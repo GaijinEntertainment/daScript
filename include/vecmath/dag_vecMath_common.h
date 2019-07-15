@@ -246,6 +246,10 @@ VECMATH_FINLINE void VECTORCALL v_mat44_transpose_to_mat33(mat33f &dest, vec3f c
 }
 #endif
 
+VECMATH_FINLINE vec4f VECTORCALL v_remove_nan(vec4f a) {return v_and(a, v_cmp_eq(a,a)); }
+VECMATH_FINLINE vec4f VECTORCALL v_norm4_safe(vec4f a) {return v_remove_nan(v_norm4(a));}
+VECMATH_FINLINE vec4f VECTORCALL v_norm3_safe(vec4f a) {return v_remove_nan(v_norm3(a));}
+
 VECMATH_FINLINE void VECTORCALL v_mat33_transpose(mat33f &dest, mat33f_cref src)
 {
   v_mat33_transpose(dest, src.col0, src.col1, src.col2);
@@ -641,63 +645,41 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat(vec3f col0, vec3f col1, vec
   vec4f radicand, invSqrt, scale;
   vec4f res0, res1, res2, res3;
   vec4f xx, yy, zz;
-  vec4f select_x = (vec4f)V_CI_MASK1000;
-  vec4f select_y = (vec4f)V_CI_MASK0100;
-  vec4f select_z = (vec4f)V_CI_MASK0010;
-  vec4f select_xyz = (vec4f)V_CI_MASK1110;
   quat4f res;
 
-  xx_yy = v_sel( col0, col1, select_y);
+  xx_yy = v_perm_xbzw(col0, col1);
 #if _TARGET_SIMD_VMX|_TARGET_SIMD_SPU
   xx_yy_zz_xx = v_perm_xycx(xx_yy, col2);
   yy_zz_xx_yy = v_perm_ycxy(xx_yy, col2);
   zz_xx_yy_zz = v_perm_cxyc(xx_yy, col2);
 #elif _TARGET_SIMD_SSE
-  xx_yy_zz_xx = _mm_shuffle_ps(xx_yy, xx_yy, _MM_SHUFFLE(0,0,1,0));
-  xx_yy_zz_xx = v_sel(xx_yy_zz_xx, col2, select_z);
+  xx_yy_zz_xx = v_perm_xycw(_mm_shuffle_ps(xx_yy, xx_yy, _MM_SHUFFLE(0,0,1,0)), col2);
   yy_zz_xx_yy = _mm_shuffle_ps(xx_yy_zz_xx, xx_yy_zz_xx, _MM_SHUFFLE(1,0,2,1));
   zz_xx_yy_zz = _mm_shuffle_ps(xx_yy_zz_xx, xx_yy_zz_xx, _MM_SHUFFLE(2,1,0,2));
 #endif
 
   diagSum = v_add(v_add(xx_yy_zz_xx, yy_zz_xx_yy), zz_xx_yy_zz );
   diagDiff = v_sub(v_sub(xx_yy_zz_xx, yy_zz_xx_yy), zz_xx_yy_zz );
-  radicand = v_add(v_sel(diagSum, diagDiff, select_xyz), V_C_ONE);
+  radicand = v_add(v_perm_xyzd(diagDiff, diagSum), V_C_ONE);
   invSqrt = v_rsqrt4(v_sel(radicand, V_C_ONE, v_cmp_ge(v_zero(), radicand)));
 
-  zy_xz_yx = v_sel(col0, col1, select_z);
-#if _TARGET_SIMD_VMX|_TARGET_SIMD_SPU
+  zy_xz_yx = v_perm_xycw(col0, col1);
   zy_xz_yx = v_perm_zayx(zy_xz_yx, col2);
-  yz_zx_xy = v_sel(col0, col1, select_x);
+  yz_zx_xy = v_perm_ayzw(col0, col1);
   yz_zx_xy = v_perm_bzxx(yz_zx_xy, col2);
-#elif _TARGET_SIMD_SSE
-  zy_xz_yx = _mm_shuffle_ps(zy_xz_yx, zy_xz_yx, _MM_SHUFFLE(0,1,2,2));
-  zy_xz_yx = v_sel(zy_xz_yx, v_splat_x(col2), select_y);
-  yz_zx_xy = v_sel(col0, col1, select_x);
-  yz_zx_xy = _mm_shuffle_ps(yz_zx_xy, yz_zx_xy, _MM_SHUFFLE(0,0,2,0));
-  yz_zx_xy = v_sel(yz_zx_xy, v_splat_y(col2), select_x);
-#endif
 
   sum = v_add(zy_xz_yx, yz_zx_xy);
   diff = v_sub(zy_xz_yx, yz_zx_xy);
 
   scale = v_mul(invSqrt, V_C_HALF);
-#if _TARGET_SIMD_VMX|_TARGET_SIMD_SPU
   res0 = v_perm_xzya(sum, diff);
   res1 = v_perm_zxxb(sum, diff);
   res2 = v_perm_yxxc(sum, diff);
-#elif _TARGET_SIMD_SSE
-  res0 = _mm_shuffle_ps( sum, sum, _MM_SHUFFLE(0,1,2,0));
-  res0 = v_sel(v_splat_x(diff), res0, select_xyz);
-  res1 = _mm_shuffle_ps( sum, sum, _MM_SHUFFLE(0,0,0,2));
-  res1 = v_sel(v_splat_y(diff), res1, select_xyz);
-  res2 = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(0,0,0,1));
-  res2 = v_sel(v_splat_z(diff), res2, select_xyz);
-#endif
   res3 = diff;
-  res0 = v_sel(res0, radicand, select_x);
-  res1 = v_sel(res1, radicand, select_y);
-  res2 = v_sel(res2, radicand, select_z);
-  res3 = v_sel(radicand, res3, select_xyz);
+  res0 = v_perm_ayzw(res0, radicand);
+  res1 = v_perm_xbzw(res1, radicand);
+  res2 = v_perm_xycw(res2, radicand);
+  res3 = v_perm_xyzd(res3, radicand);
   res0 = v_mul( res0, v_splat_x(scale));
   res1 = v_mul( res1, v_splat_y(scale));
   res2 = v_mul( res2, v_splat_z(scale));
@@ -724,27 +706,41 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat4(mat44f_cref m)
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_arc(vec3f v0, vec3f v1)
 {
   vec4f cosAngle = v_dot3(v0, v1);
-  vec4f cosAngleX2Plus2 = v_madd(cosAngle, V_C_TWO, V_C_TWO);
-  vec4f recipCosHalfAngleX2 = v_rsqrt4(v_abs(cosAngleX2Plus2));
-  vec4f cosHalfAngleX2 = v_mul(recipCosHalfAngleX2, cosAngleX2Plus2);
-  vec3f crossVec = v_cross3(v0, v1);
-  quat4f res = v_mul(crossVec, recipCosHalfAngleX2);
-  res = v_sel(v_mul(cosHalfAngleX2, V_C_HALF), res, (vec3f)V_CI_MASK1110);
-  return v_norm4(res);
+  vec4f cosAngleX2Plus2 = v_madd_x(cosAngle, V_C_TWO, V_C_TWO);
+  if (v_extract_x(cosAngleX2Plus2) > 1e-4)
+  {
+    vec3f crossVec = v_cross3(v0, v1);
+    vec4f recipCosHalfAngleX2 = v_rsqrt_x(cosAngleX2Plus2);
+    vec4f cosHalfAngleX2 = v_mul_x(recipCosHalfAngleX2, cosAngleX2Plus2);
+    return v_perm_xyzd(
+      v_mul(crossVec, v_splat_x(recipCosHalfAngleX2)),
+      v_splat_x(v_mul_x(cosHalfAngleX2, V_C_HALF)));
+  }
+  // slow path for opposite vectors
+  if (v_test_vec_x_eq_0(v0))
+    return v_perm_xzbx(v_mul(v0, V_C_UNIT_0010), v_neg(v0));
+  return v_perm_yaxx(v_mul(v0, V_C_UNIT_0100), v_neg(v0));
 }
 
 //! make quaternion to rotate 'v0' to 'v1'
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_arc(vec3f v0, vec3f v1)
 {
-  vec4f inv_len_product = v_rsqrt4(v_mul(v_length3_sq(v0), v_length3_sq(v1)));
-  vec3f crossVec = v_cross3(v0, v1);
-  vec4f cosAngle = v_mul(v_dot3(v0, v1), inv_len_product);
-  vec4f cosAngleX2Plus2 = v_madd(cosAngle, V_C_TWO, V_C_TWO);
-  vec4f recipCosHalfAngleX2 = v_rsqrt4(v_abs(cosAngleX2Plus2));
-  vec4f cosHalfAngleX2 = v_mul(recipCosHalfAngleX2, cosAngleX2Plus2);
-  quat4f res = v_mul(crossVec, v_mul(recipCosHalfAngleX2, inv_len_product));
-  res = v_sel(v_mul(cosHalfAngleX2, V_C_HALF), res, (vec3f)V_CI_MASK1110);
-  return v_norm4(res);
+  vec4f inv_len_product = v_rsqrt_x(v_mul_x(v_length3_sq_x(v0), v_length3_sq_x(v1)));
+  vec4f cosAngle = v_mul_x(v_dot3(v0, v1), inv_len_product);
+  vec4f cosAngleX2Plus2 = v_madd_x(cosAngle, V_C_TWO, V_C_TWO);
+  if (v_extract_x(cosAngleX2Plus2) > 1e-4)
+  {
+    vec3f crossVec = v_cross3(v0, v1);
+    vec4f recipCosHalfAngleX2 = v_rsqrt_x(cosAngleX2Plus2);
+    vec4f cosHalfAngleX2 = v_mul_x(recipCosHalfAngleX2, cosAngleX2Plus2);
+    return v_perm_xyzd(
+      v_mul(crossVec, v_splat_x(v_mul_x(recipCosHalfAngleX2, inv_len_product))),
+      v_splat_x(v_mul_x(cosHalfAngleX2, V_C_HALF)));
+  }
+  // slow path for opposite vectors
+  if (v_test_vec_x_eq_0(v0))
+    return v_perm_xzbx(v_mul(v0, V_C_UNIT_0010), v_neg(v0));
+  return v_perm_yaxx(v_mul(v0, V_C_UNIT_0100), v_neg(v0));
 }
 
 //! make quaternion to rotate 'ang' radians around 'v' vector; v must be normalized
@@ -752,7 +748,7 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang
 {
   vec4f s, c;
   v_sincos_x(v_mul(ang, V_C_HALF), s, c);
-  return v_sel(c, v_mul(v, s), (vec3f)V_CI_MASK1110);
+  return v_perm_xyzd(v_mul(v, s), c);
 }
 
 VECMATH_FINLINE quat4f VECTORCALL v_quat_qsquad(float t,
@@ -791,8 +787,6 @@ VECMATH_FINLINE void VECTORCALL v_mat33_from_quat(mat33f &dest, quat4f rot)
 {
   vec4f xyzw_2, wwww, yzxw, zxyw, yzxw_2, zxyw_2;
   vec4f tmp0, tmp1, tmp2, tmp3, tmp4, tmp5;
-  vec4f select_x = (vec4f)V_CI_MASK1000;
-  vec4f select_z = (vec4f)V_CI_MASK0010;
 
   xyzw_2 = v_add(rot, rot);
   wwww = v_splat_w(rot);
@@ -804,12 +798,12 @@ VECMATH_FINLINE void VECTORCALL v_mat33_from_quat(mat33f &dest, quat4f rot)
   tmp0 = v_madd(zxyw, xyzw_2, tmp0);
   tmp1 = v_nmsub(zxyw, zxyw_2, tmp1);
   tmp2 = v_nmsub(zxyw_2, wwww, tmp2);
-  tmp3 = v_sel(tmp0, tmp1, select_x);
-  tmp4 = v_sel(tmp1, tmp2, select_x);
-  tmp5 = v_sel(tmp2, tmp0, select_x);
-  dest.col0 = v_sel(tmp3, tmp2, select_z);
-  dest.col1 = v_sel(tmp4, tmp0, select_z);
-  dest.col2 = v_sel(tmp5, tmp1, select_z);
+  tmp3 = v_perm_ayzw(tmp0, tmp1);
+  tmp4 = v_perm_ayzw(tmp1, tmp2);
+  tmp5 = v_perm_ayzw(tmp2, tmp0);
+  dest.col0 = v_perm_xycw(tmp3, tmp2);
+  dest.col1 = v_perm_xycw(tmp4, tmp0);
+  dest.col2 = v_perm_xycw(tmp5, tmp1);
 }
 
 //! compose 3x3 matrix from rotation/scale
@@ -817,8 +811,6 @@ VECMATH_FINLINE void VECTORCALL v_mat33_compose(mat33f &dest, quat4f rot, vec4f 
 {
   vec4f xyzw_2, wwww, yzxw, zxyw, yzxw_2, zxyw_2;
   vec4f tmp0, tmp1, tmp2, tmp3, tmp4, tmp5;
-  vec4f select_x = (vec4f)V_CI_MASK1000;
-  vec4f select_z = (vec4f)V_CI_MASK0010;
 
   xyzw_2 = v_add(rot, rot);
   wwww = v_splat_w(rot);
@@ -830,12 +822,12 @@ VECMATH_FINLINE void VECTORCALL v_mat33_compose(mat33f &dest, quat4f rot, vec4f 
   tmp0 = v_madd(zxyw, xyzw_2, tmp0);
   tmp1 = v_nmsub(zxyw, zxyw_2, tmp1);
   tmp2 = v_nmsub(zxyw_2, wwww, tmp2);
-  tmp3 = v_sel(tmp0, tmp1, select_x);
-  tmp4 = v_sel(tmp1, tmp2, select_x);
-  tmp5 = v_sel(tmp2, tmp0, select_x);
-  dest.col0 = v_mul(v_sel(tmp3, tmp2, select_z), v_splat_x(scale));
-  dest.col1 = v_mul(v_sel(tmp4, tmp0, select_z), v_splat_y(scale));
-  dest.col2 = v_mul(v_sel(tmp5, tmp1, select_z), v_splat_z(scale));
+  tmp3 = v_perm_ayzw(tmp0, tmp1);
+  tmp4 = v_perm_ayzw(tmp1, tmp2);
+  tmp5 = v_perm_ayzw(tmp2, tmp0);
+  dest.col0 = v_mul(v_perm_xycw(tmp3, tmp2), v_splat_x(scale));
+  dest.col1 = v_mul(v_perm_xycw(tmp4, tmp0), v_splat_y(scale));
+  dest.col2 = v_mul(v_perm_xycw(tmp5, tmp1), v_splat_z(scale));
 }
 
 //! make 4x4 matrix from quaternion and position
@@ -852,8 +844,6 @@ VECMATH_FINLINE void VECTORCALL v_mat44_compose(mat44f &dest, vec4f pos, quat4f 
 {
   vec4f xyzw_2, wwww, yzxw, zxyw, yzxw_2, zxyw_2;
   vec4f tmp0, tmp1, tmp2, tmp3, tmp4, tmp5;
-  vec4f select_x = (vec4f)V_CI_MASK1000;
-  vec4f select_z = (vec4f)V_CI_MASK0010;
   vec4f select_xyz = (vec4f)V_CI_MASK1110;
 
   xyzw_2 = v_add(rot, rot);
@@ -866,13 +856,13 @@ VECMATH_FINLINE void VECTORCALL v_mat44_compose(mat44f &dest, vec4f pos, quat4f 
   tmp0 = v_madd(zxyw, xyzw_2, tmp0);
   tmp1 = v_nmsub(zxyw, zxyw_2, tmp1);
   tmp2 = v_nmsub(zxyw_2, wwww, tmp2);
-  tmp3 = v_sel(tmp0, tmp1, select_x);
-  tmp4 = v_sel(tmp1, tmp2, select_x);
-  tmp5 = v_sel(tmp2, tmp0, select_x);
-  dest.col0 = v_and(v_mul(v_sel(tmp3, tmp2, select_z), v_splat_x(scale)), select_xyz);
-  dest.col1 = v_and(v_mul(v_sel(tmp4, tmp0, select_z), v_splat_y(scale)), select_xyz);
-  dest.col2 = v_and(v_mul(v_sel(tmp5, tmp1, select_z), v_splat_z(scale)), select_xyz);
-  dest.col3 = v_sel(V_C_ONE, pos, select_xyz);
+  tmp3 = v_perm_ayzw(tmp0, tmp1);
+  tmp4 = v_perm_ayzw(tmp1, tmp2);
+  tmp5 = v_perm_ayzw(tmp2, tmp0);
+  dest.col0 = v_and(v_mul(v_perm_xycw(tmp3, tmp2), v_splat_x(scale)), select_xyz);
+  dest.col1 = v_and(v_mul(v_perm_xycw(tmp4, tmp0), v_splat_y(scale)), select_xyz);
+  dest.col2 = v_and(v_mul(v_perm_xycw(tmp5, tmp1), v_splat_z(scale)), select_xyz);
+  dest.col3 = v_perm_xyzd(pos, V_C_ONE);
 }
 
 //! decompose 3x3 matrix to rotation/scale
@@ -922,17 +912,9 @@ VECMATH_FINLINE void VECTORCALL v_mat33_make_rot_cw(mat33f &dest, vec3f v, vec4f
   oneMinusC = v_sub(V_C_ONE, c);
   axisS = v_mul(v, s);
   negAxisS = v_neg(axisS);
-#if _TARGET_SIMD_VMX|_TARGET_SIMD_SPU|_TARGET_SIMD_NEON
   tmp0 = v_perm_xzbx(axisS, negAxisS);
   tmp1 = v_perm_caxx(axisS, negAxisS);
   tmp2 = v_perm_yaxx(axisS, negAxisS);
-#elif _TARGET_SIMD_SSE
-  tmp0 = _mm_shuffle_ps(axisS, axisS, _MM_SHUFFLE(0,0,2,0));
-  tmp0 = v_sel(tmp0, v_splat_y(negAxisS), (vec4f)V_CI_MASK0010);
-  tmp1 = v_sel(v_splat_x(axisS), v_splat_z(negAxisS), (vec4f)V_CI_MASK1000);
-  tmp2 = _mm_shuffle_ps(axisS, axisS, _MM_SHUFFLE(0,0,0,1));
-  tmp2 = v_sel(tmp2, v_splat_x(negAxisS), (vec4f)V_CI_MASK0100);
-#endif
   tmp0 = v_perm_ayzw(tmp0, c);
   tmp1 = v_perm_xbzw(tmp1, c);
   tmp2 = v_perm_xycw(tmp2, c);
@@ -946,42 +928,42 @@ VECMATH_FINLINE void VECTORCALL v_mat33_make_rot_cw(mat33f &dest, vec3f v, vec4f
 //! make rotational matrix 3x3 to rotate 'ang' radians around X axis
 VECMATH_FINLINE void VECTORCALL v_mat33_make_rot_cw_x(mat33f &dest, vec4f ang)
 {
-  vec4f s, c, res1, res2, zero = v_zero();
-  vec4f select_y = (vec4f)V_CI_MASK0100, select_z = (vec4f)V_CI_MASK0010;
+  vec4f s, c, res1, res2;
+  vec4f select_y = (vec4f)V_CI_MASK0100;
   v_sincos_x(ang, s, c);
 
   dest.col0 = V_C_UNIT_1000;
-  res1 = v_sel(zero, c, select_y);
-  dest.col1 = v_sel(res1, s, select_z);
-  res2 = v_sel(zero, v_neg(s), select_y);
-  dest.col2 = v_sel(res2, c, select_z);
+  res1 = v_and(c, select_y);
+  dest.col1 = v_perm_xycw(res1, s);
+  res2 = v_and(v_neg(s), select_y);
+  dest.col2 = v_perm_xycw(res2, c);
 }
 
 //! make rotational matrix 3x3 to rotate 'ang' radians around Y axis
 VECMATH_FINLINE void VECTORCALL v_mat33_make_rot_cw_y(mat33f &dest, vec4f ang)
 {
-  vec4f s, c, res0, res2, zero = v_zero();
-  vec4f select_x = (vec4f)V_CI_MASK1000, select_z = (vec4f)V_CI_MASK0010;
+  vec4f s, c, res0, res2;
+  vec4f select_x = (vec4f)V_CI_MASK1000;
   v_sincos_x(ang, s, c);
 
-  res0 = v_sel(zero, c, select_x);
-  dest.col0 = v_sel(res0, v_neg(s), select_z);
+  res0 = v_and(c, select_x);
+  dest.col0 = v_perm_xycw(res0, v_neg(s));
   dest.col1 = V_C_UNIT_0100;
-  res2 = v_sel(zero, s, select_x);
-  dest.col2 = v_sel(res2, c, select_z);
+  res2 = v_and(s, select_x);
+  dest.col2 = v_perm_xycw(res2, c);
 }
 
 //! make rotational matrix 3x3 to rotate 'ang' radians around Z axis
 VECMATH_FINLINE void VECTORCALL v_mat33_make_rot_cw_z(mat33f &dest, vec4f ang)
 {
-  vec4f s, c, res0, res1, zero = v_zero();
-  vec4f select_x = (vec4f)V_CI_MASK1000, select_y = (vec4f)V_CI_MASK0100;
+  vec4f s, c, res0, res1;
+  vec4f select_x = (vec4f)V_CI_MASK1000;
   v_sincos4(ang, s, c);
 
-  res0 = v_sel(zero, c, select_x);
-  dest.col0 = v_sel(res0, s, select_y);
-  res1 = v_sel(zero, v_neg(s), select_x);
-  dest.col1 = v_sel(res1, c, select_y);
+  res0 = v_and(c, select_x);
+  dest.col0 = v_perm_xbzw(res0, s);
+  res1 = v_and(v_neg(s), select_x);
+  dest.col1 = v_perm_xbzw(res1, c);
   dest.col2 = V_C_UNIT_0010;
 }
 

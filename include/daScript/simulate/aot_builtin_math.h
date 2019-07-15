@@ -37,9 +37,12 @@ namespace das {
     __forceinline float dot3(vec4f a, vec4f b){return v_extract_x(v_dot3_x(a, b));}
     __forceinline float dot4(vec4f a, vec4f b){return v_extract_x(v_dot4_x(a, b));}
 
-    // __forceinline float2 normalize2(float2 a){vec4f v = v_norm2(v_ldu_half(&a.x)); return *(float2*)&v;}
-    __forceinline vec4f normalize3(vec4f a){vec4f v = v_norm3(a); return v;}
-    __forceinline vec4f normalize4(vec4f a){vec4f v = v_norm4(a); return v;}
+    __forceinline vec4f normalize2(vec4f a){vec4f v = v_mul(a, a); return v_div(a, v_splat_x(v_sqrt_x(v_add_x(v, v_rot_1(v))))); }
+    __forceinline vec4f normalize3(vec4f a){return v_norm3(a); }
+    __forceinline vec4f normalize4(vec4f a){return v_norm4(a); }
+    __forceinline vec4f safe_normalize2(vec4f a){vec4f v = v_mul(a, a); return v_remove_nan(v_div(a, v_splat_x(v_sqrt_x(v_add_x(v, v_rot_1(v)))))); }
+    __forceinline vec4f safe_normalize3(vec4f a){return v_norm3_safe(a); }
+    __forceinline vec4f safe_normalize4(vec4f a){return v_norm4_safe(a); }
 
     __forceinline vec4f cross3(vec4f a, vec4f b){vec4f v = v_cross3(a,b); return v;}
 
