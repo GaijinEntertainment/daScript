@@ -76,6 +76,7 @@ namespace das
     struct AnnotationDeclaration : enable_shared_from_this<AnnotationDeclaration> {
         AnnotationPtr           annotation;
         AnnotationArgumentList  arguments;
+        string getMangledName() const;
     };
     typedef shared_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 

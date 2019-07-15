@@ -122,6 +122,11 @@ struct EsFunctionAnnotation : FunctionAnnotation {
 #endif
         block->annotationData = uint64_t(tab.get());
         auto mangledName = block->getMangledName(true,true);
+        for (auto & ann : block->annotations) {
+            if (ann->annotation.get() == this) {
+                mangledName += " " + ann->getMangledName();
+            }
+        }
         block->annotationDataSid = hash_blockz32((uint8_t *)mangledName.c_str());
         buildAttributeTable(*tab, block->arguments, err);
         esData->g_esBlockTable.emplace_back(move(tab));

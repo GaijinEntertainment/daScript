@@ -32,6 +32,30 @@ namespace das {
         return call->func->getAotBasicName();
     }
 
+    string AnnotationDeclaration::getMangledName() const {
+        TextWriter tw;
+        tw << "[" << annotation->getMangledName();
+        if (arguments.size()) {
+            tw << "(";
+            for (auto & arg : arguments) {
+                if (&arg != &arguments.front()) {
+                    tw << ",";
+                }
+                tw << arg.name << ":" << das_to_string(arg.type) << "=";
+                switch (arg.type) {
+                case Type::tBool:       tw << (arg.bValue ? "true" : "false"); break;
+                case Type::tInt:        tw << arg.iValue; break;
+                case Type::tFloat:      tw << arg.fValue; break;
+                case Type::tString:     tw << "\"" << arg.sValue << "\""; break;
+                default:                tw << "error"; break;
+                }
+            }
+            tw << ")";
+        }
+        tw << "]";
+        return tw.str();
+    }
+
     // enumeration
 
     string Enumeration::getMangledName() const {

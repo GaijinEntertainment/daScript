@@ -163,6 +163,13 @@ namespace  das {
         static __forceinline float ATan2_est ( float a, float b, Context & ) { return v_extract_x(v_atan2_est(v_splats(a), v_splats(b))); }
     };
 
+    struct SimPolicy_F2IVec {
+        static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
+        static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }
+        static __forceinline vec4f Floori ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_floori(a)); }
+        static __forceinline vec4f Ceili  ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_ceili(a)); }
+    };
+
     struct SimPolicy_MathVec {
         static __forceinline vec4f Abs   ( vec4f a, Context & )          { return v_abs(a); }
         static __forceinline vec4f Floor ( vec4f a, Context & )          { return v_floor(a); }
@@ -175,11 +182,6 @@ namespace  das {
         static __forceinline vec4f Mad   ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
         static __forceinline vec4f MadS  ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,v_perm_xxxx(b),c); }
         static __forceinline vec4f Lerp  ( vec4f a, vec4f b, vec4f t, Context & ) { return v_madd(v_sub(b,a),t,a); }
-
-        static __forceinline vec4f Trunci ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_vec4i(a)); }
-        static __forceinline vec4f Roundi ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_roundi(a)); }
-        static __forceinline vec4f Floori ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_floori(a)); }
-        static __forceinline vec4f Ceili  ( vec4f a, Context & )          { return v_cast_vec4f(v_cvt_ceili(a)); }
 
         static __forceinline vec4f Exp   ( vec4f a, Context & )          { return v_exp(a); }
         static __forceinline vec4f Log   ( vec4f a, Context & )          { return v_log(a); }
@@ -490,15 +492,15 @@ namespace  das {
     template <> struct SimPolicy<float> : SimPolicy_Float, SimPolicy_MathFloat {};
     template <> struct SimPolicy<double> : SimPolicy_Double {};
     template <> struct SimPolicy<void *> : SimPolicy_Pointer {};
-    template <> struct SimPolicy<float2> : SimPolicy_Vec<float2,1+2>, SimPolicy_MathVec {};
-    template <> struct SimPolicy<float3> : SimPolicy_Vec<float3,1+2+4>, SimPolicy_MathVec {};
-    template <> struct SimPolicy<float4> : SimPolicy_Vec<float4,1+2+4+8>, SimPolicy_MathVec {};
-    template <> struct SimPolicy<int2> : SimPolicy_iVec<int2,1+2>, SimPolicy_MathVecI {};
-    template <> struct SimPolicy<int3> : SimPolicy_iVec<int3,1+2+4>, SimPolicy_MathVecI {};
-    template <> struct SimPolicy<int4> : SimPolicy_iVec<int4,1+2+4+8>, SimPolicy_MathVecI {};
-    template <> struct SimPolicy<uint2> : SimPolicy_uVec<uint2,1+2>, SimPolicy_MathVecI {};
-    template <> struct SimPolicy<uint3> : SimPolicy_uVec<uint3,1+2+4>, SimPolicy_MathVecI {};
-    template <> struct SimPolicy<uint4> : SimPolicy_uVec<uint4,1+2+4+8>, SimPolicy_MathVecI {};
+    template <> struct SimPolicy<float2> : SimPolicy_Vec<float2,1+2>, SimPolicy_MathVec, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<float3> : SimPolicy_Vec<float3,1+2+4>, SimPolicy_MathVec, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<float4> : SimPolicy_Vec<float4,1+2+4+8>, SimPolicy_MathVec, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<int2> : SimPolicy_iVec<int2,1+2>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<int3> : SimPolicy_iVec<int3,1+2+4>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<int4> : SimPolicy_iVec<int4,1+2+4+8>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<uint2> : SimPolicy_uVec<uint2,1+2>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<uint3> : SimPolicy_uVec<uint3,1+2+4>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<uint4> : SimPolicy_uVec<uint4,1+2+4+8>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
     template <> struct SimPolicy<range> : SimPolicy_Range {};
     template <> struct SimPolicy<urange> : SimPolicy_URange {};
     template <> struct SimPolicy<char *> : SimPolicy_String {};
