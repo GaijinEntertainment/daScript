@@ -647,6 +647,7 @@ namespace das {
 
     string describeCppFunc ( Function * fn, BlockVariableCollector * collector, bool needName = true ) {
         TextWriter ss;
+        ss << "inline ";
         describeLocalCppType(ss,fn->result,false);
         ss << " ";
         if ( needName ) {
@@ -808,7 +809,7 @@ namespace das {
         }
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
-            ss << "\n";
+            ss << "\ninline ";
             describeLocalCppType(ss,fn->result,false);
             ss << " " << aotFuncName(fn) << " ( Context * __context__";
         }
