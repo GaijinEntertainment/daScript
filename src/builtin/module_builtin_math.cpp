@@ -225,9 +225,9 @@ namespace das {
             addExternEx<float3(float3),DAS_BIND_FUN(normalize3)>(*this, lib, "normalize", SideEffects::none, "normalize3");
             addExternEx<float4(float4),DAS_BIND_FUN(normalize4)>(*this, lib, "normalize", SideEffects::none, "normalize4");
 
-            addExternEx<float2(float2),DAS_BIND_FUN(normalize2)>(*this, lib, "safe_normalize", SideEffects::none, "safe_normalize2");
-            addExternEx<float3(float3),DAS_BIND_FUN(normalize3)>(*this, lib, "safe_normalize", SideEffects::none, "safe_normalize3");
-            addExternEx<float4(float4),DAS_BIND_FUN(normalize4)>(*this, lib, "safe_normalize", SideEffects::none, "safe_normalize4");
+            addExternEx<float2(float2),DAS_BIND_FUN(safe_normalize2)>(*this, lib, "safe_normalize", SideEffects::none, "safe_normalize2");
+            addExternEx<float3(float3),DAS_BIND_FUN(safe_normalize3)>(*this, lib, "safe_normalize", SideEffects::none, "safe_normalize3");
+            addExternEx<float4(float4),DAS_BIND_FUN(safe_normalize4)>(*this, lib, "safe_normalize", SideEffects::none, "safe_normalize4");
 
             addExternEx<float(float2),DAS_BIND_FUN(length2)>(*this, lib, "length", SideEffects::none, "length2");
             addExternEx<float(float3),DAS_BIND_FUN(length3)>(*this, lib, "length", SideEffects::none, "length3");
