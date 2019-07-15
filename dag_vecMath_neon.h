@@ -214,7 +214,11 @@ VECMATH_FINLINE vec4f VECTORCALL v_rsqrt4(vec4f a)
   return vmulq_f32(e , vrsqrtsq_f32(vmulq_f32(e, e), a));
 }
 
-VECMATH_FINLINE vec4f VECTORCALL v_rsqrt_fast_x(vec4f a) { return vrsqrteq_f32(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_rsqrt_fast_x(vec4f a)
+{
+  float32x2_t e = vrsqrte_f32(vget_low_f32(a));
+  return vcombine_f32(e, e);
+}
 VECMATH_FINLINE float32x2_t VECTORCALL v_rsqrt_x(float32x2_t a)
 {
   float32x2_t e = vrsqrte_f32(a);
@@ -223,13 +227,18 @@ VECMATH_FINLINE float32x2_t VECTORCALL v_rsqrt_x(float32x2_t a)
 }
 VECMATH_FINLINE vec4f VECTORCALL v_rsqrt_x(vec4f a) { float32x2_t r = v_rsqrt_x(vget_low_f32(a)); return vcombine_f32(r, r); }
 
-VECMATH_FINLINE vec4f VECTORCALL v_sqrt4_fast(vec4f a) { return v_sel(v_zero(), v_mul(a, vrsqrteq_f32(a)), v_cmp_ge(a, v_zero())); }
-VECMATH_FINLINE vec4f VECTORCALL v_sqrt4(vec4f a) { return v_sel(v_zero(), v_mul(a, v_rsqrt4(a)), v_cmp_ge(a, v_zero())); }
-VECMATH_FINLINE vec4f VECTORCALL v_sqrt_fast_x(vec4f a) { return v_sqrt4_fast(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_sqrt4_fast(vec4f a) { return v_and(v_mul(a, vrsqrteq_f32(a)), v_cmp_gt(a, v_zero())); }
+VECMATH_FINLINE vec4f VECTORCALL v_sqrt4(vec4f a) { return v_and(v_mul(a, v_rsqrt4(a)), v_cmp_gt(a, v_zero())); }
+VECMATH_FINLINE vec4f VECTORCALL v_sqrt_fast_x(vec4f _a)
+{
+  float32x2_t a = vget_low_f32(_a);
+  float32x2_t r = (float32x2_t)vand_s32((int32x2_t)vmul_f32(a, vrsqrte_f32(a)), vcgt_f32(a, vdup_n_f32(0)));
+  return vcombine_f32(r, r);
+}
 VECMATH_FINLINE vec4f VECTORCALL v_sqrt_x(vec4f _a)
 {
   float32x2_t a = vget_low_f32(_a);
-  float32x2_t r = vmul_f32(a, v_rsqrt_x(a));
+  float32x2_t r = (float32x2_t)vand_s32(vmul_f32(a, v_rsqrt_x(a)), vcgt_f32(a, vdup_n_f32(0)));
   return vcombine_f32(r, r);
 }
 

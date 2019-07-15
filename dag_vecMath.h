@@ -360,10 +360,18 @@ VECMATH_FINLINE vec4f VECTORCALL v_length4_x(vec4f a);
 //! length: .x = sqrt(a.x*a.x + a.y*a.y + a.z*a.z), a.w could be anything (even NAN)
 VECMATH_FINLINE vec3f VECTORCALL v_length3_x(vec3f a);
 
-//! normalize: a/length(a)
+//! normalize: a/length(a). will return NaN for zero vector
 VECMATH_FINLINE vec4f VECTORCALL v_norm4(vec4f a);
-//! normalize: a/length(a), .w could be anything (even NAN)
+//! normalize: a/length(a), .w could be anything (even NAN). will return NaN for zero vector
 VECMATH_FINLINE vec3f VECTORCALL v_norm3(vec3f a);
+//! nans converted to zero, v_and(a, v_cmp_eq(a,a))
+VECMATH_FINLINE vec4f VECTORCALL v_remove_nan(vec4f a);
+//! safe normalize: a/length(a)
+//! result is not guaranteed to be normalized, but is definetly not NaN (NAN components will be zero)
+VECMATH_FINLINE vec4f VECTORCALL v_norm4_safe(vec4f a);
+//! safe normalize: a/length(a), .w could be anything (even NAN)
+//! result is not guaranteed to be normalized, but is definetly not NaN (NAN components will be zero)
+VECMATH_FINLINE vec3f VECTORCALL v_norm3_safe(vec3f a);
 
 
 //
