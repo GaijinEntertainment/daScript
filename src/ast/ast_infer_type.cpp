@@ -1884,7 +1884,8 @@ namespace das {
                 }
                 expr->tupleIndex = index;
             } else {
-                error("can't get field of " + expr->value->type->describe(), expr->at, CompilationError::cant_get_field);
+                error("can't get field of " + expr->value->type->describe(),
+                      expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
             // handle
@@ -1898,7 +1899,8 @@ namespace das {
                 expr->type->ref = true;
                 expr->type->constant |= tupleT->constant;
             } else if ( !expr->type ) {
-                error("field " + expr->name + " not found", expr->at, CompilationError::cant_get_field);
+                error("field " + expr->name + " not found in " + expr->value->type->describe(),
+                      expr->at, CompilationError::cant_get_field);
             } else {
                 expr->type->constant |= valT->constant;
             }

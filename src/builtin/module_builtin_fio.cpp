@@ -355,6 +355,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
+            // and now its aot ready
+            verifyAotReady();
         }
         virtual bool aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_fio.h\"\n";

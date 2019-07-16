@@ -39,13 +39,55 @@ namespace das {
     }
 
     class LintVisitor : public Visitor {
+        bool checkOnlyFastAot;
     public:
-        LintVisitor ( const ProgramPtr & prog ) : program(prog) {}
+        LintVisitor ( const ProgramPtr & prog ) : program(prog) {
+            checkOnlyFastAot = program->options.getOption("onlyFastAot", false);
+        }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             program->error(err,at,cerr);
         }
     protected:
+        void verifyOnlyFastAot ( Function * func, const LineInfo & at ) {
+            if ( !checkOnlyFastAot ) return;
+            if ( func && func->builtIn ) {
+                auto bif = (BuiltInFunction *) func;
+                if ( bif->cppName.empty() ) {
+                    program->error(func->describe() + " has no cppName while onlyFastAot option is set", at,
+                                   CompilationError::only_fast_aot_no_cpp_name );
+                }
+            }
+        }
+        virtual void preVisit ( ExprCall * expr ) {
+            Visitor::preVisit(expr);
+            verifyOnlyFastAot(expr->func, expr->at);
+        }
+        virtual void preVisit ( ExprOp1 * expr ) {
+            Visitor::preVisit(expr);
+            verifyOnlyFastAot(expr->func, expr->at);
+        }
+        virtual void preVisit ( ExprOp2 * expr ) {
+            Visitor::preVisit(expr);
+            verifyOnlyFastAot(expr->func, expr->at);
+        }
+        virtual void preVisit ( ExprOp3 * expr ) {
+            Visitor::preVisit(expr);
+            verifyOnlyFastAot(expr->func, expr->at);
+        }
+        virtual void preVisit ( ExprCopy * expr ) {
+            Visitor::preVisit(expr);
+            verifyOnlyFastAot(expr->func, expr->at);
+        }
+        virtual void preVisit ( ExprMove * expr ) {
+            Visitor::preVisit(expr);
+            verifyOnlyFastAot(expr->func, expr->at);
+        }
+        virtual void preVisit ( ExprClone * expr ) {
+            Visitor::preVisit(expr);
+            verifyOnlyFastAot(expr->func, expr->at);
+        }
         virtual void preVisit ( ExprAssert * expr ) {
+            Visitor::preVisit(expr);
             if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
                 error("assert expressions can't have side-effects (use verify instead)", expr->at,
                       CompilationError::assert_with_side_effects);

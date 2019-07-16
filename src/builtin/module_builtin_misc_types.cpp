@@ -112,14 +112,14 @@ namespace das
     void Module_BuiltIn::addMiscTypes(ModuleLibrary & lib) {
         // enum
         addFunctionBasic<EnumStub>(*this,lib);
-        addExtern<DAS_BIND_FUN(enum_to_int)>(*this, lib, "int", SideEffects::none);
+        addExtern<DAS_BIND_FUN(enum_to_int)>(*this, lib, "int", SideEffects::none, "int");
         // function
         addFunctionBasic<Func>(*this,lib);
-        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,const Func,const void *>>("==",lib,"",false) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,const Func,const void *>>("!=",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,const Func,const void *>>("==",lib,"==",false) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,const Func,const void *>>("!=",lib,"!=",false) );
         // lambda
-        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,const Lambda,const void *>>("==",lib,"",false) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,const Lambda,const void *>>("!=",lib,"",false) );
+        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,const Lambda,const void *>>("==",lib,"==",false) );
+        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,const Lambda,const void *>>("!=",lib,"!=",false) );
         // string
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);

@@ -142,6 +142,8 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addTime(lib);
         // NOW, for the builtin module
         appendCompiledFunctions();
+        // lets make sure its all aot ready
+        verifyAotReady();
     }
 }
 

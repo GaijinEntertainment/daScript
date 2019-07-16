@@ -440,6 +440,7 @@ namespace das
                 bool    unsafe : 1;
                 bool    unsafeOperation : 1;
                 bool    hasMakeBlock : 1;
+                bool    aotNeedPrologue : 1;
                 bool    noAot : 1;
                 bool    aotHybrid : 1;
             };
@@ -503,6 +504,7 @@ namespace das
         static void Shutdown();
         static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
+        void verifyAotReady();
     public:
         template <typename TT, typename ...TARG>
         __forceinline void addCall ( const string & fnName, TARG ...args ) {

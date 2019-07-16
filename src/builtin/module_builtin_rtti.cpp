@@ -236,9 +236,11 @@ namespace das {
     struct FuncInfoAnnotation : DebugInfoAnnotation<VarInfo,FuncInfo> {
         FuncInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("FuncInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
             addField<DAS_BIND_MANAGED_FIELD(result)>("result");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+            addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
             fieldType = makeType<VarInfo>(*mlib);
             fieldType->ref = true;
         }
@@ -490,6 +492,9 @@ namespace das {
             addRecAnnotation<VarInfoAnnotation>(lib);
             initRecAnnotation(sia, lib);
             addAnnotation(make_shared<FuncInfoAnnotation>(lib));
+            // func info flags
+            addConstant<uint32_t>(*this, "FUNCINFO_INIT", uint32_t(FuncInfo::flag_init));
+            addConstant<uint32_t>(*this, "FUNCINFO_BUILTIN", uint32_t(FuncInfo::flag_builtin));
             // functions
             //      all the stuff is only resolved after debug info is built
             //      hence SideEffects::modifyExternal is essencial for it to not be optimized out

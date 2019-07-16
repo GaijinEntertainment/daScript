@@ -32,6 +32,12 @@ namespace das {
         if ( it!=fmn2f.end() ) return it->second;
         FuncInfo * fni = debugInfo->makeNode<FuncInfo>();
         fni->name = debugInfo->allocateName(fn.name);
+        if ( rtti && fn.builtIn ) {
+            auto bfn = (BuiltInFunction *) &fn;
+            fni->cppName = debugInfo->allocateName(bfn->cppName);
+        } else {
+            fni->cppName = nullptr;
+        }
         fni->stackSize = fn.totalStackSize;
         fni->count = (uint32_t) fn.arguments.size();
         fni->fields = (VarInfo **) debugInfo->allocate(sizeof(VarInfo *) * fni->count);
@@ -40,6 +46,7 @@ namespace das {
         }
         fni->flags = 0;
         if ( fn.init ) fni->flags |= FuncInfo::flag_init;
+        if ( fn.builtIn ) fni->flags |= FuncInfo::flag_builtin;
         fni->result = makeTypeInfo(nullptr, fn.result);
         fni->hash = hash_value(fni);
         fmn2f[mangledName] = fni;

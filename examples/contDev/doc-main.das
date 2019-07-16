@@ -1,4 +1,5 @@
 // options logNodes=true, logStack=true
+// options logCpp=true, onlyFastAot=true
 
 require fio
 require rtti
@@ -12,7 +13,10 @@ def getModuleDoc(modName:string)
 	rttiModuleForEachStructure(pMod) <| $(info)
 		print("struct {info.name}\n")
 	rttiModuleForEachFunction(pMod) <| $(info)
-		print("def {info.name}\n")
+		print("def {info.name}")
+		if (info.flags & FUNCINFO_BUILTIN) == FUNCINFO_BUILTIN
+			print(" // {info.cppName=="" ? "WARNING: no CPP name" : info.cppName}")
+		print("\n")
 	rttiModuleForEachGeneric(pMod) <| $(info)
 		print("def {info.name} // generic\n")
 

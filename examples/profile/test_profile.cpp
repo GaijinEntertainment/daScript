@@ -321,7 +321,7 @@ string aotEsRunBlockName ( EsAttributeTable * table, const vector<EsComponent> &
 
 void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsComponent> & components ) {
     auto fnName = aotEsRunBlockName(table, components);
-    ss << "template<typename BT>\nuint32_t " << fnName << " ( uint64_t /*annotationData*/, const BT & block, Context * __context )\n{\n";
+    ss << "template<typename BT>\ninline uint32_t " << fnName << " ( uint64_t /*annotationData*/, const BT & block, Context * __context )\n{\n";
     ss << "\tfor ( uint32_t i=0; i != g_total; ++i ) {\n";
     ss << "\t\tblock(";
     uint32_t nAttr = (uint32_t) table->attributes.size();
@@ -732,39 +732,37 @@ public:
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>(lib));
         addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib));
         // register functions
-        addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none);
+        addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal,"updateObject");
         addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest",SideEffects::modifyExternal,"updateTest");
-        addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks",SideEffects::modifyExternal);
-
+        addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000",SideEffects::modifyExternal,"update10000");
+        addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks",SideEffects::modifyExternal,"update10000ks");
         // es
         initEsComponents();
-
         auto qes_annotation = make_shared<QueryEsFunctionAnnotation>();
         addAnnotation(qes_annotation);
-
-        auto queryEsFn = addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal);
+        auto queryEsFn = addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal,"queryEs");
 #if FAST_PATH_ANNOTATION
         auto qes_decl = make_shared<AnnotationDeclaration>();
         qes_decl->annotation = qes_annotation;
         queryEsFn->annotations.push_back(qes_decl);
 #endif
-
-        addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate",SideEffects::modifyExternal,"testEsUpdate");
+        addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents",SideEffects::modifyExternal,"initEsComponents");
+        addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents",SideEffects::modifyExternal,"verifyEsComponents");
         // C++ copy of all tests
-        addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testDict)>(*this, lib, "testDict",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testFibR)>(*this, lib, "testFibR",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testFibI)>(*this, lib, "testFibI",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testParticles)>(*this, lib, "testParticles",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testParticlesI)>(*this, lib, "testParticlesI",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testTryCatch)>(*this, lib, "testTryCatch",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testNBodiesInit)>(*this, lib, "testNBodiesInit",SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(testNBodies)>(*this, lib, "testNBodies",SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes",SideEffects::modifyExternal,"testPrimes");
+        addExtern<DAS_BIND_FUN(testDict)>(*this, lib, "testDict",SideEffects::modifyExternal,"testDict");
+        addExtern<DAS_BIND_FUN(testFibR)>(*this, lib, "testFibR",SideEffects::modifyExternal,"testFibR");
+        addExtern<DAS_BIND_FUN(testFibI)>(*this, lib, "testFibI",SideEffects::modifyExternal,"testFibI");
+        addExtern<DAS_BIND_FUN(testParticles)>(*this, lib, "testParticles",SideEffects::modifyExternal,"testParticles");
+        addExtern<DAS_BIND_FUN(testParticlesI)>(*this, lib, "testParticlesI",SideEffects::modifyExternal,"testParticlesI");
+        addExtern<DAS_BIND_FUN(testTryCatch)>(*this, lib, "testTryCatch",SideEffects::modifyExternal,"testTryCatch");
+        addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop",SideEffects::modifyExternal,"testExpLoop");
+        addExtern<DAS_BIND_FUN(testNBodiesInit)>(*this, lib, "testNBodiesInit",SideEffects::modifyExternal,"testNBodiesInit");
+        addExtern<DAS_BIND_FUN(testNBodies)>(*this, lib, "testNBodies",SideEffects::modifyExternal,"testNBodies");
+        // its AOT ready
+        verifyAotReady();
     }
     virtual bool aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"test_profile.h\"\n";

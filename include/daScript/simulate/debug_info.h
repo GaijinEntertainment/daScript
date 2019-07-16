@@ -183,8 +183,10 @@ namespace das
     struct FuncInfo {
         enum {
             flag_init = (1<<0)
+        ,   flag_builtin = (1<<1)
         };
         char *      name;
+        char *      cppName;
         VarInfo **  fields;
         uint32_t    count;
         uint32_t    stackSize;

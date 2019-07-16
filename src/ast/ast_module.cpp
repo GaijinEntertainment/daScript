@@ -286,6 +286,20 @@ namespace das {
         }
     }
 
+    void Module::verifyAotReady() {
+        bool failed = false;
+        for ( auto & it : functions ) {
+            auto fun = it.second.get();
+            if ( fun->builtIn ) {
+                auto bif = (BuiltInFunction *) fun;
+                if ( !bif->policyBased && bif->cppName.empty() ) {
+                    DAS_FATAL_LOG("builtin function %s is missing cppName\n", fun->describe().c_str());
+                    failed = true;
+                }
+            }
+        }
+        DAS_VERIFYF(!failed, "verifyAotReady failed");
+    }
 
     // MODULE LIBRARY
 

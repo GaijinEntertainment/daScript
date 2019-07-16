@@ -210,8 +210,8 @@ namespace das {
             addFunctionCommonTyped<int64_t>(*this, lib);
             addFunctionCommonTyped<uint64_t>(*this, lib);
 
-            addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", SideEffects::none);
-            addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", SideEffects::none);
+            addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", SideEffects::none, "uint32_hash");
+            addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", SideEffects::none, "uint_noise1D");
             addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", SideEffects::none, "uint_noise2D_int2");
             addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", SideEffects::none, "uint_noise3D_int3");
 
@@ -266,8 +266,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosF");
             addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosD");
 
-            addExternEx<float3(float3,float3),DAS_BIND_FUN(reflect)>(*this, lib, "reflect", SideEffects::none);
-            addExternEx<bool(float3,float3,float,float3&),DAS_BIND_FUN(refract)>(*this, lib, "refract", SideEffects::modifyArgument);
+            addExternEx<float3(float3,float3),DAS_BIND_FUN(reflect)>(*this, lib, "reflect", SideEffects::none, "reflect");
+            addExternEx<bool(float3,float3,float,float3&),DAS_BIND_FUN(refract)>(*this, lib, "refract", SideEffects::modifyArgument, "refract");
 
             addFunctionCommonConversion<int, float>  (*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);

@@ -163,43 +163,43 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>
     void Module_BuiltIn::addVectorCtor(ModuleLibrary & lib) {
         // float2
         ADD_VEC_CTOR_1(float2,"v_splats");
-        ADD_VEC_CTOR_2(float2,"");
-        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib,"",false) );
-        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib,"",false) );
+        ADD_VEC_CTOR_2(float2,"float2");
+        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib,"float2",false) );
+        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib,"float2",false) );
         // float3
         ADD_VEC_CTOR_1(float3,"v_splats");
-        ADD_VEC_CTOR_3(float3,"");
-        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib,"",false) );
-        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib,"",false) );
+        ADD_VEC_CTOR_3(float3,"float3");
+        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib,"float3",false) );
+        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib,"float3",false) );
         // float4
         ADD_VEC_CTOR_1(float4,"v_splats");
-        ADD_VEC_CTOR_4(float4,"");
-        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib,"",false) );
-        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib,"",false) );
+        ADD_VEC_CTOR_4(float4,"float4");
+        addFunction( make_shared<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib,"float4",false) );
+        addFunction( make_shared<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib,"float4",false) );
         // int2
-        ADD_VEC_CTOR_1(int2,"");
-        ADD_VEC_CTOR_2(int2,"");
+        ADD_VEC_CTOR_1(int2,"int2");
+        ADD_VEC_CTOR_2(int2,"int2");
         // int3
-        ADD_VEC_CTOR_1(int3,"");
-        ADD_VEC_CTOR_3(int3,"");
+        ADD_VEC_CTOR_1(int3,"int3");
+        ADD_VEC_CTOR_3(int3,"int3");
         // int4
-        ADD_VEC_CTOR_1(int4,"");
-        ADD_VEC_CTOR_4(int4,"");
+        ADD_VEC_CTOR_1(int4,"int4");
+        ADD_VEC_CTOR_4(int4,"int4");
         // uint2
-        ADD_VEC_CTOR_1(uint2,"");
-        ADD_VEC_CTOR_2(uint2,"");
+        ADD_VEC_CTOR_1(uint2,"uint2");
+        ADD_VEC_CTOR_2(uint2,"uint2");
         // uint3
-        ADD_VEC_CTOR_1(uint3,"");
-        ADD_VEC_CTOR_3(uint3,"");
+        ADD_VEC_CTOR_1(uint3,"uint3");
+        ADD_VEC_CTOR_3(uint3,"uint3");
         // uint4
-        ADD_VEC_CTOR_1(uint4,"");
-        ADD_VEC_CTOR_4(uint4,"");
+        ADD_VEC_CTOR_1(uint4,"uint4");
+        ADD_VEC_CTOR_4(uint4,"uint4");
         // range
-        ADD_VEC_CTOR_1(range,"");
-        ADD_VEC_CTOR_2(range,"");
+        ADD_VEC_CTOR_1(range,"range");
+        ADD_VEC_CTOR_2(range,"range");
         // urange
-        ADD_VEC_CTOR_1(urange,"");
-        ADD_VEC_CTOR_2(urange,"");
+        ADD_VEC_CTOR_1(urange,"urange");
+        ADD_VEC_CTOR_2(urange,"urange");
     }
 }
 

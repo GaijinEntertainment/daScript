@@ -193,23 +193,23 @@ namespace das
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
-        addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal);
-        addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate", SideEffects::modifyExternal, "terminate");
+        addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal, "stackwalk");
+        addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
         // heap
-        addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark", SideEffects::modifyExternal);
-        addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal);
+        addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated", SideEffects::modifyExternal, "heap_bytes_allocated");
+        addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark", SideEffects::modifyExternal, "heap_high_watermark");
+        addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal, "heap_depth");
         // binary serializer
-        addInterop<_builtin_binary_load,void,vec4f,char *>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument);
-        addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal);
+        addInterop<_builtin_binary_load,void,vec4f,char *>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument, "_builtin_binary_load");
+        addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal, "_builtin_binary_save");
         // function-like expresions
         addCall<ExprAssert>         ("assert",false);
         addCall<ExprAssert>         ("verify",true);
         addCall<ExprStaticAssert>   ("static_assert");
         addCall<ExprDebug>          ("debug");
         // hash
-        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none);
+        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none, "hash");
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none, "builtin_table_size");

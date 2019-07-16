@@ -281,6 +281,33 @@ namespace das {
         }
     };
 
+    class PrologueMarker : public Visitor {
+    public:
+        PrologueMarker() {}
+    protected:
+        Function * func = nullptr;
+    protected:
+        // function
+        virtual void preVisit ( Function * f ) override {
+            func = f;
+            Visitor::preVisit(f);
+        }
+        virtual FunctionPtr visit ( Function * that ) override {
+            auto res = Visitor::visit(that);
+            func = nullptr;
+            return res;
+        }
+        // ExprMakeBlock
+        virtual void preVisit ( ExprMakeBlock * expr ) override {
+            Visitor::preVisit(expr);
+            if ( func && func->hasMakeBlock ) {
+                auto block = static_pointer_cast<ExprBlock>(expr->block);
+                if ( !block->aotSkipMakeBlock ) {
+                    func->aotNeedPrologue = true;
+                }
+            }
+        }
+    };
 
     class AotDebugInfoHelper : public DebugInfoHelper {
     public:
@@ -645,9 +672,11 @@ namespace das {
         set<Variable *>                     moved;
     };
 
-    string describeCppFunc ( Function * fn, BlockVariableCollector * collector, bool needName = true ) {
+    string describeCppFunc ( Function * fn, BlockVariableCollector * collector, bool needName = true, bool needInline = true ) {
         TextWriter ss;
-        ss << "inline ";
+        if ( needInline ) {
+            ss << "inline ";
+        }
         describeLocalCppType(ss,fn->result,false);
         ss << " ";
         if ( needName ) {
@@ -815,7 +844,7 @@ namespace das {
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
-            if ( fn->hasMakeBlock ) {
+            if ( fn->aotNeedPrologue ) {
                 ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize << ",__LINE__);\n";
             } else {
                 ss << " )\n";
@@ -843,7 +872,7 @@ namespace das {
             return Visitor::visitArgument(fn, that, last);
         }
         virtual FunctionPtr visit ( Function * fn ) override {
-            if ( fn->hasMakeBlock ) {
+            if ( fn->aotNeedPrologue ) {
                 ss << "}\n";
             } else {
                 ss << "\n";
@@ -1983,7 +2012,15 @@ namespace das {
             return false;
         }
         bool isHybridCall ( Function * func ) {
-            if ( func->builtIn ) return false;
+            if ( func->builtIn ) {
+                auto bif = (BuiltInFunction *) func;
+                DAS_VERIFYF(!func->policyBased, "we should not be here. policy based calls are handled elsewhere");
+                DAS_VERIFYF(!func->callBased, "we should not be here. call-based calls handled elsewhere");
+                if ( bif->cppName.empty() ) {
+                    return true;
+                }
+                return false;
+            }
             if ( func->noAot ) return true;
             if ( func->aotHybrid ) return true;
             if ( func->module == program->thisModule.get() ) return false;
@@ -2269,7 +2306,7 @@ namespace das {
             if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
                 logs << "CMRES";
             }
-            logs << "<" << describeCppFunc(fnn[i],nullptr,false) << ",";
+            logs << "<" << describeCppFunc(fnn[i],nullptr,false,false) << ",";
             logs << aotFuncName(fnn[i]) << ">>();\n\t};\n";
         }
         if ( context.totalVariables || funInit ) {
@@ -2289,6 +2326,9 @@ namespace das {
         // run no-aot marker
         NoAotMarker marker;
         visit(marker);
+        // mark prologue
+        PrologueMarker pmarker;
+        visit(pmarker);
         // compute semantic hash for each used function
         int fni = 0;
         for (auto & pm : library.modules) {
