@@ -691,6 +691,35 @@ namespace das
 
     // this one collectes dependencies and compiles with modules
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false );
+
+
+    // note: this has sifnificant performance implications
+    //      i.e. this is ok for the load time \ map time
+    //      it is not ok to use for every call
+    template <typename ...Args>
+    inline bool verifyCall ( FuncInfo * info, const ModuleLibrary & lib ) {
+        vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
+        if ( args.size() != info->count ) {
+            return false;
+        }
+        DebugInfoHelper helper;
+        for ( uint32_t index=0; index != info->count; ++ index ) {
+            auto argType = info->fields[index];
+            if ( argType->type==Type::anyArgument ) {
+                continue;
+            }
+            auto passType = helper.makeTypeInfo(nullptr, args[index]);
+            // passing non-ref to ref, or passing not the same type
+            if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,false,false,false) ) {
+                return false;
+            }
+            // ref or pointer can only add const
+            if ( (argType->isRef() || argType->type==Type::tPointer) && !argType->isConst() && passType->isConst() ) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 

@@ -63,6 +63,10 @@ bool unit_test ( const string & fn ) {
                 ctxU.emplace_back(make_unique<Context>(ctx));
             }
             auto fnJob = ctx.findFunction("job");
+            if ( !verifyCall<Array,int32_t,int32_t,int32_t,int32_t,int32_t>(fnJob->debugInfo, dummyGroup) ) {
+                tout << "function 'job', call arguments do not match\n";
+                return false;
+            }
             for (int frame = 0; frame != frameCount; ++frame) {
                 auto t0f = ref_time_ticks();
                 vector<thread> threads;
@@ -106,6 +110,10 @@ bool unit_test ( const string & fn ) {
             return true;
 #else
             if ( auto fnTest = ctx.findFunction("test") ) {
+                if ( !verifyCall<>(fnTest->debugInfo, dummyGroup) ) {
+                    tout << "function 'test', call arguments do not match\n";
+                    return false;
+                }
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
                 if ( auto ex = ctx.getException() ) {

@@ -89,6 +89,10 @@ bool unit_test ( const string & fn, bool useAot ) {
                 program->linkCppAot(ctx, aotLib, tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
+                if ( !verifyCall<>(fnTest->debugInfo, dummyLibGroup) ) {
+                    tout << "function 'test', call arguments do not match\n";
+                    return false;
+                }
                 ctx.restart();
                 ctx.runInitScript();    // this is here for testing purposes only
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
@@ -139,6 +143,10 @@ bool exception_test ( const string & fn, bool useAot ) {
                 program->linkCppAot(ctx, aotLib, tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
+                if ( !verifyCall<>(fnTest->debugInfo, dummyLibGroup) ) {
+                    tout << "function 'test', call arguments do not match\n";
+                    return false;
+                }
                 ctx.restart();
                 ctx.evalWithCatch(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {

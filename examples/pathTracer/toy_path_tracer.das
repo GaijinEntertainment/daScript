@@ -279,7 +279,7 @@ def test
         s = sw1 - sw0
         let frames = i + 1
         let ms = int(s / float(frames) * 1000.)
-        let mrayS = float(totalRayCount) / s * 1.0e-6f
+        let mrayS = float(totalRayCount) / max(s,0.000001) * 1.0e-6f
         let mrayFr = float(rayCount) * 10e-6f
         print("{ms}ms\t{mrayS} Mrays/s\t{mrayFr} Mrays/frame\tframes {frames}\n")
     let sw1 = getClock()

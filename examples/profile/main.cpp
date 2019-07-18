@@ -39,14 +39,21 @@ bool unit_test ( const string & fn, bool useAOT ) {
                 AotListBase::registerAot(aotLib);
                 program->linkCppAot(ctx, aotLib, tout);
             }
-            // vector of 10000 objects
-            vector<Object> objects;
-            objects.resize(10000);
             // run the test
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
-                vec4f args[1] = { cast<vector<Object> *>::from(&objects) };
-                bool result = cast<bool>::to(ctx.eval(fnTest, args));
+                bool result;
+                if ( verifyCall<>(fnTest->debugInfo, dummyGroup) ) {
+                    result = cast<bool>::to(ctx.eval(fnTest, nullptr));
+                } else if ( verifyCall<vector<Object>>(fnTest->debugInfo, dummyGroup) ) {
+                    vector<Object> objects;
+                    objects.resize(10000);
+                    vec4f args[1] = { cast<vector<Object> *>::from(&objects) };
+                    result = cast<bool>::to(ctx.eval(fnTest, args));
+                } else {
+                    tout << "function 'test', call arguments do not match\n";
+                    return false;
+                }
                 if ( auto ex = ctx.getException() ) {
                     tout << fn << ", exception: " << ex << "\n";
                     return false;
