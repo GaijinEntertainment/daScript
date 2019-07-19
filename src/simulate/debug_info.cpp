@@ -232,6 +232,19 @@ namespace das
         return (THIS->type==Type::tVoid) && (THIS->dimSize==0);
     }
 
+    bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
+        // passing non-ref to ref, or passing not the same type
+        if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,false,false,false) ) {
+            return false;
+        }
+        // ref or pointer can only add const
+        if ( (argType->isRef() || argType->type==Type::tPointer) && !argType->isConst() && passType->isConst() ) {
+            return false;
+        }
+        // all good
+        return true;
+    }
+
     bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, bool refMatters, bool constMatters, bool topLevel ) {
         if ( topLevel && THIS->isRef() ) {
             constMatters = false;

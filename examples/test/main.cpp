@@ -89,7 +89,7 @@ bool unit_test ( const string & fn, bool useAot ) {
                 program->linkCppAot(ctx, aotLib, tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
-                if ( !verifyCall<>(fnTest->debugInfo, dummyLibGroup) ) {
+                if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
                     tout << "function 'test', call arguments do not match\n";
                     return false;
                 }
@@ -143,7 +143,7 @@ bool exception_test ( const string & fn, bool useAot ) {
                 program->linkCppAot(ctx, aotLib, tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
-                if ( !verifyCall<>(fnTest->debugInfo, dummyLibGroup) ) {
+                if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
                     tout << "function 'test', call arguments do not match\n";
                     return false;
                 }

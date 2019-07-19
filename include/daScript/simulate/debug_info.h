@@ -207,6 +207,7 @@ namespace das
 
     bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, bool refMatters, bool constMatters, bool topLevel );
     bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
+    bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType );
 
     enum class PrintFlags : uint32_t {
         none =                  0

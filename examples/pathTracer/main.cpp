@@ -63,7 +63,7 @@ bool unit_test ( const string & fn ) {
                 ctxU.emplace_back(make_unique<Context>(ctx));
             }
             auto fnJob = ctx.findFunction("job");
-            if ( !verifyCall<Array,int32_t,int32_t,int32_t,int32_t,int32_t>(fnJob->debugInfo, dummyGroup) ) {
+            if ( !verifyCall<int32_t,Array,int32_t,int32_t,int32_t,int32_t,int32_t>(fnJob->debugInfo, dummyGroup) ) {
                 tout << "function 'job', call arguments do not match\n";
                 return false;
             }
@@ -110,7 +110,7 @@ bool unit_test ( const string & fn ) {
             return true;
 #else
             if ( auto fnTest = ctx.findFunction("test") ) {
-                if ( !verifyCall<>(fnTest->debugInfo, dummyGroup) ) {
+                if ( !verifyCall<bool>(fnTest->debugInfo, dummyGroup) ) {
                     tout << "function 'test', call arguments do not match\n";
                     return false;
                 }

@@ -43,9 +43,9 @@ bool unit_test ( const string & fn, bool useAOT ) {
             if ( auto fnTest = ctx.findFunction("test") ) {
                 ctx.restart();
                 bool result;
-                if ( verifyCall<>(fnTest->debugInfo, dummyGroup) ) {
+                if ( verifyCall<bool>(fnTest->debugInfo, dummyGroup) ) {
                     result = cast<bool>::to(ctx.eval(fnTest, nullptr));
-                } else if ( verifyCall<vector<Object>>(fnTest->debugInfo, dummyGroup) ) {
+                } else if ( verifyCall<bool,vector<Object>>(fnTest->debugInfo, dummyGroup) ) {
                     vector<Object> objects;
                     objects.resize(10000);
                     vec4f args[1] = { cast<vector<Object> *>::from(&objects) };

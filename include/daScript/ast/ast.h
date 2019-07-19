@@ -696,7 +696,7 @@ namespace das
     // note: this has sifnificant performance implications
     //      i.e. this is ok for the load time \ map time
     //      it is not ok to use for every call
-    template <typename ...Args>
+    template <typename ReturnType, typename ...Args>
     inline bool verifyCall ( FuncInfo * info, const ModuleLibrary & lib ) {
         vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
         if ( args.size() != info->count ) {
@@ -709,14 +709,14 @@ namespace das
                 continue;
             }
             auto passType = helper.makeTypeInfo(nullptr, args[index]);
-            // passing non-ref to ref, or passing not the same type
-            if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,false,false,false) ) {
+            if ( !isValidArgumentType(argType, passType) ) {
                 return false;
             }
-            // ref or pointer can only add const
-            if ( (argType->isRef() || argType->type==Type::tPointer) && !argType->isConst() && passType->isConst() ) {
-                return false;
-            }
+        }
+        // ok, now for the return type
+        auto resType = helper.makeTypeInfo(nullptr, makeType<ReturnType>(lib));
+        if ( !isValidArgumentType(resType, info->result) ) {
+            return false;
         }
         return true;
     }
