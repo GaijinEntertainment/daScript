@@ -196,7 +196,7 @@ namespace das {
             if ( auto tnode = trySimulate(context, rv, idx, r2vType, ofs) ) {
                 return tnode;
             } else {
-                return context.code->makeNode<SimNode_AtR2V<float>>(at,
+                return context.code->makeValueNode<SimNode_AtR2V>(  r2vType, at,
                                                                     rv->simulate(context),
                                                                     idx->simulate(context),
                                                                     uint32_t(sizeof(float)*ColC), ofs, RowC);
