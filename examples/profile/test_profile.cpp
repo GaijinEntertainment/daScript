@@ -59,6 +59,7 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 };
 
 MAKE_TYPE_FACTORY(Object, Object)
+MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
 
 __noinline int AddOne(int a) {
     return a+1;
@@ -459,7 +460,7 @@ typedef unordered_map<char *, int32_t, dictKeyHash, dictKeyEqual> dict_hash_map;
     char ** data = (char **) arr.data;
     int maxOcc = 0;
     for ( uint32_t t = 0; t !=arr.size; ++t ) {
-        maxOcc = max(++tab[data[t]], maxOcc);
+        maxOcc = das::max(++tab[data[t]], maxOcc);
     }
     return maxOcc;
 }
@@ -541,7 +542,7 @@ __noinline void testTryCatch(Context * context) {
         int fail = 0;
         for (int i = 0; i != 2000; ++i) {
             try {
-                if (i < 0 || i>=1000) throw das::runtime_error("range check error");
+                if (i < 0 || i>=1000) throw std::runtime_error("range check error");
                 cnt += arr[i];
             }
             catch (...) {

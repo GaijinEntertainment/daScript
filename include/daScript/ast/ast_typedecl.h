@@ -299,20 +299,23 @@ namespace das {
 
     das::TypeDeclPtr makeHandleType(const das::ModuleLibrary & library, const char * typeName);
 
-#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                       \
-    template <>                                                             \
-    struct das::typeFactory<CTYPE> {                                        \
-        static das::TypeDeclPtr make(const das::ModuleLibrary & library ) { \
-            return makeHandleType(library,#TYPE);                           \
-        }                                                                   \
-    };                                                                      \
-    template <>                                                             \
-    struct das::typeName<CTYPE> {                                           \
-        static string name() { return #CTYPE; }                             \
-    };
-
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
     string describeCppType(const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false, bool skipConst = false);
 
 }
+
+
+#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                       \
+namespace das { \
+  template <>                                                             \
+  struct typeFactory<CTYPE> {                                        \
+      static TypeDeclPtr make(const ModuleLibrary & library ) { \
+          return makeHandleType(library,#TYPE);                           \
+      }                                                                   \
+  };                                                                      \
+  template <>                                                             \
+  struct typeName<CTYPE> {                                           \
+      static string name() { return #CTYPE; }                             \
+  }; \
+};
