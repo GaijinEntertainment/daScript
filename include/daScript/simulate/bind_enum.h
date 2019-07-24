@@ -7,18 +7,21 @@
 #define DAS_BIND_ENUM_UNQUALIFIED_HELPER(x, ARG) x,
 
 // sample of enumeration
-#define DAS_BASE_BIND_ENUM_CAST(enum_name, das_enum_name)\
-template <>\
-struct das::cast <enum_name> {\
-  static __forceinline enum_name to ( vec4f x )            { return (enum_name) v_extract_xi(v_cast_vec4i(x)); }\
-  static __forceinline vec4f from ( enum_name x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }\
-};\
-template <>\
-struct das::typeFactory<enum_name> {\
-    static das::TypeDeclPtr make(const das::ModuleLibrary & library ) {\
-        return library.makeEnumType(das_enum_name);\
-    }\
-};
+  #define DAS_BASE_BIND_ENUM_CAST(enum_name, das_enum_name)\
+  namespace das \
+  { \
+    template <>\
+    struct cast <enum_name> {\
+      static __forceinline enum_name to ( vec4f x )            { return (enum_name) v_extract_xi(v_cast_vec4i(x)); }\
+      static __forceinline vec4f from ( enum_name x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }\
+    };\
+    template <>\
+    struct typeFactory<enum_name> {\
+        static TypeDeclPtr make(const ModuleLibrary & library ) {\
+            return library.makeEnumType(das_enum_name);\
+        }\
+    }; \
+  };
 
 #define DAS_BIND_ENUM_CAST(enum_name) DAS_BASE_BIND_ENUM_CAST(enum_name, #enum_name)
 

@@ -1,15 +1,13 @@
 #pragma once
 
-#include "daScript/daScript.h"
+#include "daScript/simulate/simulate.h"
 
 struct Object {
     das::float3   pos;  
     das::float3   vel;  
 };
 
-typedef std::vector<Object> ObjectArray;
-
-MAKE_TYPE_FACTORY(ObjectArray, ObjectArray);
+typedef das::vector<Object> ObjectArray;
 
 int AddOne(int a);
 
