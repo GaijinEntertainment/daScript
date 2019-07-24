@@ -253,23 +253,24 @@ namespace das {
     };
 
     template <typename TT>
-    struct typeFactory<TT &> {
-        static TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = typeFactory<TT>::make(lib);
-            t->ref = true;
-            return t;
-        }
-    };
-
-    template <typename TT>
     struct typeFactory<const TT *> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto pt = make_shared<TypeDecl>(Type::tPointer);
             if ( !is_void<TT>::value ) {
                 pt->firstType = typeFactory<TT>::make(lib);
+                pt->firstType->constant = true;
             }
             pt->constant = true;
             return pt;
+        }
+    };
+
+    template <typename TT>
+    struct typeFactory<TT &> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT>::make(lib);
+            t->ref = true;
+            return t;
         }
     };
 

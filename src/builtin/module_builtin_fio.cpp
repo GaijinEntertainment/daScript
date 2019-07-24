@@ -135,7 +135,7 @@ namespace das {
         }
     }
 
-    FILE * builtin_fopen  ( const char * name, const char * mode ) {
+    const FILE * builtin_fopen  ( const char * name, const char * mode ) {
         if ( name && mode ) {
             return fopen(name, mode);
         } else {
@@ -147,15 +147,15 @@ namespace das {
         fclose((FILE *)f);
     }
 
-    FILE * builtin_stdin() {
+    const FILE * builtin_stdin() {
         return stdin;
     }
 
-    FILE * builtin_stdout() {
+    const FILE * builtin_stdout() {
         return stdout;
     }
 
-    FILE * builtin_stderr() {
+    const FILE * builtin_stderr() {
         return stderr;
     }
 

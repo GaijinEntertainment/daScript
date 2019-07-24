@@ -6,7 +6,7 @@ namespace das {
     struct Block;
     struct SimNode_CallBase;
 
-    FILE * builtin_fopen  ( const char * name, const char * mode );
+    const FILE * builtin_fopen  ( const char * name, const char * mode );
     void builtin_fclose ( const FILE * f );
     void builtin_fprint ( const FILE * f, const char * text );
     char * builtin_fread ( const FILE * _f, Context * context );
@@ -19,7 +19,7 @@ namespace das {
     bool builtin_stat ( const char * filename, FStat & fs );
     void builtin_dir ( const char * path, const Block & fblk, Context * context );
     bool builtin_mkdir ( const char * path );
-    FILE * builtin_stdin();
-    FILE * builtin_stdout();
-    FILE * builtin_stderr();
+    const FILE * builtin_stdin();
+    const FILE * builtin_stdout();
+    const FILE * builtin_stderr();
 }

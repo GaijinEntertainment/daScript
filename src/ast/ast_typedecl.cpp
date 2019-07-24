@@ -504,12 +504,15 @@ namespace das
 
     bool TypeDecl::isConst() const
     {
+        return constant;
+        /*
         if ( constant )
             return true;
         if ( baseType==Type::tPointer )
             if ( firstType && firstType->constant )
                 return true;
         return false;
+        */
     }
 
     bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters, bool topLevel ) const {

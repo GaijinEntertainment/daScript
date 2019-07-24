@@ -1,4 +1,5 @@
 // options optimize=false, log=true
+// options logInferPasses=true
 
 struct Foo
     bar : int
@@ -38,10 +39,10 @@ def test
     pFoo = pFooI
     assert(pFoo.bar==1)
     // array
-    let TT_A : array<int>
+    var TT_A : array<int>
     let TT_iA : array<auto> <- TT_A
     // table
-    let TT_T : table<string,int>
+    var TT_T : table<string,int>
     let TT_iT : table<auto,auto> <- TT_T
     let TT_ikT : table<auto,int> <- TT_T
     let TT_ivT : table<string,auto> <- TT_T
