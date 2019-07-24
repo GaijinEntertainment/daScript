@@ -11,6 +11,9 @@ using namespace das;
 
 #include "test_profile.h"
 
+MAKE_TYPE_FACTORY(Object, Object)
+MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
+
 TextPrinter tout;
 
 bool unit_test ( const string & fn, bool useAOT ) {
