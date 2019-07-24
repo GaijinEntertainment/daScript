@@ -129,7 +129,7 @@ namespace das {
         if ( baseType != Type::tPointer ) {
             if ( !skipConst ) {
                 if ( type->constant ) {
-                    stream << "const ";     // TODO: do we skip it alltogether?
+                    stream << "const ";
                 }
             }
         }
@@ -236,7 +236,7 @@ namespace das {
         if ( baseType == Type::tPointer ) {
             if ( !skipConst ) {
                 if ( type->constant ) {
-                    stream << "const ";     // TODO: do we skip it alltogether?
+                    stream << "const ";
                 }
             }
         }

@@ -85,7 +85,7 @@ def test:bool
         make_test_array(a)
         verify_test_array(a)
         if true
-            let b:array<int> <- a
+            var b:array<int> <- a
             assert(length(a)==0)
             verify_test_array(b)
             a <- b

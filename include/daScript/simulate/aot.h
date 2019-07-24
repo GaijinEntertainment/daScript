@@ -154,7 +154,7 @@ namespace das {
     struct das_cast {
         template <typename QQ>
         static __forceinline TT & cast ( const QQ & expr ) {
-            return reinterpret_cast<TT&>(expr);
+            return reinterpret_cast<TT&>(const_cast<QQ &>(expr));
         }
         template <typename QQ>
         static __forceinline TT & cast ( QQ && expr ) {
@@ -427,6 +427,11 @@ namespace das {
 
     template <typename TT>
     struct das_iterator;
+
+    template <typename TT>
+    struct das_iterator<const TT> : das_iterator<TT> {
+        __forceinline das_iterator ( const TT & a ) : das_iterator<TT>(a) {}
+    };
 
     template <>
     struct das_iterator <range> {

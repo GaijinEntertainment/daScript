@@ -2171,6 +2171,8 @@ namespace das {
                 error("can't move to a constant value", expr->at, CompilationError::cant_move_to_const);
             } else if ( !expr->left->type->canMove() ) {
                 error("this type can't be moved, use clone (:=) instead", expr->at, CompilationError::cant_move);
+            } else if ( expr->right->type->constant ) {
+                error("can't move from a constant value", expr->at, CompilationError::cant_move);
             }
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
@@ -2298,6 +2300,9 @@ namespace das {
                     error("this type can't be returned at all " + resType->describe(),
                           expr->at, CompilationError::invalid_return_type);
                 }
+            }
+            if ( expr->moveSemantics && expr->subexpr->type->isConst() ) {
+                error("can't return via move from a constant value", expr->at, CompilationError::cant_move);
             }
             return false;
         }
@@ -2620,6 +2625,8 @@ namespace das {
                        && var->init->type->canMove() && !var->move_to_init ) {
                 error("this local variable can only be move-initialized, use <- for that", var->at,
                     CompilationError::invalid_initialization_type);
+            } else if ( var->move_to_init && var->init->type->isConst() ) {
+                error("can't init (move) from a constant value", expr->at, CompilationError::cant_move);
             }
             return Visitor::visitLetInit(expr, var, init);
         }
