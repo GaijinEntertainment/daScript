@@ -770,7 +770,7 @@ namespace das {
             vec4f * aa = context.abiArg;
             vec4f stub[1];
             if ( !aa ) context.abiArg = stub;
-            using ResultValue = remove_const<Result>::type;
+            using ResultValue = typename remove_const<Result>::type;
             *((ResultValue *)context.abiCMRES) = ImplAotStaticFunctionCMRES<Result>::template
                 call<FuncT,Arguments>(*fn, context, Indices());
             context.abiArg = aa;
