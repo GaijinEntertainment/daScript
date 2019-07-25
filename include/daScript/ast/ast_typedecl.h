@@ -302,7 +302,7 @@ namespace das {
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
-    string describeCppType(const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false, bool skipConst = false);
+    string describeCppType(const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false, bool skipConst = false, bool redundantConst = true);
 
 }
 

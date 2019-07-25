@@ -297,6 +297,9 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct das_index<const TT *> : das_index<TT *> {};
+
     template <typename TT, uint32_t size>
     struct TDim {
         enum { capacity = size };
@@ -767,7 +770,8 @@ namespace das {
             vec4f * aa = context.abiArg;
             vec4f stub[1];
             if ( !aa ) context.abiArg = stub;
-            *((Result *)context.abiCMRES) = ImplAotStaticFunctionCMRES<Result>::template
+            using ResultValue = remove_const<Result>::type;
+            *((ResultValue *)context.abiCMRES) = ImplAotStaticFunctionCMRES<Result>::template
                 call<FuncT,Arguments>(*fn, context, Indices());
             context.abiArg = aa;
             context.abiResult() = cast<void *>::from(context.abiCMRES);

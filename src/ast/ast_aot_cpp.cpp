@@ -120,10 +120,10 @@ namespace das {
         }
     }
 
-    string describeCppType ( const TypeDeclPtr & type, bool substituteRef, bool skipRef, bool skipConst ) {
+    string describeCppType ( const TypeDeclPtr & type, bool substituteRef, bool skipRef, bool skipConst, bool redundantConst ) {
         TextWriter stream;
         auto baseType = type->baseType;
-        if ( isConstRedundantForCpp(type) ) {
+        if ( isConstRedundantForCpp(type) && redundantConst ) {
             skipConst = true;
         }
         if ( baseType != Type::tPointer ) {
@@ -182,7 +182,7 @@ namespace das {
             }
         } else if ( baseType==Type::tPointer ) {
             if ( type->firstType ) {
-                stream << describeCppType(type->firstType) << " *";
+                stream << describeCppType(type->firstType,false,false,false,false) << " *";
             } else {
                 stream << "void *";
             }
