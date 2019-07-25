@@ -9,6 +9,8 @@ namespace das {
     template <typename TT>
     struct typeName;
     
+    template <typename TT> struct typeName<const TT> : typeName<TT> {};
+
     template <> struct typeName<int32_t>  { static string name() { return "int"; } };
     template <> struct typeName<uint32_t> { static string name() { return "uint"; } };
     template <> struct typeName<int8_t>   { static string name() { return "int8"; } };

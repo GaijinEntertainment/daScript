@@ -638,9 +638,9 @@ namespace das {
     }
 
     template <typename TT>
-    __forceinline TT & das_deref ( Context * __context__, TT * ptr ) {
+    __forceinline TT & das_deref ( Context * __context__, const TT * ptr ) {
         if ( !ptr ) __context__->throw_error("dereferencing null pointer");
-        return *ptr;
+        return *((TT *)ptr);
     }
 
     template <typename TT>

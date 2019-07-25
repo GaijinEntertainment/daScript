@@ -1873,6 +1873,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             new (iter) IterT(array);
             return cast<char *>::from(iter);
         }
+        virtual SimNode * visit(SimVisitor & vis) override {
+            V_BEGIN();
+            V_OP_TT(AnyIterator);
+            V_SUB(source);
+            V_END();
+        }
         SimNode *   source;
     };
 
