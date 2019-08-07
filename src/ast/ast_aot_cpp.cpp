@@ -1859,7 +1859,7 @@ namespace das {
                 if (isLocalVec(arg->type)) {
                     describeLocalCppType(ss, arg->type);
                 } else {
-                    ss << describeCppType(arg->type);
+                    ss << describeCppType(arg->type,false,false,false,false);
                     if ( arg->type->isRefType() && !arg->type->ref ) {
                         ss << " &";
                     }
