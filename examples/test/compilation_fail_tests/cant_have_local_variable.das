@@ -13,4 +13,3 @@ def test:bool
     var d:table<int,StructureNotLocal>  // 30108
     return true
 
-

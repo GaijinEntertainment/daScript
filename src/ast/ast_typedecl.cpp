@@ -502,6 +502,30 @@ namespace das
         return ss.str();
     }
 
+    bool TypeDecl::isLocal() const {
+        if ( isHandle() ) {
+            return annotation->isLocal();
+        } else if ( isStructure() ) {
+            return structType ? structType->isLocal() : false;
+        } else if ( isPointer() ) {
+            return true;
+        }
+        if ( firstType && !firstType->isLocal() ) {
+            return false;
+        }
+        if ( secondType && !secondType->isLocal() ) {
+            return false;
+        }
+        if ( baseType==Type::tTuple ) {
+            for ( const auto & arg : argTypes ) {
+                if ( !arg->isLocal() ) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     bool TypeDecl::isConst() const
     {
         return constant;

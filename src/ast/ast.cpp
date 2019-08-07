@@ -210,6 +210,15 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
+    bool Structure::isLocal() const {
+        for ( const auto & fd : fields ) {
+            if ( fd.type && !fd.type->isLocal() ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // variable
 
     VariablePtr Variable::clone() const {

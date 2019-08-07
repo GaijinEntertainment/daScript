@@ -30,6 +30,10 @@ struct TestObjectBar {
     TestObjectFoo * getFooPtr() { return fooPtr; }
 };
 
+struct TestObjectNotLocal {
+    int fooData;
+};
+
 int *getPtr();
 
 void testFields ( das::Context * ctx );

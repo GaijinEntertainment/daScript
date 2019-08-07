@@ -131,6 +131,7 @@ namespace das
         bool canAot( set<Structure *> & recAot ) const;
         bool isPod() const;
         bool isRawPod() const;
+        bool isLocal() const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;

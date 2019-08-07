@@ -2574,8 +2574,8 @@ namespace das {
             if ( var->type->isVoid() )
                 error("local variable can't be declared void",
                       var->at, CompilationError::invalid_variable_type);
-            if ( var->type->isHandle() && !var->type->annotation->isLocal() && !var->type->ref )
-                error("can't have local variable of handled type " + var->type->annotation->name ,
+            if ( !var->type->isLocal() && !var->type->ref )
+                error("can't have local variable of type " + var->type->describe(),
                       var->at, CompilationError::invalid_variable_type);
             if ( !var->type->isAuto() && !var->type->isAlias() ){
                 if ( var->init && var->init->rtti_isCast() ) {

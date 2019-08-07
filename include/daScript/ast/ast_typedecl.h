@@ -90,6 +90,7 @@ namespace das {
         bool isAlias() const;
         bool isAuto() const;
         bool isVectorType() const;
+        bool isLocal() const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
         bool canInitWithZero() const;

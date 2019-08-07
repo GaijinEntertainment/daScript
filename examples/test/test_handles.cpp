@@ -19,6 +19,14 @@ struct typeFactory<Point3> {
 //sample of your engine annotated struct
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
+MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
+
+struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotLocal> {
+    TestObjectNotLocalAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectNotLocal", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
+    }
+    virtual bool isLocal() const { return false; }
+};
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectFoo", ml) {
@@ -276,6 +284,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<CheckRange>());
     addAnnotation(make_shared<IntFieldsAnnotation>());
     // register types
+    addAnnotation(make_shared<TestObjectNotLocalAnnotation>(lib));
     addAnnotation(make_shared<TestObjectFooAnnotation>(lib));
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
     // register function
