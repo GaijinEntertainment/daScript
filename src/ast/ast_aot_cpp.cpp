@@ -681,6 +681,8 @@ namespace das {
         ss << " ";
         if ( needName ) {
             ss << aotFuncName(fn);
+        } else {
+            ss << "(*)";
         }
         ss << " ( Context * __context__";
         for ( auto & var : fn->arguments ) {
@@ -2307,15 +2309,15 @@ namespace das {
                 logs << "CMRES";
             }
             logs << "<" << describeCppFunc(fnn[i],nullptr,false,false) << ",";
-            logs << aotFuncName(fnn[i]) << ">>();\n\t};\n";
+            logs << "&" << aotFuncName(fnn[i]) << ">>();\n\t};\n";
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             logs << "\t\t// [[ init script ]]\n";
             logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
-            logs << "<void (Context *),";
-            logs << "__init_script>>();\n\t\t};\n";
+            logs << "<void (*)(Context *),";
+            logs << "&__init_script>>();\n\t\t};\n";
         }
         if ( headers ) {
             logs << "}\n";
