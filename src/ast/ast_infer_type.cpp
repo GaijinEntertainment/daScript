@@ -100,13 +100,16 @@ namespace das {
                 if ( auto ptrType = decl->firstType ) {
                     verifyType(ptrType);
                 }
-            }else if ( decl->baseType==Type::tArray ) {
+            } else if ( decl->baseType==Type::tArray ) {
                 if ( auto arrayType = decl->firstType ) {
                     if ( arrayType->ref ) {
                         error("can't declare an array of references",arrayType->at,CompilationError::invalid_array_type);
                     }
                     if ( arrayType->baseType==Type::tVoid) {
                         error("can't declare a void array",arrayType->at,CompilationError::invalid_array_type);
+                    }
+                    if ( !arrayType->isLocal() ) {
+                        error("array type has to be 'local'", arrayType->at,CompilationError::invalid_type);
                     }
                     verifyType(arrayType);
                 }
@@ -123,6 +126,9 @@ namespace das {
                 if ( auto valueType = decl->secondType ) {
                     if ( valueType->ref ) {
                         error("table value can't be declared as a reference",valueType->at,CompilationError::invalid_table_type);
+                    }
+                    if ( !valueType->isLocal() ) {
+                        error("table value has to be 'local'", valueType->at,CompilationError::invalid_type);
                     }
                     verifyType(valueType);
                 }
@@ -143,6 +149,9 @@ namespace das {
                 for ( auto & argType : decl->argTypes ) {
                     if ( argType->ref ) {
                         error("tuple element can't be ref", argType->at,CompilationError::invalid_type);
+                    }
+                    if ( !argType->isLocal() ) {
+                        error("tuple element has to be 'local'", argType->at,CompilationError::invalid_type);
                     }
                     verifyType(argType);
                 }
@@ -745,6 +754,8 @@ namespace das {
                 error("structure field type can't be declared void",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->ref ) {
                 error("structure field type can't be declared a reference",decl.at,CompilationError::invalid_structure_field_type);
+            } else if ( !decl.type->isLocal() ) {
+                error("structure field has to be 'local'",decl.at,CompilationError::invalid_type);
             }
             if ( decl.init ) {
                 if ( decl.init->type ) {
