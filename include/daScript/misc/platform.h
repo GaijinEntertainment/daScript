@@ -19,6 +19,13 @@
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #endif
 
+#ifdef __GNUC__
+#pragma gcc diagnostic ignored "-Wgnu-anonymous-struct"
+#pragma gcc diagnostic ignored "-Wnested-anon-types"
+#pragma gcc diagnostic ignored "-Wmissing-braces"
+#pragma gcc diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#endif
+
 #include <assert.h>
 #include <string.h>
 
