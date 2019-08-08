@@ -20,10 +20,13 @@
 #endif
 
 #ifdef __GNUC__
-#pragma gcc diagnostic ignored "-Wgnu-anonymous-struct"
-#pragma gcc diagnostic ignored "-Wnested-anon-types"
-#pragma gcc diagnostic ignored "-Wmissing-braces"
-#pragma gcc diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#pragma GCC diagnostic ignored "-Wmissing-braces"
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wunused-value"
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#pragma GCC diagnostic ignored "-Wsequence-point"
 #endif
 
 #include <assert.h>

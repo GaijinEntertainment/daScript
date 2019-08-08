@@ -31,10 +31,9 @@
 #else
 #include <emmintrin.h>
 #if _TARGET_PC_MACOSX
-	 	#include <pmmintrin.h>
- #if !defined(__clang__)
-	#include <tmmintrin.h>
- #endif
+#include <pmmintrin.h>
+#else
+#include <x86intrin.h> // MAC GCC
 #endif
 #endif
 

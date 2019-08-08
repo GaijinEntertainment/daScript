@@ -12,6 +12,12 @@
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/interop.h"
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#pragma GCC diagnostic ignored "-Wsizeof-pointer-memaccess"
+#endif
+
 namespace das {
 
     #define DAS_MAKE_ANNOTATION(name)   ((TypeAnnotation*)(intptr_t(name)|1))
@@ -296,7 +302,7 @@ namespace das {
             return value[index];
         }
     };
-
+	
     template <typename TT>
     struct das_index<const TT *> : das_index<TT *> {};
 
@@ -1208,3 +1214,6 @@ namespace das {
     }
 }
 
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif

@@ -11,7 +11,7 @@ namespace das
         vec4f *     functionArguments;
         __forceinline bool operator == ( const Block & b ) const {
             return b.stackOffset==stackOffset && b.argumentsOffset==argumentsOffset
-                && b.body==body && b.functionArguments==b.functionArguments;
+                && b.body==body && b.functionArguments==functionArguments;
         }
     };
 

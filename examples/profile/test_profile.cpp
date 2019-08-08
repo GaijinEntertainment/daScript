@@ -188,11 +188,15 @@ struct EsFunctionAnnotation : FunctionAnnotation {
     }
 };
 
+#if FUNC_TO_QUERY
+bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> &, uint32_t ) {
+    auto functionPtr = context.getFunction(table.functionIndex);
+    context.call(functionPtr, nullptr, 0);
+    return true;
+}
+#else
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto functionPtr = context.getFunction(table.functionIndex);
-#if FUNC_TO_QUERY
-    context.call(functionPtr, nullptr, 0);
-#else
     vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.callEx(functionPtr, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
@@ -237,9 +241,9 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
             }
         }
     });
-#endif
     return true;
 }
+#endif
 
 uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto * closure = (SimNode_ClosureBlock *) block.body;

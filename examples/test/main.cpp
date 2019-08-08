@@ -150,7 +150,7 @@ bool exception_test ( const string & fn, bool useAot ) {
                 ctx.restart();
                 ctx.evalWithCatch(fnTest, nullptr);
                 if ( auto ex = ctx.getException() ) {
-                    tout << (useAot ? "ok AOT\n" : "ok\n");
+                    tout << "with exception " << ex << ", " << (useAot ? "ok AOT\n" : "ok\n");
                     return true;
                 }
                 tout << "failed, finished without exception\n";
