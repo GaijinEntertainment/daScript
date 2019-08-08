@@ -303,7 +303,16 @@ namespace das {
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
-    string describeCppType(const TypeDeclPtr & type, bool substituteRef = false, bool skipRef = false, bool skipConst = false, bool redundantConst = true);
+    enum class CpptSubstitureRef { no, yes };
+    enum class CpptSkipRef { no, yes };
+    enum class CpptSkipConst { no, yes };
+    enum class CpptRedundantConst { no, yes };
+
+    string describeCppType(const TypeDeclPtr & type,
+                           CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
+                           CpptSkipRef skipRef = CpptSkipRef::no,
+                           CpptSkipConst skipConst = CpptSkipConst::no,
+                           CpptRedundantConst redundantConst = CpptRedundantConst::yes );
 
 }
 

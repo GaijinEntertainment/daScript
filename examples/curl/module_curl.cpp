@@ -16,9 +16,12 @@ namespace das {
             curl = nullptr;
         }
     };
+}
 
     MAKE_TYPE_FACTORY(CURL, Curl);
 
+namespace das {
+    
     struct CurlAnnotation : ManagedStructureAnnotation<Curl> {
         CurlAnnotation(ModuleLibrary & ml) :  ManagedStructureAnnotation<Curl>("CURL",ml) {
         }
