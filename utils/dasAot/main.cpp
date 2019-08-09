@@ -76,6 +76,8 @@ bool compile ( const string & fn, const string & cppFn ) {
             tw << "#pragma GCC diagnostic ignored \"-Wunused-function\"\n";
 			tw << "#pragma GCC diagnostic ignored \"-Wwrite-strings\"\n";
 			tw << "#pragma GCC diagnostic ignored \"-Wreturn-local-addr\"\n";
+			tw << "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n";
+			tw << "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n";
             tw << "#elif defined(__clang__)\n";
             tw << "#pragma clang diagnostic push\n";
             tw << "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n";

@@ -264,25 +264,25 @@ namespace das {
     template <typename TT> struct das_index<vec3<TT>> : das_vec_index<TT, vec3<TT>, 3> {};
     template <typename TT> struct das_index<vec4<TT>> : das_vec_index<TT, vec4<TT>, 4> {};
 
-    template <typename VecT, uint32_t size>
+    template <typename VecT, int size>
     struct das_index<Matrix<VecT,size>> {
         using MatT = Matrix<VecT,size>;
         static __forceinline VecT & at ( MatT & value, int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error("index out of range");
+            if ( idx>=uint32_t(size) ) __context__->throw_error("index out of range");
             return value.m[idx];
         }
         static __forceinline const VecT & at ( const MatT & value, int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
-            if ( idx>=size ) __context__->throw_error("index out of range");
+            if ( idx>=uint32_t(size) ) __context__->throw_error("index out of range");
             return value.m[idx];
         }
         static __forceinline VecT & at ( MatT & value, uint32_t idx, Context * __context__ ) {
-            if ( idx>=size ) __context__->throw_error("index out of range");
+            if ( idx>=uint32_t(size) ) __context__->throw_error("index out of range");
             return value.m[idx];
         }
         static __forceinline const VecT & at ( const MatT & value, uint32_t idx, Context * __context__ ) {
-            if ( idx>=size ) __context__->throw_error("index out of range");
+            if ( idx>=uint32_t(size) ) __context__->throw_error("index out of range");
             return value.m[idx];
         }
     };
