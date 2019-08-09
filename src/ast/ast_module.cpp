@@ -40,7 +40,10 @@ namespace das {
     TypeAnnotation * Module::resolveAnnotation ( TypeInfo * info ) {
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
-            string name = (char *) ( ann & ~1 );
+            wchar_t * wsname = (wchar_t *) ( ann & ~1 );
+            wchar_t * wsend = wsname;
+            while ( *wsend ) wsend++;
+            string name ( wsname, wsend );
             string moduleName, annName;
             splitTypeName(name, moduleName, annName);
             info->annotation_or_name = nullptr;
