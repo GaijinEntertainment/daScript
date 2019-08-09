@@ -12,7 +12,7 @@
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/interop.h"
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #pragma GCC diagnostic ignored "-Wsizeof-pointer-memaccess"
@@ -1214,6 +1214,6 @@ namespace das {
     }
 }
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
