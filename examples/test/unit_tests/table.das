@@ -6,7 +6,9 @@ def test : bool
     verify(!erase(tab,"0"))
     i = 0
     while i!=total
-        tab[string(i)] = i++
+        // tab[string(i)] = i++
+		tab[string(i)] = i
+		i++
     assert(length(tab)==total)
     // debug(tab)
     i = 0
