@@ -805,11 +805,11 @@ namespace das
         uint32_t                    extraOffset = 0;
         union {
             struct {
-                bool    useStackRef;
-                bool    useCMRES;
-                bool    doesNotNeedSp;
-                bool    doesNotNeedInit;
-                bool    needTempSrc;
+                bool    useStackRef : 1;
+                bool    useCMRES : 1;
+                bool    doesNotNeedSp : 1;
+                bool    doesNotNeedInit : 1;
+                bool    needTempSrc : 1;
             };
             uint32_t makeFlags = 0;
         };
