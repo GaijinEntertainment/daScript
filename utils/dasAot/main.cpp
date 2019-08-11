@@ -3,10 +3,14 @@
 
 using namespace das;
 
+static bool quiet = false;
+
 TextPrinter tout;
 
 bool saveToFile ( const string & fname, const string & str ) {
-    printf("saving to %s\n", fname.c_str());
+    if ( !quiet )  {
+        tout << "saving to " << fname << "\n";
+    }
     FILE * f = fopen ( fname.c_str(), "w" );
     if ( !f ) {
         tout << "can't open " << fname << "\n";
@@ -128,9 +132,12 @@ bool compile ( const string & fn, const string & cppFn ) {
 void require_project_specific_modules();//link time resolved dependencies
 
 int main(int argc, const char * argv[]) {
-    if ( argc!=3 ) {
-        tout << "dasAot [script.das] [script.das.src]\n";
+    if ( argc<3 ) {
+        tout << "dasAot <in_script.das> <out_script.das.cpp> [-q]\n";
         return -1;
+    }
+    if ( argc>3 && strcmp(argv[3], "-q")==0 ) {
+        quiet = true;
     }
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
