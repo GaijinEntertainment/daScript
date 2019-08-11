@@ -33,7 +33,9 @@
 #if _TARGET_PC_MACOSX
 #include <pmmintrin.h>
 #else
+#ifdef __GNUC__
 #include <x86intrin.h> // MAC GCC
+#endif
 #endif
 #endif
 
