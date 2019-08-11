@@ -14,7 +14,9 @@
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
+#if __GNUC__>=9
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
 #pragma GCC diagnostic ignored "-Wsizeof-pointer-memaccess"
 #endif
 
