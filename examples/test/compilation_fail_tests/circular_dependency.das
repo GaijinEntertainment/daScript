@@ -14,6 +14,8 @@ struct Bar
 
 [export]
 def test:bool
+    let a : Foo
+    let b : Node
+    let c : Bar
     return true
-
 

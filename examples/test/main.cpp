@@ -230,7 +230,7 @@ int main() {
 #endif
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
-    // #define TEST_NAME   "examples/test/unit_tests/tuple.das"
+    // #define TEST_NAME   "examples/test/unit_tests/struct.das"
     unit_test(TEST_PATH TEST_NAME,false);
     //unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();

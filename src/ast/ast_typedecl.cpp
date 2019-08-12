@@ -832,7 +832,7 @@ namespace das
             for ( auto & arg : argTypes )
                 any |= arg->isAlias();
             return any;
-        }
+        } 
         return false;
     }
 
@@ -1178,5 +1178,36 @@ namespace das
                 size *= dim[i];
         }
         return getBaseSizeOf() * size;
+    }
+
+    bool isCircularType ( const TypeDeclPtr & type, set<const TypeDecl *> & all ) {
+        if ( type->baseType==Type::tStructure || type->baseType==Type::tTuple ) {
+            auto thisType = type.get();
+            if ( all.find(thisType)!=all.end() ) return true;
+            all.insert(thisType);
+        }
+        if ( type->baseType==Type::tPointer ) {
+            return false;
+        } else if ( type->baseType==Type::tStructure ) {
+            if ( type->structType ) {
+                for ( auto & fd : type->structType->fields ) {
+                    if ( isCircularType(fd.type, all) ) return true;
+                }
+            }
+            return false;
+        }
+        if ( type->firstType && isCircularType(type->firstType, all) ) return true;
+        if ( type->secondType && isCircularType(type->secondType, all) ) return true;
+        if ( type->baseType==Type::tTuple ) {
+            for ( auto & arg : type->argTypes ) {
+                if ( isCircularType(arg, all) ) return true;
+            }
+        }
+        return false;
+    }
+
+    bool isCircularType ( const TypeDeclPtr & type ) {
+        set<const TypeDecl *> all;
+        return isCircularType(type, all);
     }
 }

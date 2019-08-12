@@ -303,6 +303,8 @@ namespace das {
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
+    bool isCircularType ( const TypeDeclPtr & type );
+
     enum class CpptSubstitureRef { no, yes };
     enum class CpptSkipRef { no, yes };
     enum class CpptSkipConst { no, yes };
