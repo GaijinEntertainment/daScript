@@ -246,7 +246,7 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
         return a + 1
 
     def test
-        let t =  addX |> 2
+        let t =  addOne <| 2
         assert(t == 3)
 
 ^^^^^^^^^^^^^^^^^^^^^
@@ -309,11 +309,11 @@ Struct Constructor
 (see :ref:`Structs <structs>`).
 
 -----------------
-Array contructor
+Array Contructor
 -----------------
 
 .. index::
-    single: Array constructor
+    single: Array Constructor
 
 ::
 
