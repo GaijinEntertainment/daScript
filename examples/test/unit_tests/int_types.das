@@ -18,4 +18,6 @@ def test
     assert("{typeinfo(typename uhu)}"=="uint")
     assert("{typeinfo(typename uhl)}"=="uint64")
     assert("{typeinfo(typename uhlu)}"=="uint64")
+    let ch = 'a'
+    assert(ch==97)
     return true
