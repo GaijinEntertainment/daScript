@@ -46,4 +46,10 @@ def test:bool
     let mls = "this is
 multi line string"
     assert(mls=="this is\nmulti line string")
+    assert(format("%02x",26)=="1a")
+    assert(format("%02x",27u)=="1b")
+    assert(format("%02x",28l)=="1c")
+    assert(format("%02x",29ul)=="1d")
+    assert(format("%.1f",1.23)=="1.2")
+    assert(format("%.2f",1.234)=="1.23")
     return true

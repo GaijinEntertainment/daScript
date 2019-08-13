@@ -24,4 +24,11 @@ namespace das {
     void peek_das_string(const string & str, const Block & block, Context * context);
 
     __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
+
+    template <typename TT>
+    __forceinline const char * format ( const char * fmt, TT value, Context * context ) {
+        char buf[256];
+        snprintf(buf, 256, fmt, value);
+        return context->heap.allocateString(buf, strlen(buf));
+    }
 }
