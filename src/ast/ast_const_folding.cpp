@@ -15,77 +15,145 @@ namespace das {
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             expr->noSideEffects = false;
+            expr->noNativeSideEffects = false;
         }
     };
 
     class NoSideEffectVisitor : public Visitor {
     protected:
+    // make block
+        virtual void preVisit ( ExprMakeBlock * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+        }
+    // make lambda
+        virtual void preVisit ( ExprMakeLambda * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+        }
+    // cast
+        virtual void preVisit ( ExprCast * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+        }
     // const
         virtual void preVisit ( ExprConst * expr ) override {
             Visitor::preVisit(expr);
             expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
         }
     // find
         virtual void preVisit ( ExprFind * expr ) override {
             Visitor::preVisit(expr);
             expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
         }
     // key_exists
         virtual void preVisit ( ExprKeyExists * expr ) override {
             Visitor::preVisit(expr);
             expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
         }
     // variable
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = !expr->write;
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
         }
     // swizzle
         virtual void preVisit ( ExprSwizzle * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = !expr->write;
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
         }
     // field
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = !expr->write;
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
         }
     // safe-field
         virtual void preVisit ( ExprSafeField * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = !expr->write;
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
         }
     // null-coalescing
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects && expr->defaultValue->noSideEffects;
+            expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects && expr->defaultValue->noNativeSideEffects;
             return Visitor::visit(expr);
         }
     // at
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = !expr->write;
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
         }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects && (expr->func->sideEffectFlags==0);
+            expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects
+                && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferedSideEffects))==0);
             return Visitor::visit(expr);
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && (expr->func->sideEffectFlags==0);
+            expr->noNativeSideEffects = expr->left->noNativeSideEffects && expr->right->noNativeSideEffects
+                && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferedSideEffects))==0);
             return Visitor::visit(expr);
         }
     // op3
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects && expr->left->noSideEffects && expr->right->noSideEffects;
+            expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects
+                && expr->left->noNativeSideEffects && expr->right->noNativeSideEffects;
             return Visitor::visit(expr);
         }
     // call
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             expr->noSideEffects = (expr->func->sideEffectFlags==0);
+            expr->noNativeSideEffects = (expr->func->sideEffectFlags & uint32_t(SideEffects::inferedSideEffects))==0;
             if ( expr->noSideEffects ) {
                 for ( auto & arg : expr->arguments ) {
                     expr->noSideEffects &= arg->noSideEffects;
+                    expr->noNativeSideEffects &= arg->noNativeSideEffects;
+                }
+            }
+            return Visitor::visit(expr);
+        }
+    // make tuple
+        virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+            for ( auto & val : expr->values ) {
+                expr->noSideEffects &= val->noSideEffects;
+                expr->noNativeSideEffects &= val->noNativeSideEffects;
+            }
+            return Visitor::visit(expr);
+        }
+    // make array
+        virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+            for ( auto & val : expr->values ) {
+                expr->noSideEffects &= val->noSideEffects;
+                expr->noNativeSideEffects &= val->noNativeSideEffects;
+            }
+            return Visitor::visit(expr);
+        }
+    // make structure
+        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+            for ( const auto & mksp : expr->structs ) {
+                for ( const auto & fld : *mksp ) {
+                    expr->noSideEffects &= fld->value->noSideEffects;
+                    expr->noNativeSideEffects &= fld->value->noNativeSideEffects;
                 }
             }
             return Visitor::visit(expr);
@@ -104,29 +172,35 @@ namespace das {
     // string-builder
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
             expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
             for ( auto & arg : expr->elements ) {
                 expr->noSideEffects &= arg->noSideEffects;
+                expr->noNativeSideEffects &= arg->noNativeSideEffects;
             }
             return Visitor::visit(expr);
         }
     // addr
         virtual ExpressionPtr visit ( ExprAddr * expr ) override {
             expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
             return Visitor::visit(expr);
         }
     // ref2value
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects;
+            expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects;
             return Visitor::visit(expr);
         }
     // ptr2ref
         virtual ExpressionPtr visit ( ExprPtr2Ref * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects;
+            expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects;
             return Visitor::visit(expr);
         }
     // ref2ptr
         virtual ExpressionPtr visit ( ExprRef2Ptr * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects;
+            expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects;
             return Visitor::visit(expr);
         }
     };

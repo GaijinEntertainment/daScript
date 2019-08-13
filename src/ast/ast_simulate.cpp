@@ -1975,6 +1975,7 @@ namespace das
                 gfun.stackSize = pfun->totalStackSize;
                 gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
                 gfun.flags = 0;
+                gfun.fastcall = pfun->fastCall;
             }
         }
         for (auto & pm : library.modules ) {

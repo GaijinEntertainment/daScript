@@ -330,6 +330,7 @@ namespace das
             struct {
                 bool    constexpression : 1;
                 bool    noSideEffects : 1;
+                bool    noNativeSideEffects : 1;
             };
             uint32_t    flags = 0;
         };

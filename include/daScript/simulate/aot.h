@@ -1053,7 +1053,7 @@ namespace das {
         static __forceinline ResType invoke ( Context * __context__, const Func & blk ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->call(simFunc, nullptr, 0);
+            vec4f result = __context__->callOrFastcall(simFunc, nullptr, 0);
             return cast<ResType>::to(result);
         }
         template <typename ...ArgType>
@@ -1061,7 +1061,7 @@ namespace das {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->call(simFunc, arguments, 0);
+            vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
             return cast<ResType>::to(result);
         }
     };
@@ -1071,14 +1071,14 @@ namespace das {
         static __forceinline void invoke ( Context * __context__, const Func & blk ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->call(simFunc, nullptr, 0);
+            __context__->callOrFastcall(simFunc, nullptr, 0);
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->call(simFunc, arguments, 0);
+            __context__->callOrFastcall(simFunc, arguments, 0);
         }
     };
 
@@ -1089,7 +1089,7 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->call(simFunc, nullptr, 0);
+            vec4f result = __context__->callOrFastcall(simFunc, nullptr, 0);
             return cast<ResType>::to(result);
         }
         template <typename ...ArgType>
@@ -1099,7 +1099,7 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->call(simFunc, arguments, 0);
+            vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
             return cast<ResType>::to(result);
         }
     };
@@ -1111,7 +1111,7 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->call(simFunc, nullptr, 0);
+            __context__->callOrFastcall(simFunc, nullptr, 0);
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
@@ -1120,7 +1120,7 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->call(simFunc, arguments, 0);
+            __context__->callOrFastcall(simFunc, arguments, 0);
         }
     };
 
