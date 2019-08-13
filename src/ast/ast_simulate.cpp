@@ -1646,6 +1646,7 @@ namespace das
         bool nativeIterators = false;
         bool fixedArrays = false;
         bool dynamicArrays = false;
+        bool stringChars = false;
         bool rangeBase = false;
         int32_t fixedSize = INT32_MAX;
         for ( auto & src : sources ) {
@@ -1661,13 +1662,15 @@ namespace das
                 nativeIterators = true;
             } else if ( src->type->isRange() ) {
                 rangeBase = true;
+            } else if ( src->type->isString() ) {
+                stringChars = true;
             }
         }
         // create loops based on
         int  total = int(sources.size());
-        int  sourceTypes = int(dynamicArrays) + int(fixedArrays) + int(rangeBase);
+        int  sourceTypes = int(dynamicArrays) + int(fixedArrays) + int(rangeBase) + int(stringChars);
         bool hybridRange = rangeBase && (total>1);
-        if ( (sourceTypes>1) || hybridRange || nativeIterators ) {
+        if ( (sourceTypes>1) || hybridRange || nativeIterators || stringChars ) {
             SimNode_ForWithIteratorBase * result = (SimNode_ForWithIteratorBase *)
                 context.code->makeNodeUnroll<SimNode_ForWithIterator>(total, at);
             for ( int t=0; t!=total; ++t ) {
@@ -1680,6 +1683,10 @@ namespace das
                         sources[t]->type->firstType->getStride());
                 } else if ( sources[t]->type->isRange() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator>(
+                        sources[t]->at,
+                        sources[t]->simulate(context));
+                } else if ( sources[t]->type->isString() ) {
+                    result->source_iterators[t] = context.code->makeNode<SimNode_StringIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context));
                 } else if ( sources[t]->type->isHandle() ) {

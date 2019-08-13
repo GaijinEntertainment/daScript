@@ -85,6 +85,7 @@ namespace das {
         bool isReturnType() const;
         bool isCtorType() const;
         bool isRange() const;
+        bool isString() const;
         bool isConst() const;
         bool isFoldable() const;
         bool isAlias() const;

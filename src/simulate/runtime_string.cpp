@@ -190,4 +190,32 @@ namespace das
         }
         return v_zero();
     }
+
+    // string iteration
+
+    bool StringIterator::first ( Context & context, char * _value )  {
+        if ( str==nullptr || *str==0 ) return false;
+        int32_t * value = (int32_t *) _value;
+        *value = *str++;
+        return true;
+    }
+
+    bool StringIterator::next  ( Context &, char * _value )  {
+        int32_t * value = (int32_t *) _value;
+        *value = *str++;
+        return *value != 0;
+    }
+
+    void StringIterator::close ( Context & context, char * _value )  {
+        int32_t * value = (int32_t *) _value;
+        value = 0;
+    }
+
+    vec4f SimNode_StringIterator::eval ( Context & context ) {
+        vec4f ll = source->eval(context);
+        char * str = cast<char *>::to(ll);
+        char * iter = context.heap.allocate(sizeof(StringIterator));
+        new (iter) StringIterator(str);
+        return cast<char *>::from(iter);
+    }
 }

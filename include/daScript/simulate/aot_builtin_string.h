@@ -5,6 +5,8 @@ namespace das {
     char * builtin_build_string ( const Block & block, Context * context );
     vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args );
 
+    int32_t get_character_at ( const char * str, int32_t index, Context * context );
+
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context );
     bool builtin_string_startswith ( const char * str, const char * cmp, Context * context );
     char* builtin_string_strip ( const char *str, Context * context );

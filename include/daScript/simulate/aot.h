@@ -460,6 +460,22 @@ namespace das {
         range that;
     };
 
+    template <>
+    struct das_iterator <char *> {
+        __forceinline das_iterator(const char * st) : str(st) {}
+        __forceinline bool first ( Context *, int32_t & i ) {
+            if ( !str || *str==0 ) return false;
+            i = *str++;
+            return true;
+        }
+        __forceinline bool next  ( Context *, int32_t & i ) {
+            i = *str++;
+            return i!=0;
+        }
+        __forceinline void close ( Context *, int32_t &   ) {}
+        const char * str;
+    };
+
     template <typename TT>
     struct das_iterator<TArray<TT>> {
         __forceinline das_iterator(const TArray<TT> & r) : that((Array *)&r) {

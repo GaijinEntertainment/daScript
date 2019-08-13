@@ -18,6 +18,14 @@ namespace das
         }
     };
 
+    int32_t get_character_at ( const char * str, int32_t index, Context * context ) {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if ( index<0 || index>=strLen ) {
+            context->throw_error("string character index out of range");
+        }
+        return str[index];
+    }
+
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
@@ -237,6 +245,7 @@ namespace das
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::modifyArgument,"set_das_string");
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "_builtin_peek", SideEffects::none,"peek_das_string");
         // regular string
+        addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "characterat", SideEffects::none, "get_character_at");
         addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none, "builtin_string_endswith");
         addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none, "builtin_string_startswith");
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");

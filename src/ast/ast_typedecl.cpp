@@ -1072,6 +1072,11 @@ namespace das
         return (baseType==Type::tRange || baseType==Type::tURange) && dim.size()==0;
     }
 
+    bool TypeDecl::isString() const
+    {
+        return (baseType==Type::tString) && dim.size()==0;
+    }
+
     bool TypeDecl::isSimpleType(Type typ) const {
         return baseType==typ && isSimpleType();
     }

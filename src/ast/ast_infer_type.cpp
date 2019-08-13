@@ -2559,6 +2559,10 @@ namespace das {
                 } else if ( src->type->isRange() ) {
                     pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
                     pVar->type->ref = false;
+                } else if ( src->type->isString() ) {
+                    pVar->type = make_shared<TypeDecl>(Type::tInt);
+                    pVar->type->ref = false;
+                    pVar->type->constant = true;
                 } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
                     pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType(src));
                 } else {
@@ -2572,6 +2576,12 @@ namespace das {
                 expr->iteratorVariables.push_back(pVar);
                 ++ idx;
             }
+        }
+        virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
+            if ( that->type && that->type->isRef() ) {
+                return Expression::autoDereference(that->shared_from_this());
+            }
+            return Visitor::visitForSource(expr, that, last);
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             popVarStack();

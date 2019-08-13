@@ -57,4 +57,14 @@ multi line string"
         write(writer,"255 hex is ")
         format(writer,"%2x",255)
     assert(st=="255 hex is ff")
+    // string iterator
+    var count = 0
+    var index = 0
+    for ch in st
+        if ch=='5'
+            count ++
+        let chAt = characterat(st,index)
+        assert(ch==chAt)
+        index ++
+    assert(count==2)
     return true
