@@ -62,5 +62,10 @@ def keys(a:table<auto(keyT),auto(valT)>) : iterator<keyT & const>
 def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
   return __builtin_table_values(a,typeinfo(sizeof type valT))
 
+// string writer
+
+def build_string(blk:block<(var writer:StringBuilderWriter)>)
+  return _builtin_build_string(blk)
+
 options indenting = 0
 

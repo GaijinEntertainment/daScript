@@ -6,9 +6,18 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "daScript/simulate/aot_builtin_string.h"
+#include "daScript/misc/string_writer.h"
+
+MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 namespace das
 {
+    struct StringBuilderWriterAnnotation : ManagedStructureAnnotation <StringBuilderWriter,false> {
+        StringBuilderWriterAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("StringBuilderWriter", ml) {
+        }
+    };
+
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
@@ -191,7 +200,37 @@ namespace das
         context->invoke(block, args, nullptr);
     }
 
+    char * builtin_build_string ( const Block & block, Context * context ) {
+        StringBuilderWriter writer(context->heap);
+        vec4f args[1];
+        args[0] = cast<StringBuilderWriter *>::from(&writer);
+        context->invoke(block, args, nullptr);
+        auto pStr = writer.c_str();
+        if ( !pStr ) {
+            context->throw_error("can't allocate string builder result, out of heap");
+        }
+        return pStr;
+    }
+
+    vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        StringBuilderWriter * writer = cast<StringBuilderWriter *>::to(args[0]);
+        DebugDataWalker<StringBuilderWriter> walker(*writer, PrintFlags::string_builder);
+        walker.walk(args[1], call->types[1]);
+        return v_zero();
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
+        // string builder writer
+        addAnnotation(make_shared<StringBuilderWriterAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "_builtin_build_string", SideEffects::modifyExternal,"builtin_build_string");
+        addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
+            SideEffects::modifyExternal, "builtin_write_string");
+        addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<uint64_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint64_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<float>");
+        addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<double>");
         // das string binding
         addAnnotation(make_shared<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");

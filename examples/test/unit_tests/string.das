@@ -52,4 +52,9 @@ multi line string"
     assert(format("%02x",29ul)=="1d")
     assert(format("%.1f",1.23)=="1.2")
     assert(format("%.2f",1.234)=="1.23")
+    // string builder
+    let st = build_string() <| $ (var writer : StringBuilderWriter)
+        write(writer,"255 hex is ")
+        format(writer,"%2x",255)
+    assert(st=="255 hex is ff")
     return true
