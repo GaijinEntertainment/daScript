@@ -1,10 +1,11 @@
 require fio
 
-def fopen(name:string;mode:string="r";blk:block<(f:FILE const?):void>)
+def fopen(name:string;mode:string;blk:block<(f:FILE const?):void>)
 	let f = fopen(name,mode)
     invoke(blk,f)
     fclose(f)
 
+[generic]
 def dir(path:string;blk:block<(filename:string):void>)
     builtin_dir(path,blk)
 

@@ -194,6 +194,7 @@ namespace das
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
         virtual string aotName ( ExprCallFunc * call );
         virtual void aotPrefix ( TextWriter &, ExprCallFunc * ) { }
+        virtual bool isGeneric() const { return false; }
     };
 
     struct TypeAnnotation : Annotation {

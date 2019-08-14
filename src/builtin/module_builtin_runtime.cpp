@@ -29,6 +29,16 @@ namespace das
         }
     };
 
+    struct GenericFunctionAnnotation : MarkFunctionAnnotation {
+        GenericFunctionAnnotation() : MarkFunctionAnnotation("generic") { }
+        virtual bool isGeneric() const override {
+            return true;
+        }
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            return true;
+        };
+    };
+
     struct ExportFunctionAnnotation : MarkFunctionAnnotation {
         ExportFunctionAnnotation() : MarkFunctionAnnotation("export") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -182,6 +192,7 @@ namespace das
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
+        addAnnotation(make_shared<GenericFunctionAnnotation>());
         addAnnotation(make_shared<ExportFunctionAnnotation>());
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
         addAnnotation(make_shared<RunAtCompileTimeFunctionAnnotation>());
