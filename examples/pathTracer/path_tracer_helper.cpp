@@ -52,9 +52,9 @@ public:
         // TGA
         addExtern<DAS_BIND_FUN(saveTga)>(*this, lib, "saveTga",SideEffects::modifyExternal);
     }
-    virtual bool aotRequire ( TextWriter & tw ) const override {
+    virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"path_tracer_helper.h\"\n";
-        return true;
+        return ModuleAotType::cpp;
     }
 };
 

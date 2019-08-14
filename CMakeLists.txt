@@ -186,6 +186,7 @@ include/daScript/simulate/aot_builtin_random.h
 include/daScript/simulate/aot_builtin_time.h
 include/daScript/simulate/aot_builtin_string.h
 include/daScript/simulate/aot_builtin_fio.h
+include/daScript/simulate/aot_builtin_rtti.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
 )
@@ -443,4 +444,3 @@ TARGET_INCLUDE_DIRECTORIES(daScriptProfile PUBLIC examples/profile)
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
 ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)
-
