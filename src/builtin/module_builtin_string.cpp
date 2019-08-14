@@ -20,7 +20,7 @@ namespace das
 
     int32_t get_character_at ( const char * str, int32_t index, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
-        if ( index<0 || index>=strLen ) {
+        if ( uint32_t(index)>=strLen ) {
             context->throw_error("string character index out of range");
         }
         return str[index];
@@ -220,7 +220,7 @@ namespace das
         return pStr;
     }
 
-    vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    vec4f builtin_write_string ( Context &, SimNode_CallBase * call, vec4f * args ) {
         StringBuilderWriter * writer = cast<StringBuilderWriter *>::to(args[0]);
         DebugDataWalker<StringBuilderWriter> walker(*writer, PrintFlags::string_builder);
         walker.walk(args[1], call->types[1]);
@@ -229,14 +229,14 @@ namespace das
 
     void write_string_char ( StringBuilderWriter & writer, int32_t ch ) {
         char buf[2];
-        buf[0] = ch;
+        buf[0] = char(ch);
         buf[1] = 0;
         writer.writeStr(buf, 1);
     }
 
     char * to_string_char ( int ch, Context * context ) {
         auto st = context->heap.allocateString(nullptr, 1);
-        *st = ch;
+        *st = char(ch);
         return st;
     }
 

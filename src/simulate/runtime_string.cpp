@@ -193,7 +193,7 @@ namespace das
 
     // string iteration
 
-    bool StringIterator::first ( Context & context, char * _value )  {
+    bool StringIterator::first ( Context &, char * _value )  {
         if ( str==nullptr || *str==0 ) return false;
         int32_t * value = (int32_t *) _value;
         *value = *str++;
@@ -206,7 +206,7 @@ namespace das
         return *value != 0;
     }
 
-    void StringIterator::close ( Context & context, char * _value )  {
+    void StringIterator::close ( Context &, char * _value )  {
         int32_t * value = (int32_t *) _value;
         value = 0;
     }
