@@ -227,6 +227,16 @@ namespace das
         return v_zero();
     }
 
+    char * string_repeat ( const char * str, int count, Context * context ) {
+        uint32_t len = stringLengthSafe ( *context, str );
+        if ( !len ) return nullptr;
+        char * res = context->heap.allocateString(nullptr, len * count);
+        for ( char * s = res; count; count--, s+=len ) {
+            memcpy ( s, str, len );
+        }
+        return res;
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_shared<StringBuilderWriterAnnotation>(lib));
@@ -246,6 +256,7 @@ namespace das
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "_builtin_peek", SideEffects::none,"peek_das_string");
         // regular string
         addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "characterat", SideEffects::none, "get_character_at");
+        addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
         addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none, "builtin_string_endswith");
         addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none, "builtin_string_startswith");
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");

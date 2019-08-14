@@ -273,6 +273,9 @@ namespace das {
             addFunctionCommonConversion<int2, float2>(*this,lib);
             addFunctionCommonConversion<int3, float3>(*this,lib);
             addFunctionCommonConversion<int4, float4>(*this,lib);
+
+            addExtern<DAS_BIND_FUN(rotl_c)>(*this, lib, "rotl", SideEffects::none, "rotlc");
+            addExtern<DAS_BIND_FUN(rotr_c)>(*this, lib, "rotr", SideEffects::none, "rotrc");
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_math.h\"\n";
