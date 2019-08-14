@@ -104,6 +104,7 @@ def test
         ch = uint8('.')
     padd(input)
     profile(20,"sha256") <|
-        sha256(input)
+        for i in range(0,1024)
+            sha256(input)
     print("sha = {sha256(input)}\n")
     return true
