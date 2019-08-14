@@ -7,6 +7,7 @@ luajit2_1_0beta3\luajit.exe -joff dict.lua
 luajit2_1_0beta3\luajit.exe -joff profile_try_catch.lua 
 luajit2_1_0beta3\luajit.exe -joff exp.lua 
 luajit2_1_0beta3\luajit.exe -joff nbodies.lua
+luajit2_1_0beta3\luajit.exe -joff sha1.lua
 
 echo "LuaJit, jit"
 luajit2_1_0beta3\luajit.exe fibI.lua
@@ -17,6 +18,7 @@ luajit2_1_0beta3\luajit.exe dict.lua
 luajit2_1_0beta3\luajit.exe profile_try_catch.lua 
 luajit2_1_0beta3\luajit.exe exp.lua 
 luajit2_1_0beta3\luajit.exe nbodies.lua
+luajit2_1_0beta3\luajit.exe sha1.lua
 
 echo "Lua (low res timer, no addOne)"
 lua.exe fibI.lua
@@ -26,3 +28,5 @@ lua.exe dict.lua
 lua.exe profile_try_catch.lua 
 lua.exe exp.lua 
 lua.exe nbodies.lua
+lua.exe sha1.lua
+
