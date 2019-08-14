@@ -227,6 +227,19 @@ namespace das
         return v_zero();
     }
 
+    void write_string_char ( StringBuilderWriter & writer, int32_t ch ) {
+        char buf[2];
+        buf[0] = ch;
+        buf[1] = 0;
+        writer.writeStr(buf, 1);
+    }
+
+    char * to_string_char ( int ch, Context * context ) {
+        auto st = context->heap.allocateString(nullptr, 1);
+        *st = ch;
+        return st;
+    }
+
     char * string_repeat ( const char * str, int count, Context * context ) {
         uint32_t len = stringLengthSafe ( *context, str );
         if ( !len ) return nullptr;
@@ -243,6 +256,7 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "_builtin_build_string", SideEffects::modifyExternal,"builtin_build_string");
         addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
             SideEffects::modifyExternal, "builtin_write_string");
+        addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "writechar", SideEffects::none, "write_string_char");
         addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
@@ -257,6 +271,7 @@ namespace das
         // regular string
         addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "characterat", SideEffects::none, "get_character_at");
         addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
+        addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "tochar", SideEffects::none, "to_string_char");
         addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none, "builtin_string_endswith");
         addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none, "builtin_string_startswith");
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");

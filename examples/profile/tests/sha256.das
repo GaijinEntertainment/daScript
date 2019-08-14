@@ -1,148 +1,109 @@
+require math
+
 let
     primes = [[uint
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
-        0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
-        0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
-        0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
-        0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
-        0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
-        0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-        0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+        0x428a2f98; 0x71374491; 0xb5c0fbcf; 0xe9b5dba5;
+        0x3956c25b; 0x59f111f1; 0x923f82a4; 0xab1c5ed5;
+        0xd807aa98; 0x12835b01; 0x243185be; 0x550c7dc3;
+        0x72be5d74; 0x80deb1fe; 0x9bdc06a7; 0xc19bf174;
+        0xe49b69c1; 0xefbe4786; 0x0fc19dc6; 0x240ca1cc;
+        0x2de92c6f; 0x4a7484aa; 0x5cb0a9dc; 0x76f988da;
+        0x983e5152; 0xa831c66d; 0xb00327c8; 0xbf597fc7;
+        0xc6e00bf3; 0xd5a79147; 0x06ca6351; 0x14292967;
+        0x27b70a85; 0x2e1b2138; 0x4d2c6dfc; 0x53380d13;
+        0x650a7354; 0x766a0abb; 0x81c2c92e; 0x92722c85;
+        0xa2bfe8a1; 0xa81a664b; 0xc24b8b70; 0xc76c51a3;
+        0xd192e819; 0xd6990624; 0xf40e3585; 0x106aa070;
+        0x19a4c116; 0x1e376c08; 0x2748774c; 0x34b0bcb5;
+        0x391c0cb3; 0x4ed8aa4a; 0x5b9cca4f; 0x682e6ff3;
+        0x748f82ee; 0x78a5636f; 0x84c87814; 0x8cc70208;
+        0x90befffa; 0xa4506ceb; 0xbef9a3f7; 0xc67178f2
     ]]
 
-/*
-local function toHex(str)
-    local result = str:gsub('.', function (char)
-        return string.format("%02x", char:byte())
-    end)
+def toHex(hash:uint[8])
+    let st = build_string() <| $(var writer:StringBuilderWriter)
+        for i in hash
+            format(writer,"%08x",i)
+    return st
 
-    return result
-end
+[unsafe]
+def digestBlock(data:uint?; var hash:uint[8])
+    var digest:uint[64]
+    for j in range(0,16)
+        digest[j] = data[j]
+    for j in range(16,64)
+        let v0 = digest[j-15]
+        let s0 = rotr(v0,7u) ^ rotr(v0,18u) ^ (v0>>3u)
+        let v1 = digest[j-2]
+        let s1 = rotr(v1,17u) ^ rotr(v1,19u) ^ (v1>>10u)
+        digest[j] = digest[j-16] + s0 + digest[j-7] + s1
+    var a = hash[0]
+    var b = hash[1]
+    var c = hash[2]
+    var d = hash[3]
+    var e = hash[4]
+    var f = hash[5]
+    var g = hash[6]
+    var h = hash[7]
+    for i in range(0,64)
+        let s1 = rotr(e,6u) ^ rotr(e,11u) ^ rotr(e,25u)
+        let ch = (e & f) ^ ((~e) & g)
+        let t1 = h + s1 + ch + primes[i] + digest[i]
+        let s0 = rotr(a,2u) ^ rotr(a,13u) ^ rotr(a,22u)
+        let maj = (a&b) ^ (a&c) ^ (b&c)
+        let t2 = s0 + maj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+    hash[0] += a
+    hash[1] += b
+    hash[2] += c
+    hash[3] += d
+    hash[4] += e
+    hash[5] += f
+    hash[6] += g
+    hash[7] += h
 
-local function toBytes(value, length)
-    local str = ""
+[unsafe]
+def padd(var msg:array<uint8>)
+    let len = length(msg)
+    let extra = 64 - ((length(msg)+9) % 64)
+    resize(msg,len + 9 + extra)
+    msg[len] = uint8(128)
+    var lptr = reinterpret<uint64?>(addr(msg[len+1]))
+    deref(lptr) = uint64(len*8)
+    assert((length(msg)%64)==0)
 
-    for i = 1, length do
-        local rem = value % 256
-        str = string.char(rem) .. str
-        value = (value - rem) / 256
-    end
-
-    return str
-end
-
-local function readInt32(buffer, index)
-    local value = 0
-
-    for i = index, index + 3 do
-        value = (value * 256) + string.byte(buffer, i)
-    end
-
-    return value
-end
-
-local function digestBlock(msg, i, hash)
-    local digest = {}
-
-    for j = 1, 16 do
-        digest[j] = readInt32(msg, i + (j - 1) * 4)
-    end
-
-    for j = 17, 64 do
-        local v = digest[j - 15]
-        local s0 = bxor(rrotate(v, 7), rrotate(v, 18), rshift(v, 3))
-
-        v = digest[j - 2]
-        digest[j] = digest[j - 16] + s0 + digest[j - 7] + bxor(rrotate(v, 17), rrotate(v, 19), rshift(v, 10))
-    end
-
-    local a, b, c, d, e, f, g, h = unpack(hash)
-
-    for i = 1, 64 do
-        local s0 = bxor(rrotate(a, 2), rrotate(a, 13), rrotate(a, 22))
-        local maj = bxor(band(a, b), band(a, c), band(b, c))
-
-        local t2 = s0 + maj
-        local s1 = bxor(rrotate(e, 6), rrotate(e, 11), rrotate(e, 25))
-
-        local ch = bxor(band(e, f), band(bnot(e), g))
-        local t1 = h + s1 + ch + primes[i] + digest[i]
-
-        h, g, f, e, d, c, b, a = g, f, e, d + t1, c, b, a, t1 + t2
-    end
-
-    hash[1] = band(hash[1] + a)
-    hash[2] = band(hash[2] + b)
-    hash[3] = band(hash[3] + c)
-    hash[4] = band(hash[4] + d)
-    hash[5] = band(hash[5] + e)
-    hash[6] = band(hash[6] + f)
-    hash[7] = band(hash[7] + g)
-    hash[8] = band(hash[8] + h)
-end
-
-local function sha256(msg)
-    do
-        local extra = 64 - ((#msg + 9) % 64)
-        local len = toBytes(8 * #msg, 8)
-
-        msg = msg .. '\128' .. string.rep('\0', extra) .. len
-        assert(#msg % 64 == 0)
-    end
-
-    local hash =
-    {
-        0x6a09e667,
-        0xbb67ae85,
-        0x3c6ef372,
-        0xa54ff53a,
-        0x510e527f,
-        0x9b05688c,
-        0x1f83d9ab,
-        0x5be0cd19,
-    }
-
-    for i = 1, #msg, 64 do
-        digestBlock(msg, i, hash)
-    end
-
-    local result = ""
-
-    for i = 1, 8 do
-        local value = hash[i]
-        result = result .. toBytes(value, 4)
-    end
-
-    return toHex(result)
-end
-
-local input = string.rep(".", 1024)
-
-local ts0 = os.clock()
-
-for i = 1, 1024 do
-    sha256(input)
-end
-
-local ts1 = os.clock()
-
-print(ts1 - ts0)
-*/
-
-def sha256(msg)
-    return true
+[unsafe]
+def sha256(var msg:array<uint8>)
+    var hash = [[uint
+        0x6a09e667;
+        0xbb67ae85;
+        0x3c6ef372;
+        0xa54ff53a;
+        0x510e527f;
+        0x9b05688c;
+        0x1f83d9ab;
+        0x5be0cd19
+    ]]
+    let len = length(msg) / 64
+    for i in range(0,len)
+        digestBlock(reinterpret<uint?>(addr(msg[i*64])),hash)
+    return toHex(hash)
 
 [export]
 def test
-    let input = "."
+    var input : array<uint8>
+    resize(input,1024)
+    for ch in input
+        ch = uint8('.')
+    padd(input)
     profile(20,"sha256") <|
         sha256(input)
+    print("sha = {sha256(input)}\n")
     return true
