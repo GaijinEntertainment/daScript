@@ -96,7 +96,7 @@ local function digestBlock(msg, i, hash)
     hash[8] = band(hash[8] + h)
 end
 
-local function sha256(msg)
+local function padd(msg)
     do
         local extra = 64 - ((#msg + 9) % 64)
         local len = toBytes(8 * #msg, 8)
@@ -104,7 +104,9 @@ local function sha256(msg)
         msg = msg .. '\128' .. string.rep('\0', extra) .. len
         assert(#msg % 64 == 0)
     end
-    
+end
+
+local function sha256(msg)
     local hash = 
     {
         0x6a09e667,
@@ -132,6 +134,7 @@ local function sha256(msg)
 end
 
 local input = string.rep(".", 1024)
+padd(input)
 
 local ts0 = os.clock()
 
@@ -140,5 +143,7 @@ for i = 1, 1024 do
 end
 
 local ts1 = os.clock()
+
+print(sha256(input))
 
 print(ts1 - ts0)

@@ -46,12 +46,12 @@ def digestBlock(data:uint?; var hash:uint[8])
     var g = hash[6]
     var h = hash[7]
     for i in range(0,64)
-        let s1 = rotr(e,6u) ^ rotr(e,11u) ^ rotr(e,25u)
-        let ch = (e & f) ^ ((~e) & g)
-        let t1 = h + s1 + ch + primes[i] + digest[i]
         let s0 = rotr(a,2u) ^ rotr(a,13u) ^ rotr(a,22u)
         let maj = (a&b) ^ (a&c) ^ (b&c)
         let t2 = s0 + maj
+        let s1 = rotr(e,6u) ^ rotr(e,11u) ^ rotr(e,25u)
+        let ch = (e & f) ^ ((~e) & g)
+        let t1 = h + s1 + ch + primes[i] + digest[i]
         h = g
         g = f
         f = e
