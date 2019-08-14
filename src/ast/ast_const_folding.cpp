@@ -36,8 +36,8 @@ namespace das {
     // cast
         virtual void preVisit ( ExprCast * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = true;
-            expr->noNativeSideEffects = true;
+            expr->noSideEffects = expr->subexpr->noSideEffects;
+            expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects;
         }
     // const
         virtual void preVisit ( ExprConst * expr ) override {
