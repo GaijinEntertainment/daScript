@@ -6,9 +6,26 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "daScript/simulate/aot_builtin_string.h"
+#include "daScript/misc/string_writer.h"
+
+MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 namespace das
 {
+    struct StringBuilderWriterAnnotation : ManagedStructureAnnotation <StringBuilderWriter,false> {
+        StringBuilderWriterAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("StringBuilderWriter", ml) {
+        }
+    };
+
+    int32_t get_character_at ( const char * str, int32_t index, Context * context ) {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if ( index<0 || index>=strLen ) {
+            context->throw_error("string character index out of range");
+        }
+        return str[index];
+    }
+
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
@@ -191,13 +208,70 @@ namespace das
         context->invoke(block, args, nullptr);
     }
 
+    char * builtin_build_string ( const Block & block, Context * context ) {
+        StringBuilderWriter writer(context->heap);
+        vec4f args[1];
+        args[0] = cast<StringBuilderWriter *>::from(&writer);
+        context->invoke(block, args, nullptr);
+        auto pStr = writer.c_str();
+        if ( !pStr ) {
+            context->throw_error("can't allocate string builder result, out of heap");
+        }
+        return pStr;
+    }
+
+    vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        StringBuilderWriter * writer = cast<StringBuilderWriter *>::to(args[0]);
+        DebugDataWalker<StringBuilderWriter> walker(*writer, PrintFlags::string_builder);
+        walker.walk(args[1], call->types[1]);
+        return v_zero();
+    }
+
+    void write_string_char ( StringBuilderWriter & writer, int32_t ch ) {
+        char buf[2];
+        buf[0] = ch;
+        buf[1] = 0;
+        writer.writeStr(buf, 1);
+    }
+
+    char * to_string_char ( int ch, Context * context ) {
+        auto st = context->heap.allocateString(nullptr, 1);
+        *st = ch;
+        return st;
+    }
+
+    char * string_repeat ( const char * str, int count, Context * context ) {
+        uint32_t len = stringLengthSafe ( *context, str );
+        if ( !len ) return nullptr;
+        char * res = context->heap.allocateString(nullptr, len * count);
+        for ( char * s = res; count; count--, s+=len ) {
+            memcpy ( s, str, len );
+        }
+        return res;
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
+        // string builder writer
+        addAnnotation(make_shared<StringBuilderWriterAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "_builtin_build_string", SideEffects::modifyExternal,"builtin_build_string");
+        addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
+            SideEffects::modifyExternal, "builtin_write_string");
+        addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "writechar", SideEffects::none, "write_string_char");
+        addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<uint64_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint64_t>");
+        addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<float>");
+        addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<double>");
         // das string binding
         addAnnotation(make_shared<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::modifyArgument,"set_das_string");
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "_builtin_peek", SideEffects::none,"peek_das_string");
         // regular string
+        addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "characterat", SideEffects::none, "get_character_at");
+        addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
+        addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "tochar", SideEffects::none, "to_string_char");
         addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none, "builtin_string_endswith");
         addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none, "builtin_string_startswith");
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");
@@ -216,5 +290,12 @@ namespace das
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
         addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", SideEffects::none, "fast_to_int");
         addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none, "fast_to_float");
+        // format
+        addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format", SideEffects::none, "format<int32_t>");
+        addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format", SideEffects::none, "format<uint32_t>");
+        addExtern<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format", SideEffects::none, "format<int64_t>");
+        addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format", SideEffects::none, "format<uint64_t>");
+        addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format", SideEffects::none, "format<float>");
+        addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format", SideEffects::none, "format<double>");
     }
 }

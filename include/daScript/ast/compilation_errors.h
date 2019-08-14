@@ -117,6 +117,7 @@ namespace das
     ,   not_all_paths_return_value              =   40200       // def a() { if true return 1; }
     ,   assert_with_side_effects                =   40201       // assert(i++)
     ,   only_fast_aot_no_cpp_name               =   40202       // blah() of the function without cppName
+    ,   aot_side_effects                        =   40203       // eval(a++,b++,a+b)
 
     ,   too_many_infer_passes                   =   41000
 

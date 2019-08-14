@@ -194,6 +194,7 @@ namespace das
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
         virtual string aotName ( ExprCallFunc * call );
         virtual void aotPrefix ( TextWriter &, ExprCallFunc * ) { }
+        virtual bool isGeneric() const { return false; }
     };
 
     struct TypeAnnotation : Annotation {
@@ -330,6 +331,7 @@ namespace das
             struct {
                 bool    constexpression : 1;
                 bool    noSideEffects : 1;
+                bool    noNativeSideEffects : 1;
             };
             uint32_t    flags = 0;
         };
@@ -479,12 +481,18 @@ namespace das
         CompilationError    cerr;
     };
 
+    enum class ModuleAotType {
+        no_aot,
+        hybrid,
+        cpp
+    };
+
     class Module {
     public:
         Module ( const string & n = "" );
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
-        virtual bool aotRequire ( TextWriter & ) const { return true; }
+        virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
         bool addStructure ( const StructurePtr & st, bool canFail = false );

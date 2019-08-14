@@ -768,9 +768,9 @@ public:
         // its AOT ready
         verifyAotReady();
     }
-    virtual bool aotRequire ( TextWriter & tw ) const override {
+    virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"test_profile.h\"\n";
-        return true;
+        return ModuleAotType::cpp;
     }
 };
 

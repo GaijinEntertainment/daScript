@@ -85,6 +85,7 @@ namespace das {
         bool isReturnType() const;
         bool isCtorType() const;
         bool isRange() const;
+        bool isString() const;
         bool isConst() const;
         bool isFoldable() const;
         bool isAlias() const;
@@ -302,6 +303,8 @@ namespace das {
     das::TypeDeclPtr makeHandleType(const das::ModuleLibrary & library, const char * typeName);
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
+
+    bool isCircularType ( const TypeDeclPtr & type );
 
     enum class CpptSubstitureRef { no, yes };
     enum class CpptSkipRef { no, yes };

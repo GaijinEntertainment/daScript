@@ -8,6 +8,8 @@
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/fs_file_info.h"
 
+#include "daScript/simulate/aot_builtin_rtti.h"
+
 using namespace das;
 DAS_BASE_BIND_ENUM_98(Type, Type,
     none,           autoinfer,      alias,          fakeContext,
@@ -498,13 +500,16 @@ namespace das {
             // functions
             //      all the stuff is only resolved after debug info is built
             //      hence SideEffects::modifyExternal is essencial for it to not be optimized out
-            addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "getTypeInfo", SideEffects::modifyExternal);
+            addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "getTypeInfo",
+                SideEffects::modifyExternal,"rtti_getTypeInfo");
             addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "getDim", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "getDim", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_contextTotalFunctions)>(*this, lib, "getTotalFunctions", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "getTotalVariables", SideEffects::modifyExternal);
-            addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "getFunctionInfo", SideEffects::modifyExternal);
-            addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo", SideEffects::modifyExternal);
+            addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "getFunctionInfo",
+                SideEffects::modifyExternal, "rtti_contextFunctionInfo");
+            addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo",
+                SideEffects::modifyExternal, "rtti_contextVariableInfo");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "rtti_builtin_compile_file", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "rttiGetThisModule", SideEffects::modifyExternal);\
@@ -519,6 +524,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_isCompatibleCast", SideEffects::modifyExternal);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
+        }
+        virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/simulate/aot_builtin_rtti.h\"\n";
+            return ModuleAotType::hybrid;
         }
     };
 }

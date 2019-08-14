@@ -32,6 +32,7 @@ def key_exists(var Tab:table<auto(keyT),auto(valT)>;at:keyT):bool
 
 options removeUnusedSymbols=false
 
+[generic]
 def peek ( src:das_string; subexpr:block<(root:string):void> ) 
   _builtin_peek(src,subexpr)
 
@@ -61,6 +62,12 @@ def keys(a:table<auto(keyT),auto(valT)>) : iterator<keyT & const>
 
 def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
   return __builtin_table_values(a,typeinfo(sizeof type valT))
+
+// string writer
+
+[generic]
+def build_string(blk:block<(var writer:StringBuilderWriter)>)
+  return _builtin_build_string(blk)
 
 options indenting = 0
 

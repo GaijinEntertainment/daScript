@@ -40,9 +40,11 @@ namespace das {
 
     class LintVisitor : public Visitor {
         bool checkOnlyFastAot;
+        bool checkAotSideEffects;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getOption("onlyFastAot", false);
+            checkAotSideEffects = program->options.getOption("aotOrderSideEffects", false);
         }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             program->error(err,at,cerr);
@@ -61,6 +63,17 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            if ( checkAotSideEffects ) {
+                if ( expr->arguments.size()>1 ) {
+                    for ( auto & arg : expr->arguments ) {
+                        if ( !arg->noNativeSideEffects ) {
+                            program->error("side effects may affect function " + expr->func->name + " evaluation order", expr->at,
+                                           CompilationError::aot_side_effects );
+                            break;
+                        }
+                    }
+                }
+            }
         }
         virtual void preVisit ( ExprOp1 * expr ) {
             Visitor::preVisit(expr);
@@ -69,22 +82,55 @@ namespace das {
         virtual void preVisit ( ExprOp2 * expr ) {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            if ( checkAotSideEffects ) {
+                if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
+                    program->error("side effects may affect evaluation order", expr->at,
+                                   CompilationError::aot_side_effects );
+                }
+            }
         }
         virtual void preVisit ( ExprOp3 * expr ) {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            if ( checkAotSideEffects ) {
+                if ( !expr->subexpr->noNativeSideEffects || !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
+                    program->error("side effects may affect evaluation order", expr->at,
+                                   CompilationError::aot_side_effects );
+                }
+            }
         }
         virtual void preVisit ( ExprCopy * expr ) {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            // @E1 = E2, E2 side effects are before E1 side effects
+            /*
+            if ( checkAotSideEffects ) {
+                if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
+                    program->error("side effects may affect copy evaluation order", expr->at,
+                                   CompilationError::aot_side_effects );
+                }
+            }
+            */
         }
         virtual void preVisit ( ExprMove * expr ) {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            if ( checkAotSideEffects ) {
+                if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
+                    program->error("side effects may affect move evaluation order", expr->at,
+                                   CompilationError::aot_side_effects );
+                }
+            }
         }
         virtual void preVisit ( ExprClone * expr ) {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            if ( checkAotSideEffects ) {
+                if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
+                    program->error("side effects may affect clone evaluation order", expr->at,
+                                   CompilationError::aot_side_effects );
+                }
+            }
         }
         virtual void preVisit ( ExprAssert * expr ) {
             Visitor::preVisit(expr);

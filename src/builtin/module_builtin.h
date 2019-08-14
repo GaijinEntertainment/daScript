@@ -16,5 +16,6 @@ namespace das {
         void addTime(ModuleLibrary & lib);
         void addMiscTypes(ModuleLibrary & lib);
         bool appendCompiledFunctions();
+        virtual ModuleAotType aotRequire ( TextWriter & ) const override { return ModuleAotType::cpp; }
     };
 }

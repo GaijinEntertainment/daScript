@@ -670,6 +670,13 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_StringIterator::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(StringIterator);
+        V_SUB(source);
+        V_END();
+    }
+
     SimNode * SimNode_FixedArrayIterator::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(FixedArrayIterator);

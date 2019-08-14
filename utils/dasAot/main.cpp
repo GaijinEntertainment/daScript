@@ -59,7 +59,7 @@ bool compile ( const string & fn, const string & cppFn ) {
                     } else {
                         tw << " // require " << mod->name << "\n";
                     }
-                    if ( !mod->aotRequire(tw) ) {
+                    if ( mod->aotRequire(tw)==ModuleAotType::no_aot ) {
                         tw << "  // AOT disabled due to this module\n";
                         noAot = true;
                     }

@@ -54,6 +54,7 @@ namespace das
             uint32_t    flags;
             struct {
                 bool    aot : 1;
+                bool    fastcall : 1;
             };
         };
     };
@@ -263,6 +264,40 @@ namespace das
             abiArg = aa;
             stack.pop(EP, SP);
             return result;
+        }
+
+        __forceinline vec4f callOrFastcall(const SimFunction * fn, vec4f * args, int line) {
+            if ( fn->fastcall ) {
+                auto aa = abiArg;
+                abiArg = args;
+                result = fn->code->eval(*this);
+                stopFlags = 0;
+                abiArg = aa;
+                return result;
+            } else {
+                // PUSH
+                char * EP, *SP;
+                if (!stack.push(fn->stackSize, EP, SP)) {
+                    throw_error_ex("stack overflow at line %i",line);
+                    return v_zero();
+                }
+                // fill prologue
+                auto aa = abiArg;
+                abiArg = args;
+    #if DAS_ENABLE_STACK_WALK
+                Prologue * pp = (Prologue *)stack.sp();
+                pp->arguments = args;
+                pp->info = fn->debugInfo;
+                pp->line = line;
+    #endif
+                // CALL
+                fn->code->eval(*this);
+                stopFlags = 0;
+                // POP
+                abiArg = aa;
+                stack.pop(EP, SP);
+                return result;
+            }
         }
 
         __forceinline vec4f callWithCopyOnReturn(const SimFunction * fn, vec4f * args, void * cmres, int line) {

@@ -290,6 +290,9 @@
         BEGIN(strb);
         return BEGIN_STRING;
     }
+
+<normal>\'.\'                           das_yylval.i = int32_t(yytext[1]); return INTEGER;
+
 <normal>[0-9]+(u|U)(l|L)                return sscanf(yytext, "%" SCNu64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
 <normal>[0-9]+(l|L)                     return sscanf(yytext, "%" SCNi64, &das_yylval.i64)!=1 ? LEXER_ERROR : LONG_INTEGER;
 <normal>[0-9]+(u|U)                     return sscanf(yytext, "%u",  &das_yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;

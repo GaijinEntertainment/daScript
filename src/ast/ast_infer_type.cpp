@@ -178,6 +178,52 @@ namespace das {
             return nullptr;
         }
 
+        // type has all of it subtypes resolved
+        bool isFullyResolvedType(const TypeDeclPtr & ptr) {
+            if (!ptr) return false;
+            if (ptr->baseType == Type::tStructure) {
+                for (auto & fld : ptr->structType->fields) {
+                    if (!isFullyResolvedType(fld.type) ) return false;
+                }
+            }
+            if (ptr->firstType && !isFullyResolvedType(ptr->firstType)) return false;
+            if (ptr->secondType && !isFullyResolvedType(ptr->secondType)) return false;
+            for (auto & argT : ptr->argTypes) {
+                if (argT && !isFullyResolvedType(argT)) return false;
+            }
+            return true;
+        }
+
+        // type chain is fully resolved, and not aliased \ auto
+        bool isFullySealedType(const TypeDeclPtr & ptr, set<const TypeDecl *> & all ) {
+            if (!ptr) return false;
+            if ( ptr->baseType==Type::tStructure || ptr->baseType==Type::tTuple ) {
+                auto thisType = ptr.get();
+                if ( all.find(thisType)!=all.end() ) return true;
+                all.insert(thisType);
+            }
+            if (ptr->baseType==Type::autoinfer || ptr->baseType==Type::alias) return false;
+            if (ptr->baseType == Type::tStructure) {
+                for (auto & fld : ptr->structType->fields) {
+                    if (!isFullySealedType(fld.type,all) ) return false;
+                }
+            }
+            if (ptr->firstType && !isFullySealedType(ptr->firstType,all)) return false;
+            if (ptr->secondType && !isFullySealedType(ptr->secondType,all)) return false;
+            for (auto & argT : ptr->argTypes) {
+                if (argT && !isFullySealedType(argT,all)) return false;
+            }
+            if ( ptr->structType ) {
+                for ( auto & fd : ptr->structType->fields )
+                    if ( !isFullySealedType(fd.type,all) ) return false;
+            }
+            return true;
+        }
+        bool isFullySealedType(const TypeDeclPtr & ptr) {
+            set<const TypeDecl *> all;
+            return isFullySealedType(ptr, all);
+        }
+
         // find type alias name, and resolve it to type
         // within current context
         const TypeDecl * findAlias ( const string & name ) const {
@@ -750,6 +796,9 @@ namespace das {
                     reportGenericInfer();
                 }
             }
+            if ( isCircularType(decl.type) ) {
+                return;
+            }
             if ( decl.type->isVoid() ) {
                 error("structure field type can't be declared void",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->ref ) {
@@ -780,7 +829,7 @@ namespace das {
                     }
                 }
             }
-            if ( !decl.type->isAuto() && !decl.type->isAlias() ) {
+            if ( isFullySealedType(decl.type) ) {
                 auto fa = decl.type->getAlignOf() - 1;
                 fieldOffset = (fieldOffset + fa) & ~fa;
                 decl.offset = int(fieldOffset);
@@ -800,6 +849,12 @@ namespace das {
                     error("structure already has user defined initializer", var->at,
                           CompilationError::structure_already_has_initializer);
                 }
+            }
+            auto tt = make_shared<TypeDecl>(Type::tStructure);
+            tt->structType = var;
+            if ( isCircularType(tt) ) {
+                error("type creates circular dependency", var->at,
+                      CompilationError::invalid_type);
             }
             return Visitor::visit(var);
         }
@@ -1297,20 +1352,6 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprTypeInfo
-        bool isFullyResolvedType(const TypeDeclPtr & ptr) {
-            if (!ptr) return false;
-            if (ptr->baseType == Type::tStructure) {
-                for (auto & fld : ptr->structType->fields) {
-                    if (!isFullyResolvedType(fld.type) ) return false;
-                }
-            }
-            if (ptr->firstType && !isFullyResolvedType(ptr->firstType)) return false;
-            if (ptr->secondType && !isFullyResolvedType(ptr->secondType)) return false;
-            for (auto & argT : ptr->argTypes) {
-                if (argT && !isFullyResolvedType(argT)) return false;
-            }
-            return true;
-        }
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             if ( expr->typeexpr && expr->typeexpr->isExprType() ) {
                 return Visitor::visit(expr);
@@ -2518,6 +2559,10 @@ namespace das {
                 } else if ( src->type->isRange() ) {
                     pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
                     pVar->type->ref = false;
+                } else if ( src->type->isString() ) {
+                    pVar->type = make_shared<TypeDecl>(Type::tInt);
+                    pVar->type->ref = false;
+                    pVar->type->constant = true;
                 } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
                     pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType(src));
                 } else {
@@ -2531,6 +2576,12 @@ namespace das {
                 expr->iteratorVariables.push_back(pVar);
                 ++ idx;
             }
+        }
+        virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
+            if ( that->type && that->type->isRef() ) {
+                return Expression::autoDereference(that->shared_from_this());
+            }
+            return Visitor::visitForSource(expr, that, last);
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             popVarStack();
@@ -2577,6 +2628,9 @@ namespace das {
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             if ( var->type && var->type->isExprType() ) {
+                return Visitor::visitLet(expr,var,last);
+            }
+            if ( isCircularType(var->type) ) {
                 return Visitor::visitLet(expr,var,last);
             }
             if ( var->type->ref && !var->init )

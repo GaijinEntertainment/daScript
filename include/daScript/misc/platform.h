@@ -64,6 +64,11 @@ __forceinline uint32_t rotl_c(uint32_t a, uint32_t b) {
     return (a << b) | (a >> (32 - b));
 }
 
+__forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
+    b &= 31;
+    return (a >> b) | (a << (32 - b));
+}
+
 #include "daScript/misc/hal.h"
 
 #ifndef DAS_ALIGNED_ALLOC
