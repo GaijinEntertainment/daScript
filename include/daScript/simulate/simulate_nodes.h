@@ -2319,11 +2319,15 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_POLICY(BinXor);
     DEFINE_POLICY(BinShl);
     DEFINE_POLICY(BinShr);
+    DEFINE_POLICY(BinRotl);
+    DEFINE_POLICY(BinRotr);
     DEFINE_POLICY(SetBinAnd);
     DEFINE_POLICY(SetBinOr);
     DEFINE_POLICY(SetBinXor);
     DEFINE_POLICY(SetBinShl);
     DEFINE_POLICY(SetBinShr);
+    DEFINE_POLICY(SetBinRotl);
+    DEFINE_POLICY(SetBinRotr);
     // boolean and, or, xor
     DEFINE_POLICY(SetBoolAnd);
     DEFINE_POLICY(SetBoolOr);

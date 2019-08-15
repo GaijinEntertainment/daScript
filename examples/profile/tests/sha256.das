@@ -33,9 +33,9 @@ def digestBlock(data:uint?; var hash:uint[8])
         digest[j] = data[j]
     for j in range(16,64)
         let v0 = digest[j-15]
-        let s0 = rotr(v0,7u) ^ rotr(v0,18u) ^ (v0>>3u)
+        let s0 = (v0 >>> 7u) ^ (v0 >>> 18u) ^ (v0>>3u)
         let v1 = digest[j-2]
-        let s1 = rotr(v1,17u) ^ rotr(v1,19u) ^ (v1>>10u)
+        let s1 = (v1 >>> 17u) ^ (v1 >>> 19u) ^ (v1>>10u)
         digest[j] = digest[j-16] + s0 + digest[j-7] + s1
     var a = hash[0]
     var b = hash[1]
@@ -46,10 +46,10 @@ def digestBlock(data:uint?; var hash:uint[8])
     var g = hash[6]
     var h = hash[7]
     for i in range(0,64)
-        let s0 = rotr(a,2u) ^ rotr(a,13u) ^ rotr(a,22u)
+        let s0 = (a >>> 2u) ^ (a >>> 13u) ^ (a >>> 22u)
         let maj = (a&b) ^ (a&c) ^ (b&c)
         let t2 = s0 + maj
-        let s1 = rotr(e,6u) ^ rotr(e,11u) ^ rotr(e,25u)
+        let s1 = (e >>> 6u) ^ (e >>> 11u) ^ (e >>> 25u)
         let ch = (e & f) ^ ((~e) & g)
         let t1 = h + s1 + ch + primes[i] + digest[i]
         h = g
@@ -102,9 +102,10 @@ def test
     resize(input,1024)
     for ch in input
         ch = uint8('.')
-    padd(input)
-    profile(20,"sha256") <|
+    // padd(input)
+    let dt = profile(20,"sha256") <|
         for i in range(0,1024)
             sha256(input)
     print("sha = {sha256(input)}\n")
+    print("{1.0/dt} mb/sec\n")
     return true

@@ -1083,6 +1083,7 @@ namespace das {
         bool isOpPolicy ( ExprOp2 * that ) const {
             if ( isalpha(that->op[0]) ) return true;
             if ( that->op=="/" || that->op=="%" ) return true;
+            if ( that->op=="<<<" || that->op==">>>" || that->op=="<<<=" || that->op==">>>=" ) return true;
             return that->type->isPolicyType() || that->left->type->isPolicyType() || that->right->type->isPolicyType();
         }
         const TypeDeclPtr & opPolicyBase ( ExprOp2 * that ) const {

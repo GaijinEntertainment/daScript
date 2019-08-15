@@ -422,10 +422,14 @@
 <normal>"\>\="                              return GREQU;
 <normal>"\=\="                              return EQUEQU;
 <normal>"\!\="                              return NOTEQU;
+<normal>"\>\>\>"                            return ROTR;
+<normal>"\<\<\<"                            return ROTL;
 <normal>"\>\>"                              return SHR;
 <normal>"\<\<"                              return SHL;
 <normal>"\>\>\="                            return SHREQU;
 <normal>"\<\<\="                            return SHLEQU;
+<normal>"\>\>\>\="                          return ROTREQU;
+<normal>"\<\<\<\="                          return ROTLEQU;
 <normal>[ \t\r]                             /* skip white space */
 <normal>(\/\/.*)*\n                        {
     das_yycolumn = 1;

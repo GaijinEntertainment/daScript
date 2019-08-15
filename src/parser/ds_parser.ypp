@@ -133,7 +133,7 @@
 %token  ADDADD      SUBSUB      LEEQU       SHLEQU      SHREQU
 %token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
 %token  QQ          QDOT        LPIPE       LBPIPE      RPIPE
-%token  CLONEEQU
+%token  CLONEEQU    ROTL        ROTR        ROTLEQU     ROTREQU
 
 %token<i>       INTEGER
 %token<i64>     LONG_INTEGER
@@ -225,14 +225,14 @@
 
 /* operation precedence*/
 %left       ','
-%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU
+%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU ROTLEQU ROTREQU
 %right      '?' ':'
 %left       '|'
 %left       '^'
 %left       '&'
 %left       EQUEQU NOTEQU
 %left       '<' '>' LEEQU GREQU
-%left       SHL SHR
+%left       SHL SHR ROTL ROTR
 %left       '-' '+'
 %left       '*' '/' '%'
 %left       QQ
@@ -521,6 +521,10 @@ function_name
     |   DAS_OPERATOR SHR     { $$ = new string(">>"); }
     |   DAS_OPERATOR SHLEQU  { $$ = new string("<<="); }
     |   DAS_OPERATOR SHREQU  { $$ = new string(">>="); }
+    |   DAS_OPERATOR ROTL    { $$ = new string("<<<"); }
+    |   DAS_OPERATOR ROTR    { $$ = new string(">>>"); }
+    |   DAS_OPERATOR ROTLEQU { $$ = new string("<<<="); }
+    |   DAS_OPERATOR ROTREQU { $$ = new string(">>>="); }
     ;
 
 function_declaration
@@ -880,6 +884,8 @@ expr_assign
     |   expr[left] MODEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"%=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SHLEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"<<=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SHREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),">>=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ROTLEQU[loc] expr[right]  { $$ = new ExprOp2(tokAt(@loc),"<<<=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ROTREQU[loc] expr[right]  { $$ = new ExprOp2(tokAt(@loc),">>>=", ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
 expr_named_call
@@ -922,6 +928,8 @@ expr
     |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokAt(@loc),"-",ExpressionPtr($subexpr)); }
     |   expr[left] SHL[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"<<", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SHR[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),">>", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ROTL[loc]    expr[right]  { $$ = new ExprOp2(tokAt(@loc),"<<<", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ROTR[loc]    expr[right]  { $$ = new ExprOp2(tokAt(@loc),">>>", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '+'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '-'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '*'[loc]    expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*", ExpressionPtr($left), ExpressionPtr($right)); }
