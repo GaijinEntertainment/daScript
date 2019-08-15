@@ -1,6 +1,6 @@
-#line 1 "/Users/borisbatkin/Work/yzg/generated/ds_lexer.cpp"
+#line 1 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
 
-#line 3 "/Users/borisbatkin/Work/yzg/generated/ds_lexer.cpp"
+#line 3 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -1114,11 +1114,11 @@ char *yytext;
         das_yylloc.last_column = das_yycolumn + yyleng - 1; \
         das_yycolumn += yyleng;
         
-#line 1117 "/Users/borisbatkin/Work/yzg/generated/ds_lexer.cpp"
+#line 1117 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
 #define YY_NO_UNISTD_H 1
 /* %option debug */
 
-#line 1121 "/Users/borisbatkin/Work/yzg/generated/ds_lexer.cpp"
+#line 1121 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
 
 #define INITIAL 0
 #define indent 1
@@ -1343,7 +1343,7 @@ YY_DECL
 #line 60 "src/parser/ds_lexer.lpp"
 
 
-#line 1346 "/Users/borisbatkin/Work/yzg/generated/ds_lexer.cpp"
+#line 1346 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -2436,7 +2436,7 @@ YY_RULE_SETUP
 #line 450 "src/parser/ds_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 2439 "/Users/borisbatkin/Work/yzg/generated/ds_lexer.cpp"
+#line 2439 "C:/Users/Boris/Work/yzg/generated/ds_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(include):
 case YY_STATE_EOF(normal):
