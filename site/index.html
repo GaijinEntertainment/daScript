@@ -87,11 +87,11 @@
                 </p>
                 <ul>
                   <li>
-                    <b>Extremely blazingly fast</b>. daScript can be compared with compiled or JiT languages even in interpreter mode, always faster than dynamic interpreted scripting languages like Lua.
-                    In AOT it is usually faster than C++ and beats best JiT VMs (V8 or LuaJit). You will never need to rewrite daScript code to C++ to optimize your application!
+                    <b>Extremely blazingly fast</b>. daScript can be compared with compiled or JIT languages even in interpreter mode, always faster than dynamic interpreted scripting languages like Lua.
+                    In AOT it is usually faster than C++ and beats best JIT VMs (V8 or LuaJIT). You will never need to rewrite daScript code to C++ to optimize your application!
                   </li>
                   <li>
-                    <b>Safe</b>. It is static typed languages with all it's benefits (most of Lua\JS errors that will break application in runtime won't even compile), but due to generics and type inference it is easy and fluid. Safety is the next key pillar of daScript design, so in many cases it is safier than languages like C++ or Java.
+                    <b>Safe</b>. It is static typed languages with all it's benefits (most of Lua/JS errors that will break application in runtime won't even compile), but due to generics and type inference it is easy and fluid. Safety is the next key pillar of daScript design, so in many cases it is safier than languages like C++ or Java.
                   </li>
 
                   <li>
@@ -129,7 +129,7 @@
 					
 				</ul>
                 <p>
-                    daScript is inspired by languages like Python in terms of it's explictness and readability; while it is designed to be extremely fast</p>
+                    daScript is inspired by languages like Python in terms of it's explictness and readability; while it is designed to be extremely fast.</p>
                 <p>
                     <br>
                     <!--------------------------------------------------------------------------------------------------- -->
@@ -137,7 +137,7 @@
                     <!--------------------------------------------------------------------------------------------------- -->
                    <span id="look" class="labels">What Does it look like?</span><br>
                     daScript's syntax is similar to (Typed) Python,
-but the language has a static strong typed nature like ML or Ziglang, and it's POD types are close to hardware/machine types.
+but the language has a static strong typed nature like ML or Zig, and it's POD types are close to hardware/machine types.
                     <br>
                     <br>
 <div class="snippets"><div class="snippets"><pre><span></span><span class="k">def</span> <span class="nf">fibR</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
@@ -166,12 +166,12 @@ but the language has a static strong typed nature like ML or Ziglang, and it's P
         The current release is initial 0.1. The language is used in Gaijin Entertainment projects in production.
         <br>
         The project has been compiled and run on Windows(x86 &amp; x64),
-        Linux(x64), Mac OS X, Xbox One, PlayStation4, Nintendo Switch, iOS and Android.<br>
+        Linux(x64), macOS, Xbox One, PlayStation 4, Nintendo Switch, iOS and Android.<br>
         Has been tested with the following compilers with C++11 support:
         <blockquote dir="ltr" style="margin-right: 0px">
             <p>
                 MS Visual C++ 15.0 and 17.0(x86 &amp; x64)<br>
-				Linux gcc<br>
+				Linux GCC<br>
 				LLVM 7, 8, 9<br>
             </p>
         </blockquote>
@@ -191,7 +191,7 @@ but the language has a static strong typed nature like ML or Ziglang, and it's P
     <span id="performance" class="labels">Performance</span><br>
     <ul>
         <br>
-          As interpreted language it typically beats everything, including blazing fast <b>LuaJit</b>.
+          As interpreted language it typically beats everything, including blazing fast <b>LuaJIT</b>.
         <br>
           Especially it shines in interop with C++ functions, which allows easy and nice experience to integrate new functions and types.
         <br>
@@ -200,7 +200,7 @@ but the language has a static strong typed nature like ML or Ziglang, and it's P
         <br>
 <iframe frameborder="0" scrolling="no" width="1100" height="250" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=1640974160&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false"></iframe>
         <br>
-          As compiled Ahead-of-Time language it is also much faster then both LuaJit and Chrome JS (both having extremely fast Just-in-Time).
+          As compiled Ahead-of-Time language it is also much faster then both LuaJIT and Chrome JS (both having extremely fast Just-in-Time).
         <br>
           It is almost on par with C++ (msvc with all optimizations), usually within 10% of difference, and sometimes can even beat it!
         <br>
@@ -209,7 +209,7 @@ but the language has a static strong typed nature like ML or Ziglang, and it's P
         <br>
 <iframe frameborder="0" scrolling="no" width="1100" height="250" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=59293637&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false&amp;"></iframe>
         <br>
-          All times are in <b>milliseconds</b>, all results are measured as best-out-of-20 runs on Intel I5.
+          All times are in <b>milliseconds</b>, all results are measured as best-out-of-20 runs on Intel Core i5.
         <br>
           All samples for all languages in comparison are available in <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/profile/tests">GitHub</a>
     </ul>
