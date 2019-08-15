@@ -18,7 +18,7 @@ Misc
     will cause panic. The program will be determinated if there is no recover.
     Panic is not a error handling mechanism and can not be used as such. It is indeed panic, fatal error.
     It is not supposed that program can completely correctly recover from panic, recover construction is provided so program can try to correcly shut-down or report fatal error.
-    If there is no recover withing script, it will be called in calling eval (in c++ callee code).
+    If there is no recover withing script, it will be called in calling eval (in C++ callee code).
 
 .. js:function:: print(x)
 
@@ -62,7 +62,8 @@ Misc
 .. js:function:: debug(x, str)
 
     debug will print string str and value of x (like print). However, debug also returns value of x, which makes it suitable for debugging expressions::
-        let mad = debug(x,"x")*debug(y,"y") + debug(z,"z") // x*y + z
+
+        let mad = debug(x, "x") * debug(y, "y") + debug(z, "z") // x*y + z
 
 
 .. js:function:: invoke(block_or_function, arguments)
