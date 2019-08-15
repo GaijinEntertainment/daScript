@@ -1,4 +1,4 @@
-echo "LuaJit, no jit"
+echo "LuaJIT, no JIT"
 luajit2_1_0beta3\luajit.exe -joff fibI.lua
 luajit2_1_0beta3\luajit.exe -joff primes.lua
 luajit2_1_0beta3\luajit.exe -joff particles.lua
@@ -9,7 +9,7 @@ luajit2_1_0beta3\luajit.exe -joff exp.lua
 luajit2_1_0beta3\luajit.exe -joff nbodies.lua
 luajit2_1_0beta3\luajit.exe -joff sha1.lua
 
-echo "LuaJit, jit"
+echo "LuaJIT, JIT"
 luajit2_1_0beta3\luajit.exe fibI.lua
 luajit2_1_0beta3\luajit.exe primes.lua
 luajit2_1_0beta3\luajit.exe particles.lua

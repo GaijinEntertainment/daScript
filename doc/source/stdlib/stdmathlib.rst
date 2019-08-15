@@ -218,18 +218,18 @@ float3 only:
 
     returns vector representating reflection of `x` from `n` same as ::
 
-        def reflect(v,n:float3)
+        def reflect(v, n: float3)
             return v - 2. * dot(v, n) * n
 
 .. js:function:: refract(v, n)
 
     returns vector representating reflection of `x` from `n` same as ::
 
-        def refract(v,n:float3;nint:float;outRefracted:float3&)
-            let dt = dot(v,n)
-            let discr = 1. - nint*nint*(1.-dt*dt)
+        def refract(v, n: float3; nint: float; outRefracted: float3&)
+            let dt = dot(v, n)
+            let discr = 1. - nint * nint * (1. - dt * dt)
             if discr > 0.
-                outRefracted = nint*(v-n*dt)-n*sqrt(discr)
+                outRefracted = nint * (v - n * dt) - n * sqrt(discr)
                 return true
             return false
 

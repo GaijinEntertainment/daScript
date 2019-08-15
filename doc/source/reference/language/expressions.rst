@@ -27,9 +27,10 @@ daScript implements 3 kind of assignment: the normal assignment(=)::
 
     a = 10
 
-"move" assignment.::
+"move" assignment ::
+
     var b = new Foo
-    var a:Foo?
+    var a: Foo?
     a <- b
 
 move assignment nullifies source (b)
@@ -38,11 +39,11 @@ Some external handled types can be non assignable, but still moveable;
 
     var
 
-"clone" assignment.::
+"clone" assignment ::
 
     a := b
 
-Clone assignment is syntactic sugar for calling clone(var a:auto&; b:auto&) if it exists or basic assignment for POD types.
+Clone assignment is syntactic sugar for calling clone(var a: auto&; b: auto&) if it exists or basic assignment for POD types.
 It is also implemented for das_string, array and table types, and creates 'deep' copy.
 
 Some external handled types can be non assignable, but still copyable;
@@ -114,28 +115,28 @@ If value is not null exists, return deref of field 'key' for struct, else return
         fooData : int
 
     struct TestObjectBarNative
-        fooPtr:TestObjectFooNative?
-        barData:float
+        fooPtr: TestObjectFooNative?
+        barData: float
 
     def test
-        var a:TestObjectFooNative?
-        var b:TestObjectBarNative?
-        var idummy:int
-        var fdummy:float
+        var a: TestObjectFooNative?
+        var b: TestObjectBarNative?
+        var idummy: int
+        var fdummy: float
         a?.fooData ?? idummy = 1 // will return reference to idummy, since a is null
-        assert(idummy==1)
+        assert(idummy == 1)
 
         a = new TestObjectFooNative
         a?.fooData ?? idummy = 2 // will return reference to a.fooData, since a is now not null
-        assert(a.fooData==2 & idummy==1)
+        assert(a.fooData == 2 & idummy == 1)
 
         b = new TestObjectBarNative
         b?.fooPtr?.fooData ?? idummy = 3 // will return reference to idummy, since while b is not null, but b.?barData is still null
-        assert(idummy==3)
+        assert(idummy == 3)
 
         b.fooPtr <- a
         b?.fooPtr?.fooData ?? idummy = 4 // will return reference to b.fooPtr.fooData
-        assert(b.fooPtr.fooData==4 & idummy==3)
+        assert(b.fooPtr.fooData == 4 & idummy == 3)
 
 
 ^^^^^^^^^^^^^
@@ -150,14 +151,14 @@ Arithmetic
     exp:= 'exp' op 'exp'
 
 daScript supports the standard arithmetic operators ``+, -, *, / and %``.
-Other than that is also supports compact operators (``+=,-=,*=,/=,%=,^=,<<=, >>=``) and
+Other than that is also supports compact operators (``+=, -=, *=, /=, %=, ^=, <<=, >>=``) and
 increment and decrement operators(++ and --);::
 
     a += 2
-    //is the same as writing
+    // is the same as writing
     a = a + 2
     x++
-    //is the same as writing
+    // is the same as writing
     x = x + 1
 
 All operators work normally with (u)int* and float* and double.
@@ -232,12 +233,12 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
 
 ::
 
-    def addX(a,b)
-        assert(b==2 | b==3)
+    def addX(a, b)
+        assert(b == 2 | b == 3)
         return a + b
     def test
         let t = 12 |> addX(2) |> addX(3)
-        assert(t==17)
+        assert(t == 17)
         return true
 
 ::
@@ -246,7 +247,7 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
         return a + 1
 
     def test
-        let t =  addX |> 2
+        let t =  addOne <| 2
         assert(t == 3)
 
 ^^^^^^^^^^^^^^^^^^^^^
@@ -257,23 +258,23 @@ Operators precedence
     pair: Operators precedence; Operators
 
 +----------------------------------------------------+-----------+
-| ``post ++, post --, . , ->, ?.``                   | highest   |
+| ``post++  post--  .   ->  ?.``                     | highest   |
 +----------------------------------------------------+-----------+
-| ``|>, <|``                                         |           |
+| ``|>  <|``                                         |           |
 +----------------------------------------------------+-----------+
-| ``-, +, ~, ! , ++, --``                            |           |
+| ``-  +  ~  !   ++  --``                            |           |
 +----------------------------------------------------+-----------+
 | ``??``                                             |           |
 +----------------------------------------------------+-----------+
-| ``/, *, %``                                        |           |
+| ``/  *  %``                                        |           |
 +----------------------------------------------------+-----------+
-| ``+, -``                                           |           |
+| ``+  -``                                           |           |
 +----------------------------------------------------+-----------+
-| ``<<, >>``                                         |           |
+| ``<<  >>``                                         |           |
 +----------------------------------------------------+-----------+
-| ``<, <=, >, >=``                                   |           |
+| ``<  <=  >  >=``                                   |           |
 +----------------------------------------------------+-----------+
-| ``==, !=``                                         |           |
+| ``==  !=``                                         |           |
 +----------------------------------------------------+-----------+
 | ``&``                                              |           |
 +----------------------------------------------------+-----------+
@@ -281,9 +282,9 @@ Operators precedence
 +----------------------------------------------------+-----------+
 | ``|``                                              |           |
 +----------------------------------------------------+-----------+
-| ``?, :``                                           |           |
+| ``?  :``                                           |           |
 +----------------------------------------------------+-----------+
-| ``+=, =, -=, /=, *=, %=, &=, |=, ^=, <<=, >>=, <-``| ...       |
+| ``+=  =  -=  /=  *=  %=  &=  |=  ^=  <<=  >>=  <-``| ...       |
 +----------------------------------------------------+-----------+
 | ``',' comma``                                      | lowest    |
 +----------------------------------------------------+-----------+
@@ -300,31 +301,31 @@ Struct Constructor
 ::
 
     struct Foo
-        x:int = 1
-        y:int = 2
+      x: int = 1
+      y: int = 2
 
-    let fExplicit = [[Foo x=13,y=11]]//x = 13, y = 11
-    let fPartial  = [[Foo x=13]]//x = 13, y = 0
+    let fExplicit = [[Foo x = 13, y = 11]] // x = 13, y = 11
+    let fPartial  = [[Foo x = 13]]         // x = 13, y = 0
 
 (see :ref:`Structs <structs>`).
 
 -----------------
-Array contructor
+Array Contructor
 -----------------
 
 .. index::
-    single: Array constructor
+    single: Array Constructor
 
 ::
 
     exp := '[['type[] [explist] ']]'
 
-Creates a new fixed size array.::
+Creates a new fixed size array::
 
-    let a = [[int[] 1,2]]    //creates array of two elements
-    let a = [[int[2] 1,2]]   //creates array of two elements
-    let a = [[int[2] 1,2,3]] //error, too many initializers
+    let a = [[int[] 1, 2]]     // creates array of two elements
+    let a = [[int[2] 1, 2]]    // creates array of two elements
+    let a = [[int[2] 1, 2, 3]] // error, too many initializers
 
 Arrays can be also created with array comprehensions::
 
-    let q <- [[ for x in range(0,10); x*x ]]
+    let q <- [[ for x in range(0, 10); x * x ]]

@@ -70,16 +70,6 @@ def digestBlock(data:uint?; var hash:uint[8])
     hash[7] += h
 
 [unsafe]
-def padd(var msg:array<uint8>)
-    let len = length(msg)
-    let extra = 64 - ((length(msg)+9) % 64)
-    resize(msg,len + 9 + extra)
-    msg[len] = uint8(128)
-    var lptr = reinterpret<uint64?>(addr(msg[len+1]))
-    deref(lptr) = uint64(len*8)
-    assert((length(msg)%64)==0)
-
-[unsafe]
 def sha256(var msg:array<uint8>)
     var hash = [[uint
         0x6a09e667;
@@ -102,7 +92,6 @@ def test
     resize(input,1024)
     for ch in input
         ch = uint8('.')
-    // padd(input)
     let dt = profile(20,"sha256") <|
         for i in range(0,1024)
             sha256(input)

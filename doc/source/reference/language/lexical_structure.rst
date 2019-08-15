@@ -62,7 +62,7 @@ daScript recognizes the following operators:
 +----------+----------+----------+----------+----------+----------+----------+----------+
 | ``*=``   | ``|>``   | ``<|``   | ``++``   | ``--``   | ``<-``   | ``=``    | ``&``    |
 +----------+----------+----------+----------+----------+----------+----------+----------+
-| ``^``    | ``|``    | ``~``    | ``>>``   | ``.``    | ``?.``    | ``??``  |          |
+| ``^``    | ``|``    | ``~``    | ``>>``   | ``.``    | ``?.``   | ``??``   |          |
 +----------+----------+----------+----------+----------+----------+----------+----------+
 
 ------------
@@ -141,19 +141,19 @@ treats them as white space.
 
 A comment can be ``/*`` (slash, asterisk) characters, followed by any
 sequence of characters (including new lines),
-followed by the ``*/`` characters. This syntax is the same as ANSI C.::
+followed by the ``*/`` characters. This syntax is the same as ANSI C::
 
     /*
-    this is
+    This is
     a multiline comment.
-    this lines will be ignored by the compiler
+    This lines will be ignored by the compiler.
     */
 
 A comment can also be ``//`` (two slashes) characters, followed by any sequence of
 characters.  A new line not immediately preceded by a backslash terminates this form of
 comment.  It is commonly called a *"single-line comment."*::
 
-    //this is a single line comment. this line will be ignored by the compiler
+    // This is a single line comment. This line will be ignored by the compiler.
 
 
 ------------------
@@ -163,7 +163,7 @@ Semantic indenting
 .. index:: single: indenting
 
 daScript follows semantic indenting (much like Python).
-That means, that logical blocks are arranged with a same indenting, and if control statement requires nesting of block (such as body of function, block, if, for, etc)
+That means, that logical blocks are arranged with a same indenting, and if control statement requires nesting of block (such as body of function, block, if, for, etc.)
 it have to be indented one step more.
-Indenting step is part of options of program, so it is either 2,4 or 8, but always the same for whole file.
+Indenting step is part of options of program, so it is either 2, 4 or 8, but always the same for whole file.
 Default indenting is 4, and can be globally overriden per project.

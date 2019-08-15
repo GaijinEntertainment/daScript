@@ -5,7 +5,7 @@ The System library
 ==================
 
 The system library exposes operating system facilities like environment variables,
-date time manipulation etc..
+date time manipulation etc.
 
 ++++++++++++++
 Global Symbols
