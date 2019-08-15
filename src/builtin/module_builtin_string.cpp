@@ -202,13 +202,7 @@ namespace das
         str = bs ? bs : "";
     }
 
-    void peek_das_string(const string & str, const Block & block, Context * context) {
-        vec4f args[1];
-        args[0] = cast<const char *>::from(str.c_str());
-        context->invoke(block, args, nullptr);
-    }
-
-    char * builtin_build_string ( const Block & block, Context * context ) {
+    char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context ) {
         StringBuilderWriter writer(context->heap);
         vec4f args[1];
         args[0] = cast<StringBuilderWriter *>::from(&writer);
@@ -250,10 +244,17 @@ namespace das
         return res;
     }
 
+    void peek_das_string(const string & str, const TBlock<void,char *> & block, Context * context) {
+        vec4f args[1];
+        args[0] = cast<const char *>::from(str.c_str());
+        context->invoke(block, args, nullptr);
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_shared<StringBuilderWriterAnnotation>(lib));
-        addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "_builtin_build_string", SideEffects::modifyExternal,"builtin_build_string");
+        addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
+            SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
         addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
             SideEffects::modifyExternal, "builtin_write_string");
         addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "writechar", SideEffects::none, "write_string_char");
@@ -267,7 +268,8 @@ namespace das
         addAnnotation(make_shared<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::modifyArgument,"set_das_string");
-        addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "_builtin_peek", SideEffects::modifyExternal,"peek_das_string");
+        addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
+            SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
         // regular string
         addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "characterat", SideEffects::none, "get_character_at");
         addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");

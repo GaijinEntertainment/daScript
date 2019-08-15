@@ -225,10 +225,12 @@ namespace das {
         }
     };
 
-    template <>
-    struct typeFactory<Block *> {
-        static TypeDeclPtr make(const ModuleLibrary &) {
+    template <typename ResultType, typename ...Args>
+    struct typeFactory< TBlock<ResultType,Args...> > {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = make_shared<TypeDecl>(Type::tBlock);
+            t->firstType = typeFactory<ResultType>::make(lib);
+            t->argTypes = { typeFactory<Args>::make(lib)... };
             return t;
         }
     };

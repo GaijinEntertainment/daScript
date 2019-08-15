@@ -15,6 +15,13 @@ namespace das
         }
     };
 
+    template <typename Result, typename ...Args>
+    struct TBlock : Block {
+        TBlock() = default;
+        TBlock( const TBlock & ) = default;
+        TBlock( const Block & that ) { *(Block *)this = that; }
+    };
+
     struct Func {
         int32_t     index;
         Func() = default;

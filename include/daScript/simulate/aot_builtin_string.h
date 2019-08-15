@@ -2,7 +2,7 @@
 
 namespace das {
 
-    char * builtin_build_string ( const Block & block, Context * context );
+    char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context );
     vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args );
 
     int32_t get_character_at ( const char * str, int32_t index, Context * context );
@@ -27,7 +27,7 @@ namespace das {
     int fast_to_int ( const char *str );
     char * to_das_string(const string & str, Context * ctx);
     void set_das_string(string & str, const char * bs);
-    void peek_das_string(const string & str, const Block & block, Context * context);
+    void peek_das_string(const string & str, const TBlock<void,char *> & block, Context * context);
     char * string_repeat ( const char * str, int count, Context * context );
 
     __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
@@ -44,5 +44,21 @@ namespace das {
         char buf[256];
         snprintf(buf, 256, fmt, value);
         writer.writeStr(buf, strlen(buf));
+    }
+
+    template <typename TT>
+    void peek_das_string_T(const string & str, TT && block, Context *) {
+        block(str.c_str());
+    }
+
+    template <typename TT>
+    char * builtin_build_string_T ( TT && block, Context * context ) {
+        StringBuilderWriter writer(context->heap);
+        block(writer);
+        auto pStr = writer.c_str();
+        if ( !pStr ) {
+            context->throw_error("can't allocate string builder result, out of heap");
+        }
+        return pStr;
     }
 }
