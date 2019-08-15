@@ -408,10 +408,9 @@ namespace das
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;
-        virtual string getAotBasicName() const {
-            return name;
-        }
+        virtual string getAotBasicName() const { return name; }
         string getAotName(ExprCallFunc * call) const;
+        FunctionPtr setAotTemplate();
     public:
         AnnotationList      annotations;
         string              name;
@@ -446,6 +445,7 @@ namespace das
                 bool    aotNeedPrologue : 1;
                 bool    noAot : 1;
                 bool    aotHybrid : 1;
+                bool    aotTemplate : 1;
             };
             uint32_t flags = 0;
         };

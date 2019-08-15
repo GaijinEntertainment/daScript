@@ -57,6 +57,36 @@ namespace das
                 }
             }
         }
+
+        void skipMakeBlock ( const ExpressionPtr & expr ) {
+            if ( expr->rtti_isMakeBlock() ) {
+                auto mkb = static_pointer_cast<ExprMakeBlock>(expr);
+                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                blk->aotSkipMakeBlock = true;
+            }
+        }
+        virtual void preVisit ( ExprCall * call ) override {
+            Visitor::preVisit(call);
+            if ( call->func->aotTemplate ) {
+                for ( auto & arg : call->arguments ) {
+                    skipMakeBlock(arg);
+                }
+            }
+        }
+        virtual void preVisit ( ExprOp1 * op1 ) override {
+            Visitor::preVisit(op1);
+            skipMakeBlock(op1->subexpr);
+        }
+        virtual void preVisit ( ExprOp2 * op2 ) override {
+            Visitor::preVisit(op2);
+            skipMakeBlock(op2->left);
+            skipMakeBlock(op2->right);
+        }
+        virtual void preVisit ( ExprOp3 * op3 ) override {
+            Visitor::preVisit(op3);
+            skipMakeBlock(op3->left);
+            skipMakeBlock(op3->right);
+        }
     };
 
     void Program::finalizeAnnotations() {

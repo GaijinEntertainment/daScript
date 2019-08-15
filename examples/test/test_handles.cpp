@@ -293,7 +293,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addEquNeq<TestObjectFoo>(*this, lib);
     addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init", SideEffects::none);
     addExtern<DAS_BIND_FUN(get_screen_dimensions)>(*this, lib, "get_screen_dimensions", SideEffects::none);
-    addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::none);
+    addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::modifyExternal);
     addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyArgument);
     addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyArgument);
     addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields", SideEffects::modifyExternal);

@@ -373,6 +373,11 @@ namespace das {
         return shared_from_this();
     }
 
+    FunctionPtr Function::setAotTemplate() {
+        aotTemplate = true;
+        return shared_from_this();
+    }
+
     // built-in function
 
     BuiltInFunction::BuiltInFunction ( const string & fn, const string & fnCpp ) {
