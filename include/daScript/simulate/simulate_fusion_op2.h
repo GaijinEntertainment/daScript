@@ -1,5 +1,11 @@
 #pragma once
 
+/*
+ TODO:
+    ArgAny
+    AnyArg
+ */
+
 #define IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE,RCTYPE) \
     struct Op2FusionPoint_##OPNAME##_##TYPE : FusionPoint { \
         Op2FusionPoint_##OPNAME##_##TYPE ( ) {} \
@@ -22,6 +28,25 @@
             uint32_t stackTop_l; \
             uint32_t stackTop_r; \
         }; \
+        struct SimNode_Op2ArgArg : SimNode { \
+            DAS_NODE(RTYPE,RCTYPE); \
+            SimNode_Op2ArgArg ( const LineInfo & at, int32_t i_l, int32_t i_r ) \
+                : SimNode(at),index_l(i_l), index_r(i_r) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "ArgArg", sizeof(CTYPE), #TYPE); \
+                V_ARG(index_l); \
+                V_ARG(index_r); \
+                V_END(); \
+            } \
+            __forceinline RCTYPE compute ( Context & context ) { \
+                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index_l]); \
+                CTYPE rv =  cast<CTYPE>::to(context.abiArguments()[index_r]); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+            } \
+            int32_t index_l; \
+            int32_t index_r; \
+        }; \
         struct SimNode_Op2R2VAny : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
             SimNode_Op2R2VAny ( const LineInfo & at, SimNode * rn, uint32_t sp ) \
@@ -29,8 +54,8 @@
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "R2VAny", sizeof(CTYPE), #TYPE); \
-                V_SUB(r); \
                 V_SP(stackTop); \
+                V_SUB(r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
@@ -159,8 +184,8 @@
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ConstAny", sizeof(CTYPE), #TYPE); \
-                V_SUB(r); \
                 V_ARG(c); \
+                V_SUB(r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
@@ -177,8 +202,8 @@
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ConstR2V", sizeof(CTYPE), #TYPE); \
-                V_SP(stackTop); \
                 V_ARG(c); \
+                V_SP(stackTop); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
@@ -195,8 +220,8 @@
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ConstArg", sizeof(CTYPE), #TYPE); \
-                V_ARG(index); \
                 V_ARG(c); \
+                V_ARG(index); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
@@ -261,6 +286,14 @@
                     return context->code->makeNode<SimNode_Op2ArgR2V>(node->debugInfo, argnode_l->index, r2vnode_r->stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->stackTop); \
+                } \
+            /* OP(GetArgument,* */ \
+            } else if ( is(info,tnode->l,"GetArgument") ) { \
+                auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
+                /* OP(GetArgument,GetArgument) */ \
+                if ( is(info,tnode->r,"GetArgument") ) { \
+                    auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
+                    return context->code->makeNode<SimNode_Op2ArgArg>(node->debugInfo, argnode_l->index, argnode_r->index); \
                 } \
             } \
             return node; \
