@@ -137,6 +137,24 @@ namespace das {
             CTYPE c; \
             uint32_t stackTop; \
         }; \
+        struct SimNode_Op2ArgConst : SimNode { \
+            DAS_NODE(TYPE,CTYPE); \
+            SimNode_Op2ArgConst ( const LineInfo & at, CTYPE cv, int32_t i ) \
+                : SimNode(at), c(cv), index(i) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "ArgConst", sizeof(CTYPE), #TYPE); \
+                V_ARG(index); \
+                V_ARG(c); \
+                V_END(); \
+            } \
+            __forceinline CTYPE compute ( Context & context ) { \
+                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index]); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
+            } \
+            CTYPE c; \
+            int32_t index; \
+        }; \
         struct SimNode_Op2AnyConst : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
             SimNode_Op2AnyConst ( const LineInfo & at, SimNode * ll, CTYPE cv ) \
@@ -165,6 +183,9 @@ namespace das {
                 if ( is(tnode->l,"GetLocalR2V") ) { \
                     auto r2vnode_l = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->l); \
                     return context->code->makeNode<SimNode_Op2R2VConst>(node->debugInfo, cvalue, r2vnode_l->stackTop); \
+                } else if ( is(tnode->l,"GetArgument") ) { \
+                    auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
+                    return context->code->makeNode<SimNode_Op2ArgConst>(node->debugInfo, cvalue, argnode_l->index); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2AnyConst>(node->debugInfo, tnode->l, cvalue); \
                 } \
