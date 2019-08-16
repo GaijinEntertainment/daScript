@@ -148,6 +148,7 @@ src/simulate/simulate.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
 src/simulate/simulate_fn_hash.cpp
+src/simulate/simulate_fusion.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h

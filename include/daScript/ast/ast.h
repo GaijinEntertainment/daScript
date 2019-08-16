@@ -643,6 +643,7 @@ namespace das
         bool optimizationBlockFolding();
         bool optimizationCondFolding();
         bool optimizationUnused(TextWriter & logs);
+        void fusion ( Context & context, TextWriter & logs );
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void optimize(TextWriter & logs);

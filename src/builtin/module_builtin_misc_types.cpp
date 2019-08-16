@@ -61,7 +61,7 @@ namespace das
         DAS_BOOL_NODE;
         Sim_EqFunPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitOp2(vis, "EqFunPtr");
+            return visitOp2(vis, "EqFunPtr", sizeof(Func), "Func");
         }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Func>::to(l->eval(context));
@@ -74,7 +74,7 @@ namespace das
         DAS_BOOL_NODE;
         Sim_NEqFunPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitOp2(vis, "NEqFunPtr");
+            return visitOp2(vis, "NEqFunPtr", sizeof(Func), "Func");
         }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Func>::to(l->eval(context));
@@ -87,7 +87,7 @@ namespace das
         DAS_BOOL_NODE;
         Sim_EqLambdaPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitOp2(vis, "EqLambdaPtr");
+            return visitOp2(vis, "EqLambdaPtr", sizeof(Lambda), "Lambda");
         }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Lambda>::to(l->eval(context));
@@ -100,7 +100,7 @@ namespace das
         DAS_BOOL_NODE;
         Sim_NEqLambdaPtr ( const LineInfo & at ) : SimNode_Op2(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
-            return visitOp2(vis, "NEqLambdaPtr");
+            return visitOp2(vis, "NEqLambdaPtr", sizeof(Lambda), "Lambda");
         }
         __forceinline bool compute ( Context & context ) {
             auto lv = cast<Lambda>::to(l->eval(context));

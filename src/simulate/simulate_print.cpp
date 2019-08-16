@@ -64,7 +64,22 @@ namespace das {
                 ss << "null";
             }
         }
+        virtual void arg ( int64_t argV,  const char * argN ) override {
+            SimVisitor::arg(argV,argN);
+            crlf();
+            ss << argV;
+        }
         virtual void arg ( uint64_t argV,  const char * argN ) override {
+            SimVisitor::arg(argV,argN);
+            crlf();
+            ss << argV;
+        }
+        virtual void arg ( float argV,  const char * argN ) override {
+            SimVisitor::arg(argV,argN);
+            crlf();
+            ss << argV;
+        }
+        virtual void arg ( double argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
             crlf();
             ss << argV;

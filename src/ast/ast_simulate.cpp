@@ -1992,6 +1992,7 @@ namespace das
         buildMNLookup(context, logs);
         buildADLookup(context, logs);
         context.simEnd();
+        fusion(context, logs);
         context.restart();
         context.runInitScript();
         context.restart();

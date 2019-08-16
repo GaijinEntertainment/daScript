@@ -115,7 +115,10 @@ namespace das
         virtual void arg ( uint32_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( const char * /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( vec4f /* argV */,  const char * /* argN */  ) { }
+        virtual void arg ( int64_t /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( uint64_t /* argV */,  const char * /* argN */  ) { }
+        virtual void arg ( float /* argV */,  const char * /* argN */  ) { }
+        virtual void arg ( double /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( bool /* argV */,  const char * /* argN */  ) { }
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * );
         virtual SimNode * sub ( SimNode * node, const char * /* opN */ = "subexpr" ) { return node->visit(*this); }
@@ -499,9 +502,9 @@ namespace das
                 argValues[i] = arguments[i]->eval(context);
             }
         }
-        SimNode * visitOp1 ( SimVisitor & vis, const char * op );
-        SimNode * visitOp2 ( SimVisitor & vis, const char * op );
-        SimNode * visitOp3 ( SimVisitor & vis, const char * op );
+        SimNode * visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName );
+        SimNode * visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName );
+        SimNode * visitOp3 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName );
 #define EVAL_NODE(TYPE,CTYPE)\
 virtual CTYPE eval##TYPE ( Context & context ) override {   \
 return cast<CTYPE>::to(eval(context));                  \
