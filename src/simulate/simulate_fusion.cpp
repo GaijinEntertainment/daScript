@@ -119,6 +119,25 @@ namespace das {
             SimNode * l; \
             uint32_t stackTop; \
         }; \
+        struct SimNode_Op2ArgR2V : SimNode { \
+            DAS_NODE(TYPE,CTYPE); \
+            SimNode_Op2ArgR2V ( const LineInfo & at, int32_t i, uint32_t sp ) \
+                : SimNode(at), index(i), stackTop(sp) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "ArgR2V", sizeof(CTYPE), #TYPE); \
+                V_ARG(index); \
+                V_SP(stackTop); \
+                V_END(); \
+            } \
+            __forceinline CTYPE compute ( Context & context ) { \
+                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index]); \
+                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+            } \
+            int32_t  index; \
+            uint32_t stackTop; \
+        }; \
         struct SimNode_Op2R2VConst : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
             SimNode_Op2R2VConst ( const LineInfo & at, CTYPE cv, uint32_t sp ) \
@@ -202,7 +221,13 @@ namespace das {
             /* OP(*,GetLocalR2V) */ \
             } else if ( is(tnode->r, "GetLocalR2V") ) { \
                 auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->stackTop); \
+                /* OP(GetArgument,GetLocalR2V) */ \
+                if ( is(tnode->l,"GetArgument") ) { \
+                    auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
+                    return context->code->makeNode<SimNode_Op2ArgR2V>(node->debugInfo, argnode_l->index, r2vnode_r->stackTop); \
+                } else { \
+                    return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->stackTop); \
+                } \
             } \
             return node; \
         } \
