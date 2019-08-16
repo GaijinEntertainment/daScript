@@ -134,6 +134,17 @@ src/misc/string_writer.cpp
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
 
+SET(SIMULATE_FUSION_SRC
+src/simulate/simulate_fusion.cpp
+src/simulate/simulate_fusion_op2.cpp
+src/simulate/simulate_fusion_op2_bool.cpp
+src/simulate/simulate_fusion_op2_bin.cpp
+include/daScript/simulate/simulate_fusion.h
+include/daScript/simulate/simulate_fusion_op2.h
+)
+list(SORT SIMULATE_FUSION_SRC)
+SOURCE_GROUP_FILES("fusion" SIMULATE_FUSION_SRC)
+
 SET(SIMULATE_SRC
 src/hal/performance_time.cpp
 src/hal/debug_break.cpp
@@ -149,7 +160,6 @@ src/simulate/simulate.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
 src/simulate/simulate_fn_hash.cpp
-src/simulate/simulate_fusion.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
@@ -203,8 +213,8 @@ include/daScript/das_config.h
 SOURCE_GROUP_FILES("main" MAIN_SRC)
 
 include_directories(include)
-ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC} 
-    ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
+ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
+    ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
 
 add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})

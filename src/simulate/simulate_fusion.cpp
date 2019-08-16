@@ -5,21 +5,29 @@
 #endif
 
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate.h"
+#include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
 
-    struct SimNodeInfo {
-        string  name;
-        string  typeName;
-        size_t  typeSize;
-    };
-
     string fuseName ( const string & name, const string & typeName ) {
         return typeName.empty() ? name : (name + "<" + typeName + ">");
+    }
+
+    unique_ptr<FusionEngine> g_fusionEngine;
+
+    void resetFusionEngine() {
+        g_fusionEngine.reset();
+    }
+
+    void createFusionEngine() {
+        if ( !g_fusionEngine ) {
+            g_fusionEngine = make_unique<FusionEngine>();
+            createFusionEngine_op2();
+            createFusionEngine_op2_bool();
+        }
     }
 
     struct SimNodeCollector : SimVisitor {
@@ -39,488 +47,19 @@ namespace das {
         SimNode * thisNode = nullptr;
     };
 
-    struct FusionPoint {
-        FusionPoint ( map<SimNode *,SimNodeInfo> & ni ) : info(ni) {
-        }
-        virtual ~FusionPoint() {}
-        virtual SimNode * fuse ( SimNode * node, Context * ) {
-            return node;
-        }
-        bool is ( SimNode * node, const char * name ) {
-            auto & ni = info[node];
-            return ni.name == name;
-        }
-
-        bool is ( SimNode * node, const char * name, const char * typeName ) {
-            auto & ni = info[node];
-            return (ni.name == name) && (ni.typeName==typeName);
-        }
-        map<SimNode *,SimNodeInfo> & info;
-    };
-    typedef shared_ptr<FusionPoint> FusionPointPtr;
-
-#define IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE,RCTYPE) \
-    struct Op2FusionPoint_##OPNAME##_##TYPE : FusionPoint { \
-        Op2FusionPoint_##OPNAME##_##TYPE ( map<SimNode *,SimNodeInfo> & ni ) : FusionPoint(ni) {} \
-        struct SimNode_Op2R2VR2V : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2R2VR2V ( const LineInfo & at, uint32_t sp_l, uint32_t sp_r ) \
-                : SimNode(at),stackTop_l(sp_l), stackTop_r(sp_r) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "R2VR2V", sizeof(CTYPE), #TYPE); \
-                V_SP(stackTop_l); \
-                V_SP(stackTop_r); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop_l); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop_r); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-            } \
-            uint32_t stackTop_l; \
-            uint32_t stackTop_r; \
-        }; \
-        struct SimNode_Op2R2VAny : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2R2VAny ( const LineInfo & at, SimNode * rn, uint32_t sp ) \
-                : SimNode(at), r(rn), stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "R2VAny", sizeof(CTYPE), #TYPE); \
-                V_SUB(r); \
-                V_SP(stackTop); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                CTYPE rv =  r->eval##TYPE(context); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-            } \
-            SimNode * r; \
-            uint32_t stackTop; \
-        }; \
-        struct SimNode_Op2AnyR2V : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2AnyR2V ( const LineInfo & at, SimNode * ln, uint32_t sp ) \
-                : SimNode(at), l(ln), stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "AnyR2V", sizeof(CTYPE), #TYPE); \
-                V_SUB(l); \
-                V_SP(stackTop); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  l->eval##TYPE(context); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-            } \
-            SimNode * l; \
-            uint32_t stackTop; \
-        }; \
-        struct SimNode_Op2ArgR2V : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ArgR2V ( const LineInfo & at, int32_t i, uint32_t sp ) \
-                : SimNode(at), index(i), stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "ArgR2V", sizeof(CTYPE), #TYPE); \
-                V_ARG(index); \
-                V_SP(stackTop); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index]); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-            } \
-            int32_t  index; \
-            uint32_t stackTop; \
-        }; \
-        struct SimNode_Op2R2VArg : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2R2VArg ( const LineInfo & at, int32_t i, uint32_t sp ) \
-                : SimNode(at), index(i), stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "R2VArg", sizeof(CTYPE), #TYPE); \
-                V_SP(stackTop); \
-                V_ARG(index); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                CTYPE rv =  cast<CTYPE>::to(context.abiArguments()[index]); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-            } \
-            int32_t  index; \
-            uint32_t stackTop; \
-        }; \
-        struct SimNode_Op2R2VConst : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2R2VConst ( const LineInfo & at, CTYPE cv, uint32_t sp ) \
-                : SimNode(at), c(cv), stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "R2VConst", sizeof(CTYPE), #TYPE); \
-                V_SP(stackTop); \
-                V_ARG(c); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
-            } \
-            CTYPE c; \
-            uint32_t stackTop; \
-        }; \
-        struct SimNode_Op2ArgConst : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ArgConst ( const LineInfo & at, CTYPE cv, int32_t i ) \
-                : SimNode(at), c(cv), index(i) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "ArgConst", sizeof(CTYPE), #TYPE); \
-                V_ARG(index); \
-                V_ARG(c); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index]); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
-            } \
-            CTYPE c; \
-            int32_t index; \
-        }; \
-        struct SimNode_Op2AnyConst : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2AnyConst ( const LineInfo & at, SimNode * ll, CTYPE cv ) \
-                : SimNode(at), l(ll), c(cv) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "AnyConst", sizeof(CTYPE), #TYPE); \
-                V_SUB(l); \
-                V_ARG(c); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv = l->eval##TYPE(context); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
-            } \
-            SimNode * l; \
-            CTYPE c; \
-        }; \
-        struct SimNode_Op2ConstAny : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstAny ( const LineInfo & at, SimNode * rr, CTYPE cv ) \
-                : SimNode(at), r(rr), c(cv) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "ConstAny", sizeof(CTYPE), #TYPE); \
-                V_SUB(r); \
-                V_ARG(c); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE rv = r->eval##TYPE(context); \
-                return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
-            } \
-            SimNode * r; \
-            CTYPE c; \
-        }; \
-        struct SimNode_Op2ConstR2V : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstR2V ( const LineInfo & at, CTYPE cv, uint32_t sp ) \
-                : SimNode(at), c(cv), stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "ConstR2V", sizeof(CTYPE), #TYPE); \
-                V_SP(stackTop); \
-                V_ARG(c); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
-            } \
-            CTYPE c; \
-            uint32_t stackTop; \
-        }; \
-        struct SimNode_Op2ConstArg : SimNode { \
-            DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstArg ( const LineInfo & at, CTYPE cv, int32_t i ) \
-                : SimNode(at), c(cv), index(i) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "ConstArg", sizeof(CTYPE), #TYPE); \
-                V_ARG(index); \
-                V_ARG(c); \
-                V_END(); \
-            } \
-            __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE rv = cast<CTYPE>::to(context.abiArguments()[index]); \
-                return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
-            } \
-            CTYPE c; \
-            int32_t index; \
-        }; \
-        virtual SimNode * fuse ( SimNode * node, Context * context ) override { \
-            auto tnode = static_cast<SimNode_Op2 *>(node); \
-            /* OP(*,ConstValue) */ \
-            if ( is(tnode->r,"ConstValue") ) { \
-                auto cnode = static_cast<SimNode_ConstValue *>(tnode->r); \
-                auto cvalue = cast<CTYPE>::to(cnode->value); \
-                /* OP(GetLocalR2V,ConstValue) */ \
-                if ( is(tnode->l,"GetLocalR2V") ) { \
-                    auto r2vnode_l = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2R2VConst>(node->debugInfo, cvalue, r2vnode_l->stackTop); \
-                /* OP(GetArgument,ConstValue) */ \
-                } else if ( is(tnode->l,"GetArgument") ) { \
-                    auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2ArgConst>(node->debugInfo, cvalue, argnode_l->index); \
-                } else { \
-                    return context->code->makeNode<SimNode_Op2AnyConst>(node->debugInfo, tnode->l, cvalue); \
-                } \
-            /* OP(ConstValue,*) */ \
-            } else if ( is(tnode->l,"ConstValue") ) { \
-                auto cnode = static_cast<SimNode_ConstValue *>(tnode->l); \
-                auto cvalue = cast<CTYPE>::to(cnode->value); \
-                /* OP(ConstValue,GetLocalR2V) */ \
-                if ( is(tnode->r,"GetLocalR2V") ) { \
-                    auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2ConstR2V>(node->debugInfo, cvalue, r2vnode_r->stackTop); \
-                /* OP(ConstValue,GetArgument) */ \
-                } else if ( is(tnode->r,"GetArgument") ) { \
-                    auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2ConstArg>(node->debugInfo, cvalue, argnode_r->index); \
-                } else { \
-                    return context->code->makeNode<SimNode_Op2ConstAny>(node->debugInfo, tnode->r, cvalue); \
-                } \
-            /* OP(GetLocalR2V,*) */ \
-            } else if ( is(tnode->l,"GetLocalR2V") ) { \
-                auto r2vnode_l = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->l); \
-                /* OP(GetLocalR2V,GetLocalR2V) */ \
-                if ( is(tnode->r,"GetLocalR2V") ) { \
-                    auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2R2VR2V>(node->debugInfo, r2vnode_l->stackTop, r2vnode_r->stackTop); \
-                /* OP(GetLocalR2V,GetLocalArg) */ \
-                } else if ( is(tnode->r,"GetLocalArg") ) { \
-                    auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2R2VArg>(node->debugInfo, argnode_r->index, r2vnode_l->stackTop); \
-                } else { \
-                    return context->code->makeNode<SimNode_Op2R2VAny>(node->debugInfo, tnode->r, r2vnode_l->stackTop); \
-                } \
-            /* OP(*,GetLocalR2V) */ \
-            } else if ( is(tnode->r, "GetLocalR2V") ) { \
-                auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                /* OP(GetArgument,GetLocalR2V) */ \
-                if ( is(tnode->l,"GetArgument") ) { \
-                    auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2ArgR2V>(node->debugInfo, argnode_l->index, r2vnode_r->stackTop); \
-                } else { \
-                    return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->stackTop); \
-                } \
-            } \
-            return node; \
-        } \
-    };
-
-#define IMPLEMENT_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,TYPE,CTYPE) 
-
-#define IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,Bool,bool) 
-
-#define IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    struct Op2FusionPoint_##OPNAME##_##TYPE : FusionPoint { \
-        Op2FusionPoint_##OPNAME##_##TYPE ( map<SimNode *,SimNodeInfo> & ni ) : FusionPoint(ni) {} \
-        struct SimNode_Op2LocR2V : SimNode { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op2LocR2V ( const LineInfo & at, uint32_t sp_l, uint32_t sp_r ) \
-                : SimNode(at),stackTop_l(sp_l), stackTop_r(sp_r) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "LocR2V", sizeof(CTYPE), #TYPE); \
-                V_SP(stackTop_l); \
-                V_SP(stackTop_r); \
-                V_END(); \
-            } \
-            __forceinline CTYPE compute ( Context & context ) { \
-                CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop_l); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop_r); \
-                SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-                return CTYPE(); \
-            } \
-            uint32_t stackTop_l; \
-            uint32_t stackTop_r; \
-        }; \
-        struct SimNode_Op2LocAny : SimNode { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op2LocAny ( const LineInfo & at, SimNode * rn, uint32_t sp ) \
-                : SimNode(at), r(rn), stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "LocAny", sizeof(CTYPE), #TYPE); \
-                V_SUB(r); \
-                V_SP(stackTop); \
-                V_END(); \
-            } \
-            __forceinline CTYPE compute ( Context & context ) { \
-                CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                CTYPE rv =  r->eval##TYPE(context); \
-                SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-                return CTYPE(); \
-            } \
-            SimNode * r; \
-            uint32_t stackTop; \
-        }; \
-        virtual SimNode * fuse ( SimNode * node, Context * context ) override { \
-            auto tnode = static_cast<SimNode_Op2 *>(node); \
-            /* OP(GetLocal,*) */ \
-            if ( is(tnode->l,"GetLocal") ) { \
-                auto r2vnode_l = static_cast<SimNode_GetLocal *>(tnode->l); \
-                /* OP(GetLocal,GetLocalR2V) */ \
-                if ( is(tnode->r,"GetLocalR2V") ) { \
-                    auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2LocR2V>(node->debugInfo, r2vnode_l->stackTop, r2vnode_r->stackTop); \
-                } else { \
-                    return context->code->makeNode<SimNode_Op2LocAny>(node->debugInfo, tnode->r, r2vnode_l->stackTop); \
-                } \
-            } \
-            return node; \
-        } \
-    };
-
-#define REGISTER_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    elements[fuseName(#OPNAME,#TYPE)].push_back(make_shared<Op2FusionPoint_##OPNAME##_##TYPE>(info));
-
-#define IMPLEMENT_OP2_INTEGER_FUSION_POINT(OPNAME) \
-    IMPLEMENT_OP2_FUSION_POINT(OPNAME,Int,int32_t); \
-    IMPLEMENT_OP2_FUSION_POINT(OPNAME,UInt,uint32_t); \
-    IMPLEMENT_OP2_FUSION_POINT(OPNAME,Int64,int64_t); \
-    IMPLEMENT_OP2_FUSION_POINT(OPNAME,UInt64,uint64_t);
-
-#define IMPLEMENT_OP2_NUMERIC_FUSION_POINT(OPNAME) \
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(OPNAME); \
-    IMPLEMENT_OP2_FUSION_POINT(OPNAME,Float,float); \
-    IMPLEMENT_OP2_FUSION_POINT(OPNAME,Double,double);
-
-#define IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(OPNAME) \
-    IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,Int,int32_t); \
-    IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,UInt,uint32_t); \
-    IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,Int64,int64_t); \
-    IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,UInt64,uint64_t);
-
-#define IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(OPNAME) \
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(OPNAME); \
-    IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,Float,float); \
-    IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,Double,double);
-
-#define IMPLEMENT_BOOL_OP2_INTEGER_FUSION_POINT(OPNAME) \
-    IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,Int,int32_t); \
-    IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,UInt,uint32_t); \
-    IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,Int64,int64_t); \
-    IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,UInt64,uint64_t);
-
-#define IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(OPNAME) \
-    IMPLEMENT_BOOL_OP2_INTEGER_FUSION_POINT(OPNAME); \
-    IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,Float,float); \
-    IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,Double,double);
-
-#define REGISTER_OP2_INTEGER_FUSION_POINT(OPNAME) \
-    REGISTER_OP2_FUSION_POINT(OPNAME,Int,int32_t); \
-    REGISTER_OP2_FUSION_POINT(OPNAME,UInt,uint32_t); \
-    REGISTER_OP2_FUSION_POINT(OPNAME,Int64,int64_t); \
-    REGISTER_OP2_FUSION_POINT(OPNAME,UInt64,uint64_t);
-
-#define REGISTER_OP2_NUMERIC_FUSION_POINT(OPNAME) \
-    REGISTER_OP2_INTEGER_FUSION_POINT(OPNAME); \
-    REGISTER_OP2_FUSION_POINT(OPNAME,Float,float); \
-    REGISTER_OP2_FUSION_POINT(OPNAME,Double,double);
-
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinAnd);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinOr);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinXor);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinShl);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinShr);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinRotl);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinRotr);
-
-    IMPLEMENT_OP2_NUMERIC_FUSION_POINT(Add);
-    IMPLEMENT_OP2_NUMERIC_FUSION_POINT(Sub);
-    IMPLEMENT_OP2_NUMERIC_FUSION_POINT(Div);
-    IMPLEMENT_OP2_NUMERIC_FUSION_POINT(Mod);
-    IMPLEMENT_OP2_NUMERIC_FUSION_POINT(Mul);
-
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(SetBinAnd);
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(SetBinOr);
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(SetBinXor);
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(SetBinShl);
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(SetBinShr);
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(SetBinRotl);
-    IMPLEMENT_SET_OP2_INTEGER_FUSION_POINT(SetBinRotr);
-
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetAdd);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetSub);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetDiv);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetMod);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetMul);
-
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(Equ);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(NotEqu);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(LessEqu);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(GtEqu);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(Gt);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(Less);
-
     struct SimFusion : SimVisitor {
         SimFusion ( Context * ctx, TextWriter & wr,  map<SimNode *,SimNodeInfo> && ni )
-            : context(ctx), ss(wr), info(ni)
-        {
-            REGISTER_OP2_INTEGER_FUSION_POINT(BinAnd);
-            REGISTER_OP2_INTEGER_FUSION_POINT(BinOr);
-            REGISTER_OP2_INTEGER_FUSION_POINT(BinXor);
-            REGISTER_OP2_INTEGER_FUSION_POINT(BinShl);
-            REGISTER_OP2_INTEGER_FUSION_POINT(BinShr);
-            REGISTER_OP2_INTEGER_FUSION_POINT(BinRotl);
-            REGISTER_OP2_INTEGER_FUSION_POINT(BinRotr);
-
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Add);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Sub);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Div);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Mod);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Mul);
-
-            REGISTER_OP2_INTEGER_FUSION_POINT(SetBinAnd);
-            REGISTER_OP2_INTEGER_FUSION_POINT(SetBinOr);
-            REGISTER_OP2_INTEGER_FUSION_POINT(SetBinXor);
-            REGISTER_OP2_INTEGER_FUSION_POINT(SetBinShl);
-            REGISTER_OP2_INTEGER_FUSION_POINT(SetBinShr);
-            REGISTER_OP2_INTEGER_FUSION_POINT(SetBinRotl);
-            REGISTER_OP2_INTEGER_FUSION_POINT(SetBinRotr);
-
-            REGISTER_OP2_NUMERIC_FUSION_POINT(SetAdd);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(SetSub);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(SetDiv);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(SetMod);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(SetMul);
-
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Equ);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(NotEqu);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(LessEqu);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(GtEqu);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Gt);
-            REGISTER_OP2_NUMERIC_FUSION_POINT(Less);
+            : context(ctx), ss(wr), info(ni) {
+                createFusionEngine();
         }
         void fuse() {
             fused = true;
         }
         virtual SimNode * visit ( SimNode * node ) override {
             auto & ni = info[node];
-            auto & nv = elements[fuseName(ni.name, ni.typeName)];
+            auto & nv = (*g_fusionEngine)[fuseName(ni.name, ni.typeName)];
             for ( const auto & fe : nv ) {
-                auto newNode = fe->fuse(node, context);
+                auto newNode = fe->fuse(info, node, context);
                 if ( newNode != node ) {
                     fuse();
                     return newNode;
@@ -532,7 +71,6 @@ namespace das {
         TextWriter & ss;
         bool fused = false;
         map<SimNode *,SimNodeInfo> & info;
-        map<string,vector<FusionPointPtr>> elements;
     };
 
     void Program::fusion ( Context & context, TextWriter & logs ) {

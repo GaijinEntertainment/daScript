@@ -64,6 +64,8 @@ namespace das {
         return info->annotation_or_name;
     }
 
+    void resetFusionEngine();
+
     void Module::Shutdown() {
         auto m = modules;
         while ( m ) {
@@ -71,6 +73,7 @@ namespace das {
             m = m->next;
             delete pM;
         }
+        resetFusionEngine();
     }
 
     Module * Module::require ( const string & name ) {
