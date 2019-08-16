@@ -95,6 +95,6 @@ def test
     let dt = profile(20,"sha256") <|
         for i in range(0,1024)
             sha256(input)
-    print("sha = {sha256(input)}\n")
+    verify(sha256(input)=="8adcaee60bb05a9964a1df12d2f007adcb8f3fa20ff7d1ecfde0a2ac301ff412")
     print("{1.0/dt} mb/sec\n")
     return true
