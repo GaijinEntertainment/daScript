@@ -137,8 +137,12 @@ SOURCE_GROUP_FILES("misc" MISC_SRC)
 SET(SIMULATE_FUSION_SRC
 src/simulate/simulate_fusion.cpp
 src/simulate/simulate_fusion_op2.cpp
+src/simulate/simulate_fusion_op2_set.cpp
 src/simulate/simulate_fusion_op2_bool.cpp
 src/simulate/simulate_fusion_op2_bin.cpp
+src/simulate/simulate_fusion_op2_vec.cpp
+src/simulate/simulate_fusion_op2_set_vec.cpp
+src/simulate/simulate_fusion_op2_bool_vec.cpp
 include/daScript/simulate/simulate_fusion.h
 include/daScript/simulate/simulate_fusion_op2.h
 )
@@ -410,7 +414,7 @@ list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 SET(TEST_GENERATED_SRC)
-DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC)
+#DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
