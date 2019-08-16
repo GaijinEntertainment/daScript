@@ -44,4 +44,5 @@ namespace das {
     void createFusionEngine_op2_bool();
     void createFusionEngine_op2_bin();
     void createFusionEngine_op2_vec();
+    void createFusionEngine_op2_set_vec();
 }

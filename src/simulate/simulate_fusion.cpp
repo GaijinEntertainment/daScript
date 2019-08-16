@@ -25,11 +25,14 @@ namespace das {
     void createFusionEngine() {
         if ( !g_fusionEngine ) {
             g_fusionEngine = make_unique<FusionEngine>();
+            // scalar
             createFusionEngine_op2();
             createFusionEngine_op2_set();
             createFusionEngine_op2_bool();
             createFusionEngine_op2_bin();
+            // vector
             createFusionEngine_op2_vec();
+            createFusionEngine_op2_set_vec();
         }
     }
 

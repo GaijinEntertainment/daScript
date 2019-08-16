@@ -309,6 +309,10 @@
 #define IMPLEMENT_OP2_VEC_FUSION_POINT(OPNAME,CTYPE) \
     IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,,CTYPE,,vec4f)
 
+#ifndef FUSION_OP2_EVAL_CAST
+#define FUSION_OP2_EVAL_CAST(expr)     (expr)
+#endif
+
 #define IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
     struct Op2FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op2FusionPoint_##OPNAME##_##CTYPE () {} \
@@ -326,7 +330,7 @@
             __forceinline void compute ( Context & context ) { \
                 CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop_l); \
                 CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop_r); \
-                SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+                SimPolicy<CTYPE>:: OPNAME (FUSION_OP2_EVAL_CAST(lv),rv,context); \
             } \
             uint32_t stackTop_l; \
             uint32_t stackTop_r; \
@@ -345,7 +349,7 @@
             __forceinline void compute ( Context & context ) { \
                 CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
                 auto rv =  r->eval##TYPE(context); \
-                SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+                SimPolicy<CTYPE>:: OPNAME (FUSION_OP2_EVAL_CAST(lv),rv,context); \
             } \
             SimNode * r; \
             uint32_t stackTop; \
@@ -366,6 +370,9 @@
             return node; \
         } \
     };
+
+#define IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,CTYPE) \
+    IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,,CTYPE)
 
 #define REGISTER_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
     (*g_fusionEngine)[fuseName(#OPNAME,#CTYPE)].push_back(make_shared<Op2FusionPoint_##OPNAME##_##CTYPE>());
@@ -432,6 +439,20 @@
     IMPLEMENT_OP2_VEC_FUSION_POINT(OPNAME,float2 ); \
     IMPLEMENT_OP2_VEC_FUSION_POINT(OPNAME,float3 ); \
     IMPLEMENT_OP2_VEC_FUSION_POINT(OPNAME,float4 );
+
+#define IMPLEMENT_SET_OP2_VEC_INTEGER_FUSION_POINT(OPNAME) \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,int2 ); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,uint2); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,int3 ); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,uint3); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,int4 ); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,uint4);
+
+#define IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(OPNAME)  \
+    IMPLEMENT_SET_OP2_VEC_INTEGER_FUSION_POINT(OPNAME); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,float2 ); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,float3 ); \
+    IMPLEMENT_SET_OP2_VEC_FUSION_POINT(OPNAME,float4 );
 
 #define REGISTER_OP2_VEC_INTEGER_FUSION_POINT(OPNAME) \
     REGISTER_OP2_VEC_FUSION_POINT(OPNAME,int2 ); \
