@@ -2,6 +2,10 @@ require math
 
 options optimize=false
 
+[sideeffects]
+def rightPolicyCeili(a:float):int
+	return ceili(a)
+
 [export]
 def test
     assert(uint32_hash(1U) != 1U)
@@ -56,4 +60,6 @@ def test
     assert(floori(float2(0.5,-0.1)) == int2(0,-1))
     assert(roundi(float2(0.501,-0.1)) == int2(1,0))
     assert(trunci(float2(0.501,-0.1)) == int2(0,0))
+	// policy AOT
+	verify(rightPolicyCeili(1.2)==2)
     return true

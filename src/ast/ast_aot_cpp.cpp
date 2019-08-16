@@ -2077,7 +2077,7 @@ namespace das {
                     // c-tor?
                     ss << "/*c-tor*/ ";
                 } else if ( bif->policyBased ) {
-                    outPolicy(call->type);
+                    outPolicy(call->arguments[0]->type);
                     ss << "::";
                 }
                 if ( bif->interopFn ) {
