@@ -4,12 +4,9 @@
  TODO:
     Op2ArgAny
     Op2AnyArg
-
-TODO:
- extra macro parameter to use vec4f as const type for Op2-Vec
  */
 
-#define IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE,RCTYPE) \
+#define IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE,RCTYPE,CONSTTYPE) \
     struct Op2FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op2FusionPoint_##OPNAME##_##CTYPE ( ) {} \
         struct SimNode_Op2R2VR2V : SimNode { \
@@ -128,7 +125,7 @@ TODO:
         }; \
         struct SimNode_Op2R2VConst : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2R2VConst ( const LineInfo & at, CTYPE cv, uint32_t sp ) \
+            SimNode_Op2R2VConst ( const LineInfo & at, CONSTTYPE cv, uint32_t sp ) \
                 : SimNode(at), c(cv), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
@@ -141,12 +138,12 @@ TODO:
                 CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
             } \
-            CTYPE c; \
+            CONSTTYPE c; \
             uint32_t stackTop; \
         }; \
         struct SimNode_Op2ArgConst : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ArgConst ( const LineInfo & at, CTYPE cv, int32_t i ) \
+            SimNode_Op2ArgConst ( const LineInfo & at, CONSTTYPE cv, int32_t i ) \
                 : SimNode(at), c(cv), index(i) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
@@ -159,12 +156,12 @@ TODO:
                 CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index]); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
             } \
-            CTYPE c; \
+            CONSTTYPE c; \
             int32_t index; \
         }; \
         struct SimNode_Op2AnyConst : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2AnyConst ( const LineInfo & at, SimNode * ll, CTYPE cv ) \
+            SimNode_Op2AnyConst ( const LineInfo & at, SimNode * ll, CONSTTYPE cv ) \
                 : SimNode(at), l(ll), c(cv) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
@@ -178,11 +175,11 @@ TODO:
                 return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
             } \
             SimNode * l; \
-            CTYPE c; \
+            CONSTTYPE c; \
         }; \
         struct SimNode_Op2ConstAny : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstAny ( const LineInfo & at, SimNode * rr, CTYPE cv ) \
+            SimNode_Op2ConstAny ( const LineInfo & at, SimNode * rr, CONSTTYPE cv ) \
                 : SimNode(at), r(rr), c(cv) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
@@ -196,11 +193,11 @@ TODO:
                 return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
             } \
             SimNode * r; \
-            CTYPE c; \
+            CONSTTYPE c; \
         }; \
         struct SimNode_Op2ConstR2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstR2V ( const LineInfo & at, CTYPE cv, uint32_t sp ) \
+            SimNode_Op2ConstR2V ( const LineInfo & at, CONSTTYPE cv, uint32_t sp ) \
                 : SimNode(at), c(cv), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
@@ -213,12 +210,12 @@ TODO:
                 CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
             } \
-            CTYPE c; \
+            CONSTTYPE c; \
             uint32_t stackTop; \
         }; \
         struct SimNode_Op2ConstArg : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstArg ( const LineInfo & at, CTYPE cv, int32_t i ) \
+            SimNode_Op2ConstArg ( const LineInfo & at, CONSTTYPE cv, int32_t i ) \
                 : SimNode(at), c(cv), index(i) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
@@ -231,7 +228,7 @@ TODO:
                 CTYPE rv = cast<CTYPE>::to(context.abiArguments()[index]); \
                 return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
             } \
-            CTYPE c; \
+            CONSTTYPE c; \
             int32_t index; \
         }; \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
@@ -239,7 +236,7 @@ TODO:
             /* OP(*,ConstValue) */ \
             if ( is(info,tnode->r,"ConstValue") ) { \
                 auto cnode = static_cast<SimNode_ConstValue *>(tnode->r); \
-                auto cvalue = cast<CTYPE>::to(cnode->value); \
+                auto cvalue = cast<CONSTTYPE>::to(cnode->value); \
                 /* OP(GetLocalR2V,ConstValue) */ \
                 if ( is(info,tnode->l,"GetLocalR2V") ) { \
                     auto r2vnode_l = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->l); \
@@ -254,7 +251,7 @@ TODO:
             /* OP(ConstValue,*) */ \
             } else if ( is(info,tnode->l,"ConstValue") ) { \
                 auto cnode = static_cast<SimNode_ConstValue *>(tnode->l); \
-                auto cvalue = cast<CTYPE>::to(cnode->value); \
+                auto cvalue = cast<CONSTTYPE>::to(cnode->value); \
                 /* OP(ConstValue,GetLocalR2V) */ \
                 if ( is(info,tnode->r,"GetLocalR2V") ) { \
                     auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
@@ -304,16 +301,16 @@ TODO:
     };
 
 #define IMPLEMENT_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,TYPE,CTYPE)
+    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,TYPE,CTYPE,CTYPE)
 
 #define IMPLEMENT_BOOL_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,Bool,bool)
+    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,Bool,bool,CTYPE)
 
 #define IMPLEMENT_OP2_VEC_FUSION_POINT(OPNAME,CTYPE) \
-    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,,CTYPE,,vec4f)
+    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,,CTYPE,,vec4f,vec4f)
 
 #define IMPLEMENT_BOOL_OP2_VEC_FUSION_POINT(OPNAME,CTYPE) \
-    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,,CTYPE,Bool,bool)
+    IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,,CTYPE,Bool,bool,vec4f)
 
 #ifndef FUSION_OP2_EVAL_CAST
 #define FUSION_OP2_EVAL_CAST(expr)     (expr)
