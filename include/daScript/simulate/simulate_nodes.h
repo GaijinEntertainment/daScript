@@ -2111,7 +2111,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
-            return visitOp2(vis, #CALL, sizeof(CTYPE), "");             \
+        return visitOp2(vis, #CALL, sizeof(CTYPE), #CTYPE);             \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = l->eval(context);                                 \
@@ -2125,7 +2125,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct Sim_##CALL <CTYPE> : SimNode_CallBase {                      \
         Sim_##CALL ( const LineInfo & at ) : SimNode_CallBase(at) {}    \
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
-            return visitOp2(vis, #CALL, sizeof(CTYPE), "");             \
+        return visitOp2(vis, #CALL, sizeof(CTYPE), #CTYPE);             \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = arguments[0]->eval(context);                      \
@@ -2139,7 +2139,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct Sim_##CALL <CTYPE> : SimNode_Op2 {                           \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
-            return visitOp2(vis, #CALL, sizeof(CTYPE), "");             \
+        return visitOp2(vis, #CALL, sizeof(CTYPE), #CTYPE);             \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
             auto lv = l->evalPtr(context);                              \
@@ -2155,7 +2155,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_BOOL_NODE;                                                  \
         Sim_##CALL ( const LineInfo & at ) : SimNode_Op2(at) {}         \
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
-            return visitOp2(vis, #CALL, sizeof(CTYPE), "");             \
+        return visitOp2(vis, #CALL, sizeof(CTYPE), #CTYPE);             \
         }                                                               \
         __forceinline bool compute ( Context & context ) {              \
             auto lv = l->eval(context);                                 \
