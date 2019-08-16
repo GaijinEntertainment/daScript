@@ -7,7 +7,7 @@ require testProfile
 def expLoop(n)
     var sum = 0.
     for i in range(0, n)
-        sum += exp(rcp_est(1. + float(i)))
+        sum += exp(rcp_est(float(i+1)))
     return sum
 
 [sideeffects]
