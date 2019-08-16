@@ -27,6 +27,7 @@ namespace das {
             g_fusionEngine = make_unique<FusionEngine>();
             createFusionEngine_op2();
             createFusionEngine_op2_bool();
+            createFusionEngine_op2_bin();
         }
     }
 
