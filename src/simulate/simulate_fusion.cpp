@@ -28,6 +28,7 @@ namespace das {
             createFusionEngine_op2();
             createFusionEngine_op2_bool();
             createFusionEngine_op2_bin();
+            createFusionEngine_op2_vec();
         }
     }
 
