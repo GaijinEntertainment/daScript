@@ -10,14 +10,6 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
-#undef DAS_NODE
-#define DAS_NODE(TYPE,CTYPE)                                    \
-    virtual vec4f eval ( das::Context & context ) override {    \
-        compute(context);                                       \
-        return v_zero();                                        \
-    }
-
-
 #include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
