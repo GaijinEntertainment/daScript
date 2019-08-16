@@ -1,5 +1,9 @@
 #include "daScript/misc/platform.h"
 
+#ifdef _MSC_VER
+#pragma warning(disable:4505)
+#endif
+
 #include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/sim_policy.h"
