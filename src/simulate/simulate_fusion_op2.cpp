@@ -9,6 +9,15 @@
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
+
+#undef DAS_NODE
+#define DAS_NODE(TYPE,CTYPE)                                    \
+    virtual vec4f eval ( das::Context & context ) override {    \
+        compute(context);                                       \
+        return v_zero();                                        \
+    }
+
+
 #include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
@@ -18,12 +27,6 @@ namespace das {
     IMPLEMENT_OP2_NUMERIC_FUSION_POINT(Mod);
     IMPLEMENT_OP2_NUMERIC_FUSION_POINT(Mul);
 
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetAdd);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetSub);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetDiv);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetMod);
-    IMPLEMENT_SET_OP2_NUMERIC_FUSION_POINT(SetMul);
-
     void createFusionEngine_op2()
     {
         REGISTER_OP2_NUMERIC_FUSION_POINT(Add);
@@ -31,12 +34,6 @@ namespace das {
         REGISTER_OP2_NUMERIC_FUSION_POINT(Div);
         REGISTER_OP2_NUMERIC_FUSION_POINT(Mod);
         REGISTER_OP2_NUMERIC_FUSION_POINT(Mul);
-
-        REGISTER_OP2_NUMERIC_FUSION_POINT(SetAdd);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(SetSub);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(SetDiv);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(SetMod);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(SetMul);
     }
 }
 

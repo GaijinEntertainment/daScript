@@ -40,6 +40,7 @@ namespace das {
 
     // fusion engine subsections
     void createFusionEngine_op2();
+    void createFusionEngine_op2_set();
     void createFusionEngine_op2_bool();
     void createFusionEngine_op2_bin();
     void createFusionEngine_op2_vec();

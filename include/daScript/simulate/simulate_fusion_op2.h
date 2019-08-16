@@ -323,11 +323,10 @@
                 V_SP(stackTop_r); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute ( Context & context ) { \
+            __forceinline void compute ( Context & context ) { \
                 CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop_l); \
                 CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop_r); \
                 SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-                return CTYPE(); \
             } \
             uint32_t stackTop_l; \
             uint32_t stackTop_r; \
@@ -339,15 +338,14 @@
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "LocAny", sizeof(CTYPE), #CTYPE); \
-                V_SUB(r); \
                 V_SP(stackTop); \
+                V_SUB(r); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute ( Context & context ) { \
+            __forceinline void compute ( Context & context ) { \
                 CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
-                return CTYPE(); \
             } \
             SimNode * r; \
             uint32_t stackTop; \
