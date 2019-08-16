@@ -33,6 +33,7 @@ namespace das {
             // vector
             createFusionEngine_op2_vec();
             createFusionEngine_op2_set_vec();
+            createFusionEngine_op2_bool_vec();
         }
     }
 
