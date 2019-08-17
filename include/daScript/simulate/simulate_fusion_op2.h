@@ -1,14 +1,95 @@
 #pragma once
 
+#define FUSION_ENABLE_GLRF      1
+
 /*
  TODO:
     Op2ArgAny
     Op2AnyArg
  */
 
+#ifndef FUSION_OP_EVAL_CAST
+#define FUSION_OP_EVAL_CAST(expr)          (*(expr))
+#endif
+
+#ifndef FUSION_OP_PTR_RVALUE
+#define FUSION_OP_PTR_RVALUE(CTYPE,expr)   ((CTYPE *)((expr)))
+#endif
+
+#ifndef FUSION_OP_PTR_VALUE
+#define FUSION_OP_PTR_VALUE(CTYPE,expr)    *((CTYPE *)((expr)))
+#endif
+
+#ifndef FUSION_OP_ARG_VALUE
+#define FUSION_OP_ARG_VALUE(CTYPE,expr)    cast<CTYPE>::to(expr)
+#endif
+
 #define IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE,RCTYPE,CONSTTYPE) \
     struct Op2FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op2FusionPoint_##OPNAME##_##CTYPE ( ) {} \
+        struct SimNode_Op2Glrf2VGlrf2V : SimNode { \
+            DAS_NODE(RTYPE,RCTYPE); \
+            SimNode_Op2Glrf2VGlrf2V ( const LineInfo & at, uint32_t sp_l, uint32_t ofs_l, uint32_t sp_r, uint32_t ofs_r ) \
+                : SimNode(at), stackTop_l(sp_l), offset_l(ofs_l), stackTop_r(sp_r), offset_r(ofs_r) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "Glrf2VGlrf2V", sizeof(CTYPE), #CTYPE); \
+                V_SP(stackTop_l); \
+                V_SP(offset_l); \
+                V_SP(stackTop_r); \
+                V_SP(offset_r); \
+                V_END(); \
+            } \
+            __forceinline RCTYPE compute ( Context & context ) { \
+                auto lv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop_l)) + offset_l)); \
+                auto rv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop_r)) + offset_r)); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+            } \
+            uint32_t stackTop_l, stackTop_r; \
+            uint32_t offset_l, offset_r; \
+        }; \
+        struct SimNode_Op2Glrf2VAny : SimNode { \
+            DAS_NODE(RTYPE,RCTYPE); \
+            SimNode_Op2Glrf2VAny ( const LineInfo & at, SimNode * rn, uint32_t sp, uint32_t ofs ) \
+                : SimNode(at), r(rn), stackTop(sp), offset(ofs) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "Glrf2VAny", sizeof(CTYPE), #CTYPE); \
+                V_SP(stackTop); \
+                V_SP(offset); \
+                V_SUB(r); \
+                V_END(); \
+            } \
+            __forceinline RCTYPE compute ( Context & context ) { \
+                CTYPE lv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop)) + offset)); \
+                auto rv =  r->eval##TYPE(context); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+            } \
+            SimNode * r; \
+            uint32_t stackTop; \
+            uint32_t offset; \
+        }; \
+        struct SimNode_Op2AnyGlrf2V : SimNode { \
+            DAS_NODE(RTYPE,RCTYPE); \
+            SimNode_Op2AnyGlrf2V ( const LineInfo & at, SimNode * ln, uint32_t sp, uint32_t ofs ) \
+                : SimNode(at), l(ln), stackTop(sp), offset(ofs) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "AnyGlrf2V", sizeof(CTYPE), #CTYPE); \
+                V_SUB(l); \
+                V_SP(stackTop); \
+                V_SP(offset); \
+                V_END(); \
+            } \
+            __forceinline RCTYPE compute ( Context & context ) { \
+                auto lv = l->eval##TYPE(context); \
+                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop)) + offset)); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+            } \
+            SimNode * l; \
+            uint32_t stackTop; \
+            uint32_t offset; \
+        }; \
         struct SimNode_Op2R2VR2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
             SimNode_Op2R2VR2V ( const LineInfo & at, uint32_t sp_l, uint32_t sp_r ) \
@@ -21,8 +102,8 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop_l); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop_r); \
+                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_l); \
+                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_r); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             uint32_t stackTop_l; \
@@ -40,8 +121,8 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index_l]); \
-                CTYPE rv =  cast<CTYPE>::to(context.abiArguments()[index_r]); \
+                auto lv = FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index_l]); \
+                auto rv = FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index_r]); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             int32_t index_l; \
@@ -59,7 +140,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
                 auto rv =  r->eval##TYPE(context); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
@@ -79,7 +160,7 @@
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
                 auto lv = l->eval##TYPE(context); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
+                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             SimNode * l; \
@@ -97,8 +178,8 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index]); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
+                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             int32_t  index; \
@@ -116,8 +197,8 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
-                CTYPE rv =  cast<CTYPE>::to(context.abiArguments()[index]); \
+                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             int32_t  index; \
@@ -135,7 +216,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
             } \
             CONSTTYPE c; \
@@ -153,7 +234,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv =  cast<CTYPE>::to(context.abiArguments()[index]); \
+                auto lv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
             } \
             CONSTTYPE c; \
@@ -207,7 +288,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop); \
+                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
             } \
             CONSTTYPE c; \
@@ -225,7 +306,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE rv = cast<CTYPE>::to(context.abiArguments()[index]); \
+                auto rv = FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
                 return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
             } \
             CONSTTYPE c; \
@@ -295,6 +376,19 @@
                     auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
                     return context->code->makeNode<SimNode_Op2ArgArg>(node->debugInfo, argnode_l->index, argnode_r->index); \
                 } \
+            /* OP(GetLocalRefR2VOff,*) */ \
+            } else if ( FUSION_ENABLE_GLRF && is(info,tnode->l,"GetLocalRefR2VOff") ) { \
+                auto r2vonode_l = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->l); \
+                if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
+                    auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
+                    return context->code->makeNode<SimNode_Op2Glrf2VGlrf2V>(node->debugInfo, r2vonode_l->stackTop, r2vonode_l->offset, r2vonode_r->stackTop, r2vonode_r->offset); \
+                } else { \
+                    return context->code->makeNode<SimNode_Op2Glrf2VAny>(node->debugInfo, tnode->r, r2vonode_l->stackTop, r2vonode_l->offset); \
+                } \
+            /* OP(*,GetLocalRefR2VOff) */ \
+            } else if ( FUSION_ENABLE_GLRF && is(info,tnode->r,"GetLocalRefR2VOff") ) { \
+                auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
+                return context->code->makeNode<SimNode_Op2AnyGlrf2V>(node->debugInfo, tnode->l, r2vonode_r->stackTop, r2vonode_r->offset); \
             } \
             return node; \
         } \
@@ -312,10 +406,6 @@
 #define IMPLEMENT_BOOL_OP2_VEC_FUSION_POINT(OPNAME,CTYPE) \
     IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,,CTYPE,Bool,bool,vec4f)
 
-#ifndef FUSION_OP2_EVAL_CAST
-#define FUSION_OP2_EVAL_CAST(expr)     (expr)
-#endif
-
 #define IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
     struct Op2FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op2FusionPoint_##OPNAME##_##CTYPE () {} \
@@ -331,9 +421,9 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop_l); \
-                CTYPE rv =  *(CTYPE *)(context.stack.sp() + stackTop_r); \
-                SimPolicy<CTYPE>:: OPNAME (FUSION_OP2_EVAL_CAST(lv),rv,context); \
+                auto lv = FUSION_OP_PTR_RVALUE(CTYPE,context.stack.sp() + stackTop_l); \
+                auto rv = FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_r); \
+                SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
             uint32_t stackTop_l; \
             uint32_t stackTop_r; \
@@ -350,12 +440,54 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                CTYPE & lv =  *(CTYPE *)(context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,context.stack.sp() + stackTop); \
                 auto rv =  r->eval##TYPE(context); \
-                SimPolicy<CTYPE>:: OPNAME (FUSION_OP2_EVAL_CAST(lv),rv,context); \
+                SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
             SimNode * r; \
             uint32_t stackTop; \
+        }; \
+        struct SimNode_Op2GlrfAny : SimNode { \
+            DAS_NODE(TYPE,CTYPE); \
+            SimNode_Op2GlrfAny ( const LineInfo & at, SimNode * rn, uint32_t sp, uint32_t ofs ) \
+                : SimNode(at), r(rn), stackTop(sp), offset(ofs) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "GlrfAny", sizeof(CTYPE), #CTYPE); \
+                V_SP(stackTop); \
+                V_SP(offset); \
+                V_SUB(r); \
+                V_END(); \
+            } \
+            __forceinline void compute ( Context & context ) { \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop)) + offset); \
+                auto rv =  r->eval##TYPE(context); \
+                SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
+            } \
+            SimNode * r; \
+            uint32_t stackTop; \
+            uint32_t offset; \
+        }; \
+        struct SimNode_Op2GlrfGlrf2V : SimNode { \
+            DAS_NODE(RTYPE,RCTYPE); \
+            SimNode_Op2GlrfGlrf2V ( const LineInfo & at, uint32_t sp_l, uint32_t ofs_l, uint32_t sp_r, uint32_t ofs_r ) \
+                : SimNode(at), stackTop_l(sp_l), offset_l(ofs_l), stackTop_r(sp_r), offset_r(ofs_r) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "GlrfGlrf2V", sizeof(CTYPE), #CTYPE); \
+                V_SP(stackTop_l); \
+                V_SP(offset_l); \
+                V_SP(stackTop_r); \
+                V_SP(offset_r); \
+                V_END(); \
+            } \
+            __forceinline void compute ( Context & context ) { \
+                auto lv = FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop_l)) + offset_l); \
+                auto rv = FUSION_OP_PTR_VALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop_r)) + offset_r); \
+                SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
+            } \
+            uint32_t stackTop_l, stackTop_r; \
+            uint32_t offset_l, offset_r; \
         }; \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
             auto tnode = static_cast<SimNode_Op2 *>(node); \
@@ -368,6 +500,16 @@
                     return context->code->makeNode<SimNode_Op2LocR2V>(node->debugInfo, r2vnode_l->stackTop, r2vnode_r->stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2LocAny>(node->debugInfo, tnode->r, r2vnode_l->stackTop); \
+                } \
+            /* OP(GetLocalRefOff,*) */ \
+            } else if ( FUSION_ENABLE_GLRF && is(info,tnode->l,"GetLocalRefOff") ) { \
+                auto glrfnode_l = static_cast<SimNode_GetLocalRefOff *>(tnode->l); \
+                /* OP(GetLocalRefOff,GetLocalRefR2VOff) */ \
+                if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
+                    auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
+                    return context->code->makeNode<SimNode_Op2GlrfGlrf2V>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, r2vonode_r->stackTop, r2vonode_r->offset); \
+                } else { \
+                    return context->code->makeNode<SimNode_Op2GlrfAny>(node->debugInfo, tnode->r, glrfnode_l->stackTop, glrfnode_l->offset); \
                 } \
             } \
             return node; \

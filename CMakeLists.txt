@@ -145,6 +145,7 @@ src/simulate/simulate_fusion_op2_set_vec.cpp
 src/simulate/simulate_fusion_op2_bool_vec.cpp
 include/daScript/simulate/simulate_fusion.h
 include/daScript/simulate/simulate_fusion_op2.h
+include/daScript/simulate/simulate_fusion_vec_settings.h
 )
 list(SORT SIMULATE_FUSION_SRC)
 SOURCE_GROUP_FILES("fusion" SIMULATE_FUSION_SRC)

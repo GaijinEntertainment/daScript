@@ -15,7 +15,7 @@ namespace das {
     struct FusionPoint {
         FusionPoint () {}
         virtual ~FusionPoint() {}
-        virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * ) {
+        virtual SimNode * fuse ( const SimNodeInfoLookup &, SimNode * node, Context * ) {
             return node;
         }
         static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name ) {

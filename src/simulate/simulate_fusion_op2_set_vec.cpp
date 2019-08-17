@@ -17,9 +17,7 @@
         return v_zero();                                        \
     }
 
-#undef FUSION_OP2_EVAL_CAST
-#define FUSION_OP2_EVAL_CAST(expr)  ((char *)(&(expr)))
-
+#include "daScript/simulate/simulate_fusion_vec_settings.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {

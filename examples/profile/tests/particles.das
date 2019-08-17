@@ -1,5 +1,6 @@
 // options log = true, logNodes =true, printRef = true, printVarAccess = true // , logOptimizationPasses = true
 // options logCpp = true
+// options logNodes=true
 
 require testProfile
 

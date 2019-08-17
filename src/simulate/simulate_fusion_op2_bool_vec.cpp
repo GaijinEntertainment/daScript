@@ -10,6 +10,7 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
+#include "daScript/simulate/simulate_fusion_vec_settings.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
