@@ -19,7 +19,7 @@
 
 #include "daScript/simulate/simulate_fusion_vec_settings.h"
 
-#undef FUSION_OP_PTR_VALUE(CTYPE,expr)
+#undef FUSION_OP_PTR_VALUE
 #define FUSION_OP_PTR_VALUE(CTYPE,expr)    *((CTYPE *)((expr)))
 
 #include "daScript/simulate/simulate_fusion_op2.h"

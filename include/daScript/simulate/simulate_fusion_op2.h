@@ -45,8 +45,10 @@
                 auto rv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop_r)) + offset_r)); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
-            uint32_t stackTop_l, stackTop_r; \
-            uint32_t offset_l, offset_r; \
+            uint32_t stackTop_l; \
+            uint32_t offset_l; \
+            uint32_t stackTop_r; \
+            uint32_t offset_r; \
         }; \
         struct SimNode_Op2Glrf2VAny : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
@@ -486,8 +488,10 @@
                 auto rv = FUSION_OP_PTR_VALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop_r)) + offset_r); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
-            uint32_t stackTop_l, stackTop_r; \
-            uint32_t offset_l, offset_r; \
+            uint32_t stackTop_l; \
+            uint32_t offset_l; \
+            uint32_t stackTop_r; \
+            uint32_t offset_r; \
         }; \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
             auto tnode = static_cast<SimNode_Op2 *>(node); \
