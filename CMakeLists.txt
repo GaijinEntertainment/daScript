@@ -143,6 +143,7 @@ src/simulate/simulate_fusion_op2_bin.cpp
 src/simulate/simulate_fusion_op2_vec.cpp
 src/simulate/simulate_fusion_op2_set_vec.cpp
 src/simulate/simulate_fusion_op2_bool_vec.cpp
+src/simulate/simulate_fusion_op2_bin_vec.cpp
 src/simulate/simulate_fusion_op2_scalar_vec.cpp
 include/daScript/simulate/simulate_fusion.h
 include/daScript/simulate/simulate_fusion_op2.h
