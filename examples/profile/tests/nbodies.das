@@ -75,10 +75,10 @@ def energy():float
  *
  * When all advances done, rescale bodies back to obtain correct energy.
  */
-def scale_bodies(scale) 
+def scale_bodies(scale)
   for b in bodies
-    b.mass *= scale*scale
-    b.v = b.v*scale
+    b.mass *= scale * scale
+    b.v *= scale
 
 def nbodies(n)
   scale_bodies(0.01)

@@ -516,6 +516,27 @@
             uint32_t stackTop_r; \
             uint32_t offset_r; \
         }; \
+        struct SimNode_Op2GlrfArg : SimNode { \
+            DAS_NODE(TYPE,CTYPE); \
+            SimNode_Op2GlrfArg ( const LineInfo & at, uint32_t sp, uint32_t ofs, int32_t i ) \
+                : SimNode(at), stackTop(sp), offset(ofs), index(i) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "GlrfArg", sizeof(CTYPE), #CTYPE); \
+                V_SP(stackTop); \
+                V_SP(offset); \
+                V_ARG(index); \
+                V_END(); \
+            } \
+            __forceinline void compute ( Context & context ) { \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop)) + offset); \
+                auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
+                SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
+            } \
+            uint32_t stackTop; \
+            uint32_t offset; \
+            int32_t index; \
+        }; \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
             auto tnode = static_cast<SimNode_Op2 *>(node); \
             /* OP(GetLocal,*) */ \
@@ -535,6 +556,10 @@
                 if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
                     auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
                     return context->code->makeNode<SimNode_Op2GlrfGlrf2V>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, r2vonode_r->stackTop, r2vonode_r->offset); \
+                /* OP(GetLocalRefOff,GetArgument) */ \
+                } else if ( is(info,tnode->r,"GetArgument") ) { \
+                    auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
+                    return context->code->makeNode<SimNode_Op2GlrfArg>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, argnode_r->index); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2GlrfAny>(node->debugInfo, tnode->r, glrfnode_l->stackTop, glrfnode_l->offset); \
                 } \
