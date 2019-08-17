@@ -87,15 +87,15 @@
                 </p>
                 <ul>
                   <li>
-                    <b>Extremely blazingly fast</b>. daScript can be compared with compiled or JIT languages even in interpreter mode, always faster than dynamic interpreted scripting languages like Lua.
-                    In AOT it is usually faster than C++ and beats best JIT VMs (V8 or LuaJIT). You will never need to rewrite daScript code to C++ to optimize your application!
+                    <b>Extremely blazingly fast</b>. daScript can be compared with compiled or JIT language even in interpreter mode, always faster than dynamic interpreted scripting languages like Lua.
+                    In AOT it is usually faster than naively written C++ and beats best JIT VMs (V8 or LuaJIT). You will never need to rewrite daScript code to C++ to optimize your application!
                   </li>
                   <li>
                     <b>Safe</b>. It is static typed languages with all it's benefits (most of Lua/JS errors that will break application in runtime won't even compile), but due to generics and type inference it is easy and fluid. Safety is the next key pillar of daScript design, so in many cases it is safier than languages like C++ or Java.
                   </li>
 
                   <li>
-                    <b>Real embedded scripting language</b>. It has no dependecies (you only need C++11 compiler), super easy-to-use and safe interop (all embedded scripting languages supposed to call native code).
+                    <b>Real embedded scripting language</b>. It has no dependecies (you only need C++14 compiler), super easy-to-use and safe interop (all embedded scripting languages supposed to call native code).
                   </li>
                 </ul>
                 <p>
@@ -104,7 +104,7 @@
                 <ul>
                     <li>amazing performance
                      </li><li>strong static typing
-                     </li><li>Instant hot reload
+                     </li><li>instant hot reload
                      </li><li>Ruby-like blocks
                      </li><li>semantic indenting
                      </li><li>lexical scoping
@@ -138,7 +138,7 @@
                     <!--------------------------------------------------------------------------------------------------- -->
                    <span id="look" class="labels">What Does it look like?</span><br>
                     daScript's syntax is similar to (Typed) Python,
-but the language has a static strong typed nature like ML or Zig, and it's POD types are close to hardware/machine types.
+but the language has a static strong typed nature like ML or Zig, and it's POD types are close to hardware/machine types. The following Fibonacci code snippet also relies on type inference.
                     <br>
                     <br>
 <div class="snippets"><div class="snippets"><pre><span></span><span class="k">def</span> <span class="nf">fibR</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
