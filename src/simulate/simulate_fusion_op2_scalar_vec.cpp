@@ -19,17 +19,21 @@
 
 #include "daScript/simulate/simulate_fusion_vec_settings.h"
 
-#ifdef FUSION_OP_PTR_VALUE
-#undef FUSION_OP_PTR_VALUE
-#endif
-
-#define FUSION_OP_PTR_VALUE(CTYPE,expr)    *((CTYPE *)((expr)))
-
 #include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
+
+#undef FUSION_OP_PTR_VALUE_RIGHT
+#define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   (v_ld_x((const float *)(expr)))
+
     IMPLEMENT_OP2_VEC_NUMERIC_FUSION_POINT(MulVecScal);
     IMPLEMENT_OP2_VEC_NUMERIC_FUSION_POINT(DivVecScal);
+
+#undef FUSION_OP_PTR_VALUE_RIGHT
+#define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   (v_ldu((const float *)(expr)))
+#undef FUSION_OP_PTR_VALUE_LEFT
+#define FUSION_OP_PTR_VALUE_LEFT(CTYPE,expr)    (v_ld_x((const float *)(expr)))
+
     IMPLEMENT_OP2_VEC_NUMERIC_FUSION_POINT(MulScalVec);
     IMPLEMENT_OP2_VEC_NUMERIC_FUSION_POINT(DivScalVec);
 

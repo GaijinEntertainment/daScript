@@ -18,6 +18,14 @@
 #define FUSION_OP_PTR_VALUE(CTYPE,expr)    *((CTYPE *)((expr)))
 #endif
 
+#ifndef FUSION_OP_PTR_VALUE_LEFT
+#define FUSION_OP_PTR_VALUE_LEFT(CTYPE,expr)    *((CTYPE *)((expr)))
+#endif
+
+#ifndef FUSION_OP_PTR_VALUE_RIGHT
+#define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   *((CTYPE *)((expr)))
+#endif
+
 #ifndef FUSION_OP_ARG_VALUE
 #define FUSION_OP_ARG_VALUE(CTYPE,expr)    cast<CTYPE>::to(expr)
 #endif
@@ -39,8 +47,8 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop_l)) + offset_l)); \
-                auto rv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop_r)) + offset_r)); \
+                auto lv = FUSION_OP_PTR_VALUE_LEFT(CTYPE,((*(char **)(context.stack.sp() + stackTop_l)) + offset_l)); \
+                auto rv = FUSION_OP_PTR_VALUE_RIGHT(CTYPE,((*(char **)(context.stack.sp() + stackTop_r)) + offset_r)); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             uint32_t stackTop_l; \
@@ -61,7 +69,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                CTYPE lv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop)) + offset)); \
+                CTYPE lv = FUSION_OP_PTR_VALUE_LEFT(CTYPE,((*(char **)(context.stack.sp() + stackTop)) + offset)); \
                 auto rv =  r->eval##TYPE(context); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
@@ -83,7 +91,7 @@
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
                 auto lv = l->eval##TYPE(context); \
-                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop)) + offset)); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,((*(char **)(context.stack.sp() + stackTop)) + offset)); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             SimNode * l; \
@@ -102,8 +110,8 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_l); \
-                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_r); \
+                auto lv =  FUSION_OP_PTR_VALUE_LEFT(CTYPE,context.stack.sp() + stackTop_l); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop_r); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             uint32_t stackTop_l; \
@@ -140,7 +148,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_PTR_VALUE_LEFT(CTYPE,context.stack.sp() + stackTop); \
                 auto rv =  r->eval##TYPE(context); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
@@ -160,7 +168,7 @@
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
                 auto lv = l->eval##TYPE(context); \
-                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             SimNode * l; \
@@ -179,8 +187,8 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop_l)) + offset_l)); \
-                auto rv = FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_r); \
+                auto lv = FUSION_OP_PTR_VALUE_LEFT(CTYPE,((*(char **)(context.stack.sp() + stackTop_l)) + offset_l)); \
+                auto rv = FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop_r); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             uint32_t stackTop_l; \
@@ -200,7 +208,7 @@
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
                 auto lv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
-                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             int32_t  index; \
@@ -218,7 +226,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_PTR_VALUE_LEFT(CTYPE,context.stack.sp() + stackTop); \
                 auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
@@ -237,7 +245,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_PTR_VALUE_LEFT(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
             } \
             CONSTTYPE c; \
@@ -309,7 +317,7 @@
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto rv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop); \
                 return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
             } \
             CONSTTYPE c; \
@@ -447,7 +455,7 @@
             } \
             __forceinline void compute ( Context & context ) { \
                 auto lv = FUSION_OP_PTR_RVALUE(CTYPE,context.stack.sp() + stackTop_l); \
-                auto rv = FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_r); \
+                auto rv = FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop_r); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
             uint32_t stackTop_l; \
@@ -508,7 +516,7 @@
             } \
             __forceinline void compute ( Context & context ) { \
                 auto lv = FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop_l)) + offset_l); \
-                auto rv = FUSION_OP_PTR_VALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop_r)) + offset_r); \
+                auto rv = FUSION_OP_PTR_VALUE_RIGHT(CTYPE,(*(char **)(context.stack.sp() + stackTop_r)) + offset_r); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
             uint32_t stackTop_l; \
