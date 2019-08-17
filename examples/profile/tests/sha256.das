@@ -1,3 +1,5 @@
+// options logNodes=true
+
 require math
 
 let

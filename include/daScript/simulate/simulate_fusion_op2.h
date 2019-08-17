@@ -1,7 +1,5 @@
 #pragma once
 
-#define FUSION_ENABLE_GLRF      1
-
 /*
  TODO:
     Op2ArgAny
@@ -167,6 +165,27 @@
             } \
             SimNode * l; \
             uint32_t stackTop; \
+        }; \
+        struct SimNode_Op2GlrfR2V : SimNode { \
+            DAS_NODE(RTYPE,RCTYPE); \
+            SimNode_Op2GlrfR2V ( const LineInfo & at, uint32_t sp_l, uint32_t ofs_l, uint32_t sp_r ) \
+                : SimNode(at), stackTop_l(sp_l), offset_l(ofs_l), stackTop_r(sp_r) {} \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op(#OPNAME "GlrfR2V", sizeof(CTYPE), #CTYPE); \
+                V_SP(stackTop_l); \
+                V_SP(offset_l); \
+                V_SP(stackTop_r); \
+                V_END(); \
+            } \
+            __forceinline RCTYPE compute ( Context & context ) { \
+                auto lv = FUSION_OP_PTR_VALUE(CTYPE,((*(char **)(context.stack.sp() + stackTop_l)) + offset_l)); \
+                auto rv = FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop_r); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
+            } \
+            uint32_t stackTop_l; \
+            uint32_t offset_l; \
+            uint32_t stackTop_r; \
         }; \
         struct SimNode_Op2ArgR2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
@@ -367,6 +386,10 @@
                 if ( is(info,tnode->l,"GetArgument") ) { \
                     auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
                     return context->code->makeNode<SimNode_Op2ArgR2V>(node->debugInfo, argnode_l->index, r2vnode_r->stackTop); \
+                /* OP(GetLocalRefR2VOff,GetLocalR2V) */ \
+                } else if ( is(info,tnode->l,"GetLocalRefR2VOff") ) { \
+                    auto r2vonode_l = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->l); \
+                    return context->code->makeNode<SimNode_Op2GlrfR2V>(node->debugInfo,r2vonode_l->stackTop, r2vonode_l->offset, r2vnode_r->stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->stackTop); \
                 } \
@@ -379,7 +402,7 @@
                     return context->code->makeNode<SimNode_Op2ArgArg>(node->debugInfo, argnode_l->index, argnode_r->index); \
                 } \
             /* OP(GetLocalRefR2VOff,*) */ \
-            } else if ( FUSION_ENABLE_GLRF && is(info,tnode->l,"GetLocalRefR2VOff") ) { \
+            } else if ( is(info,tnode->l,"GetLocalRefR2VOff") ) { \
                 auto r2vonode_l = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->l); \
                 if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
                     auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
@@ -388,7 +411,7 @@
                     return context->code->makeNode<SimNode_Op2Glrf2VAny>(node->debugInfo, tnode->r, r2vonode_l->stackTop, r2vonode_l->offset); \
                 } \
             /* OP(*,GetLocalRefR2VOff) */ \
-            } else if ( FUSION_ENABLE_GLRF && is(info,tnode->r,"GetLocalRefR2VOff") ) { \
+            } else if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
                 auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
                 return context->code->makeNode<SimNode_Op2AnyGlrf2V>(node->debugInfo, tnode->l, r2vonode_r->stackTop, r2vonode_r->offset); \
             } \
@@ -506,7 +529,7 @@
                     return context->code->makeNode<SimNode_Op2LocAny>(node->debugInfo, tnode->r, r2vnode_l->stackTop); \
                 } \
             /* OP(GetLocalRefOff,*) */ \
-            } else if ( FUSION_ENABLE_GLRF && is(info,tnode->l,"GetLocalRefOff") ) { \
+            } else if ( is(info,tnode->l,"GetLocalRefOff") ) { \
                 auto glrfnode_l = static_cast<SimNode_GetLocalRefOff *>(tnode->l); \
                 /* OP(GetLocalRefOff,GetLocalRefR2VOff) */ \
                 if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
