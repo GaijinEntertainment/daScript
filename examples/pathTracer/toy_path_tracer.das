@@ -1,6 +1,8 @@
 // options log=true
 // options logCpp=true
 
+// options noaot=true, fusion=true
+
 require math
 require PathTracerHelper
 
@@ -21,8 +23,7 @@ var
 
 def schlick(cosine,ri:float)
     var r0 = (1. - ri) / (1. + ri)
-    r0 = r0 * r0
-    return lerp ( r0, 1., pow(1.-cosine,5.))
+    return lerp ( r0*r0, 1., pow(1.-cosine,5.))
 
 struct Sphere
     center : float3
