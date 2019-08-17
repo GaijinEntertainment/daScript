@@ -34,6 +34,7 @@ namespace das {
             createFusionEngine_op2_vec();
             createFusionEngine_op2_set_vec();
             createFusionEngine_op2_bool_vec();
+            createFusionEngine_op2_scalar_vec();
         }
     }
 
