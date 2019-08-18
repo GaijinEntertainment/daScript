@@ -10,6 +10,8 @@
 
 #include "daScript/simulate/aot_builtin_rtti.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 using namespace das;
 DAS_BASE_BIND_ENUM_98(Type, Type,
     none,           autoinfer,      alias,          fakeContext,
@@ -87,6 +89,7 @@ namespace das {
 
     template <typename ST>
     struct SimNode_DebugInfoAtField : SimNode_At {
+        using TT = ST;
         DAS_PTR_NODE;
         SimNode_DebugInfoAtField ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
             : SimNode_At(at, rv, idx, 0, ofs, 0) {}
@@ -99,6 +102,16 @@ namespace das {
             } else {
                 return ((char *)(pValue->fields[idx])) + offset;
             }
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP_TT(DebugInfoAtField);
+            V_SUB(value);
+            V_SUB(index);
+            V_ARG(stride);
+            V_ARG(offset);
+            V_ARG(range);
+            V_END();
         }
     };
 

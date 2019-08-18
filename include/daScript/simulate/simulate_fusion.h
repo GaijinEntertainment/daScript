@@ -50,4 +50,6 @@ namespace das {
     void createFusionEngine_op2_bool_vec();
     void createFusionEngine_op2_bin_vec();
     void createFusionEngine_op2_scalar_vec();
+    // at
+    void createFusionEngine_at();
 }

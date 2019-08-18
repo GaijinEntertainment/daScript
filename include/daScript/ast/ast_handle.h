@@ -5,6 +5,8 @@
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate_nodes.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das
 {
     #define DAS_BIND_MANAGED_FIELD(FIELDNAME)   DAS_BIND_FIELD(ManagedType,FIELDNAME)
@@ -278,9 +280,20 @@ namespace das
             SimNode * value;
         };
         struct SimNode_AtStdVector : SimNode_At {
+            using TT = OT;
             DAS_PTR_NODE;
             SimNode_AtStdVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
                 : SimNode_At(at, rv, idx, 0, ofs, 0) {}
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP_TT(AtStdVector);
+                V_SUB(value);
+                V_SUB(index);
+                V_ARG(stride);
+                V_ARG(offset);
+                V_ARG(range);
+                V_END();
+            }
             __forceinline char * compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
@@ -446,3 +459,6 @@ namespace das
 }
 
 MAKE_TYPE_FACTORY(das_string, das::string);
+
+#include "daScript/simulate/simulate_visit_op_undef.h"
+
