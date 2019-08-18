@@ -34,6 +34,8 @@ namespace das
         }
     };
 
+    template <> struct typeName<EnumStub>  { static string name() { return "enum"; } };
+
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub);
 

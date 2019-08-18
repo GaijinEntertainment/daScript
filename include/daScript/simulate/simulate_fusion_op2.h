@@ -39,7 +39,7 @@
                 : SimNode(at), stackTop_l(sp_l), offset_l(ofs_l), stackTop_r(sp_r), offset_r(ofs_r) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "Glrf2VGlrf2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "Glrf2VGlrf2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop_l); \
                 V_SP(offset_l); \
                 V_SP(stackTop_r); \
@@ -62,7 +62,7 @@
                 : SimNode(at), r(rn), stackTop(sp), offset(ofs) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "Glrf2VAny", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "Glrf2VAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop); \
                 V_SP(offset); \
                 V_SUB(r); \
@@ -83,7 +83,7 @@
                 : SimNode(at), l(ln), stackTop(sp), offset(ofs) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "AnyGlrf2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "AnyGlrf2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SUB(l); \
                 V_SP(stackTop); \
                 V_SP(offset); \
@@ -104,7 +104,7 @@
                 : SimNode(at),stackTop_l(sp_l), stackTop_r(sp_r) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "R2VR2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "R2VR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop_l); \
                 V_SP(stackTop_r); \
                 V_END(); \
@@ -123,7 +123,7 @@
                 : SimNode(at),index_l(i_l), index_r(i_r) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "ArgArg", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "ArgArg", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_ARG(index_l); \
                 V_ARG(index_r); \
                 V_END(); \
@@ -142,7 +142,7 @@
                 : SimNode(at), r(rn), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "R2VAny", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "R2VAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop); \
                 V_SUB(r); \
                 V_END(); \
@@ -161,7 +161,7 @@
                 : SimNode(at), l(ln), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "AnyR2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "AnyR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SUB(l); \
                 V_SP(stackTop); \
                 V_END(); \
@@ -180,7 +180,7 @@
                 : SimNode(at), stackTop_l(sp_l), offset_l(ofs_l), stackTop_r(sp_r) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "GlrfR2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "GlrfR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop_l); \
                 V_SP(offset_l); \
                 V_SP(stackTop_r); \
@@ -201,7 +201,7 @@
                 : SimNode(at), index(i), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "ArgR2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "ArgR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_ARG(index); \
                 V_SP(stackTop); \
                 V_END(); \
@@ -220,7 +220,7 @@
                 : SimNode(at), index(i), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "R2VArg", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "R2VArg", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop); \
                 V_ARG(index); \
                 V_END(); \
@@ -239,7 +239,7 @@
                 : SimNode(at), c(cv), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "R2VConst", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "R2VConst", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop); \
                 V_ARG(c); \
                 V_END(); \
@@ -257,7 +257,7 @@
                 : SimNode(at), c(cv), index(i) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "ArgConst", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "ArgConst", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_ARG(index); \
                 V_ARG(c); \
                 V_END(); \
@@ -275,7 +275,7 @@
                 : SimNode(at), l(ll), c(cv) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "AnyConst", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "AnyConst", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SUB(l); \
                 V_ARG(c); \
                 V_END(); \
@@ -293,7 +293,7 @@
                 : SimNode(at), r(rr), c(cv) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "ConstAny", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "ConstAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_ARG(c); \
                 V_SUB(r); \
                 V_END(); \
@@ -311,7 +311,7 @@
                 : SimNode(at), c(cv), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "ConstR2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "ConstR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_ARG(c); \
                 V_SP(stackTop); \
                 V_END(); \
@@ -329,7 +329,7 @@
                 : SimNode(at), c(cv), index(i) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "ConstArg", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "ConstArg", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_ARG(c); \
                 V_ARG(index); \
                 V_END(); \
@@ -448,7 +448,7 @@
                 : SimNode(at),stackTop_l(sp_l), stackTop_r(sp_r) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "LocR2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "LocR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop_l); \
                 V_SP(stackTop_r); \
                 V_END(); \
@@ -467,7 +467,7 @@
                 : SimNode(at), r(rn), stackTop(sp) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "LocAny", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "LocAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop); \
                 V_SUB(r); \
                 V_END(); \
@@ -486,7 +486,7 @@
                 : SimNode(at), r(rn), stackTop(sp), offset(ofs) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "GlrfAny", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "GlrfAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop); \
                 V_SP(offset); \
                 V_SUB(r); \
@@ -507,7 +507,7 @@
                 : SimNode(at), stackTop_l(sp_l), offset_l(ofs_l), stackTop_r(sp_r), offset_r(ofs_r) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "GlrfGlrf2V", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "GlrfGlrf2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop_l); \
                 V_SP(offset_l); \
                 V_SP(stackTop_r); \
@@ -530,7 +530,7 @@
                 : SimNode(at), stackTop(sp), offset(ofs), index(i) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
-                vis.op(#OPNAME "GlrfArg", sizeof(CTYPE), #CTYPE); \
+                vis.op(#OPNAME "GlrfArg", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SP(stackTop); \
                 V_SP(offset); \
                 V_ARG(index); \
@@ -580,10 +580,10 @@
     IMPLEMENT_SET_OP2_FUSION_POINT(OPNAME,,CTYPE)
 
 #define REGISTER_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    (*g_fusionEngine)[fuseName(#OPNAME,#CTYPE)].push_back(make_shared<Op2FusionPoint_##OPNAME##_##CTYPE>());
+    (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_shared<Op2FusionPoint_##OPNAME##_##CTYPE>());
 
 #define REGISTER_OP2_VEC_FUSION_POINT(OPNAME,CTYPE) \
-    (*g_fusionEngine)[fuseName(#OPNAME,#CTYPE)].push_back(make_shared<Op2FusionPoint_##OPNAME##_##CTYPE>());
+    (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_shared<Op2FusionPoint_##OPNAME##_##CTYPE>());
 
 #define IMPLEMENT_OP2_INTEGER_FUSION_POINT(OPNAME) \
     IMPLEMENT_OP2_FUSION_POINT(OPNAME,Int,int32_t); \

@@ -557,14 +557,14 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_Op1::visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
+    SimNode * SimNode_Op1::visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
         V_BEGIN();
         vis.op(op, typeSize, typeName);
         V_SUB(x);
         V_END();
     }
 
-    SimNode * SimNode_Op2::visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
+    SimNode * SimNode_Op2::visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
         V_BEGIN();
         vis.op(op, typeSize, typeName);
         V_SUB(l);
@@ -572,14 +572,14 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_CallBase::visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
+    SimNode * SimNode_CallBase::visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
         V_BEGIN();
         vis.op(op, typeSize, typeName);
         V_SUB(arguments[0]);
         V_END();
     }
 
-    SimNode * SimNode_CallBase::visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
+    SimNode * SimNode_CallBase::visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
         V_BEGIN();
         vis.op(op, typeSize, typeName);
         V_SUB(arguments[0]);
@@ -587,7 +587,7 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_CallBase::visitOp3 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
+    SimNode * SimNode_CallBase::visitOp3 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
         V_BEGIN();
         vis.op(op, typeSize, typeName);
         V_SUB(arguments[0]);
