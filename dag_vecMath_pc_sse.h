@@ -882,62 +882,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt100(bbox3f_cref b){ return v_perm_ayz
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt101(bbox3f_cref b){ return v_perm_xbzw(b.bmax, b.bmin); }
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt110(bbox3f_cref b){ return v_perm_xycd(b.bmax, b.bmin); }
 
-
-VECMATH_FINLINE float VECTORCALL quat_qslerp_counter_warp(float t, float cos_alpha)
-{
-  const float ATTENUATION = 0.82279687f;
-  const float WORST_CASE_SLOPE = 0.58549219f;
-
-  float factor = 1 - ATTENUATION * fabsf(cos_alpha);
-  factor *= factor;
-  float k = WORST_CASE_SLOPE * factor;
-
-  return t*(k*t*(2*t - 3) + 1 + k);
-}
-
-
-VECMATH_FINLINE quat4f VECTORCALL v_quat_qslerp(float t, quat4f a, quat4f b)
-{
-  float cosAngle = v_extract_x(v_dot4_x(a, b));
-
-  if (t <= 0.5)
-    t = ::quat_qslerp_counter_warp(t, cosAngle);
-  else
-    t = 1-::quat_qslerp_counter_warp(1-t, cosAngle);
-
-  if (cosAngle < 0)
-    b = v_neg(b);
-  quat4f res = v_quat_lerp(v_splat4(&t), a, b);
-  return v_norm4(res);
-}
-
-VECMATH_FINLINE vec3f VECTORCALL v_quat_mul_vec3(quat4f q, vec3f v)
-{
-  __m128 product, tmp0, tmp1, tmp2, tmp3, wwww, qv, qw, res;
-  tmp0 = V_SHUFFLE_REV(q, 3,0,2,1);
-  tmp1 = _mm_shuffle_ps(v, v, _MM_SHUFFLE(3,1,0,2));
-  tmp2 = V_SHUFFLE_REV(q, 3,1,0,2);
-  tmp3 = _mm_shuffle_ps(v, v, _MM_SHUFFLE(3,0,2,1));
-  wwww = v_splat_w(q);
-  qv = v_mul(wwww, v);
-  qv = v_madd(tmp0, tmp1, qv);
-  qv = v_nmsub(tmp2, tmp3, qv);
-  product = v_mul( q, v );
-  qw = v_madd(
-    V_SHUFFLE_REV(q, 0,3,2,1),
-    _mm_shuffle_ps(v, v, _MM_SHUFFLE(0,3,2,1)),
-    product);
-  qw = v_add(V_SHUFFLE_REV(product, 1,0,3,2), qw);
-
-  tmp1 = V_SHUFFLE_REV(qv, 3,1,0,2);
-  tmp3 = _mm_shuffle_ps(qv, qv, _MM_SHUFFLE(3,0,2,1));
-  res = v_mul(v_splat_x(qw), q);
-  res = v_madd(wwww, qv, res);
-  res = v_madd(tmp0, tmp1, res);
-  return v_nmsub(tmp2, tmp3, res);
-}
-
-
 #if defined(_MSC_VER) && (_MSC_VER < 1600 || (_MSC_VER < 1700 && _TARGET_64BIT)) && !defined(__clang__)
 //due to compiler bug (vc2008-32 and vc2010-64)
 VECMATH_FINLINE float VECTORCALL v_extract_x(vec4f v) { return v.m128_f32[0]; }

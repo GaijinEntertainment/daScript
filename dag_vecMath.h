@@ -127,6 +127,9 @@ VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const ve
 //! reads(unaligned) and unpacks 4 halfs into float vector
 VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m);
 
+//! converts float vector to 4 halfs (lower 16 bits of vec4i)
+VECMATH_FINLINE vec4i VECTORCALL v_float_to_half(vec4f v);
+
 
 //! round to biggest integer (result remains fp)
 VECMATH_FINLINE vec4f VECTORCALL v_ceil(vec4f a);

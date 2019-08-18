@@ -1004,61 +1004,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt100(bbox3f_cref b){ return v_perm_xbc
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt101(bbox3f_cref b){ return v_perm_xbzz(b.bmax, b.bmin); }
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt110(bbox3f_cref b){ return v_perm_xycc(b.bmax, b.bmin); }
 
-static VECMATH_FINLINE float VECTORCALL quat_qslerp_counter_warp(float t, float cos_alpha)
-{
-  const float ATTENUATION = 0.82279687f;
-  const float WORST_CASE_SLOPE = 0.58549219f;
-
-  float factor = 1 - ATTENUATION * fabsf(cos_alpha);
-  factor *= factor;
-  float k = WORST_CASE_SLOPE * factor;
-
-  return t*(k*t*(2*t - 3) + 1 + k);
-}
-
-
-VECMATH_FINLINE quat4f VECTORCALL v_quat_qslerp(float t, quat4f a, quat4f b)
-{
-  vec4f m = v_mul(a, b);
-  float *mp = (float*)&m;
-  bool t_lt_half = t <= 0.5;
-  float cosAngle = mp[0]+mp[1]+mp[2]+mp[3];
-
-  if (!t_lt_half)
-    t = 1-t;
-
-  t = ::quat_qslerp_counter_warp(t, cosAngle);
-  if (!t_lt_half)
-    t = 1-t;
-
-  if (cosAngle < 0)
-    b = v_neg(b);
-  quat4f res = v_quat_lerp(v_splat4(&t), a, b);
-  return v_norm4(res);
-}
-
-VECMATH_FINLINE vec3f VECTORCALL v_quat_mul_vec3(quat4f q, vec3f v)
-{
-  vec4f product, tmp0, tmp1, tmp2, tmp3, wwww, qv, qw, res;
-  tmp0 = v_perm_yzxw(q);
-  tmp1 = v_perm_zxyw(v);
-  tmp2 = v_perm_zxyw(q);
-  tmp3 = v_perm_yzxw(v);
-  wwww = v_splat_w(q);
-  qv = v_mul(wwww, v);
-  qv = v_madd(tmp0, tmp1, qv);
-  qv = v_nmsub(tmp2, tmp3, qv);
-  product = v_mul(q, v);
-  qw = v_madd(v_rot_1(q), v_rot_1(v), product);
-  qw = v_add(v_rot_2(product), qw);
-  tmp1 = v_perm_zxyw(qv);
-  tmp3 = v_perm_yzxw(qv);
-  res = v_mul(v_splat_x(qw), q);
-  res = v_madd(wwww, qv, res);
-  res = v_madd(tmp0, tmp1, res);
-  return v_nmsub(tmp2, tmp3, res);
-}
-
 VECMATH_FINLINE vec4f VECTORCALL v_insert(float s, vec4f v, int i)
 {
   if (i == 0)

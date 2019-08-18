@@ -637,6 +637,13 @@ VECMATH_FINLINE quat4f VECTORCALL v_quat_lerp(vec4f tttt, quat4f a, quat4f b)
 
 VECMATH_FINLINE quat4f VECTORCALL v_quat_conjugate(quat4f q) { return v_perm_xyzd(v_neg(q), q); }
 
+VECMATH_FINLINE vec3f VECTORCALL v_quat_mul_vec3(quat4f q, vec3f v)
+{
+  vec3f t = v_cross3(q, v);
+  t = v_add(t,t);//*2
+  return v_add(v, v_madd(v_splat_w(q), t, v_cross3(q, t)));//v + q.w * t + v_cross3(q.xyz, t);
+}
+
 #if _TARGET_SIMD_VMX|_TARGET_SIMD_SPU|_TARGET_SIMD_SSE
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat(vec3f col0, vec3f col1, vec3f col2)
 {
@@ -749,6 +756,21 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang
   vec4f s, c;
   v_sincos_x(v_mul(ang, V_C_HALF), s, c);
   return v_perm_xyzd(v_mul(v, s), c);
+}
+
+
+VECMATH_FINLINE quat4f VECTORCALL v_quat_qslerp(float t, quat4f l, quat4f r)
+{
+  float ca = v_extract_x(v_dot4_x(l, r));
+  //todo: vectorize
+  float d = fabsf(ca);
+  float k = 0.931872f + d * (-1.25654f + d * 0.331442f);
+  float ot = t + t * (t - 0.5f) * (t - 1) * k;
+
+  float lt = 1 - ot;
+  float rt = ca > 0 ? ot : -ot;
+
+  return v_norm4(v_add(v_mul(l, v_splats(lt)), v_mul(r, v_splats(rt))));
 }
 
 VECMATH_FINLINE quat4f VECTORCALL v_quat_qsquad(float t,
@@ -2339,7 +2361,8 @@ VECMATH_FINLINE vec4f VECTORCALL distance_to_seg_x(vec3f point, vec3f a, vec3f b
   return v_length3_x(v_sub(point, pt));
 };
 
-VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const vec4f v)
+
+VECMATH_FINLINE vec4i VECTORCALL v_float_to_half(vec4f v)
 {
   vec4i fltInt32 = v_cast_vec4i(v);
   vec4i fltInt16 = v_slli(v_srli(fltInt32, 31), 5);
@@ -2347,8 +2370,12 @@ VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const ve
   tmp = v_andi( v_subi(tmp, V_CI_070), v_srli(v_srai(v_subi(V_CI_070, tmp), 4), 27));
   fltInt16 = v_slli(v_ori(fltInt16, tmp), 10);
   fltInt16 = v_ori(fltInt16, v_andi(v_srli(fltInt32, 13), V_CI_3FF));
-  fltInt16 = v_packus(fltInt16);//replace for sse2
-  v_stu_w_half(m, fltInt16);
+  return fltInt16;
+}
+
+VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const vec4f v)
+{
+  v_stu_w_half(m, v_packus(v_float_to_half(v)));
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m)
@@ -2362,6 +2389,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m)
   fltInt32 = v_ori(fltInt32, v_andi(v_slli(fltInt16, 13), V_CI_07FFFFF));
   return v_cast_vec4f(fltInt32);
 }
+
 
 VECMATH_INLINE vec3f VECTORCALL v_triangle_bounding_sphere_center( const vec3f& p1, const vec3f& p2, const vec3f& p3 )
 {
