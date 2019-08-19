@@ -2,7 +2,11 @@
 
 /*
  TODO:
+    Op1
+
     Op2AnyArg
+    Op2ArgR2VOffAny +
+    Op2LocR2VOffAny +
  */
 
 #ifndef FUSION_OP_EVAL_CAST
