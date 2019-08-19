@@ -18,7 +18,7 @@ namespace das {
 
 #define FUSION_AT_PTR_TO_RESULT(CTYPE,expr)     (expr)
 
-#define IMPLEMENT_ANY_AT_FUSION_POINT(TYPE,CTYPE,CNAME,ATNAME) \
+#define IMPLEMENT_ANY_AT_FUSION_POINT(TYPE,CTYPE,RTYPE,CNAME,ATNAME) \
     struct AtFusionPoint##CNAME : FusionPoint { \
         AtFusionPoint##CNAME () {} \
         struct SimNode_AtGlobAny : SimNode_At { \
@@ -35,7 +35,7 @@ namespace das {
                 V_ARG(range); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute (Context & context) { \
+            __forceinline RTYPE compute (Context & context) { \
                 auto pValue = context.globals + goffset_l; \
                 uint32_t idx = cast<uint32_t>::to(index->eval(context)); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
@@ -57,7 +57,7 @@ namespace das {
                 V_ARG(range); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute (Context & context) { \
+            __forceinline RTYPE compute (Context & context) { \
                 auto pValue = context.globals + goffset_l; \
                 uint32_t idx = *(uint32_t *)(context.stack.sp() + stackTop_r); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
@@ -80,7 +80,7 @@ namespace das {
                 V_ARG(range); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute (Context & context) { \
+            __forceinline RTYPE compute (Context & context) { \
                 auto pValue = context.globals + goffset_l; \
                 uint32_t idx = const_r; \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
@@ -103,7 +103,7 @@ namespace das {
                 V_ARG(range); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute (Context & context) { \
+            __forceinline RTYPE compute (Context & context) { \
                 auto pValue = context.stack.sp() + stackTop_l; \
                 uint32_t idx = cast<uint32_t>::to(index->eval(context)); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
@@ -125,7 +125,7 @@ namespace das {
                 V_ARG(range); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute (Context & context) { \
+            __forceinline RTYPE compute (Context & context) { \
                 auto pValue = context.stack.sp() + stackTop_l; \
                 uint32_t idx = *(uint32_t *)(context.stack.sp() + stackTop_r); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
@@ -148,7 +148,7 @@ namespace das {
                 V_ARG(range); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute (Context & context) { \
+            __forceinline RTYPE compute (Context & context) { \
                 auto pValue = cast<char *>::to(context.abiArguments()[index_l]); \
                 uint32_t idx = cast<uint32_t>::to(index->eval(context)); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
@@ -170,7 +170,7 @@ namespace das {
                 V_ARG(range); \
                 V_END(); \
             } \
-            __forceinline CTYPE compute (Context & context) { \
+            __forceinline RTYPE compute (Context & context) { \
                 auto pValue = cast<char *>::to(context.abiArguments()[index_l]); \
                 uint32_t idx = *(uint32_t *)(context.stack.sp() + stackTop_r); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
@@ -235,16 +235,16 @@ namespace das {
     };
 
 #define IMPLEMENT_ATR2V_FUSION_POINT(TYPE,CTYPE) \
-    IMPLEMENT_ANY_AT_FUSION_POINT(TYPE,CTYPE,_##CTYPE,AtR2V);
+    IMPLEMENT_ANY_AT_FUSION_POINT(TYPE,CTYPE,CTYPE,_##CTYPE,AtR2V);
 
 #define IMPLEMENT_ATR2V_VEC_FUSION_POINT(CTYPE) \
-    IMPLEMENT_ANY_AT_FUSION_POINT(,CTYPE,_##CTYPE,AtR2V);
+    IMPLEMENT_ANY_AT_FUSION_POINT(,CTYPE,char *,_##CTYPE,AtR2V);
 
 #define REGISTER_ATR2V_FUSION_POINT(CTYPE) \
     (*g_fusionEngine)[fuseName("AtR2V",typeName<CTYPE>::name())].push_back(make_shared<AtFusionPoint_##CTYPE>());
 
 // IMPLEMENT AT
-    IMPLEMENT_ANY_AT_FUSION_POINT(Ptr,char *,,At);
+    IMPLEMENT_ANY_AT_FUSION_POINT(Ptr,char *,char *,,At);
 
 // IMPLEMENT AtR2V for scalar types
 #undef FUSION_AT_PTR_TO_RESULT
@@ -262,8 +262,11 @@ namespace das {
     #undef DAS_NODE
     #define DAS_NODE(TYPE,CTYPE)                                    \
         virtual vec4f eval ( das::Context & context ) override {    \
-            return cast<CTYPE>::from(compute(context));             \
+            return v_ldu((const float *)compute(context));          \
         }
+
+    #undef  FUSION_AT_PTR_TO_RESULT
+    #define FUSION_AT_PTR_TO_RESULT(CTYPE,expr)     (expr)
 
     IMPLEMENT_ATR2V_VEC_FUSION_POINT(int2);
     IMPLEMENT_ATR2V_VEC_FUSION_POINT(int3);
