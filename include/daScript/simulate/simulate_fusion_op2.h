@@ -793,7 +793,7 @@
              /* OP(GetArgument,*) */ \
             } else if ( is(info,tnode->l,"GetArgument") ) { \
                 auto tbanode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
-                /* OP(GetTArgument,GetTArgument) */ \
+                /* OP(GetArgument,GetArgument) */ \
                 if ( is(info,tnode->r,"GetArgument") ) { \
                     auto tbanode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
                     return context->code->makeNode<SimNode_Op2ArgArg>(node->debugInfo, \
