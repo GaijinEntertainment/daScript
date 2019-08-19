@@ -96,11 +96,7 @@ namespace das
             }
             return resN;
         } else if ( rightType.isRef() ) {
-            if ( rightType.isWorkhorseType() ) {
-                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
-            } else {
-                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
-            }
+            return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
             return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
@@ -184,11 +180,7 @@ namespace das
             }
             return resN;
         } else if ( rightType.isRef() ) {
-            if ( rightType.isWorkhorseType() ) {
-                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
-            } else {
-                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
-            }
+            return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
             return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
@@ -288,11 +280,7 @@ namespace das
             }
             return resN;
         } else if ( rightType.isRef() ) {
-            if ( rightType.isWorkhorseType() ) {
-                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
-            } else {
-                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
-            }
+            return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
             return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }
@@ -374,11 +362,7 @@ namespace das
             }
             return resN;
         } else if ( rightType.isRef() ) {
-            if ( rightType.isWorkhorseType() ) {
-                return context.code->makeValueNode<SimNode_CopyRefValueT>(rightType.baseType, at, left, right);
-            } else {
-                return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
-            }
+            return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
             return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
         }

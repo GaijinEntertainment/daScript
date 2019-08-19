@@ -122,6 +122,7 @@ SET(MISC_SRC
 include/daScript/misc/enums.h
 include/daScript/misc/function_traits.h
 include/daScript/misc/hal.h
+include/daScript/misc/copy_bytes.h
 include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
@@ -147,6 +148,7 @@ src/simulate/simulate_fusion_op2_bool_vec.cpp
 src/simulate/simulate_fusion_op2_bin_vec.cpp
 src/simulate/simulate_fusion_op2_scalar_vec.cpp
 src/simulate/simulate_fusion_at.cpp
+src/simulate/simulate_fusion_misc_copy.cpp
 include/daScript/simulate/simulate_fusion.h
 include/daScript/simulate/simulate_fusion_op2.h
 include/daScript/simulate/simulate_fusion_vec_settings.h

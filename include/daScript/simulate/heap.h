@@ -200,6 +200,22 @@ namespace das {
             case 14: return makeNode<NodeType<14>>(args...);
             case 15: return makeNode<NodeType<15>>(args...);
             case 16: return makeNode<NodeType<16>>(args...);
+            case 17: return makeNode<NodeType<17>>(args...);
+            case 18: return makeNode<NodeType<18>>(args...);
+            case 19: return makeNode<NodeType<19>>(args...);
+            case 20: return makeNode<NodeType<20>>(args...);
+            case 21: return makeNode<NodeType<21>>(args...);
+            case 22: return makeNode<NodeType<22>>(args...);
+            case 23: return makeNode<NodeType<23>>(args...);
+            case 24: return makeNode<NodeType<24>>(args...);
+            case 25: return makeNode<NodeType<25>>(args...);
+            case 26: return makeNode<NodeType<26>>(args...);
+            case 27: return makeNode<NodeType<27>>(args...);
+            case 28: return makeNode<NodeType<28>>(args...);
+            case 29: return makeNode<NodeType<29>>(args...);
+            case 30: return makeNode<NodeType<30>>(args...);
+            case 31: return makeNode<NodeType<31>>(args...);
+            case 32: return makeNode<NodeType<32>>(args...);
             default:
                 DAS_ASSERTF(0, "we should not even be here. we are calling makeNodeUnroll on a large number or a negative number."
                             "if its negative, there is some issue with the logic of count."
