@@ -25,6 +25,8 @@ namespace das {
     void createFusionEngine() {
         if ( !g_fusionEngine ) {
             g_fusionEngine = make_unique<FusionEngine>();
+            // op1
+            createFusionEngine_op1();
             // scalar
             createFusionEngine_op2();
             createFusionEngine_op2_set();
