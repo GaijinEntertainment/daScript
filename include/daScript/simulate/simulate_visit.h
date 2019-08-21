@@ -109,8 +109,9 @@ namespace das {
     template <typename CastTo, typename CastFrom>
     SimNode * SimNode_Cast<CastTo,CastFrom>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP(Cast); 
-        V_CALL();
+        string opName = "Cast_to_" + typeName<CastTo>::name();
+        vis.op(opName.c_str(), sizeof(CastFrom), typeName<CastFrom>::name());
+        V_SUB(arguments[0]);
         V_END();
     }
 
@@ -118,7 +119,7 @@ namespace das {
     SimNode * SimNode_LexicalCast<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(LexicalCast);
-        V_CALL();
+        V_SUB(arguments[0]);
         V_END();
     }
 
@@ -164,71 +165,6 @@ namespace das {
         V_OP_TT(GetLocalRefR2VOff);
         V_SP(stackTop);
         V_SP(offset);
-        V_END();
-    }
-
-    template <typename TT>
-    SimNode * SimNode_CopyLocal2LocalT<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(CopyLocal2Local);
-        V_SP_EX(stackTopLeft);
-        V_SP_EX(stackTopRight);
-        V_END();
-    }
-
-    template <typename TT>
-    SimNode * SimNode_SetLocalRefT<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(SetLocalRef);
-        V_SP(stackTop);
-        V_SUB(value);
-        V_END();
-    }
-
-    template <typename TT>
-    SimNode * SimNode_SetLocalValueT<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(SetLocalValue);
-        V_SP(stackTop);
-        V_SUB(value);
-        V_END();
-    }
-
-    template <typename TT>
-    SimNode * SimNode_SetCMResRefT<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(SetCMResRef);
-        V_SP(offset);
-        V_SUB(value);
-        V_END();
-    }
-
-    template <typename TT>
-    SimNode * SimNode_SetCMResValueT<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(SetCMResValue);
-        V_SP(offset);
-        V_SUB(value);
-        V_END();
-    }
-
-    template <typename TT>
-    SimNode * SimNode_SetLocalRefRefOffT<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(SetLocalRefRefOff);
-        V_SP(stackTop);
-        V_SP(offset);
-        V_SUB(value);
-        V_END();
-    }
-
-    template <typename TT>
-    SimNode * SimNode_SetLocalValueRefOffT<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(SetLocalValueRefOff);
-        V_SP(stackTop);
-        V_SP(offset);
-        V_SUB(value);
         V_END();
     }
 

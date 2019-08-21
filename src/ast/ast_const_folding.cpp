@@ -4,6 +4,11 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/debug_print.h"
 
+/*
+TODO:
+    Fold vector constructors
+*/
+
 namespace das {
 
     void OptVisitor::reportFolding() {

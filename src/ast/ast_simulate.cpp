@@ -58,15 +58,6 @@ namespace das
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
         auto right = rE->simulate(context);
-        if ( rightType.isWorkhorseType() ) {
-            if ( rightType.ref ) {
-                return context.code->makeValueNode<SimNode_SetCMResRefT>(rightType.baseType,
-                                                                         at, right, offset);
-            } else {
-                return context.code->makeValueNode<SimNode_SetCMResValueT>(rightType.baseType,
-                                                                           at, right, offset);
-            }
-        }
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
@@ -142,15 +133,6 @@ namespace das
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
         auto right = rE->simulate(context);
-        if ( rightType.isWorkhorseType() ) {
-            if ( rightType.isRef() ) {
-                return context.code->makeValueNode<SimNode_SetLocalRefRefOffT>(rightType.baseType,
-                                                                            at, right, stackTop, offset);
-            } else {
-                return context.code->makeValueNode<SimNode_SetLocalValueRefOffT>(rightType.baseType,
-                                                                            at, right, stackTop, offset);
-            }
-        }
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
@@ -225,31 +207,6 @@ namespace das
                 "we are calling makeLocalCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
-        // TODO:
-        //  expand to (while managing combinatorics explosion, policy?)
-        //      1. local ref variables (iterator results etc)
-        //      2. global variables
-        //      3. arguments
-        //      4. blocks
-        //      5. common cross-copy scenarios
-        if ( rightType.isWorkhorseType() ) {
-            if ( rE->rtti_isVar() ) {
-                auto rvar = static_pointer_cast<ExprVar>(rE);
-                if ( rvar->local && !rvar->variable->type->ref && !rvar->variable->aliasCMRES ) {
-                    return context.code->makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
-                                                                                at, stackTop,
-                                                                                rvar->variable->stackTop);
-                }
-            }
-            auto right = rE->simulate(context);
-            if ( rightType.ref ) {
-                return context.code->makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
-                                                                        at, right, stackTop);
-            } else {
-                return context.code->makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
-                                                                          at, right, stackTop);
-            }
-        }
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
@@ -292,46 +249,6 @@ namespace das
                 "we are calling makeCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
-        // TODO:
-        //  expand to (while managing combinatorics explosion, policy?)
-        //      1. local ref variables (iterator results etc)
-        //      2. global variables
-        //      3. arguments
-        //      4. blocks
-        //      5. common cross-copy scenarios
-        if ( rightType.isWorkhorseType() && lE->rtti_isVar() ) {
-            auto var = static_pointer_cast<ExprVar>(lE);
-            if ( var->local && !var->variable->type->ref ) {
-                if ( var->variable->aliasCMRES ) {
-                    auto right = rE->simulate(context);
-                    if ( rightType.isWorkhorseType() ) {
-                        if ( rightType.ref ) {
-                            return context.code->makeValueNode<SimNode_SetCMResRefT>(rightType.baseType,
-                                                                                     at, right, 0);
-                        } else {
-                            return context.code->makeValueNode<SimNode_SetCMResValueT>(rightType.baseType,
-                                                                                       at, right, 0);
-                        }
-                    }
-                } else {
-                    if ( rE->rtti_isVar() ) {
-                        auto rvar = static_pointer_cast<ExprVar>(rE);
-                        if ( rvar->local && !rvar->variable->type->ref&& !rvar->variable->aliasCMRES ) {
-                            return context.code->makeValueNode<SimNode_CopyLocal2LocalT>(rightType.baseType,
-                                    at, var->variable->stackTop, rvar->variable->stackTop);
-                        }
-                    }
-                    auto right = rE->simulate(context);
-                    if ( rightType.ref ) {
-                        return context.code->makeValueNode<SimNode_SetLocalRefT>(rightType.baseType,
-                                    at, right, var->variable->stackTop);
-                    } else {
-                        return context.code->makeValueNode<SimNode_SetLocalValueT>(rightType.baseType,
-                                    at, right, var->variable->stackTop);
-                    }
-                }
-            }
-        }
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);

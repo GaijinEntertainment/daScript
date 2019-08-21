@@ -94,7 +94,7 @@ namespace das {
                 : SimNode_CopyRefValue(at, nullptr, rr, typeSize), stackTop_l(lsp) {};
             virtual SimNode * visit ( SimVisitor & vis ) override {
                 V_BEGIN();
-                V_OP(CopyRefValue);
+                V_OP(CopyRefValueLocAny);
                 V_SP(stackTop_l);
                 V_SUB(r);
                 V_ARG(size);
@@ -108,16 +108,164 @@ namespace das {
             }
             uint32_t stackTop_l;
         };
+        template <int typeSize>
+        struct SimNode_CopyRefValueFixedLocLoc : SimNode_CopyRefValue {
+            SimNode_CopyRefValueFixedLocLoc(const LineInfo & at, uint32_t lsp, uint32_t rsp)
+                : SimNode_CopyRefValue(at, nullptr, nullptr, typeSize), stackTop_l(lsp), stackTop_r(rsp) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueFixedLocLoc);
+                V_SP(stackTop_l);
+                V_SP(stackTop_r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = context.stack.sp() + stackTop_l;
+                auto pr = context.stack.sp() + stackTop_r;
+                CopyBytes<typeSize>::copy(pl, pr);
+                return v_zero();
+            }
+            uint32_t stackTop_l, stackTop_r;
+        };
+        struct SimNode_CopyRefValueLocLoc : SimNode_CopyRefValue {
+            SimNode_CopyRefValueLocLoc(const LineInfo & at, uint32_t lsp, uint32_t rsp, uint32_t typeSize)
+                : SimNode_CopyRefValue(at, nullptr, nullptr, typeSize), stackTop_l(lsp), stackTop_r(rsp) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueLocLoc);
+                V_SP(stackTop_l);
+                V_SP(stackTop_r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = context.stack.sp() + stackTop_l;
+                auto pr = context.stack.sp() + stackTop_r;
+                memcpy(pl, pr, size);
+                return v_zero();
+            }
+            uint32_t stackTop_l, stackTop_r;
+        };
+        template <int typeSize>
+        struct SimNode_CopyRefValueFixedCmroAny : SimNode_CopyRefValue {
+            SimNode_CopyRefValueFixedCmroAny(const LineInfo & at, uint32_t ol, SimNode * rr)
+                : SimNode_CopyRefValue(at, nullptr, rr, typeSize), offset_l(ol) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueFixedCmroAny);
+                V_ARG(offset_l);
+                V_SUB(r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = context.abiCopyOrMoveResult() + offset_l;
+                auto pr = r->evalPtr(context);
+                CopyBytes<typeSize>::copy(pl, pr);
+                return v_zero();
+            }
+            uint32_t offset_l;
+        };
+        struct SimNode_CopyRefValueCmroAny : SimNode_CopyRefValue {
+            SimNode_CopyRefValueCmroAny(const LineInfo & at, uint32_t ol, SimNode * rr, uint32_t typeSize)
+                : SimNode_CopyRefValue(at, nullptr, rr, typeSize), offset_l(ol) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueCmroAny);
+                V_ARG(offset_l);
+                V_SUB(r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = context.abiCopyOrMoveResult() + offset_l;
+                auto pr = r->evalPtr(context);
+                memcpy(pl, pr, size);
+                return v_zero();
+            }
+            uint32_t offset_l;
+        };
+        template <int typeSize>
+        struct SimNode_CopyRefValueFixedGlrfAny : SimNode_CopyRefValue {
+            SimNode_CopyRefValueFixedGlrfAny(const LineInfo & at, uint32_t spl, uint32_t ol, SimNode * rr)
+                : SimNode_CopyRefValue(at, nullptr, rr, typeSize), stackTop_l(spl), offset_l(ol) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueFixedGlrfAny);
+                V_SP(stackTop_l);
+                V_ARG(offset_l);
+                V_SUB(r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = (*(char **)(context.stack.sp() + stackTop_l)) + offset_l;
+                auto pr = r->evalPtr(context);
+                CopyBytes<typeSize>::copy(pl, pr);
+                return v_zero();
+            }
+            uint32_t stackTop_l;
+            uint32_t offset_l;
+        };
+        struct SimNode_CopyRefValueGlrfAny : SimNode_CopyRefValue {
+            SimNode_CopyRefValueGlrfAny(const LineInfo & at, uint32_t spl, uint32_t ol, SimNode * rr, uint32_t typeSize)
+                : SimNode_CopyRefValue(at, nullptr, rr, typeSize), stackTop_l(spl), offset_l(ol) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueGlrfAny);
+                V_SP(stackTop_l);
+                V_ARG(offset_l);
+                V_SUB(r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = (*(char **)(context.stack.sp() + stackTop_l)) + offset_l;
+                auto pr = r->evalPtr(context);
+                memcpy(pl, pr, size);
+                return v_zero();
+            }
+            uint32_t stackTop_l;
+            uint32_t offset_l;
+        };
         virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             /* CopyRefValue(GetLocal,*,size) */
-            if ( is(info, crnode->l, "GetLocal" )) {
+            if (is(info, crnode->l, "GetLocal")) {
                 auto lnode_l = static_cast<SimNode_GetLocal *>(crnode->l);
-                if (isFastCopyBytes(crnode->size)) {
-                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocAny>(crnode->size, node->debugInfo, lnode_l->stackTop, crnode->r);
+                /* CopyRefValue(GetLocal,GetLocal,size) */
+                if (is(info, crnode->r, "GetLocal")) {
+                    auto lnode_r = static_cast<SimNode_GetLocal *>(crnode->r);
+                    if (isFastCopyBytes(crnode->size)) {
+                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocLoc>(crnode->size, node->debugInfo, lnode_l->stackTop, lnode_r->stackTop);
+                    } else {
+                        return context->code->makeNode<SimNode_CopyRefValueLocLoc>(node->debugInfo, lnode_l->stackTop, lnode_r->stackTop, crnode->size);
+                    }
                 } else {
-                    return context->code->makeNode<SimNode_CopyRefValueLocAny>(node->debugInfo, lnode_l->stackTop, crnode->r, crnode->size);
+                    if (isFastCopyBytes(crnode->size)) {
+                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocAny>(crnode->size, node->debugInfo, lnode_l->stackTop, crnode->r);
+                    } else {
+                        return context->code->makeNode<SimNode_CopyRefValueLocAny>(node->debugInfo, lnode_l->stackTop, crnode->r, crnode->size);
+                    }
                 }
+            /* CopyRefValue(GetCMResOfs,*,size) */
+            } else if (is(info, crnode->l, "GetCMResOfs")) {
+                auto cmnode_l = static_cast<SimNode_GetCMResOfs *>(crnode->l);
+                if (isFastCopyBytes(crnode->size)) {
+                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedCmroAny>(crnode->size, node->debugInfo, cmnode_l->offset, crnode->r);
+                } else {
+                    return context->code->makeNode<SimNode_CopyRefValueCmroAny>(node->debugInfo, cmnode_l->offset, crnode->r, crnode->size);
+                }
+            /* CopyRefValue(GetLocalRefOff,*,size) */
+            } else if (is(info, crnode->l, "GetLocalRefOff")) {
+                auto glrfnode_l = static_cast<SimNode_GetLocalRefOff *>(crnode->l);
+                if (isFastCopyBytes(crnode->size)) {
+                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedGlrfAny>(crnode->size, node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, crnode->r);
+                } else {
+                    return context->code->makeNode<SimNode_CopyRefValueGlrfAny>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, crnode->r, crnode->size);
+                }
+            /* size allows fast copy */
             } else {
                 if (isFastCopyBytes(crnode->size)) {
                     context->code->makeNodeUnroll<SimNode_CopyRefValueFixed>(crnode->size, node->debugInfo, crnode->l, crnode->r);
@@ -127,9 +275,162 @@ namespace das {
         }
     };
 
+#define CAST_COPY_RESULT(CTYPE,expr)        ((expr))
+
+    // copy value
+    //  *a = b
+#define IMPLEMENT_COPY_VALUE(TYPE,CTYPE) \
+    struct FusionPoint_MiscCopyValue_##CTYPE : FusionPoint { \
+        FusionPoint_MiscCopyValue_##CTYPE() {} \
+        struct SimNode_CopyValueAnyAny : SimNode { \
+            SimNode_CopyValueAnyAny(const LineInfo & at, SimNode * ll, SimNode * rr) \
+                : SimNode(at), l(ll), r(rr) {}; \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op("CopyValueAnyAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
+                V_SUB(l); \
+                V_SUB(r); \
+                V_END(); \
+            } \
+            virtual vec4f eval ( Context & context ) override { \
+                auto pl = (CTYPE *) l->evalPtr(context); \
+                auto rr = r->eval##TYPE(context); \
+                *pl = CAST_COPY_RESULT(CTYPE,rr); \
+                return v_zero(); \
+            } \
+            SimNode * l, * r; \
+        }; \
+        struct SimNode_CopyValueLocAny : SimNode { \
+            SimNode_CopyValueLocAny(const LineInfo & at, uint32_t lsp, SimNode * rr) \
+                : SimNode(at), stackTop_l(lsp), r(rr) {}; \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op("CopyValueLocAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
+                V_SP(stackTop_l); \
+                V_SUB(r); \
+                V_END(); \
+            } \
+            virtual vec4f eval ( Context & context ) override { \
+                auto pl = (CTYPE *)(context.stack.sp() + stackTop_l); \
+                auto rr = r->eval##TYPE(context); \
+                *pl = CAST_COPY_RESULT(CTYPE,rr); \
+                return v_zero(); \
+            } \
+            uint32_t stackTop_l; \
+            SimNode * r; \
+        }; \
+        struct SimNode_CopyValueCmroAny : SimNode { \
+            SimNode_CopyValueCmroAny(const LineInfo & at, uint32_t ol, SimNode * rr) \
+                : SimNode(at), offset_l(ol), r(rr) {}; \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op("CopyValueCmroAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
+                V_ARG(offset_l); \
+                V_SUB(r); \
+                V_END(); \
+            } \
+            virtual vec4f eval ( Context & context ) override { \
+                auto pl = (CTYPE *)(context.abiCopyOrMoveResult() + offset_l); \
+                auto rr = r->eval##TYPE(context); \
+                *pl = CAST_COPY_RESULT(CTYPE,rr); \
+                return v_zero(); \
+            } \
+            uint32_t offset_l; \
+            SimNode * r; \
+        }; \
+        struct SimNode_CopyValueGlrfAny : SimNode { \
+            SimNode_CopyValueGlrfAny(const LineInfo & at, uint32_t spl, uint32_t ol, SimNode * rr) \
+                : SimNode(at), stackTop_l(spl), offset_l(ol), r(rr) {}; \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op("CopyValueGlrfAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
+                V_SP(stackTop_l); \
+                V_ARG(offset_l); \
+                V_SUB(r); \
+                V_END(); \
+            } \
+            virtual vec4f eval ( Context & context ) override { \
+                auto pl = (CTYPE *)((*(char **)(context.stack.sp() + stackTop_l)) + offset_l); \
+                auto rr = r->eval##TYPE(context); \
+                *pl = CAST_COPY_RESULT(CTYPE,rr); \
+                return v_zero(); \
+            } \
+            uint32_t stackTop_l; \
+            uint32_t offset_l; \
+            SimNode * r; \
+        }; \
+        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override { \
+            auto cnode = static_cast<SimNode_CopyValue<CTYPE> *> (node); \
+            /* CopyValue(GetLocal,*,size) */ \
+            if ( is(info, cnode->l, "GetLocal" )) { \
+                auto lnode_l = static_cast<SimNode_GetLocal *>(cnode->l); \
+                return context->code->makeNode<SimNode_CopyValueLocAny>(node->debugInfo, lnode_l->stackTop, cnode->r); \
+            /* CopyValue(GetCMResOfs,*,size) */ \
+            } else if ( is(info, cnode->l, "GetCMResOfs" )) { \
+                auto cmnode_l = static_cast<SimNode_GetCMResOfs *>(cnode->l); \
+                return context->code->makeNode<SimNode_CopyValueCmroAny>(node->debugInfo, cmnode_l->offset, cnode->r); \
+            /* CopyValue(GetLocalRefOff,*,size) */ \
+            } else if ( is(info, cnode->l, "GetLocalRefOff" )) { \
+                auto glrfnode_l = static_cast<SimNode_GetLocalRefOff *>(cnode->l); \
+                return context->code->makeNode<SimNode_CopyValueGlrfAny>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, cnode->r); \
+            } \
+            /* promote to CopyValueAnyAny, for it is faster */ \
+            return context->code->makeNode<SimNode_CopyValueAnyAny>(node->debugInfo, cnode->l, cnode->r); \
+        } \
+    };
+
+// (CopyValueAnyAny_TT<float3> (GetLocalRefOff #208 #16)
+
+#define REGISTER_COPY_VALUE(CTYPE) \
+    (*g_fusionEngine)[fuseName("CopyValue",typeName<CTYPE>::name())].push_back(make_shared<FusionPoint_MiscCopyValue_##CTYPE>());
+
+    IMPLEMENT_COPY_VALUE(Int,    int32_t);
+    IMPLEMENT_COPY_VALUE(UInt,   uint32_t);
+    IMPLEMENT_COPY_VALUE(Int64,  int64_t);
+    IMPLEMENT_COPY_VALUE(UInt64, uint64_t);
+    IMPLEMENT_COPY_VALUE(Float,  float);
+    IMPLEMENT_COPY_VALUE(Double, double);
+    IMPLEMENT_COPY_VALUE(Bool,   bool);
+
+#undef  CAST_COPY_RESULT
+#define CAST_COPY_RESULT(CTYPE,expr)        (*((CTYPE *)(&(expr))))
+
+#define IMPLEMENT_VEC_COPY_VALUE(CTYPE)     IMPLEMENT_COPY_VALUE(,CTYPE)
+
+    IMPLEMENT_VEC_COPY_VALUE(int2);
+    IMPLEMENT_VEC_COPY_VALUE(int3);
+    IMPLEMENT_VEC_COPY_VALUE(int4);
+    IMPLEMENT_VEC_COPY_VALUE(uint2);
+    IMPLEMENT_VEC_COPY_VALUE(uint3);
+    IMPLEMENT_VEC_COPY_VALUE(uint4);
+    IMPLEMENT_VEC_COPY_VALUE(float2);
+    IMPLEMENT_VEC_COPY_VALUE(float3);
+    IMPLEMENT_VEC_COPY_VALUE(float4);
+    IMPLEMENT_VEC_COPY_VALUE(range);
+    IMPLEMENT_VEC_COPY_VALUE(urange);
 
     void createFusionEngine_misc_copy_reference() {
         (*g_fusionEngine)["CopyReference"].push_back(make_shared<FusionPoint_MiscCopyReference>());
         (*g_fusionEngine)["CopyRefValue"].push_back(make_shared<FusionPoint_MiscCopyRefValue>());
+        // scalar copy-value
+        REGISTER_COPY_VALUE(int32_t);
+        REGISTER_COPY_VALUE(uint32_t);
+        REGISTER_COPY_VALUE(int64_t);
+        REGISTER_COPY_VALUE(uint64_t);
+        REGISTER_COPY_VALUE(float);
+        REGISTER_COPY_VALUE(double);
+        REGISTER_COPY_VALUE(bool);
+        // vector copy-value
+        REGISTER_COPY_VALUE(int2);
+        REGISTER_COPY_VALUE(int3);
+        REGISTER_COPY_VALUE(int4);
+        REGISTER_COPY_VALUE(uint2);
+        REGISTER_COPY_VALUE(uint3);
+        REGISTER_COPY_VALUE(uint4);
+        REGISTER_COPY_VALUE(float2);
+        REGISTER_COPY_VALUE(float3);
+        REGISTER_COPY_VALUE(float4);
+        REGISTER_COPY_VALUE(range);
+        REGISTER_COPY_VALUE(urange);
     }
 }
