@@ -38,7 +38,7 @@ namespace das {
             } \
             __forceinline RTYPE compute (Context & context) { \
                 auto pValue = context.globals + goffset_l; \
-                uint32_t idx = cast<uint32_t>::to(index->eval(context)); \
+                uint32_t idx = uint32_t(index->evalInt(context)); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
                 return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
             } \
@@ -106,7 +106,7 @@ namespace das {
             } \
             __forceinline RTYPE compute (Context & context) { \
                 auto pValue = context.stack.sp() + stackTop_l; \
-                uint32_t idx = cast<uint32_t>::to(index->eval(context)); \
+                uint32_t idx = uint32_t(index->evalInt(context)); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
                 return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
             } \
@@ -151,7 +151,7 @@ namespace das {
             } \
             __forceinline RTYPE compute (Context & context) { \
                 auto pValue = *(char **)(context.abiArguments()+index_l); \
-                uint32_t idx = cast<uint32_t>::to(index->eval(context)); \
+                uint32_t idx = uint32_t(index->evalInt(context)); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
                 return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
             } \

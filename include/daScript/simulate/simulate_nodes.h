@@ -194,7 +194,7 @@ namespace das {
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
             auto pValue = value->evalPtr(context);
-            uint32_t idx = cast<uint32_t>::to(index->eval(context));
+            uint32_t idx = uint32_t(index->evalInt(context));
             if (idx >= range) {
                 context.throw_error_at(debugInfo,"index out of range");
                 return nullptr;
@@ -242,7 +242,7 @@ namespace das {
         }                                                                                       \
         __forceinline CTYPE compute ( Context & context ) {                                     \
             auto vec = value->eval(context);                                                    \
-            uint32_t idx = cast<uint32_t>::to(index->eval(context));                            \
+            uint32_t idx = uint32_t(index->evalInt(context));                                   \
             if (idx >= range) {                                                                 \
                 context.throw_error_at(debugInfo,"index out of range");                         \
                 return (CTYPE) 0;                                                               \
