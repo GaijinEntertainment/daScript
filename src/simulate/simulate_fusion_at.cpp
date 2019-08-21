@@ -150,7 +150,7 @@ namespace das {
                 V_END(); \
             } \
             __forceinline RTYPE compute (Context & context) { \
-                auto pValue = cast<char *>::to(context.abiArguments()[index_l]); \
+                auto pValue = *(char **)(context.abiArguments()+index_l); \
                 uint32_t idx = cast<uint32_t>::to(index->eval(context)); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
                 return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
@@ -172,7 +172,7 @@ namespace das {
                 V_END(); \
             } \
             __forceinline RTYPE compute (Context & context) { \
-                auto pValue = cast<char *>::to(context.abiArguments()[index_l]); \
+                auto pValue = *(char **)(context.abiArguments()+index_l); \
                 uint32_t idx = *(uint32_t *)(context.stack.sp() + stackTop_r); \
                 if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
                 return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \

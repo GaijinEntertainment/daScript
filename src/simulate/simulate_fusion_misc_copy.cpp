@@ -242,7 +242,7 @@ namespace das {
                 V_END();
             }
             virtual vec4f eval ( Context & context ) override {
-                auto pl = cast<char *>::to(context.abiArguments()[index_l]);
+                auto pl = *(char **)(context.abiArguments()+index_l);
                 auto pr = r->evalPtr(context);
                 CopyBytes<typeSize>::copy(pl, pr);
                 return v_zero();
@@ -261,7 +261,7 @@ namespace das {
                 V_END();
             }
             virtual vec4f eval ( Context & context ) override {
-                auto pl = cast<char *>::to(context.abiArguments()[index_l]);
+                auto pl = *(char **)(context.abiArguments()+index_l);
                 auto pr = r->evalPtr(context);
                 memcpy(pl, pr, size);
                 return v_zero();
@@ -417,7 +417,7 @@ namespace das {
                 V_END(); \
             } \
             virtual vec4f eval ( Context & context ) override { \
-                auto pl = cast<CTYPE *>::to(context.abiArguments()[index_l]); \
+                auto pl = *(CTYPE **)(context.abiArguments()+index_l); \
                 auto rr = r->eval##TYPE(context); \
                 *pl = CAST_COPY_RESULT(CTYPE,rr); \
                 return v_zero(); \
