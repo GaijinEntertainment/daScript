@@ -357,7 +357,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            Block * block = cast<Block *>::to(argValues[0]);
+            Block * block = *(Block **)(argValues);
             if ( argCount>1 ) {
                 return context.invoke(*block, argValues + 1, nullptr);
             } else {
@@ -368,7 +368,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            Block * block = cast<Block *>::to(argValues[0]);                                    \
+            Block * block = *(Block **)(argValues);                                             \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.invoke(*block, argValues + 1, nullptr));         \
             } else {                                                                            \
@@ -389,7 +389,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            Block * block = cast<Block *>::to(argValues[0]);
+            Block * block = *(Block **)(argValues);
             if ( argCount>1 ) {
                 return context.invoke(*block, argValues + 1, cmres);
             } else {
@@ -401,7 +401,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);                                           \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            Block * block = cast<Block *>::to(argValues[0]);                                    \
+            Block * block = *(Block **)(argValues);                                             \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.invoke(*block, argValues + 1, cmres));           \
             } else {                                                                            \
@@ -452,7 +452,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);
+            int32_t * fnIndex = *(int32_t **)(argValues);
             if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");
             SimFunction * simFunc = context.getFunction(*fnIndex-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
@@ -462,7 +462,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);                     \
+            int32_t * fnIndex = *(int32_t **)(argValues);                                       \
             if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");               \
             SimFunction * simFunc = context.getFunction(*fnIndex-1);                            \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
@@ -517,7 +517,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);
+            int32_t * fnIndex = *(int32_t **) (argValues);
             if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");
             SimFunction * simFunc = context.getFunction(*fnIndex-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
@@ -528,7 +528,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);                                           \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            int32_t * fnIndex = (int32_t *) cast<char *>::to(argValues[0]);                     \
+            int32_t * fnIndex = *(int32_t **) (argValues);                                      \
             if (!fnIndex) context.throw_error_at(debugInfo,"invoke null lambda");               \
             SimFunction * simFunc = context.getFunction(*fnIndex-1);                            \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
@@ -778,7 +778,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return cast<CTYPE>::to(context.abiArguments()[index]);  \
+            return *(CTYPE *)(context.abiArguments()+index);  \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -791,7 +791,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            return (char *)(&context.abiArguments()[index]);
+            return (char *)(context.abiArguments()+index);
         }
     };
 
@@ -801,12 +801,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = cast<TT *>::to(context.abiArguments()[index]);
+            TT * pR = *(TT **)(context.abiArguments()+index);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            return * cast<CTYPE *>::to(context.abiArguments()[index]);      \
+            return **(CTYPE **)(context.abiArguments()+index);              \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -818,7 +818,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetArgument(at,i), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            char * pR = cast<char *>::to(context.abiArguments()[index]);
+            char * pR = *(char **)(context.abiArguments()+index);
             return pR + offset;
         }
         uint32_t offset;
@@ -830,12 +830,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetArgument(at,i), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            char * pR = cast<char *>::to(context.abiArguments()[index]);
+            char * pR = *(char **)(context.abiArguments()+index);
             return cast<TT>::from(*((TT *)(pR+offset)));
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            char * pR = cast<char *>::to(context.abiArguments()[index]);    \
+            char * pR = *(char **)(context.abiArguments()+index);           \
             return *(CTYPE *)(pR + offset);                                 \
         }
         DAS_EVAL_NODE
@@ -855,7 +855,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
             vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));    \
-            return cast<CTYPE>::to(args[index]);                            \
+            return *(CTYPE *)(args+index);                                  \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -870,13 +870,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
-            TT * pR = (TT *) cast<char *>::to(args[index]);
+            TT * pR = *(TT **)(args+index);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
             vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));    \
-            return * cast<CTYPE *>::to(args[index]);                        \
+            return **(CTYPE **)(args+index);                                \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -889,7 +889,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
             vec4f * args = *((vec4f **)(context.stack.sp() + stackTop));
-            return (char *)(&args[index]);
+            return (char *)(args+index);
         }
     };
 
@@ -903,7 +903,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return cast<CTYPE>::to(context.abiThisBlockArguments()[index]);  \
+            return *(CTYPE *)(context.abiThisBlockArguments()+index);  \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -916,12 +916,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetThisBlockArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = cast<TT *>::to(context.abiThisBlockArguments()[index]);
+            TT * pR = *(TT **)(context.abiThisBlockArguments()+index);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            return * cast<CTYPE *>::to(context.abiThisBlockArguments()[index]);      \
+            return **(CTYPE **)(context.abiThisBlockArguments()+index);     \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -933,7 +933,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetThisBlockArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            return (char *)(&context.abiThisBlockArguments()[index]);
+            return (char *)(context.abiThisBlockArguments()+index);
         }
     };
 

@@ -506,9 +506,9 @@ namespace das
         SimNode * visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName );
         SimNode * visitOp3 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName );
 #define EVAL_NODE(TYPE,CTYPE)\
-virtual CTYPE eval##TYPE ( Context & context ) override {   \
-return cast<CTYPE>::to(eval(context));                  \
-}
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return cast<CTYPE>::to(eval(context));                  \
+        }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
         SimNode ** arguments;

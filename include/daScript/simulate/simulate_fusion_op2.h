@@ -30,7 +30,7 @@
 #endif
 
 #ifndef FUSION_OP_ARG_VALUE
-#define FUSION_OP_ARG_VALUE(CTYPE,expr)    cast<CTYPE>::to(expr)
+#define FUSION_OP_ARG_VALUE(CTYPE,expr)    *((CTYPE *)(&(expr)))
 #endif
 
 #define IMPLEMENT_ANY_OP2_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE,RCTYPE,CONSTTYPE) \
@@ -630,7 +630,7 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,cast<char *>::to(context.abiArguments()[index_l]) + offset_l); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.abiArguments()+index_l)) + offset_l); \
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
@@ -652,8 +652,8 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,cast<char *>::to(context.abiArguments()[index_l]) + offset_l); \
-                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,cast<char *>::to(context.abiArguments()[index_r]) + offset_r); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.abiArguments()+index_l)) + offset_l); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,(*(char **)(context.abiArguments()+index_r)) + offset_r); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
             SimNode * r; \
@@ -674,7 +674,7 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,cast<char *>::to(context.abiThisBlockArguments()[index_l])); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.abiThisBlockArguments()+index_l))); \
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
@@ -693,7 +693,7 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,cast<char *>::to(context.abiThisBlockArguments()[index_l])); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.abiThisBlockArguments()+index_l))); \
                 auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiThisBlockArguments()[index_r]); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
@@ -713,7 +713,7 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,cast<char *>::to(context.abiArguments()[index_l])); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.abiArguments()+index_l))); \
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
@@ -732,7 +732,7 @@
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,cast<char *>::to(context.abiArguments()[index_l])); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.abiArguments()+index_l))); \
                 auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index_r]); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
