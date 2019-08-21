@@ -326,7 +326,7 @@ namespace das {
 
     // copy value
     //  *a = b
-#define IMPLEMENT_COPY_VALUE(TYPE,CTYPE) \
+#define IMPLEMENT_ANY_COPY_VALUE(TYPE,CTYPE,CONSTTYPE) \
     struct FusionPoint_MiscCopyValue_##CTYPE : FusionPoint { \
         FusionPoint_MiscCopyValue_##CTYPE() {} \
         struct SimNode_CopyValueAnyAny : SimNode { \
@@ -365,6 +365,24 @@ namespace das {
             } \
             uint32_t stackTop_l; \
             SimNode * r; \
+        }; \
+        struct SimNode_CopyValueLocConst : SimNode { \
+            SimNode_CopyValueLocConst(const LineInfo & at, uint32_t lsp, CONSTTYPE crv) \
+                : SimNode(at), stackTop_l(lsp), c_r(crv) {}; \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op("CopyValueLocConst", sizeof(CTYPE), typeName<CTYPE>::name()); \
+                V_SP(stackTop_l); \
+                V_ARG(c_r); \
+                V_END(); \
+            } \
+            virtual vec4f eval ( Context & context ) override { \
+                auto pl = (CTYPE *)(context.stack.sp() + stackTop_l); \
+                *pl = CAST_COPY_RESULT(CTYPE,c_r); \
+                return v_zero(); \
+            } \
+            uint32_t stackTop_l; \
+            CONSTTYPE c_r; \
         }; \
         struct SimNode_CopyValueCmroAny : SimNode { \
             SimNode_CopyValueCmroAny(const LineInfo & at, uint32_t ol, SimNode * rr) \
@@ -430,7 +448,14 @@ namespace das {
             /* CopyValue(GetLocal,*,size) */ \
             if ( is(info, cnode->l, "GetLocal" )) { \
                 auto lnode_l = static_cast<SimNode_GetLocal *>(cnode->l); \
-                return context->code->makeNode<SimNode_CopyValueLocAny>(node->debugInfo, lnode_l->stackTop, cnode->r); \
+                /* CopyValue(GetLocal,ConstValue) */ \
+                if ( is(info,cnode->r,"ConstValue") ) { \
+                    auto cnnode = static_cast<SimNode_ConstValue *>(cnode->r); \
+                    auto cvalue = cast<CONSTTYPE>::to(cnnode->value); \
+                    return context->code->makeNode<SimNode_CopyValueLocConst>(node->debugInfo, lnode_l->stackTop, cvalue); \
+                } else { \
+                    return context->code->makeNode<SimNode_CopyValueLocAny>(node->debugInfo, lnode_l->stackTop, cnode->r); \
+                } \
             /* CopyValue(GetCMResOfs,*,size) */ \
             } else if ( is(info, cnode->l, "GetCMResOfs" )) { \
                 auto cmnode_l = static_cast<SimNode_GetCMResOfs *>(cnode->l); \
@@ -454,6 +479,9 @@ namespace das {
 #define REGISTER_COPY_VALUE(CTYPE) \
     (*g_fusionEngine)[fuseName("CopyValue",typeName<CTYPE>::name())].push_back(make_shared<FusionPoint_MiscCopyValue_##CTYPE>());
 
+#define IMPLEMENT_COPY_VALUE(TYPE,CTYPE) \
+    IMPLEMENT_ANY_COPY_VALUE(TYPE,CTYPE,CTYPE)
+
     IMPLEMENT_COPY_VALUE(Int,    int32_t);
     IMPLEMENT_COPY_VALUE(UInt,   uint32_t);
     IMPLEMENT_COPY_VALUE(Int64,  int64_t);
@@ -465,7 +493,7 @@ namespace das {
 #undef  CAST_COPY_RESULT
 #define CAST_COPY_RESULT(CTYPE,expr)        (*((CTYPE *)(&(expr))))
 
-#define IMPLEMENT_VEC_COPY_VALUE(CTYPE)     IMPLEMENT_COPY_VALUE(,CTYPE)
+#define IMPLEMENT_VEC_COPY_VALUE(CTYPE)     IMPLEMENT_ANY_COPY_VALUE(,CTYPE,vec4f)
 
     IMPLEMENT_VEC_COPY_VALUE(int2);
     IMPLEMENT_VEC_COPY_VALUE(int3);
