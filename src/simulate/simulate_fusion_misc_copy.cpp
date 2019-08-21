@@ -229,6 +229,45 @@ namespace das {
             uint32_t stackTop_l;
             uint32_t offset_l;
         };
+        template <int typeSize>
+        struct SimNode_CopyRefValueFixedArgAny : SimNode_CopyRefValue {
+            SimNode_CopyRefValueFixedArgAny(const LineInfo & at, int32_t ill, SimNode * rr)
+                : SimNode_CopyRefValue(at, nullptr, rr, typeSize), index_l(ill) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueFixedArgAny);
+                V_ARG(index_l);
+                V_SUB(r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = cast<char *>::to(context.abiArguments()[index_l]);
+                auto pr = r->evalPtr(context);
+                CopyBytes<typeSize>::copy(pl, pr);
+                return v_zero();
+            }
+            int32_t index_l;
+        };
+        struct SimNode_CopyRefValueArgAny : SimNode_CopyRefValue {
+            SimNode_CopyRefValueArgAny(const LineInfo & at, int32_t ill, SimNode * rr, uint32_t typeSize)
+                : SimNode_CopyRefValue(at, nullptr, rr, typeSize), index_l(ill) {};
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP(CopyRefValueArgAny);
+                V_ARG(index_l);
+                V_SUB(r);
+                V_ARG(size);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                auto pl = cast<char *>::to(context.abiArguments()[index_l]);
+                auto pr = r->evalPtr(context);
+                memcpy(pl, pr, size);
+                return v_zero();
+            }
+            int32_t index_l;
+        };
         virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             /* CopyRefValue(GetLocal,*,size) */
@@ -264,6 +303,14 @@ namespace das {
                     return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedGlrfAny>(crnode->size, node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, crnode->r);
                 } else {
                     return context->code->makeNode<SimNode_CopyRefValueGlrfAny>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, crnode->r, crnode->size);
+                }
+            /* CopyRefValue(GetArgument,*,size) */
+            } else if (is(info, crnode->l, "GetArgument")) {
+                auto argnode_l = static_cast<SimNode_GetArgument *>(crnode->l); 
+                if (isFastCopyBytes(crnode->size)) {
+                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedArgAny>(crnode->size, node->debugInfo, argnode_l->index, crnode->r);
+                } else {
+                    return context->code->makeNode<SimNode_CopyRefValueArgAny>(node->debugInfo, argnode_l->index, crnode->r, crnode->size);
                 }
             /* size allows fast copy */
             } else {
@@ -359,6 +406,25 @@ namespace das {
             uint32_t offset_l; \
             SimNode * r; \
         }; \
+        struct SimNode_CopyValueArgAny : SimNode { \
+            SimNode_CopyValueArgAny(const LineInfo & at, int32_t ill, SimNode * rr) \
+                : SimNode(at), index_l(ill), r(rr) {}; \
+            virtual SimNode * visit ( SimVisitor & vis ) override { \
+                V_BEGIN(); \
+                vis.op("CopyValueArgAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
+                V_ARG(index_l); \
+                V_SUB(r); \
+                V_END(); \
+            } \
+            virtual vec4f eval ( Context & context ) override { \
+                auto pl = cast<CTYPE *>::to(context.abiArguments()[index_l]); \
+                auto rr = r->eval##TYPE(context); \
+                *pl = CAST_COPY_RESULT(CTYPE,rr); \
+                return v_zero(); \
+            } \
+            int32_t index_l; \
+            SimNode * r; \
+        }; \
         virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override { \
             auto cnode = static_cast<SimNode_CopyValue<CTYPE> *> (node); \
             /* CopyValue(GetLocal,*,size) */ \
@@ -373,6 +439,10 @@ namespace das {
             } else if ( is(info, cnode->l, "GetLocalRefOff" )) { \
                 auto glrfnode_l = static_cast<SimNode_GetLocalRefOff *>(cnode->l); \
                 return context->code->makeNode<SimNode_CopyValueGlrfAny>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, cnode->r); \
+            /* CopyValue(GetArgument,*,size) */ \
+            } else if ( is(info, cnode->l, "GetArgument" )) { \
+                auto argnode_l = static_cast<SimNode_GetArgument *>(cnode->l); \
+                return context->code->makeNode<SimNode_CopyValueArgAny>(node->debugInfo, argnode_l->index, cnode->r); \
             } \
             /* promote to CopyValueAnyAny, for it is faster */ \
             return context->code->makeNode<SimNode_CopyValueAnyAny>(node->debugInfo, cnode->l, cnode->r); \

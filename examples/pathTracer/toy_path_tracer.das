@@ -1,5 +1,6 @@
 // options log=true
 // options logCpp=true
+// options logNodes=true
 
 // options noaot=true, fusion=true
 
@@ -269,22 +270,12 @@ def test
     var backbuffer : array<float3>
     resize(backbuffer,width*height)
     var s = 0.
-    var totalRayCount = 0
     print("\ntracing...\n")
-    let sw0 = getClock()
-    for i in range(0,kFrameCount)
+	var i = 0
+	profile(kFrameCount,"ray-trace frame") <|
         var rayCount = 0
-        draw(s, i, width, height, 0, height, backbuffer, rayCount)
-        totalRayCount += rayCount
-        let sw1 = getClock()
-        s = sw1 - sw0
-        let frames = i + 1
-        let ms = int(s / float(frames) * 1000.)
-        let mrayS = float(totalRayCount) / max(s,0.000001) * 1.0e-6f
-        let mrayFr = float(rayCount) * 10e-6f
-        print("{ms}ms\t{mrayS} Mrays/s\t{mrayFr} Mrays/frame\tframes {frames}\n")
-    let sw1 = getClock()
-    print("tracer took {sw1-sw0} sec\n")
+		draw(s, i, width, height, 0, height, backbuffer, rayCount)
+		i ++
     saveTga("path_tracer.tga",backbuffer,width,height)
     return true
 
