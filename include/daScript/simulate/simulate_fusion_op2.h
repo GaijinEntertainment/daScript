@@ -255,22 +255,22 @@
         }; \
         struct SimNode_Op2AnyR2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2AnyR2V ( const LineInfo & at, SimNode * ln, uint32_t sp ) \
-                : SimNode(at), l(ln), stackTop(sp) {} \
+            SimNode_Op2AnyR2V ( const LineInfo & at, SimNode * ln, uint32_t spr ) \
+                : SimNode(at), l(ln), stackTop_r(spr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "AnyR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SUB(l); \
-                V_SP(stackTop); \
+                V_SP(stackTop_r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
                 auto lv = l->eval##TYPE(context); \
-                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop_r); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
             SimNode * l; \
-            uint32_t stackTop; \
+            uint32_t stackTop_r; \
         }; \
         struct SimNode_Op2GlrfR2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
@@ -295,22 +295,22 @@
         }; \
         struct SimNode_Op2ArgR2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ArgR2V ( const LineInfo & at, int32_t i, uint32_t sp ) \
-                : SimNode(at), index(i), stackTop(sp) {} \
+            SimNode_Op2ArgR2V ( const LineInfo & at, int32_t irr, uint32_t spl ) \
+                : SimNode(at), index_l(irr), stackTop_r(spl) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ArgR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_ARG(index); \
-                V_SP(stackTop); \
+                V_ARG(index_l); \
+                V_SP(stackTop_r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
-                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index_l]); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop_r); \
                 return SimPolicy<CTYPE>:: OPNAME (lv,rv,context); \
             } \
-            int32_t  index; \
-            uint32_t stackTop; \
+            int32_t  index_l; \
+            uint32_t stackTop_r; \
         }; \
         struct SimNode_Op2R2VArg : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
@@ -333,57 +333,57 @@
         }; \
         struct SimNode_Op2R2VConst : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2R2VConst ( const LineInfo & at, CONSTTYPE cv, uint32_t sp ) \
-                : SimNode(at), c(cv), stackTop(sp) {} \
+            SimNode_Op2R2VConst ( const LineInfo & at, uint32_t spl, CONSTTYPE cvr ) \
+                : SimNode(at), stackTop_l(spl), c_r(cvr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "R2VConst", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_SP(stackTop); \
-                V_ARG(c); \
+                V_SP(stackTop_l); \
+                V_ARG(c_r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_VALUE_LEFT(CTYPE,context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
+                auto lv =  FUSION_OP_PTR_VALUE_LEFT(CTYPE,context.stack.sp() + stackTop_l); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,c_r,context); \
             } \
-            CONSTTYPE c; \
-            uint32_t stackTop; \
+            uint32_t stackTop_l; \
+            CONSTTYPE c_r; \
         }; \
         struct SimNode_Op2ArgConst : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ArgConst ( const LineInfo & at, CONSTTYPE cv, int32_t i ) \
-                : SimNode(at), c(cv), index(i) {} \
+            SimNode_Op2ArgConst ( const LineInfo & at, int32_t ill, CONSTTYPE cvr ) \
+                : SimNode(at), index_l(ill), c_r(cvr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ArgConst", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_ARG(index); \
-                V_ARG(c); \
+                V_ARG(index_l); \
+                V_ARG(c_r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
+                auto lv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index_l]); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,c_r,context); \
             } \
-            CONSTTYPE c; \
-            int32_t index; \
+            int32_t index_l; \
+            CONSTTYPE c_r; \
         }; \
         struct SimNode_Op2AnyConst : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2AnyConst ( const LineInfo & at, SimNode * ll, CONSTTYPE cv ) \
-                : SimNode(at), l(ll), c(cv) {} \
+            SimNode_Op2AnyConst ( const LineInfo & at, SimNode * ll, CONSTTYPE cvr ) \
+                : SimNode(at), l(ll), c_r(cvr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "AnyConst", sizeof(CTYPE), typeName<CTYPE>::name()); \
                 V_SUB(l); \
-                V_ARG(c); \
+                V_ARG(c_r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
                 auto lv = l->eval##TYPE(context); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,c,context); \
+                return SimPolicy<CTYPE>:: OPNAME (lv,c_r,context); \
             } \
             SimNode * l; \
-            CONSTTYPE c; \
+            CONSTTYPE c_r; \
         }; \
         struct SimNode_Op2ConstAny : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
@@ -448,11 +448,11 @@
                 /* OP(GetLocalR2V,ConstValue) */ \
                 if ( is(info,tnode->l,"GetLocalR2V") ) { \
                     auto r2vnode_l = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2R2VConst>(node->debugInfo, cvalue, r2vnode_l->stackTop); \
+                    return context->code->makeNode<SimNode_Op2R2VConst>(node->debugInfo, r2vnode_l->stackTop, cvalue); \
                 /* OP(GetArgument,ConstValue) */ \
                 } else if ( is(info,tnode->l,"GetArgument") ) { \
                     auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2ArgConst>(node->debugInfo, cvalue, argnode_l->index); \
+                    return context->code->makeNode<SimNode_Op2ArgConst>(node->debugInfo, argnode_l->index, cvalue); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2AnyConst>(node->debugInfo, tnode->l, cvalue); \
                 } \
