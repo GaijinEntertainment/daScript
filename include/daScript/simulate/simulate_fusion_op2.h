@@ -314,7 +314,7 @@
         }; \
         struct SimNode_Op2R2VArg : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2R2VArg ( const LineInfo & at, int32_t irr, uint32_t spl ) \
+            SimNode_Op2R2VArg ( const LineInfo & at, uint32_t(spl), int32_t irr ) \
                 : SimNode(at), stackTop_l(spl), index_r(irr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
