@@ -218,7 +218,7 @@
         struct SimNode_Op2GtbaArg : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
             SimNode_Op2GtbaArg ( const LineInfo & at, int32_t i_l, int32_t i_r ) \
-                : SimNode(at),index_l(i_l), index_r(i_r) {} \
+                : SimNode(at), index_l(i_l), index_r(i_r) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "GtbaArg", sizeof(CTYPE), typeName<CTYPE>::name()); \
@@ -387,57 +387,57 @@
         }; \
         struct SimNode_Op2ConstAny : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstAny ( const LineInfo & at, SimNode * rr, CONSTTYPE cv ) \
-                : SimNode(at), r(rr), c(cv) {} \
+            SimNode_Op2ConstAny ( const LineInfo & at, CONSTTYPE cvl, SimNode * rr ) \
+                : SimNode(at), c_l(cvl), r(rr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ConstAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_ARG(c); \
+                V_ARG(c_l); \
                 V_SUB(r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
                 auto rv = r->eval##TYPE(context); \
-                return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
+                return SimPolicy<CTYPE>:: OPNAME (c_l,rv,context); \
             } \
+            CONSTTYPE c_l; \
             SimNode * r; \
-            CONSTTYPE c; \
         }; \
         struct SimNode_Op2ConstR2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstR2V ( const LineInfo & at, CONSTTYPE cv, uint32_t sp ) \
-                : SimNode(at), c(cv), stackTop(sp) {} \
+            SimNode_Op2ConstR2V ( const LineInfo & at, CONSTTYPE cvl, uint32_t spr ) \
+                : SimNode(at), c_l(cvl), stackTop_r(spr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ConstR2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_ARG(c); \
-                V_SP(stackTop); \
+                V_ARG(c_l); \
+                V_SP(stackTop_r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,context.stack.sp() + stackTop_r); \
+                return SimPolicy<CTYPE>:: OPNAME (c_l,rv,context); \
             } \
-            CONSTTYPE c; \
-            uint32_t stackTop; \
+            CONSTTYPE c_l; \
+            uint32_t stackTop_r; \
         }; \
         struct SimNode_Op2ConstArg : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
-            SimNode_Op2ConstArg ( const LineInfo & at, CONSTTYPE cv, int32_t i ) \
-                : SimNode(at), c(cv), index(i) {} \
+            SimNode_Op2ConstArg ( const LineInfo & at, CONSTTYPE cvl, int32_t irr ) \
+                : SimNode(at), c_l(cvl), index_r(irr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ConstArg", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_ARG(c); \
-                V_ARG(index); \
+                V_ARG(c_l); \
+                V_ARG(index_r); \
                 V_END(); \
             } \
             __forceinline RCTYPE compute ( Context & context ) { \
-                auto rv = FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
-                return SimPolicy<CTYPE>:: OPNAME (c,rv,context); \
+                auto rv = FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index_r]); \
+                return SimPolicy<CTYPE>:: OPNAME (c_l,rv,context); \
             } \
-            CONSTTYPE c; \
-            int32_t index; \
+            CONSTTYPE c_l; \
+            int32_t index_r; \
         }; \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
             auto tnode = static_cast<SimNode_Op2 *>(node); \
@@ -469,7 +469,7 @@
                     auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
                     return context->code->makeNode<SimNode_Op2ConstArg>(node->debugInfo, cvalue, argnode_r->index); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2ConstAny>(node->debugInfo, tnode->r, cvalue); \
+                    return context->code->makeNode<SimNode_Op2ConstAny>(node->debugInfo, cvalue, tnode->r); \
                 } \
             /* OP(GetLocalR2V,*) */ \
             } else if ( is(info,tnode->l,"GetLocalR2V") ) { \
@@ -499,7 +499,8 @@
                 /* OP(GetLocalRefR2VOff,GetLocalR2V) */ \
                 } else if ( is(info,tnode->l,"GetLocalRefR2VOff") ) { \
                     auto r2vonode_l = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2GlrfR2V>(node->debugInfo,r2vonode_l->stackTop, r2vonode_l->offset, r2vnode_r->stackTop); \
+                    return context->code->makeNode<SimNode_Op2GlrfR2V>(node->debugInfo, \
+                        r2vonode_l->stackTop, r2vonode_l->offset, r2vnode_r->stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->stackTop); \
                 } \
@@ -534,7 +535,8 @@
                     auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
                     return context->code->makeNode<SimNode_Op2Glrf2VGlrf2V>(node->debugInfo, r2vonode_l->stackTop, r2vonode_l->offset, r2vonode_r->stackTop, r2vonode_r->offset); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2Glrf2VAny>(node->debugInfo, r2vonode_l->stackTop, r2vonode_l->offset, tnode->r); \
+                    return context->code->makeNode<SimNode_Op2Glrf2VAny>(node->debugInfo, \
+                        r2vonode_l->stackTop, r2vonode_l->offset, tnode->r); \
                 } \
             /* OP(*,GetLocalRefR2VOff) */ \
             } else if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
@@ -581,43 +583,43 @@
         }; \
         struct SimNode_Op2LocAny : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op2LocAny ( const LineInfo & at, SimNode * rn, uint32_t sp ) \
-                : SimNode(at), r(rn), stackTop(sp) {} \
+            SimNode_Op2LocAny ( const LineInfo & at, uint32_t spl, SimNode * rn ) \
+                : SimNode(at), stackTop_l(spl), r(rn) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "LocAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_SP(stackTop); \
+                V_SP(stackTop_l); \
                 V_SUB(r); \
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,context.stack.sp() + stackTop); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,context.stack.sp() + stackTop_l); \
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
+            uint32_t stackTop_l; \
             SimNode * r; \
-            uint32_t stackTop; \
         }; \
         struct SimNode_Op2GlrfAny : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op2GlrfAny ( const LineInfo & at, SimNode * rn, uint32_t sp, uint32_t ofs ) \
-                : SimNode(at), r(rn), stackTop(sp), offset(ofs) {} \
+            SimNode_Op2GlrfAny ( const LineInfo & at, uint32_t spl, uint32_t ofsl, SimNode * rn ) \
+                : SimNode(at), stackTop_l(spl), offset_l(ofsl), r(rn) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "GlrfAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_SP(stackTop); \
-                V_SP(offset); \
+                V_SP(stackTop_l); \
+                V_SP(offset_l); \
                 V_SUB(r); \
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop)) + offset); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop_l)) + offset_l); \
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
+            uint32_t stackTop_l; \
+            uint32_t offset_l; \
             SimNode * r; \
-            uint32_t stackTop; \
-            uint32_t offset; \
         }; \
         struct SimNode_Op2GlrfGlrf2V : SimNode { \
             DAS_NODE(RTYPE,RCTYPE); \
@@ -644,29 +646,29 @@
         }; \
         struct SimNode_Op2GlrfArg : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op2GlrfArg ( const LineInfo & at, uint32_t sp, uint32_t ofs, int32_t i ) \
-                : SimNode(at), stackTop(sp), offset(ofs), index(i) {} \
+            SimNode_Op2GlrfArg ( const LineInfo & at, uint32_t spl, uint32_t ofsl, int32_t irr ) \
+                : SimNode(at), stackTop_l(spl), offset_l(ofsl), index_r(irr) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "GlrfArg", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_SP(stackTop); \
-                V_SP(offset); \
-                V_ARG(index); \
+                V_SP(stackTop_l); \
+                V_SP(offset_l); \
+                V_ARG(index_r); \
                 V_END(); \
             } \
             __forceinline void compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop)) + offset); \
-                auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index]); \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.stack.sp() + stackTop_l)) + offset_l); \
+                auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiArguments()[index_r]); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
-            uint32_t stackTop; \
-            uint32_t offset; \
-            int32_t index; \
+            uint32_t stackTop_l; \
+            uint32_t offset_l; \
+            int32_t index_r; \
         }; \
         struct SimNode_Op2ArgOffAny : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op2ArgOffAny ( const LineInfo & at, SimNode * rn, int32_t il, uint32_t ol ) \
-                : SimNode(at), r(rn), index_l(il), offset_l(ol) {} \
+            SimNode_Op2ArgOffAny ( const LineInfo & at, int32_t il, uint32_t ol, SimNode * rn ) \
+                : SimNode(at), index_l(il), offset_l(ol), r(rn) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "ArgOffAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
@@ -680,9 +682,9 @@
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
-            SimNode * r; \
             int32_t index_l; \
             uint32_t offset_l; \
+            SimNode * r; \
         }; \
         struct SimNode_Op2ArgOffArgOffR2V : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
@@ -710,8 +712,8 @@
         }; \
         struct SimNode_Op2GtbaAny : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op2GtbaAny ( const LineInfo & at, SimNode * rn, int32_t ill ) \
-                : SimNode(at), r(rn), index_l(ill) {} \
+            SimNode_Op2GtbaAny ( const LineInfo & at, int32_t ill, SimNode * rn ) \
+                : SimNode(at), index_l(ill), r(rn) {} \
             virtual SimNode * visit ( SimVisitor & vis ) override { \
                 V_BEGIN(); \
                 vis.op(#OPNAME "GtbaAny", sizeof(CTYPE), typeName<CTYPE>::name()); \
@@ -724,8 +726,8 @@
                 auto rv =  r->eval##TYPE(context); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
-            SimNode * r; \
             int32_t index_l; \
+            SimNode * r; \
         }; \
         struct SimNode_Op2GtbaGtba : SimNode { \
             DAS_NODE(TYPE,CTYPE); \
@@ -794,9 +796,11 @@
                 /* OP(GetLocal,GetLocalR2V) */ \
                 if ( is(info,tnode->r,"GetLocalR2V") ) { \
                     auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2LocR2V>(node->debugInfo, r2vnode_l->stackTop, r2vnode_r->stackTop); \
+                    return context->code->makeNode<SimNode_Op2LocR2V>(node->debugInfo, \
+                        r2vnode_l->stackTop, r2vnode_r->stackTop); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2LocAny>(node->debugInfo, tnode->r, r2vnode_l->stackTop); \
+                    return context->code->makeNode<SimNode_Op2LocAny>(node->debugInfo, \
+                        r2vnode_l->stackTop, tnode->r); \
                 } \
             /* OP(GetLocalRefOff,*) */ \
             } else if ( is(info,tnode->l,"GetLocalRefOff") ) { \
@@ -804,13 +808,18 @@
                 /* OP(GetLocalRefOff,GetLocalRefR2VOff) */ \
                 if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
                     auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2GlrfGlrf2V>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, r2vonode_r->stackTop, r2vonode_r->offset); \
+                    return context->code->makeNode<SimNode_Op2GlrfGlrf2V>(node->debugInfo, \
+                        glrfnode_l->stackTop, glrfnode_l->offset, \
+                        r2vonode_r->stackTop, r2vonode_r->offset); \
                 /* OP(GetLocalRefOff,GetArgument) */ \
                 } else if ( is(info,tnode->r,"GetArgument") ) { \
                     auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2GlrfArg>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, argnode_r->index); \
+                    return context->code->makeNode<SimNode_Op2GlrfArg>(node->debugInfo,\
+                        glrfnode_l->stackTop, glrfnode_l->offset, \
+                        argnode_r->index); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2GlrfAny>(node->debugInfo, tnode->r, glrfnode_l->stackTop, glrfnode_l->offset); \
+                    return context->code->makeNode<SimNode_Op2GlrfAny>(node->debugInfo, \
+                        glrfnode_l->stackTop, glrfnode_l->offset, tnode->r); \
                 } \
             /* OP(GetArgumentOff,*) */ \
             } else if ( is(info,tnode->l,"GetArgumentOff") ) { \
@@ -821,8 +830,8 @@
                     return context->code->makeNode<SimNode_Op2ArgOffArgOffR2V>(node->debugInfo, \
                         aofnode_l->index, aofnode_l->offset, aofnode_r->index, aofnode_r->offset); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2ArgOffAny>(node->debugInfo, tnode->r, \
-                        aofnode_l->index, aofnode_l->offset); \
+                    return context->code->makeNode<SimNode_Op2ArgOffAny>(node->debugInfo, \
+                        aofnode_l->index, aofnode_l->offset, tnode->r); \
                 } \
             /* OP(GetThisBlockArgument,*) */ \
             } else if ( is(info,tnode->l,"GetThisBlockArgument") ) { \
@@ -833,8 +842,8 @@
                     return context->code->makeNode<SimNode_Op2GtbaGtba>(node->debugInfo, \
                         tbanode_l->index, tbanode_r->index); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2GtbaAny>(node->debugInfo, tnode->r, \
-                        tbanode_l->index); \
+                    return context->code->makeNode<SimNode_Op2GtbaAny>(node->debugInfo, \
+                        tbanode_l->index, tnode->r); \
                 } \
              /* OP(GetArgument,*) */ \
             } else if ( is(info,tnode->l,"GetArgument") ) { \
@@ -845,8 +854,8 @@
                     return context->code->makeNode<SimNode_Op2ArgArg>(node->debugInfo, \
                         tbanode_l->index, tbanode_r->index); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2ArgAny>(node->debugInfo, tnode->r, \
-                        tbanode_l->index); \
+                    return context->code->makeNode<SimNode_Op2ArgAny>(node->debugInfo, \
+                        tnode->r, tbanode_l->index); \
                 } \
             } \
             return node; \
