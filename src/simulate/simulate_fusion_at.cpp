@@ -6,7 +6,6 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {

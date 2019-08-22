@@ -72,6 +72,7 @@ namespace das
         virtual int64_t     evalInt64 ( Context & context );
         virtual uint64_t    evalUInt64 ( Context & context );
         LineInfo debugInfo;
+        virtual bool rtti_isSourceBase() const { return false;  }
     protected:
         virtual ~SimNode() {}
     };

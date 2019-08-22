@@ -142,6 +142,7 @@ namespace das {
 
     struct SimNode_SourceBase : SimNode {
         SimNode_SourceBase ( const LineInfo & at ) : SimNode(at) {}
+        virtual bool rtti_isSourceBase() const override { return true;  }
         SimSource   subexpr;
     };
 

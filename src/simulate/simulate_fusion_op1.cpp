@@ -6,95 +6,98 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
+
+/*
+TODO:
+    (BinNot_TT<uint> (GetLocalR2V_TT<uint> #448)
+    (Inc_TT<int> (GetLocal #48))
+*/
 
 namespace das {
 
-// (BinNot_TT<uint> (GetLocalR2V_TT<uint> #448)
-// (Inc_TT<int> (GetLocal #48))
+    struct SimNode_Op1Fusion : SimNode_SourceBase {
+        SimNode_Op1Fusion() : SimNode_SourceBase(LineInfo()) {}
+        void set(const char * opn, const LineInfo & at) {
+            op = opn;
+            debugInfo = at;
+        }
+        virtual SimNode * visit(SimVisitor & vis) override {
+            V_BEGIN();
+            string name = op;
+            name += getSimSourceName(subexpr.type);
+            vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
+            subexpr.visit(vis);
+            V_END();
+        }
+        const char *    op = nullptr;
+        Type            baseType;
+    };
 
 #define FUSION_OP_PTR_VALUE(CTYPE,expr)    *((CTYPE *)((expr)))
 #define FUSION_OP_PTR_RVALUE(CTYPE,expr)   ((CTYPE *)((expr)))
 #define FUSION_OP_EVAL_CAST(expr)          (*(expr))
 
+#define IMPLEMENT_ANY_OP1_NODE(OPNAME,TYPE,CTYPE,RTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
+            DAS_NODE(TYPE,CTYPE); \
+            __forceinline RTYPE compute ( Context & context ) { \
+                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
+                return SimPolicy<CTYPE>::OPNAME(lv,context); \
+            } \
+        }; 
+
+#define IMPLEMENT_ANY_OP1_SET_NODE(OPNAME,TYPE,CTYPE,RTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
+            DAS_NODE(TYPE,CTYPE); \
+            __forceinline RTYPE compute ( Context & context ) { \
+                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
+                return SimPolicy<CTYPE>::OPNAME(FUSION_OP_EVAL_CAST(lv),context); \
+            } \
+        }; 
+
+#define MATCH_ANY_OP1_NODE(NODENAME,COMPUTE) \
+    else if ( is(info,tnode->x,NODENAME) ) { result = context->code->makeNode<SimNode_Op1##COMPUTE>(); } \
+
 #define IMPLEMENT_ANY_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE) \
     struct Op1FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op1FusionPoint_##OPNAME##_##CTYPE ( ) {} \
-        struct SimNode_Op1R2V : SimNode { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op1R2V ( const LineInfo & at, uint32_t sp ) \
-                : SimNode(at),stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "R2V", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_SP(stackTop); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (lv,context); \
-            } \
-            uint32_t stackTop; \
-        }; \
-        struct SimNode_Op1Arg : SimNode { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_Op1Arg ( const LineInfo & at, int32_t idx ) \
-                : SimNode(at),index(idx) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "Arg", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_SP(index); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_VALUE(CTYPE,context.abiArguments()+index); \
-                return SimPolicy<CTYPE>::OPNAME (lv,context); \
-            } \
-            int32_t index; \
-        }; \
+        IMPLEMENT_ANY_OP1_NODE(OPNAME,TYPE,CTYPE,RTYPE,Local); \
+        IMPLEMENT_ANY_OP1_NODE(OPNAME,TYPE,CTYPE,RTYPE,Argument); \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
+            SimNode_Op1Fusion * result = nullptr; \
             auto tnode = static_cast<SimNode_Op1 *>(node); \
-            /* OP(GetLocalR2V,*) */ \
-            if ( is(info,tnode->x,"GetLocalR2V") ) { \
-                auto r2vnode = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->x); \
-                return context->code->makeNode<SimNode_Op1R2V>(node->debugInfo, r2vnode->subexpr.stackTop); \
-            /* OP(GetLocalR2V,*) */ \
-            } else if ( is(info,tnode->x,"GetArgument") ) { \
-                auto argnode = static_cast<SimNode_GetArgument *>(tnode->x); \
-                return context->code->makeNode<SimNode_Op1Arg>(node->debugInfo, argnode->subexpr.index); \
+            if ( false ) {} \
+            MATCH_ANY_OP1_NODE("GetLocalR2V",Local) \
+            MATCH_ANY_OP1_NODE("GetArgument",Argument) \
+            if ( result ) { \
+                result->set(#OPNAME,tnode->debugInfo); \
+                SimNode_SourceBase * sbnode = static_cast<SimNode_SourceBase *>(tnode->x); \
+                result->subexpr = sbnode->subexpr; \
+                return result; \
+            } else { \
+                return node; \
             } \
-            return node; \
         } \
     };
 
 #define IMPLEMENT_SET_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE,RTYPE) \
     struct Op1FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op1FusionPoint_##OPNAME##_##CTYPE ( ) {} \
-        struct SimNode_SetOp1Loc : SimNode { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_SetOp1Loc ( const LineInfo & at, uint32_t sp ) \
-                : SimNode(at),stackTop(sp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                vis.op(#OPNAME "Loc", sizeof(CTYPE), typeName<CTYPE>::name()); \
-                V_SP(stackTop); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute ( Context & context ) { \
-                auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,context.stack.sp() + stackTop); \
-                return SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),context); \
-            } \
-            uint32_t stackTop; \
-        }; \
+        IMPLEMENT_ANY_OP1_SET_NODE(OPNAME,TYPE,CTYPE,RTYPE,Local); \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
+            SimNode_Op1Fusion * result = nullptr; \
             auto tnode = static_cast<SimNode_Op1 *>(node); \
-            /* OP(GetLocal,*) */ \
-            if ( is(info,tnode->x,"GetLocal") ) { \
-                auto r2vnode = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->x); \
-                return context->code->makeNode<SimNode_SetOp1Loc>(node->debugInfo, r2vnode->subexpr.stackTop); \
+            if ( false ) {} \
+            MATCH_ANY_OP1_NODE("GetLocal",Local) \
+            if ( result ) { \
+                result->set(#OPNAME,tnode->debugInfo); \
+                SimNode_SourceBase * sbnode = static_cast<SimNode_SourceBase *>(tnode->x); \
+                result->subexpr = sbnode->subexpr; \
+                return result; \
+            } else { \
+                return node; \
             } \
-            return node; \
         } \
     };
 

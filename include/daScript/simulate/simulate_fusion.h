@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/simulate_nodes.h"
 
 namespace das {
 
@@ -33,6 +34,8 @@ namespace das {
 
     typedef map<string,vector<FusionPointPtr>> FusionEngine;
     extern unique_ptr<FusionEngine> g_fusionEngine;
+
+    const char * getSimSourceName(SimSourceType st);
 
     string fuseName ( const string & name, const string & typeName );
     void resetFusionEngine();

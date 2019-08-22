@@ -7,10 +7,27 @@
 #include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_nodes.h"
-#include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
+
+    const char * getSimSourceName(SimSourceType st) {
+        switch ( st ) {
+        case SimSourceType::sSimNode:                          return "Any";
+        case SimSourceType::sConstValue:                       return "Const";
+        case SimSourceType::sCMResOff:                         return "Cmro";
+        case SimSourceType::sBlockCMResOff:                    return "Bcmro";
+        case SimSourceType::sLocal:                            return "Loc";
+        case SimSourceType::sLocalRefOff:                      return "Locro";
+        case SimSourceType::sArgument:                         return "Arg";
+        case SimSourceType::sArgumentRefOff:                   return "Argo";
+        case SimSourceType::sBlockArgument:                    return "Barg";
+        case SimSourceType::sBlockArgumentRefOff:              return "Bargo";
+        case SimSourceType::sThisBlockArgument:                return "Tbarg";
+        case SimSourceType::sThisBlockArgumentRefOff:          return "Tbargo";
+        case SimSourceType::sGlobal:                           return "Glob";
+        };
+        return "???";
+    }
 
     string fuseName ( const string & name, const string & typeName ) {
         return typeName.empty() ? name : (name + "<" + typeName + ">");
