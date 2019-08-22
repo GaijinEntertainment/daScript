@@ -72,7 +72,7 @@ def digestBlock(data:uint?; var hash:uint[8])
     hash[7] += h
 
 [unsafe]
-def sha256(var msg:array<uint8>)
+def sha256(msg:array<uint8>)
     var hash = [[uint
         0x6a09e667;
         0xbb67ae85;
@@ -90,10 +90,7 @@ def sha256(var msg:array<uint8>)
 
 [export]
 def test
-    var input : array<uint8>
-    resize(input,1024)
-    for ch in input
-        ch = uint8('.')
+    let input <- [[for i in range(0,1024); uint8('.')]]
     let dt = profile(20,"sha256") <|
         for i in range(0,1024)
             sha256(input)
