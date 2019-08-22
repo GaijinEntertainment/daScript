@@ -1,7 +1,6 @@
-options log=true
+// options log=true
 // options logCpp=true
-options logNodes = true
-options fusion = false
+// options logNodes = true
 
 require testProfile
 

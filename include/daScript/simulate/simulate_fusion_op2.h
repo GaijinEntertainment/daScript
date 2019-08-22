@@ -810,7 +810,7 @@
             } \
             __forceinline void compute ( Context & context ) { \
                 auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,(*(char **)(context.abiThisBlockArguments()+index_l))); \
-                auto rv =  FUSION_OP_ARG_VALUE(CTYPE,context.abiThisBlockArguments()[index_r]); \
+                auto rv =  FUSION_OP_PTR_VALUE_RIGHT(CTYPE,*(CTYPE **)(context.abiThisBlockArguments()+index_r)); \
                 SimPolicy<CTYPE>:: OPNAME (FUSION_OP_EVAL_CAST(lv),rv,context); \
             } \
             SimNode * r; \

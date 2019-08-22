@@ -122,7 +122,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
 #if 0
-    const char * TEST_NAME = TEST_PATH "examples/profile/tests/nbodies.das";
+    const char * TEST_NAME = TEST_PATH "examples/profile/tests/annotation.das";
     tout << "\nINTERPRETED:\n";
     unit_test(TEST_NAME,false);
     tout << "\nAOT:\n";

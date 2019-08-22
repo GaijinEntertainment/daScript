@@ -116,6 +116,7 @@ IF(MSVC)
 set_source_files_properties(src/ast/ast_simulate.cpp PROPERTIES COMPILE_FLAGS /bigobj)
 set_source_files_properties(src/builtin/module_builtin_vector.cpp PROPERTIES COMPILE_FLAGS /bigobj)
 set_source_files_properties(src/builtin/module_builtin.cpp PROPERTIES COMPILE_FLAGS /bigobj)
+set_source_files_properties(src/simulate/simulate_fusion_op2_set_vec.cpp PROPERTIES COMPILE_FLAGS /bigobj)
 ENDIF()
 
 SET(MISC_SRC
