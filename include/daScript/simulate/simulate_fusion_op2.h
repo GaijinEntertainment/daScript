@@ -523,7 +523,7 @@
                 /* OP(GetLocalR2V,GetThisBlockArgumentR2V) */ \
                 } else if ( is(info,tnode->r,"GetThisBlockArgumentR2V") ) { \
                     auto argnode_r = static_cast<SimNode_GetThisBlockArgumentR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2R2VGtbaR2V>(node->debugInfo, r2vnode_l->subexpr.stackTop, argnode_r->index); \
+                    return context->code->makeNode<SimNode_Op2R2VGtbaR2V>(node->debugInfo, r2vnode_l->subexpr.stackTop, argnode_r->subexpr.index); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2R2VAny>(node->debugInfo, r2vnode_l->subexpr.stackTop, tnode->r); \
                 } \
@@ -559,13 +559,13 @@
                 /* OP(GetThisBlockArgument,GetThisBlockArgument) */ \
                 if ( is(info,tnode->r,"GetThisBlockArgument") ) { \
                     auto argnode_r = static_cast<SimNode_GetThisBlockArgument *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2GtbaGtba>(node->debugInfo, argnode_l->index, argnode_r->index); \
+                    return context->code->makeNode<SimNode_Op2GtbaGtba>(node->debugInfo, argnode_l->subexpr.index, argnode_r->subexpr.index); \
                 /* OP(GetThisBlockArgument,GetArgument) */ \
                 } else if ( is(info,tnode->r,"GetArgument") ) { \
                     auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2GtbaArg>(node->debugInfo, argnode_l->index, argnode_r->subexpr.index); \
+                    return context->code->makeNode<SimNode_Op2GtbaArg>(node->debugInfo, argnode_l->subexpr.index, argnode_r->subexpr.index); \
                 } else {\
-                    return context->code->makeNode<SimNode_Op2GtbaAny>(node->debugInfo, argnode_l->index, tnode->r); \
+                    return context->code->makeNode<SimNode_Op2GtbaAny>(node->debugInfo, argnode_l->subexpr.index, tnode->r); \
                 } \
             /* OP(GetThisBlockArgumentR2V,* */ \
             } else if ( is(info,tnode->l,"GetThisBlockArgumentR2V") ) { \
@@ -573,9 +573,9 @@
                 /* OP(GetThisBlockArgumentR2V,GetThisBlockArgument) */ \
                 if ( is(info,tnode->r,"GetThisBlockArgument") ) { \
                     auto argnode_r = static_cast<SimNode_GetThisBlockArgument *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2GtbaR2VGtba>(node->debugInfo, argnode_l->index, argnode_r->index); \
+                    return context->code->makeNode<SimNode_Op2GtbaR2VGtba>(node->debugInfo, argnode_l->subexpr.index, argnode_r->subexpr.index); \
                 } else {\
-                    return context->code->makeNode<SimNode_Op2GtbaR2VAny>(node->debugInfo, argnode_l->index, tnode->r); \
+                    return context->code->makeNode<SimNode_Op2GtbaR2VAny>(node->debugInfo, argnode_l->subexpr.index, tnode->r); \
                 } \
             /* OP(GetLocalRefR2VOff,*) */ \
             } else if ( is(info,tnode->l,"GetLocalRefR2VOff") ) { \
@@ -911,15 +911,15 @@
                 if ( is(info,tnode->r,"GetThisBlockArgument") ) { \
                     auto tbanode_r = static_cast<SimNode_GetThisBlockArgument *>(tnode->r); \
                     return context->code->makeNode<SimNode_SetOp2GtbaGtba>(node->debugInfo, \
-                        tbanode_l->index, tbanode_r->index); \
+                        tbanode_l->subexpr.index, tbanode_r->subexpr.index); \
                 /* OP(GetThisBlockArgument,GetThisBlockArgument) */ \
                 } else if ( is(info,tnode->r,"GetThisBlockArgumentR2V") ) { \
                     auto tbanode_r = static_cast<SimNode_GetThisBlockArgumentR2V<CTYPE> *>(tnode->r); \
                     return context->code->makeNode<SimNode_SetOp2GtbaGtbaR2V>(node->debugInfo, \
-                        tbanode_l->index, tbanode_r->index); \
+                        tbanode_l->subexpr.index, tbanode_r->subexpr.index); \
                 } else { \
                     return context->code->makeNode<SimNode_SetOp2GtbaAny>(node->debugInfo, \
-                        tbanode_l->index, tnode->r); \
+                        tbanode_l->subexpr.index, tnode->r); \
                 } \
              /* OP(GetArgument,*) */ \
             } else if ( is(info,tnode->l,"GetArgument") ) { \

@@ -188,7 +188,7 @@ namespace das {
     SimNode * SimNode_GetThisBlockArgumentR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(GetThisBlockArgumentR2V);
-        V_ARG(index);
+        subexpr.visit(vis);
         V_END();
     }
 

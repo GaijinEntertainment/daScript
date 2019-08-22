@@ -15,6 +15,8 @@ namespace das {
         ,   sLocalRefOff
         ,   sArgument
         ,   sArgumentRefOff
+        ,   sThisBlockArgument
+        ,   sThisBlockArgumentRefOff
     };
 
     struct SimSource {
@@ -80,6 +82,16 @@ namespace das {
             index = i;
             offset = ofs;
         }
+        __forceinline void setThisBlockArgument(int32_t i) { 
+            type = SimSourceType::sThisBlockArgument; 
+            index = i;
+            offset = 0;
+        }
+        __forceinline void setThisBlockArgumentRefOff(int32_t i, uint32_t ofs) { 
+            type = SimSourceType::sThisBlockArgumentRefOff; 
+            index = i;
+            offset = ofs;
+        }
         // compute
         __forceinline char * computeCMResOfs ( Context & context ) const { 
             return context.abiCopyOrMoveResult() + offset; 
@@ -102,6 +114,15 @@ namespace das {
         }
         __forceinline char * computeArgumentRefOff ( Context & context ) const {
             return (*(char **)(context.abiArguments() + index)) + offset;
+        }
+        __forceinline char * computeThisBlockArgument ( Context & context ) const {
+            return (char *)(context.abiThisBlockArguments() + index);
+        }
+        __forceinline char * computeThisBlockArgumentRef ( Context & context ) const {
+            return *(char **)(context.abiThisBlockArguments() + index);
+        }
+        __forceinline char * computeThisBlockArgumentRefOff ( Context & context ) const {
+            return (*(char **)(context.abiThisBlockArguments() + index)) + offset;
         }
     };
 
@@ -975,34 +996,21 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // THIS BLOCK VARIABLE "GET"
-    struct SimNode_GetThisBlockArgument : SimNode {
+    struct SimNode_GetThisBlockArgument : SimNode_SourceBase {
         SimNode_GetThisBlockArgument ( const LineInfo & at, int32_t i )
-            : SimNode(at), index(i) {}
+            : SimNode_SourceBase(at) {
+            subexpr.setArgument(i);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute(Context & context) {
+            return subexpr.computeThisBlockArgument(context);
+        }
         virtual vec4f eval ( Context & context ) override {
-            return context.abiThisBlockArguments()[index];
+            return *(vec4f *)compute(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)(context.abiThisBlockArguments()+index);  \
-        }
-        DAS_EVAL_NODE
-#undef EVAL_NODE
-        int32_t index;
-    };
-
-    template <typename TT>
-    struct SimNode_GetThisBlockArgumentR2V : SimNode_GetThisBlockArgument {
-        SimNode_GetThisBlockArgumentR2V ( const LineInfo & at, int32_t i )
-            : SimNode_GetThisBlockArgument(at,i) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
-            TT * pR = *(TT **)(context.abiThisBlockArguments()+index);
-            return cast<TT>::from(*pR);
-        }
-#define EVAL_NODE(TYPE,CTYPE)                                               \
-        virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            return **(CTYPE **)(context.abiThisBlockArguments()+index);     \
+            return *(CTYPE *)compute(context);                      \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -1013,9 +1021,26 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetThisBlockArgumentRef(const LineInfo & at, int32_t i)
             : SimNode_GetThisBlockArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
+    };
+
+    template <typename TT>
+    struct SimNode_GetThisBlockArgumentR2V : SimNode_GetThisBlockArgument {
+        SimNode_GetThisBlockArgumentR2V ( const LineInfo & at, int32_t i )
+            : SimNode_GetThisBlockArgument(at,i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            return (char *)(context.abiThisBlockArguments()+index);
+            return subexpr.computeArgumentRef(context);
         }
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *)compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                               \
+        virtual CTYPE eval##TYPE ( Context & context ) override {           \
+            return *(CTYPE *)compute(context);                              \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
     };
 
     // GLOBAL VARIABLE "GET"
