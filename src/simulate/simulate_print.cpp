@@ -102,14 +102,10 @@ namespace das {
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * ) override {
             if ( count==0 ) return;
             crlf();
-            ss << "(\t";
-            tab ++;
             for ( uint32_t t = 0; t!=count; ++t ) {
                 if ( t ) crlf();
                 nodes[t] = nodes[t]->visit(*this);
             }
-            tab --;
-            ss << ")";
         }
         virtual SimNode * sub ( SimNode * node, const char *  ) override {
             crlf();

@@ -1778,7 +1778,7 @@ namespace das
     SimNode * ExprCall::simulate (Context & context) const {
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
         simulateCall(func->shared_from_this(), this, context, pCall);
-        if ( !doesNotNeedSp ) {
+        if ( !doesNotNeedSp && stackTop ) {
             pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
         }
         return pCall;
