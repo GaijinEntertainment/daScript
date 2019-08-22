@@ -33,9 +33,20 @@ namespace das {
             V_ARG(offset);
             break;
         case SimSourceType::sArgument:
+        case SimSourceType::sThisBlockArgument:
             V_SP(index);
             break;
         case SimSourceType::sArgumentRefOff:
+        case SimSourceType::sThisBlockArgumentRefOff:
+            V_SP(index);
+            V_ARG(offset);
+            break;
+        case SimSourceType::sBlockArgument:
+            V_SP(argStackTop);
+            V_SP(index);
+            break;
+        case SimSourceType::sBlockArgumentRefOff:
+            V_SP(argStackTop);
             V_SP(index);
             V_ARG(offset);
             break;
@@ -246,16 +257,14 @@ namespace das {
     SimNode * SimNode_GetBlockArgument::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetBlockArgument);
-        V_SP(stackTop);
-        V_ARG(index);
+        subexpr.visit(vis);
         V_END();
     }
 
     SimNode * SimNode_GetBlockArgumentRef::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetBlockArgumentRef);
-        V_SP(stackTop);
-        V_ARG(index);
+        subexpr.visit(vis);
         V_END();
     }
 
