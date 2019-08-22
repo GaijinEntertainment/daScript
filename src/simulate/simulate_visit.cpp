@@ -18,18 +18,25 @@ namespace das {
         case SimSourceType::sConstValue:
             V_ARG(value);
             break;
-        case SimSourceType::sCMResOfs:
+        case SimSourceType::sCMResOff:
             V_ARG(offset);
             break;
-        case SimSourceType::sBlockCMResOfs:
+        case SimSourceType::sBlockCMResOff:
             V_SP(argStackTop);
             V_ARG(offset);
             break;
         case SimSourceType::sLocal:
             V_SP(stackTop);
             break;
-        case SimSourceType::sLocalRefOfs:
+        case SimSourceType::sLocalRefOff:
             V_SP(stackTop);
+            V_ARG(offset);
+            break;
+        case SimSourceType::sArgument:
+            V_SP(index);
+            break;
+        case SimSourceType::sArgumentRefOff:
+            V_SP(index);
             V_ARG(offset);
             break;
         }

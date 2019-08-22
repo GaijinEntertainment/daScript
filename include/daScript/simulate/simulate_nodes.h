@@ -9,10 +9,12 @@ namespace das {
     enum class SimSourceType {
             sSimNode
         ,   sConstValue
-        ,   sCMResOfs
-        ,   sBlockCMResOfs
+        ,   sCMResOff
+        ,   sBlockCMResOff
         ,   sLocal
-        ,   sLocalRefOfs
+        ,   sLocalRefOff
+        ,   sArgument
+        ,   sArgumentRefOff
     };
 
     struct SimSource {
@@ -50,11 +52,11 @@ namespace das {
             value = val; 
         }
         __forceinline void setCMResOfs(uint32_t ofs) { 
-            type = SimSourceType::sCMResOfs; 
+            type = SimSourceType::sCMResOff; 
             offset = ofs; 
         }
         __forceinline void setBlockCMResOfs(uint32_t asp, uint32_t ofs) { 
-            type = SimSourceType::sBlockCMResOfs; 
+            type = SimSourceType::sBlockCMResOff; 
             argStackTop = asp;  
             offset = ofs; 
         }
@@ -64,7 +66,17 @@ namespace das {
             offset = 0;
         }
         __forceinline void setLocalRefOff(uint32_t sp, uint32_t ofs) { 
-            type = SimSourceType::sLocal; 
+            type = SimSourceType::sLocalRefOff; 
+            stackTop = sp;
+            offset = ofs;
+        }
+        __forceinline void setArgument(uint32_t sp) { 
+            type = SimSourceType::sArgument; 
+            stackTop = sp;
+            offset = 0;
+        }
+        __forceinline void setArgumentRefOff(uint32_t sp, uint32_t ofs) { 
+            type = SimSourceType::sArgumentRefOff; 
             stackTop = sp;
             offset = ofs;
         }
@@ -79,11 +91,20 @@ namespace das {
         __forceinline char * computeLocal ( Context & context ) const {
             return context.stack.sp() + stackTop;
         }
-        __forceinline char * computeLocalRef ( Context & context ) {
+        __forceinline char * computeLocalRef ( Context & context ) const {
             return *(char **)(context.stack.sp() + stackTop);
         }
-        __forceinline char * computeLocalRefOff ( Context & context ) {
+        __forceinline char * computeLocalRefOff ( Context & context ) const {
             return (*(char **)(context.stack.sp() + stackTop)) + offset;
+        }
+        __forceinline char * computeArgument ( Context & context ) const {
+            return (char *)(context.abiArguments() + index);
+        }
+        __forceinline char * computeArgumentRef ( Context & context ) const {
+            return *(char **)(context.abiArguments() + index);
+        }
+        __forceinline char * computeArgumentRefOff ( Context & context ) const {
+            return (*(char **)(context.abiArguments() + index)) + offset;
         }
     };
 
