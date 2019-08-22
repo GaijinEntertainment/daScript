@@ -1262,9 +1262,9 @@ namespace das
         } else if ( argument ) {
             if ( variable->type->isRef() ) {
                 if ( r2vType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_GetArgumentR2VOff>(r2vType, at, argumentIndex, extraOffset);
+                    return context.code->makeValueNode<SimNode_GetArgumentRefR2VOff>(r2vType, at, argumentIndex, extraOffset);
                 } else {
-                    return context.code->makeNode<SimNode_GetArgumentOff>(at, argumentIndex, extraOffset);
+                    return context.code->makeNode<SimNode_GetArgumentRefOff>(at, argumentIndex, extraOffset);
                 }
             }
         } else { // global

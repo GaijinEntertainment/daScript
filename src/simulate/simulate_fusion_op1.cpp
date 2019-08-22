@@ -62,7 +62,7 @@ namespace das {
             /* OP(GetLocalR2V,*) */ \
             } else if ( is(info,tnode->x,"GetArgument") ) { \
                 auto argnode = static_cast<SimNode_GetArgument *>(tnode->x); \
-                return context->code->makeNode<SimNode_Op1Arg>(node->debugInfo, argnode->index); \
+                return context->code->makeNode<SimNode_Op1Arg>(node->debugInfo, argnode->subexpr.index); \
             } \
             return node; \
         } \

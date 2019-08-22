@@ -224,11 +224,11 @@ namespace das {
                     auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
                     return context->code->makeNode<SimNode_AtArgLocR2VI>(node->debugInfo, \
                         atnode->stride, atnode->offset, atnode->range, \
-                            anode_l->index, gnode_r->subexpr.stackTop); \
+                            anode_l->subexpr.index, gnode_r->subexpr.stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_AtArgAny>(node->debugInfo, \
                         atnode->index, atnode->stride, atnode->offset, atnode->range, \
-                            anode_l->index); \
+                            anode_l->subexpr.index); \
                 } \
             } \
             return node; \

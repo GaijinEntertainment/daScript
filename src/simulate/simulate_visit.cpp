@@ -190,13 +190,6 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_GetLocalRef::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(GetLocalRef);
-        subexpr.visit(vis);
-        V_END();
-    }
-
     SimNode * SimNode_GetLocalRefOff::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetLocalRefOff);
@@ -232,22 +225,21 @@ namespace das {
     SimNode * SimNode_GetArgument::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetArgument);
-        V_ARG(index);
+        subexpr.visit(vis);
         V_END();
     }
 
     SimNode * SimNode_GetArgumentRef::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetArgumentRef);
-        V_ARG(index);
+        subexpr.visit(vis);
         V_END();
     }
 
-    SimNode * SimNode_GetArgumentOff::visit ( SimVisitor & vis ) {
+    SimNode * SimNode_GetArgumentRefOff::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetArgumentOff);
-        V_ARG(index);
-        V_ARG(offset);
+        subexpr.visit(vis);
         V_END();
     }
 

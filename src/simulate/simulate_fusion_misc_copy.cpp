@@ -308,9 +308,9 @@ namespace das {
             } else if (is(info, crnode->l, "GetArgument")) {
                 auto argnode_l = static_cast<SimNode_GetArgument *>(crnode->l); 
                 if (isFastCopyBytes(crnode->size)) {
-                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedArgAny>(crnode->size, node->debugInfo, argnode_l->index, crnode->r);
+                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedArgAny>(crnode->size, node->debugInfo, argnode_l->subexpr.index, crnode->r);
                 } else {
-                    return context->code->makeNode<SimNode_CopyRefValueArgAny>(node->debugInfo, argnode_l->index, crnode->r, crnode->size);
+                    return context->code->makeNode<SimNode_CopyRefValueArgAny>(node->debugInfo, argnode_l->subexpr.index, crnode->r, crnode->size);
                 }
             /* size allows fast copy */
             } else {
@@ -467,7 +467,7 @@ namespace das {
             /* CopyValue(GetArgument,*,size) */ \
             } else if ( is(info, cnode->l, "GetArgument" )) { \
                 auto argnode_l = static_cast<SimNode_GetArgument *>(cnode->l); \
-                return context->code->makeNode<SimNode_CopyValueArgAny>(node->debugInfo, argnode_l->index, cnode->r); \
+                return context->code->makeNode<SimNode_CopyValueArgAny>(node->debugInfo, argnode_l->subexpr.index, cnode->r); \
             } \
             /* promote to CopyValueAnyAny, for it is faster */ \
             return context->code->makeNode<SimNode_CopyValueAnyAny>(node->debugInfo, cnode->l, cnode->r); \

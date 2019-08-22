@@ -70,14 +70,14 @@ namespace das {
             stackTop = sp;
             offset = ofs;
         }
-        __forceinline void setArgument(uint32_t sp) { 
+        __forceinline void setArgument(int32_t i) { 
             type = SimSourceType::sArgument; 
-            stackTop = sp;
+            index = i;
             offset = 0;
         }
-        __forceinline void setArgumentRefOff(uint32_t sp, uint32_t ofs) { 
+        __forceinline void setArgumentRefOff(int32_t i, uint32_t ofs) { 
             type = SimSourceType::sArgumentRefOff; 
-            stackTop = sp;
+            index = i;
             offset = ofs;
         }
         // compute
@@ -90,9 +90,6 @@ namespace das {
         }
         __forceinline char * computeLocal ( Context & context ) const {
             return context.stack.sp() + stackTop;
-        }
-        __forceinline char * computeLocalRef ( Context & context ) const {
-            return *(char **)(context.stack.sp() + stackTop);
         }
         __forceinline char * computeLocalRefOff ( Context & context ) const {
             return (*(char **)(context.stack.sp() + stackTop)) + offset;
@@ -766,34 +763,6 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // WHEN LOCAL VARIABLE STORES REFERENCE
-    struct SimNode_GetLocalRef : SimNode_GetLocal {
-        DAS_PTR_NODE;
-        SimNode_GetLocalRef(const LineInfo & at, uint32_t sp)
-            : SimNode_GetLocal(at,sp) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
-        __forceinline char * compute ( Context & context ) {
-            return subexpr.computeLocalRef(context);
-        }
-    };
-
-    template <typename TT>
-    struct SimNode_GetLocalRefR2V : SimNode_GetLocalRef {
-        SimNode_GetLocalRefR2V(const LineInfo & at, uint32_t sp)
-            : SimNode_GetLocalRef(at,sp) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
-            TT * pR = (TT *)compute(context);
-            return cast<TT>::from(*pR);
-        }
-#define EVAL_NODE(TYPE,CTYPE)                                       \
-        virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)compute(context);                      \
-        }
-        DAS_EVAL_NODE
-#undef EVAL_NODE
-    };
-
-    // WHEN LOCAL VARIABLE STORES REFERENCE
     struct SimNode_GetLocalRefOff : SimNode_GetLocal {
         DAS_PTR_NODE;
         SimNode_GetLocalRefOff(const LineInfo & at, uint32_t sp, uint32_t o)
@@ -878,20 +847,24 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // ARGUMENT VARIABLE "GET"
-    struct SimNode_GetArgument : SimNode {
+    struct SimNode_GetArgument : SimNode_SourceBase {
         SimNode_GetArgument ( const LineInfo & at, int32_t i )
-            : SimNode(at), index(i) {}
+            : SimNode_SourceBase(at) {
+            subexpr.setArgument(i);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute(Context & context) {
+            return subexpr.computeArgument(context);
+        }
         virtual vec4f eval ( Context & context ) override {
-            return context.abiArguments()[index];
+            return *(vec4f *)compute(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)(context.abiArguments()+index);  \
+            return *(CTYPE *)compute(context);                      \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-        int32_t index;
     };
 
     struct SimNode_GetArgumentRef : SimNode_GetArgument {
@@ -899,9 +872,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetArgumentRef(const LineInfo & at, int32_t i)
             : SimNode_GetArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        __forceinline char * compute(Context & context) {
-            return (char *)(context.abiArguments()+index);
-        }
     };
 
     template <typename TT>
@@ -909,47 +879,49 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetArgumentR2V ( const LineInfo & at, int32_t i )
             : SimNode_GetArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute(Context & context) {
+            return subexpr.computeArgumentRef(context);
+        }
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = *(TT **)(context.abiArguments()+index);
+            TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            return **(CTYPE **)(context.abiArguments()+index);              \
+            return *(CTYPE *)compute(context);                              \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
     };
 
-    struct SimNode_GetArgumentOff : SimNode_GetArgument {
+    struct SimNode_GetArgumentRefOff : SimNode_GetArgument {
         DAS_PTR_NODE;
-        SimNode_GetArgumentOff(const LineInfo & at, int32_t i, uint32_t o)
-            : SimNode_GetArgument(at,i), offset(o) {}
+        SimNode_GetArgumentRefOff(const LineInfo & at, int32_t i, uint32_t o)
+            : SimNode_GetArgument(at,i) {
+            subexpr.setArgumentRefOff(i, o);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            char * pR = *(char **)(context.abiArguments()+index);
-            return pR + offset;
+            return subexpr.computeArgumentRefOff(context);
         }
         uint32_t offset;
     };
 
     template <typename TT>
-    struct SimNode_GetArgumentR2VOff : SimNode_GetArgument {
-        SimNode_GetArgumentR2VOff ( const LineInfo & at, int32_t i, uint32_t o )
-            : SimNode_GetArgument(at,i), offset(o) {}
+    struct SimNode_GetArgumentRefR2VOff : SimNode_GetArgumentRefOff {
+        SimNode_GetArgumentRefR2VOff ( const LineInfo & at, int32_t i, uint32_t o )
+            : SimNode_GetArgumentRefOff(at,i, o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            char * pR = *(char **)(context.abiArguments()+index);
-            return cast<TT>::from(*((TT *)(pR+offset)));
+            TT * pR = (TT *)compute(context);
+            return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                               \
         virtual CTYPE eval##TYPE ( Context & context ) override {           \
-            char * pR = *(char **)(context.abiArguments()+index);           \
-            return *(CTYPE *)(pR + offset);                                 \
+            return *(CTYPE *)compute(context);                              \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-        uint32_t offset;
     };
 
     // BLOCK VARIABLE "GET"
