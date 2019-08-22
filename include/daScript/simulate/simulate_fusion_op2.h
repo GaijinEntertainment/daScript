@@ -486,7 +486,7 @@
                 /* OP(GetLocalR2V,ConstValue) */ \
                 if ( is(info,tnode->l,"GetLocalR2V") ) { \
                     auto r2vnode_l = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2R2VConst>(node->debugInfo, r2vnode_l->stackTop, cvalue); \
+                    return context->code->makeNode<SimNode_Op2R2VConst>(node->debugInfo, r2vnode_l->subexpr.stackTop, cvalue); \
                 /* OP(GetArgument,ConstValue) */ \
                 } else if ( is(info,tnode->l,"GetArgument") ) { \
                     auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
@@ -501,7 +501,7 @@
                 /* OP(ConstValue,GetLocalR2V) */ \
                 if ( is(info,tnode->r,"GetLocalR2V") ) { \
                     auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2ConstR2V>(node->debugInfo, cvalue, r2vnode_r->stackTop); \
+                    return context->code->makeNode<SimNode_Op2ConstR2V>(node->debugInfo, cvalue, r2vnode_r->subexpr.stackTop); \
                 /* OP(ConstValue,GetArgument) */ \
                 } else if ( is(info,tnode->r,"GetArgument") ) { \
                     auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
@@ -515,17 +515,17 @@
                 /* OP(GetLocalR2V,GetLocalR2V) */ \
                 if ( is(info,tnode->r,"GetLocalR2V") ) { \
                     auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2R2VR2V>(node->debugInfo, r2vnode_l->stackTop, r2vnode_r->stackTop); \
+                    return context->code->makeNode<SimNode_Op2R2VR2V>(node->debugInfo, r2vnode_l->subexpr.stackTop, r2vnode_r->subexpr.stackTop); \
                 /* OP(GetLocalR2V,GetArgument) */ \
                 } else if ( is(info,tnode->r,"GetArgument") ) { \
                     auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2R2VArg>(node->debugInfo, r2vnode_l->stackTop, argnode_r->index); \
+                    return context->code->makeNode<SimNode_Op2R2VArg>(node->debugInfo, r2vnode_l->subexpr.stackTop, argnode_r->index); \
                 /* OP(GetLocalR2V,GetThisBlockArgumentR2V) */ \
                 } else if ( is(info,tnode->r,"GetThisBlockArgumentR2V") ) { \
                     auto argnode_r = static_cast<SimNode_GetThisBlockArgumentR2V<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2R2VGtbaR2V>(node->debugInfo, r2vnode_l->stackTop, argnode_r->index); \
+                    return context->code->makeNode<SimNode_Op2R2VGtbaR2V>(node->debugInfo, r2vnode_l->subexpr.stackTop, argnode_r->index); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2R2VAny>(node->debugInfo, r2vnode_l->stackTop, tnode->r); \
+                    return context->code->makeNode<SimNode_Op2R2VAny>(node->debugInfo, r2vnode_l->subexpr.stackTop, tnode->r); \
                 } \
             /* OP(*,GetLocalR2V) */ \
             } else if ( is(info,tnode->r, "GetLocalR2V") ) { \
@@ -533,14 +533,15 @@
                 /* OP(GetArgument,GetLocalR2V) */ \
                 if ( is(info,tnode->l,"GetArgument") ) { \
                     auto argnode_l = static_cast<SimNode_GetArgument *>(tnode->l); \
-                    return context->code->makeNode<SimNode_Op2ArgR2V>(node->debugInfo, argnode_l->index, r2vnode_r->stackTop); \
+                    return context->code->makeNode<SimNode_Op2ArgR2V>(node->debugInfo, \
+                        argnode_l->index, r2vnode_r->subexpr.stackTop); \
                 /* OP(GetLocalRefR2VOff,GetLocalR2V) */ \
                 } else if ( is(info,tnode->l,"GetLocalRefR2VOff") ) { \
                     auto r2vonode_l = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->l); \
                     return context->code->makeNode<SimNode_Op2GlrfR2V>(node->debugInfo, \
-                        r2vonode_l->stackTop, r2vonode_l->offset, r2vnode_r->stackTop); \
+                        r2vonode_l->subexpr.stackTop, r2vonode_l->subexpr.offset, r2vnode_r->subexpr.stackTop); \
                 } else { \
-                    return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->stackTop); \
+                    return context->code->makeNode<SimNode_Op2AnyR2V>(node->debugInfo, tnode->l, r2vnode_r->subexpr.stackTop); \
                 } \
             /* OP(GetArgument,* */ \
             } else if ( is(info,tnode->l,"GetArgument") ) { \
@@ -581,15 +582,17 @@
                 auto r2vonode_l = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->l); \
                 if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
                     auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
-                    return context->code->makeNode<SimNode_Op2Glrf2VGlrf2V>(node->debugInfo, r2vonode_l->stackTop, r2vonode_l->offset, r2vonode_r->stackTop, r2vonode_r->offset); \
+                    return context->code->makeNode<SimNode_Op2Glrf2VGlrf2V>(node->debugInfo, \
+                        r2vonode_l->subexpr.stackTop, r2vonode_l->subexpr.offset, r2vonode_r->subexpr.stackTop, r2vonode_r->subexpr.offset); \
                 } else { \
                     return context->code->makeNode<SimNode_Op2Glrf2VAny>(node->debugInfo, \
-                        r2vonode_l->stackTop, r2vonode_l->offset, tnode->r); \
+                        r2vonode_l->subexpr.stackTop, r2vonode_l->subexpr.offset, tnode->r); \
                 } \
             /* OP(*,GetLocalRefR2VOff) */ \
             } else if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
                 auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
-                return context->code->makeNode<SimNode_Op2AnyGlrf2V>(node->debugInfo, tnode->l, r2vonode_r->stackTop, r2vonode_r->offset); \
+                return context->code->makeNode<SimNode_Op2AnyGlrf2V>(node->debugInfo, tnode->l, \
+                    r2vonode_r->subexpr.stackTop, r2vonode_r->subexpr.offset); \
             } \
             return node; \
         } \
@@ -865,10 +868,10 @@
                 if ( is(info,tnode->r,"GetLocalR2V") ) { \
                     auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \
                     return context->code->makeNode<SimNode_SetOp2LocR2V>(node->debugInfo, \
-                        r2vnode_l->stackTop, r2vnode_r->stackTop); \
+                        r2vnode_l->subexpr.stackTop, r2vnode_r->subexpr.stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_SetOp2LocAny>(node->debugInfo, \
-                        r2vnode_l->stackTop, tnode->r); \
+                        r2vnode_l->subexpr.stackTop, tnode->r); \
                 } \
             /* OP(GetLocalRefOff,*) */ \
             } else if ( is(info,tnode->l,"GetLocalRefOff") ) { \
@@ -877,17 +880,17 @@
                 if ( is(info,tnode->r,"GetLocalRefR2VOff") ) { \
                     auto r2vonode_r = static_cast<SimNode_GetLocalRefR2VOff<CTYPE> *>(tnode->r); \
                     return context->code->makeNode<SimNode_SetOp2GlrfGlrf2V>(node->debugInfo, \
-                        glrfnode_l->stackTop, glrfnode_l->offset, \
-                        r2vonode_r->stackTop, r2vonode_r->offset); \
+                        glrfnode_l->subexpr.stackTop, glrfnode_l->subexpr.offset, \
+                        r2vonode_r->subexpr.stackTop, r2vonode_r->subexpr.offset); \
                 /* OP(GetLocalRefOff,GetArgument) */ \
                 } else if ( is(info,tnode->r,"GetArgument") ) { \
                     auto argnode_r = static_cast<SimNode_GetArgument *>(tnode->r); \
                     return context->code->makeNode<SimNode_SetOp2GlrfArg>(node->debugInfo,\
-                        glrfnode_l->stackTop, glrfnode_l->offset, \
+                        glrfnode_l->subexpr.stackTop, glrfnode_l->subexpr.offset, \
                         argnode_r->index); \
                 } else { \
                     return context->code->makeNode<SimNode_SetOp2GlrfAny>(node->debugInfo, \
-                        glrfnode_l->stackTop, glrfnode_l->offset, tnode->r); \
+                        glrfnode_l->subexpr.stackTop, glrfnode_l->subexpr.offset, tnode->r); \
                 } \
             /* OP(GetArgumentOff,*) */ \
             } else if ( is(info,tnode->l,"GetArgumentOff") ) { \

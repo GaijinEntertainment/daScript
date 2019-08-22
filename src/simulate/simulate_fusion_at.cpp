@@ -190,7 +190,7 @@ namespace das {
                     auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
                     return context->code->makeNode<SimNode_AtGlobLocR2VI>(node->debugInfo, \
                         atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->offset, gnode_r->stackTop); \
+                            gnode_l->offset, gnode_r->subexpr.stackTop); \
                 /* At(GetGlobal,ConstValue) */ \
                 } else if ( is(info,atnode->index,"ConstValue") ) { \
                     auto cnode_r = static_cast<SimNode_ConstValue *>(atnode->index); \
@@ -210,11 +210,11 @@ namespace das {
                     auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
                     return context->code->makeNode<SimNode_AtLocLocR2VI>(node->debugInfo, \
                         atnode->stride, atnode->offset, atnode->range, \
-                            lnode_l->stackTop, gnode_r->stackTop); \
+                            lnode_l->subexpr.stackTop, gnode_r->subexpr.stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_AtLocAny>(node->debugInfo, \
                         atnode->index, atnode->stride, atnode->offset, atnode->range, \
-                            lnode_l->stackTop); \
+                            lnode_l->subexpr.stackTop); \
                 } \
             /* At(GetArgument,*) */ \
             } else if ( is(info,atnode->value,"GetArgument") ) { \
@@ -224,7 +224,7 @@ namespace das {
                     auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
                     return context->code->makeNode<SimNode_AtArgLocR2VI>(node->debugInfo, \
                         atnode->stride, atnode->offset, atnode->range, \
-                            anode_l->index, gnode_r->stackTop); \
+                            anode_l->index, gnode_r->subexpr.stackTop); \
                 } else { \
                     return context->code->makeNode<SimNode_AtArgAny>(node->debugInfo, \
                         atnode->index, atnode->stride, atnode->offset, atnode->range, \

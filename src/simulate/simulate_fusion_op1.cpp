@@ -58,7 +58,7 @@ namespace das {
             /* OP(GetLocalR2V,*) */ \
             if ( is(info,tnode->x,"GetLocalR2V") ) { \
                 auto r2vnode = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->x); \
-                return context->code->makeNode<SimNode_Op1R2V>(node->debugInfo, r2vnode->stackTop); \
+                return context->code->makeNode<SimNode_Op1R2V>(node->debugInfo, r2vnode->subexpr.stackTop); \
             /* OP(GetLocalR2V,*) */ \
             } else if ( is(info,tnode->x,"GetArgument") ) { \
                 auto argnode = static_cast<SimNode_GetArgument *>(tnode->x); \
@@ -92,7 +92,7 @@ namespace das {
             /* OP(GetLocal,*) */ \
             if ( is(info,tnode->x,"GetLocal") ) { \
                 auto r2vnode = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->x); \
-                return context->code->makeNode<SimNode_SetOp1Loc>(node->debugInfo, r2vnode->stackTop); \
+                return context->code->makeNode<SimNode_SetOp1Loc>(node->debugInfo, r2vnode->subexpr.stackTop); \
             } \
             return node; \
         } \

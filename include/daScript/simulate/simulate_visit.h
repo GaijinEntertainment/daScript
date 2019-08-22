@@ -139,7 +139,7 @@ namespace das {
     SimNode * SimNode_GetCMResOfsR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(GetCMResOfsR2V);
-        V_SP(offset);
+        subexpr.visit(vis);
         V_END();
     }
 
@@ -147,7 +147,7 @@ namespace das {
     SimNode * SimNode_GetLocalR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(GetLocalR2V);
-        V_SP(stackTop);
+        subexpr.visit(vis);
         V_END();
     }
 
@@ -155,7 +155,7 @@ namespace das {
     SimNode * SimNode_GetLocalRefR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(GetLocalRefR2V);
-        V_SP(stackTop);
+        subexpr.visit(vis);
         V_END();
     }
 
@@ -163,8 +163,7 @@ namespace das {
     SimNode * SimNode_GetLocalRefR2VOff<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(GetLocalRefR2VOff);
-        V_SP(stackTop);
-        V_SP(offset);
+        subexpr.visit(vis);
         V_END();
     }
 

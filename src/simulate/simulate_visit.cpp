@@ -10,6 +10,31 @@
 
 namespace das {
 
+    void SimSource::visit(SimVisitor & vis) {
+        switch (type) {
+        case SimSourceType::sSimNode:
+            V_OP(ptr);
+            break;
+        case SimSourceType::sConstValue:
+            V_ARG(value);
+            break;
+        case SimSourceType::sCMResOfs:
+            V_ARG(offset);
+            break;
+        case SimSourceType::sBlockCMResOfs:
+            V_SP(argStackTop);
+            V_ARG(offset);
+            break;
+        case SimSourceType::sLocal:
+            V_SP(stackTop);
+            break;
+        case SimSourceType::sLocalRefOfs:
+            V_SP(stackTop);
+            V_ARG(offset);
+            break;
+        }
+    }
+
     SimNode * SimNode::visit ( SimVisitor & vis ) {
         V_BEGIN();
         vis.op("??");
@@ -131,15 +156,14 @@ namespace das {
     SimNode * SimNode_GetCMResOfs::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetCMResOfs);
-        V_SP(offset);
+        subexpr.visit(vis);
         V_END();
     }
 
     SimNode * SimNode_GetBlockCMResOfs::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetBlockCMResOfs);
-        V_SP(offset);
-        V_SP(argStackTop);
+        subexpr.visit(vis);
         V_END();
     }
 
@@ -155,22 +179,21 @@ namespace das {
     SimNode * SimNode_GetLocal::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetLocal);
-        V_SP(stackTop);
+        subexpr.visit(vis);
         V_END();
     }
 
     SimNode * SimNode_GetLocalRef::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetLocalRef);
-        V_SP(stackTop);
+        subexpr.visit(vis);
         V_END();
     }
 
     SimNode * SimNode_GetLocalRefOff::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetLocalRefOff);
-        V_SP(stackTop);
-        V_SP(offset);
+        subexpr.visit(vis);
         V_END();
     }
 

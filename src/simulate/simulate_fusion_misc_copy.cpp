@@ -40,7 +40,7 @@ namespace das {
             /* CopyReference(GetLocal,*) */
             if ( is(info, crnode->l, "GetLocal" )) {
                 auto lnode_l = static_cast<SimNode_GetLocal *>(crnode->l);
-                return context->code->makeNode<SimNode_CopyReferenceLocAny>(node->debugInfo, lnode_l->stackTop, crnode->r); 
+                return context->code->makeNode<SimNode_CopyReferenceLocAny>(node->debugInfo, lnode_l->subexpr.stackTop, crnode->r); 
             }
             return node;
         }
@@ -277,32 +277,32 @@ namespace das {
                 if (is(info, crnode->r, "GetLocal")) {
                     auto lnode_r = static_cast<SimNode_GetLocal *>(crnode->r);
                     if (isFastCopyBytes(crnode->size)) {
-                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocLoc>(crnode->size, node->debugInfo, lnode_l->stackTop, lnode_r->stackTop);
+                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocLoc>(crnode->size, node->debugInfo, lnode_l->subexpr.stackTop, lnode_r->subexpr.stackTop);
                     } else {
-                        return context->code->makeNode<SimNode_CopyRefValueLocLoc>(node->debugInfo, lnode_l->stackTop, lnode_r->stackTop, crnode->size);
+                        return context->code->makeNode<SimNode_CopyRefValueLocLoc>(node->debugInfo, lnode_l->subexpr.stackTop, lnode_r->subexpr.stackTop, crnode->size);
                     }
                 } else {
                     if (isFastCopyBytes(crnode->size)) {
-                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocAny>(crnode->size, node->debugInfo, lnode_l->stackTop, crnode->r);
+                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocAny>(crnode->size, node->debugInfo, lnode_l->subexpr.stackTop, crnode->r);
                     } else {
-                        return context->code->makeNode<SimNode_CopyRefValueLocAny>(node->debugInfo, lnode_l->stackTop, crnode->r, crnode->size);
+                        return context->code->makeNode<SimNode_CopyRefValueLocAny>(node->debugInfo, lnode_l->subexpr.stackTop, crnode->r, crnode->size);
                     }
                 }
             /* CopyRefValue(GetCMResOfs,*,size) */
             } else if (is(info, crnode->l, "GetCMResOfs")) {
                 auto cmnode_l = static_cast<SimNode_GetCMResOfs *>(crnode->l);
                 if (isFastCopyBytes(crnode->size)) {
-                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedCmroAny>(crnode->size, node->debugInfo, cmnode_l->offset, crnode->r);
+                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedCmroAny>(crnode->size, node->debugInfo, cmnode_l->subexpr.offset, crnode->r);
                 } else {
-                    return context->code->makeNode<SimNode_CopyRefValueCmroAny>(node->debugInfo, cmnode_l->offset, crnode->r, crnode->size);
+                    return context->code->makeNode<SimNode_CopyRefValueCmroAny>(node->debugInfo, cmnode_l->subexpr.offset, crnode->r, crnode->size);
                 }
             /* CopyRefValue(GetLocalRefOff,*,size) */
             } else if (is(info, crnode->l, "GetLocalRefOff")) {
                 auto glrfnode_l = static_cast<SimNode_GetLocalRefOff *>(crnode->l);
                 if (isFastCopyBytes(crnode->size)) {
-                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedGlrfAny>(crnode->size, node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, crnode->r);
+                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedGlrfAny>(crnode->size, node->debugInfo, glrfnode_l->subexpr.stackTop, glrfnode_l->subexpr.offset, crnode->r);
                 } else {
-                    return context->code->makeNode<SimNode_CopyRefValueGlrfAny>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, crnode->r, crnode->size);
+                    return context->code->makeNode<SimNode_CopyRefValueGlrfAny>(node->debugInfo, glrfnode_l->subexpr.stackTop, glrfnode_l->subexpr.offset, crnode->r, crnode->size);
                 }
             /* CopyRefValue(GetArgument,*,size) */
             } else if (is(info, crnode->l, "GetArgument")) {
@@ -452,18 +452,18 @@ namespace das {
                 if ( is(info,cnode->r,"ConstValue") ) { \
                     auto cnnode = static_cast<SimNode_ConstValue *>(cnode->r); \
                     auto cvalue = cast<CONSTTYPE>::to(cnnode->value); \
-                    return context->code->makeNode<SimNode_CopyValueLocConst>(node->debugInfo, lnode_l->stackTop, cvalue); \
+                    return context->code->makeNode<SimNode_CopyValueLocConst>(node->debugInfo, lnode_l->subexpr.stackTop, cvalue); \
                 } else { \
-                    return context->code->makeNode<SimNode_CopyValueLocAny>(node->debugInfo, lnode_l->stackTop, cnode->r); \
+                    return context->code->makeNode<SimNode_CopyValueLocAny>(node->debugInfo, lnode_l->subexpr.stackTop, cnode->r); \
                 } \
             /* CopyValue(GetCMResOfs,*,size) */ \
             } else if ( is(info, cnode->l, "GetCMResOfs" )) { \
                 auto cmnode_l = static_cast<SimNode_GetCMResOfs *>(cnode->l); \
-                return context->code->makeNode<SimNode_CopyValueCmroAny>(node->debugInfo, cmnode_l->offset, cnode->r); \
+                return context->code->makeNode<SimNode_CopyValueCmroAny>(node->debugInfo, cmnode_l->subexpr.offset, cnode->r); \
             /* CopyValue(GetLocalRefOff,*,size) */ \
             } else if ( is(info, cnode->l, "GetLocalRefOff" )) { \
                 auto glrfnode_l = static_cast<SimNode_GetLocalRefOff *>(cnode->l); \
-                return context->code->makeNode<SimNode_CopyValueGlrfAny>(node->debugInfo, glrfnode_l->stackTop, glrfnode_l->offset, cnode->r); \
+                return context->code->makeNode<SimNode_CopyValueGlrfAny>(node->debugInfo, glrfnode_l->subexpr.stackTop, glrfnode_l->subexpr.offset, cnode->r); \
             /* CopyValue(GetArgument,*,size) */ \
             } else if ( is(info, cnode->l, "GetArgument" )) { \
                 auto argnode_l = static_cast<SimNode_GetArgument *>(cnode->l); \

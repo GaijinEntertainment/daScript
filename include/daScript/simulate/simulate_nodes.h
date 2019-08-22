@@ -6,6 +6,92 @@
 
 namespace das {
 
+    enum class SimSourceType {
+            sSimNode
+        ,   sConstValue
+        ,   sCMResOfs
+        ,   sBlockCMResOfs
+        ,   sLocal
+        ,   sLocalRefOfs
+    };
+
+    struct SimSource {
+        union {
+            SimNode *       subexpr;
+            union {
+                vec4f       value;
+                char *      valuePtr;
+                int32_t     valueI;
+                uint32_t    valueU;
+                int64_t     valueI64;
+                uint64_t    valueU64;
+                float       valueF;
+                double      valueLF;
+                bool        valueB;
+            };
+            struct {
+                union {
+                    int32_t     index;
+                    uint32_t    stackTop;
+                    uint32_t    argStackTop;
+                };
+                uint32_t    offset;
+            };
+        };
+        SimSourceType   type;
+        void visit ( SimVisitor & vis );
+        // construct
+        __forceinline void setSimNode(SimNode * se) { 
+            type = SimSourceType::sSimNode; 
+            subexpr = se; 
+        }
+        __forceinline void setConstValue(vec4f val) { 
+            type = SimSourceType::sConstValue; 
+            value = val; 
+        }
+        __forceinline void setCMResOfs(uint32_t ofs) { 
+            type = SimSourceType::sCMResOfs; 
+            offset = ofs; 
+        }
+        __forceinline void setBlockCMResOfs(uint32_t asp, uint32_t ofs) { 
+            type = SimSourceType::sBlockCMResOfs; 
+            argStackTop = asp;  
+            offset = ofs; 
+        }
+        __forceinline void setLocal(uint32_t sp) { 
+            type = SimSourceType::sLocal; 
+            stackTop = sp;
+            offset = 0;
+        }
+        __forceinline void setLocalRefOff(uint32_t sp, uint32_t ofs) { 
+            type = SimSourceType::sLocal; 
+            stackTop = sp;
+            offset = ofs;
+        }
+        // compute
+        __forceinline char * computeCMResOfs ( Context & context ) const { 
+            return context.abiCopyOrMoveResult() + offset; 
+        }
+        __forceinline char * computeBlockCMResOfs ( Context & context ) const {
+            auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
+            return ba->copyOrMoveResult + offset;
+        }
+        __forceinline char * computeLocal ( Context & context ) const {
+            return context.stack.sp() + stackTop;
+        }
+        __forceinline char * computeLocalRef ( Context & context ) {
+            return *(char **)(context.stack.sp() + stackTop);
+        }
+        __forceinline char * computeLocalRefOff ( Context & context ) {
+            return (*(char **)(context.stack.sp() + stackTop)) + offset;
+        }
+    };
+
+    struct SimNode_SourceBase : SimNode {
+        SimNode_SourceBase ( const LineInfo & at ) : SimNode(at) {}
+        SimSource   subexpr;
+    };
+
     // Delete structures
     struct SimNode_DeleteStructPtr : SimNode_Delete {
         SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss )
@@ -586,15 +672,16 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // CMRES "GET" + OFFSET
-    struct SimNode_GetCMResOfs : SimNode {
+    struct SimNode_GetCMResOfs : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetCMResOfs(const LineInfo & at, uint32_t o)
-            : SimNode(at), offset(o) {}
+        SimNode_GetCMResOfs(const LineInfo & at, uint32_t o) 
+            : SimNode_SourceBase(at) {
+            subexpr.setCMResOfs(o);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            return context.abiCopyOrMoveResult() + offset;
+            return subexpr.computeCMResOfs(context);
         }
-        uint32_t offset;
     };
 
     template <typename TT>
@@ -615,42 +702,43 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // BLOCK CMRES "GET" + OFFSET
-    struct SimNode_GetBlockCMResOfs : SimNode {
+    struct SimNode_GetBlockCMResOfs : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetBlockCMResOfs(const LineInfo & at, uint32_t o, uint32_t asp)
-            : SimNode(at), offset(o), argStackTop(asp) {}
+        SimNode_GetBlockCMResOfs(const LineInfo & at, uint32_t o, uint32_t asp) 
+            : SimNode_SourceBase(at) {
+            subexpr.setBlockCMResOfs(asp, o);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
-            return ba->copyOrMoveResult + offset;
+            return subexpr.computeBlockCMResOfs(context);
         }
-        uint32_t offset, argStackTop;
     };
 
     // LOCAL VARIABLE "GET"
-    struct SimNode_GetLocal : SimNode {
+    struct SimNode_GetLocal : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetLocal(const LineInfo & at, uint32_t sp)
-            : SimNode(at), stackTop(sp) {}
+        SimNode_GetLocal(const LineInfo & at, uint32_t sp) 
+            : SimNode_SourceBase(at) {
+            subexpr.setLocal(sp);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            return context.stack.sp() + stackTop;
+            return subexpr.computeLocal(context);
         }
-        uint32_t stackTop;
     };
 
     template <typename TT>
     struct SimNode_GetLocalR2V : SimNode_GetLocal {
-        SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp)
+        SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp) 
             : SimNode_GetLocal(at,sp)  {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = (TT *)(context.stack.sp() + stackTop);
+            TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)(context.stack.sp() + stackTop);       \
+            return *(CTYPE *)compute(context);                      \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -663,7 +751,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetLocal(at,sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            return *(char **)(context.stack.sp() + stackTop);
+            return subexpr.computeLocalRef(context);
         }
     };
 
@@ -673,12 +761,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetLocalRef(at,sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = *(TT **)(context.stack.sp() + stackTop);
+            TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return **(CTYPE **)(context.stack.sp() + stackTop);     \
+            return *(CTYPE *)compute(context);                      \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
@@ -688,30 +776,30 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetLocalRefOff : SimNode_GetLocal {
         DAS_PTR_NODE;
         SimNode_GetLocalRefOff(const LineInfo & at, uint32_t sp, uint32_t o)
-            : SimNode_GetLocal(at,sp), offset(o) {}
+            : SimNode_GetLocal(at,sp) {
+            subexpr.setLocalRefOff(sp, o);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            return (*(char **)(context.stack.sp() + stackTop)) + offset;
+            return subexpr.computeLocalRefOff(context);
         }
-        uint32_t offset;
     };
 
     template <typename TT>
-    struct SimNode_GetLocalRefR2VOff : SimNode_GetLocalRef {
+    struct SimNode_GetLocalRefR2VOff : SimNode_GetLocalRefOff {
         SimNode_GetLocalRefR2VOff(const LineInfo & at, uint32_t sp, uint32_t o)
-            : SimNode_GetLocalRef(at,sp), offset(o) {}
+            : SimNode_GetLocalRefOff(at,sp,o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = (TT *)((*(char **)(context.stack.sp() + stackTop)) + offset);
+            TT * pR = (TT *) compute(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)((*(char **)(context.stack.sp() + stackTop)) + offset); \
+            return *(CTYPE *) compute(context);                     \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-        uint32_t offset;
     };
 
     // AT (INDEX)
