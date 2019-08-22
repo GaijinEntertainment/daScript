@@ -67,7 +67,7 @@ extern das::vector<das::float3 *> g_velBoxed;
 extern das::vector<EsComponent> g_components;
 
 void initEsComponents();
-void verifyEsComponents();
+void verifyEsComponents(das::Context * ctx);
 void testEsUpdate(char * pass, das::Context * ctx);
 uint32_t queryEs(const das::Block & block, das::Context * context);
 

@@ -394,8 +394,8 @@ vector<EsComponent> g_components;
 void initEsComponents() {
     // build components
     float f = 1.0f;
-    for ( int i=0; i != g_total; ++i ) {
-        g_pos[i] = { f++, f+1, f+2 };
+    for ( int i=0; i != g_total; ++i, ++f ) {
+        g_pos[i] = { f, f+1, f+2 };
         g_vel[i] = { 1.0f, 2.0f, 3.0f };
         g_velBoxed[i] = &g_vel[i];
     }
@@ -405,17 +405,21 @@ void initEsComponents() {
     g_components.emplace_back("velBoxed", g_velBoxed.data(), sizeof(float3), sizeof(float3 *), true );
 }
 
-void verifyEsComponents() {
-    float t = 1.0f;
+void verifyEsComponents(Context * context) {
     float f = 1.0f;
-    for (int i = 0; i != g_total; ++i) {
-        float3 apos = { f++, f + 1, f + 2 };
+    float t = 1.0f;
+    for ( int i = 0; i != g_total; ++i, ++f ) {
+        float3 apos = { f, f + 1, f + 2 };
         float3 avel = { 1.0f, 2.0f, 3.0f };
         float3 npos;
         npos.x = apos.x + avel.x * t;
         npos.y = apos.y + avel.y * t;
         npos.z = apos.z + avel.z * t;
-        DAS_ASSERT(g_pos[i].x==npos.x && g_pos[i].y==npos.y && g_pos[i].z==npos.z );
+        if ( g_pos[i].x!=npos.x && g_pos[i].y!=npos.y && g_pos[i].z!=npos.z ) {
+            TextWriter twrt;
+            twrt << "g_pos[" << i << "] (" << g_pos[i] << ") != npos (" << npos << ")\n";
+            context->throw_error_ex("verifyEsComponents failed, %s\n", twrt.str().c_str());
+        }
     }
 }
 
