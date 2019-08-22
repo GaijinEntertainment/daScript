@@ -419,6 +419,11 @@ namespace das
         ExprConstInt2(const LineInfo & a, int2 i)  : ExprConstT(a,i,Type::tInt2) {}
     };
 
+    struct ExprConstRange : ExprConstT<range,ExprConstRange> {
+        ExprConstRange(range i = range())  : ExprConstT(i,Type::tRange) {}
+        ExprConstRange(const LineInfo & a, range i)  : ExprConstT(a,i,Type::tRange) {}
+    };
+
     struct ExprConstInt3 : ExprConstT<int3,ExprConstInt3> {
         ExprConstInt3(int3 i = int3())  : ExprConstT(i,Type::tInt3) {}
         ExprConstInt3(const LineInfo & a, int3 i)  : ExprConstT(a,i,Type::tInt3) {}
@@ -442,6 +447,11 @@ namespace das
     struct ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())  : ExprConstT(i,Type::tUInt2) {}
         ExprConstUInt2(const LineInfo & a, uint2 i)  : ExprConstT(a,i,Type::tUInt2) {}
+    };
+
+    struct ExprConstURange : ExprConstT<urange,ExprConstURange> {
+        ExprConstURange(urange i = urange())  : ExprConstT(i,Type::tURange) {}
+        ExprConstURange(const LineInfo & a, urange i)  : ExprConstT(a,i,Type::tURange) {}
     };
 
     struct ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {

@@ -892,6 +892,8 @@ namespace das
             case Type::tString:
             case Type::tDouble:
             case Type::tEnumeration:
+            case Type::tRange:
+            case Type::tURange:
                 return true;
             default:
                 return false;

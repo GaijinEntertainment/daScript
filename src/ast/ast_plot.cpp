@@ -350,6 +350,13 @@ namespace das {
             label(c, ss.str());
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit(ExprConstRange * c) override {
+            auto val = c->getValue();
+            TextWriter ss;
+            ss << "range(" << val.from << "," << val.to << ")";
+            label(c, ss.str());
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit(ExprConstInt3 * c) override {
             auto val = c->getValue();
             TextWriter ss;
@@ -368,6 +375,13 @@ namespace das {
             auto val = c->getValue();
             TextWriter ss;
             ss << "uint2(" << val.x << "," << val.y << ")";
+            label(c, ss.str());
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit(ExprConstURange * c) override {
+            auto val = c->getValue();
+            TextWriter ss;
+            ss << "urange(" << val.from << "," << val.to << ")";
             label(c, ss.str());
             return Visitor::visit(c);
         }

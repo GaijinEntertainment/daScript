@@ -193,6 +193,8 @@ namespace das {
         VISIT_EXPR(ExprConstUInt2)
         VISIT_EXPR(ExprConstUInt3)
         VISIT_EXPR(ExprConstUInt4)
+        VISIT_EXPR(ExprConstRange)
+        VISIT_EXPR(ExprConstURange)
         VISIT_EXPR(ExprConstBool)
         VISIT_EXPR(ExprConstFloat)
         VISIT_EXPR(ExprConstFloat2)

@@ -1396,6 +1396,11 @@ namespace das {
             ss << "int2(" << val.x << "," << val.y << ")";
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit ( ExprConstRange * c ) override {
+            auto val = c->getValue();
+            ss << "range(" << val.from << "," << val.to << ")";
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstInt3 * c ) override {
             auto val = c->getValue();
             ss << "int3(" << val.x << "," << val.y << "," << val.z << ")";
@@ -1409,6 +1414,11 @@ namespace das {
         virtual ExpressionPtr visit ( ExprConstUInt2 * c ) override {
             auto val = c->getValue();
             ss << "uint2(" << val.x << "," << val.y << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstURange * c ) override {
+            auto val = c->getValue();
+            ss << "urange(" << val.from << "," << val.to << ")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt3 * c ) override {

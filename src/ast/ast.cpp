@@ -1734,6 +1734,8 @@ namespace das {
             case Type::tFloat3:         return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
             case Type::tFloat4:         return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
             case Type::tDouble:         return make_shared<ExprConstDouble>(at, cast<double>::to(value));
+            case Type::tRange:          return make_shared<ExprConstRange>(at, cast<range>::to(value));
+            case Type::tURange:         return make_shared<ExprConstURange>(at, cast<urange>::to(value));
             default:                    DAS_ASSERTF(0, "we should not even be here"); return nullptr;
         }
     }
