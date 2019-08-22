@@ -19,6 +19,7 @@ namespace das {
         ,   sBlockArgumentRefOff
         ,   sThisBlockArgument
         ,   sThisBlockArgumentRefOff
+        ,   sGlobal
     };
 
     struct SimSource {
@@ -59,6 +60,10 @@ namespace das {
             type = SimSourceType::sCMResOff; 
             offset = ofs; 
         }
+        __forceinline void setGlobal(uint32_t ofs) { 
+            type = SimSourceType::sGlobal; 
+            offset = ofs; 
+        }
         __forceinline void setBlockCMResOfs(uint32_t asp, uint32_t ofs) { 
             type = SimSourceType::sBlockCMResOff; 
             argStackTop = asp;  
@@ -87,24 +92,11 @@ namespace das {
         __forceinline void setThisBlockArgument(int32_t i) { 
             type = SimSourceType::sThisBlockArgument; 
             index = i;
-            offset = 0;
-        }
-        __forceinline void setThisBlockArgumentRefOff(int32_t i, uint32_t ofs) { 
-            type = SimSourceType::sThisBlockArgumentRefOff; 
-            index = i;
-            offset = ofs;
         }
         __forceinline void setBlockArgument(uint32_t asp, int32_t i) { 
             type = SimSourceType::sBlockArgument; 
             argStackTop = asp;
             index = i;
-            offset = 0;
-        }
-        __forceinline void setBlockArgumentRefOff(uint32_t asp, int32_t i, uint32_t ofs) { 
-            type = SimSourceType::sBlockArgumentRefOff; 
-            argStackTop = asp;
-            index = i;
-            offset = ofs;
         }
         // compute
         __forceinline char * computeCMResOfs ( Context & context ) const { 
@@ -113,6 +105,9 @@ namespace das {
         __forceinline char * computeBlockCMResOfs ( Context & context ) const {
             auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
             return ba->copyOrMoveResult + offset;
+        }
+        __forceinline char * computeGlobal (Context & context) const {
+            return context.globals + offset;
         }
         __forceinline char * computeLocal ( Context & context ) const {
             return context.stack.sp() + stackTop;
@@ -1061,15 +1056,16 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // GLOBAL VARIABLE "GET"
-    struct SimNode_GetGlobal : SimNode {
+    struct SimNode_GetGlobal : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetGlobal ( const LineInfo & at, uint32_t o )
-            : SimNode(at), offset(o) {}
+        SimNode_GetGlobal ( const LineInfo & at, uint32_t o ) 
+            : SimNode_SourceBase(at) {
+            subexpr.setGlobal(o);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
-            return context.globals + offset;
+            return subexpr.computeGlobal(context);
         }
-        uint32_t    offset;
     };
 
     template <typename TT>
@@ -1078,12 +1074,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetGlobal(at,o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
-            TT * pR = (TT *)(context.globals + offset);
+            TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)(context.globals + offset);            \
+            return *(CTYPE *)compute(context);                      \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE

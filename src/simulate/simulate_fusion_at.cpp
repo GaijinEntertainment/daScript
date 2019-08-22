@@ -190,17 +190,17 @@ namespace das {
                     auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
                     return context->code->makeNode<SimNode_AtGlobLocR2VI>(node->debugInfo, \
                         atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->offset, gnode_r->subexpr.stackTop); \
+                            gnode_l->subexpr.offset, gnode_r->subexpr.stackTop); \
                 /* At(GetGlobal,ConstValue) */ \
                 } else if ( is(info,atnode->index,"ConstValue") ) { \
                     auto cnode_r = static_cast<SimNode_ConstValue *>(atnode->index); \
                     return context->code->makeNode<SimNode_AtGlobConst>(node->debugInfo, \
                         atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->offset, cnode_r->valueU); \
+                            gnode_l->subexpr.offset, cnode_r->valueU); \
                 } else { \
                     return context->code->makeNode<SimNode_AtGlobAny>(node->debugInfo, \
                         atnode->index, atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->offset); \
+                            gnode_l->subexpr.offset); \
                 } \
             /* At(GetLocal,*) */ \
             } else if ( is(info,atnode->value,"GetLocal") ) { \

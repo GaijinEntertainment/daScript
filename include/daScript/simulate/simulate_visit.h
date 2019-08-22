@@ -195,7 +195,7 @@ namespace das {
     SimNode * SimNode_GetGlobalR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(GetGlobalR2V);
-        V_ARG(offset);
+        subexpr.visit(vis);
         V_END();
     }
 

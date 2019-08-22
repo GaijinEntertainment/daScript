@@ -21,6 +21,9 @@ namespace das {
         case SimSourceType::sCMResOff:
             V_ARG(offset);
             break;
+        case SimSourceType::sGlobal:
+            V_ARG(offset);
+            break;
         case SimSourceType::sBlockCMResOff:
             V_SP(argStackTop);
             V_ARG(offset);
@@ -285,7 +288,7 @@ namespace das {
     SimNode * SimNode_GetGlobal::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GetGlobal);
-        V_ARG(offset);
+        subexpr.visit(vis);
         V_END();
     }
 
