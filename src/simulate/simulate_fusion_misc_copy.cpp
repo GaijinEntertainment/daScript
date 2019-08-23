@@ -71,149 +71,69 @@ namespace das {
         uint32_t size;
     };
 
+#define IMPLEMENT_OP2_COPYREF_NODE(COMPUTEL,COMPUTER) \
+    template <int typeSize> \
+    struct SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER : SimNode_Op2FusionCopyRef { \
+        virtual vec4f eval ( Context & context ) override { \
+            auto pl = l.compute##COMPUTEL(context); \
+            auto pr = r.compute##COMPUTER(context); \
+            CopyBytes<typeSize>::copy(pl, pr); \
+            return v_zero(); \
+        } \
+    }; \
+    struct SimNode_CopyRefValue_##COMPUTEL##_##COMPUTER : SimNode_Op2FusionCopyRef { \
+        virtual vec4f eval ( Context & context ) override { \
+            auto pl = l.compute##COMPUTEL(context); \
+            auto pr = r.compute##COMPUTER(context); \
+            memcpy(pl, pr, size); \
+            return v_zero(); \
+        } \
+    };
+
+#define MATCH_OP2_COPYREF_NODE(COMPUTEL,COMPUTER) \
+    if (isFastCopyBytes(size)) { \
+        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER>(size); \
+    } else { \
+        return context->code->makeNode<SimNode_CopyRefValue_##COMPUTEL##_##COMPUTER>(); \
+    }
+
+#define MATCH_OP2_COPYREF_LEFT_ANY(NODENAME,COMPUTEL) \
+    else if (is(info, node_l, NODENAME) ) { \
+        anyRight = true; \
+        MATCH_OP2_COPYREF_NODE(COMPUTEL,AnyPtr); \
+    } 
+
+#define MATCH_OP2_COPYREF(LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
+    else if (is(info, node_l, LNODENAME) && is(info, node_r, RNODENAME)) { \
+        MATCH_OP2_COPYREF_NODE(COMPUTEL,COMPUTER); \
+    } 
+
     // copy reference value
     //  *a = *b
     struct FusionPoint_MiscCopyRefValue : FusionPointOp2 {
         FusionPoint_MiscCopyRefValue() {}
-        template <int typeSize>
-        struct SimNode_CopyRefValueFixed : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeAnyPtr(context);
-                auto pr = r.computeAnyPtr(context);
-                CopyBytes<typeSize>::copy(pl, pr);
-                return v_zero();
-            }
-        };
-        template <int typeSize>
-        struct SimNode_CopyRefValueFixedLocAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeLocal(context);
-                auto pr = r.computeAnyPtr(context);
-                CopyBytes<typeSize>::copy(pl, pr);
-                return v_zero();
-            }
-        };
-        struct SimNode_CopyRefValueLocAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeLocal(context);
-                auto pr = r.computeAnyPtr(context);
-                memcpy(pl, pr, size);
-                return v_zero();
-            }
-            uint32_t stackTop_l;
-        };
-        template <int typeSize>
-        struct SimNode_CopyRefValueFixedLocLoc : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeLocal(context);
-                auto pr = r.computeLocal(context);
-                CopyBytes<typeSize>::copy(pl, pr);
-                return v_zero();
-            }
-        };
-        struct SimNode_CopyRefValueLocLoc : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeLocal(context);
-                auto pr = r.computeLocal(context);
-                memcpy(pl, pr, size);
-                return v_zero();
-            }
-        };
-        template <int typeSize>
-        struct SimNode_CopyRefValueFixedCmroAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeCMResOfs(context);
-                auto pr = r.computeAnyPtr(context);
-                CopyBytes<typeSize>::copy(pl, pr);
-                return v_zero();
-            }
-        };
-        struct SimNode_CopyRefValueCmroAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeCMResOfs(context);
-                auto pr = r.computeAnyPtr(context);
-                memcpy(pl, pr, size);
-                return v_zero();
-            }
-        };
-        template <int typeSize>
-        struct SimNode_CopyRefValueFixedGlrfAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeLocalRefOff(context);
-                auto pr = r.computeAnyPtr(context);
-                CopyBytes<typeSize>::copy(pl, pr);
-                return v_zero();
-            }
-        };
-        struct SimNode_CopyRefValueGlrfAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeLocalRefOff(context);
-                auto pr = r.computeAnyPtr(context);
-                memcpy(pl, pr, size);
-                return v_zero();
-            }
-        };
-        template <int typeSize>
-        struct SimNode_CopyRefValueFixedArgAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeArgumentRef(context);
-                auto pr = r.computeAnyPtr(context);
-                CopyBytes<typeSize>::copy(pl, pr);
-                return v_zero();
-            }
-        };
-        struct SimNode_CopyRefValueArgAny : SimNode_Op2FusionCopyRef {
-            virtual vec4f eval ( Context & context ) override {
-                auto pl = l.computeArgumentRef(context);
-                auto pr = r.computeAnyPtr(context);
-                memcpy(pl, pr, size);
-                return v_zero();
-            }
-        };
+        IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(Local, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(Local, Local);
+        IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, AnyPtr);
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             uint32_t size = crnode->size;
-            if (false) {
-            } else if (is(info, node_l, "GetLocal")) {
-                if (is(info, node_r, "GetLocal")) {
-                    if (isFastCopyBytes(size)) {
-                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocLoc>(size);
-                    } else {
-                        return context->code->makeNode<SimNode_CopyRefValueLocLoc>();
-                    }
-                } else {
-                    anyRight = true;
-                    if (isFastCopyBytes(size)) {
-                        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedLocAny>(size);
-                    } else {
-                        return context->code->makeNode<SimNode_CopyRefValueLocAny>();
-                    }
-                }
-            } else if (is(info, node_l, "GetCMResOfs")) {
-                anyRight = true;
-                if (isFastCopyBytes(size)) {
-                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedCmroAny>(size);
-                } else {
-                    return context->code->makeNode<SimNode_CopyRefValueCmroAny>();
-                }
-            } else if (is(info, node_l, "GetLocalRefOff")) {
-                anyRight = true;
-                if (isFastCopyBytes(size)) {
-                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedGlrfAny>(size);
-                } else {
-                    return context->code->makeNode<SimNode_CopyRefValueGlrfAny>();
-                }
-            } else if (is(info, node_l, "GetArgument")) {
-                anyRight = true;
-                if (isFastCopyBytes(size)) {
-                    return context->code->makeNodeUnroll<SimNode_CopyRefValueFixedArgAny>(size);
-                } else {
-                    return context->code->makeNode<SimNode_CopyRefValueArgAny>();
-                }
-            } else {
+            if (false) { } 
+            // *, *
+            MATCH_OP2_COPYREF("GetLocal","GetLocal",Local, Local)
+            // *, any
+            MATCH_OP2_COPYREF_LEFT_ANY("GetLocal",Local)
+            MATCH_OP2_COPYREF_LEFT_ANY("GetCMResOfs",CMResOfs)
+            MATCH_OP2_COPYREF_LEFT_ANY("GetLocalRefOff",LocalRefOff)
+            MATCH_OP2_COPYREF_LEFT_ANY("GetArgument",ArgumentRef)
+            // fallback
+            else {
                 if (isFastCopyBytes(size)) {
                     anyLeft = anyRight = true;
-                    context->code->makeNodeUnroll<SimNode_CopyRefValueFixed>(size);
+                    context->code->makeNodeUnroll<SimNode_CopyRefValueFixed_AnyPtr_AnyPtr>(size);
                 }
             }
             return nullptr;
