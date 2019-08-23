@@ -102,6 +102,9 @@ namespace das {
         __forceinline char * computeAnyPtr ( Context & context ) const { 
             return subexpr->evalPtr(context);
         }
+        __forceinline char * computeConst ( Context & ) const { 
+            return (char *)&value;
+        }
         __forceinline char * computeCMResOfs ( Context & context ) const { 
             return context.abiCopyOrMoveResult() + offset; 
         }
@@ -1394,30 +1397,21 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // CONST-VALUE
-    struct SimNode_ConstValue : SimNode {
+    struct SimNode_ConstValue : SimNode_SourceBase {
         SimNode_ConstValue(const LineInfo & at, vec4f c)
-            : SimNode(at), value(c) { }
+            : SimNode_SourceBase(at) { 
+            subexpr.setConstValue(c);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & )      override { return value; }
-        virtual char *      evalPtr(Context &)      override { return valuePtr; }
-        virtual int32_t     evalInt(Context &)      override { return valueI; }
-        virtual uint32_t    evalUInt(Context &)     override { return valueU; }
-        virtual int64_t     evalInt64(Context &)    override { return valueI64; }
-        virtual uint64_t    evalUInt64(Context &)   override { return valueU64; }
-        virtual float       evalFloat(Context &)    override { return valueF; }
-        virtual double      evalDouble(Context &)   override { return valueLF; }
-        virtual bool        evalBool(Context &)     override { return valueB; }
-        union {
-            vec4f       value;
-            char *      valuePtr;
-            int32_t     valueI;
-            uint32_t    valueU;
-            int64_t     valueI64;
-            uint64_t    valueU64;
-            float       valueF;
-            double      valueLF;
-            bool        valueB;
-        };
+        virtual vec4f       eval ( Context & )      override { return subexpr.value; }
+        virtual char *      evalPtr(Context &)      override { return subexpr.valuePtr; }
+        virtual int32_t     evalInt(Context &)      override { return subexpr.valueI; }
+        virtual uint32_t    evalUInt(Context &)     override { return subexpr.valueU; }
+        virtual int64_t     evalInt64(Context &)    override { return subexpr.valueI64; }
+        virtual uint64_t    evalUInt64(Context &)   override { return subexpr.valueU64; }
+        virtual float       evalFloat(Context &)    override { return subexpr.valueF; }
+        virtual double      evalDouble(Context &)   override { return subexpr.valueLF; }
+        virtual bool        evalBool(Context &)     override { return subexpr.valueB; }
     };
 
     struct SimNode_Zero : SimNode_CallBase {
@@ -1456,9 +1450,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pl = (TT *) l->evalPtr(context);
-            vec4f rr = r->eval(context);
-            TT * pr = (TT *) &rr;
-            *pl = *pr;
+            *pl = EvalTT<TT>::eval(context, r);
             return v_zero();
         }
         SimNode * l, * r;

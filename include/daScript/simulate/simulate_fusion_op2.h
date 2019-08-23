@@ -482,7 +482,7 @@
             /* OP(*,ConstValue) */ \
             if ( is(info,tnode->r,"ConstValue") ) { \
                 auto cnode = static_cast<SimNode_ConstValue *>(tnode->r); \
-                auto cvalue = cast<CONSTTYPE>::to(cnode->value); \
+                auto cvalue = cast<CONSTTYPE>::to(cnode->subexpr.value); \
                 /* OP(GetLocalR2V,ConstValue) */ \
                 if ( is(info,tnode->l,"GetLocalR2V") ) { \
                     auto r2vnode_l = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->l); \
@@ -497,7 +497,7 @@
             /* OP(ConstValue,*) */ \
             } else if ( is(info,tnode->l,"ConstValue") ) { \
                 auto cnode = static_cast<SimNode_ConstValue *>(tnode->l); \
-                auto cvalue = cast<CONSTTYPE>::to(cnode->value); \
+                auto cvalue = cast<CONSTTYPE>::to(cnode->subexpr.value); \
                 /* OP(ConstValue,GetLocalR2V) */ \
                 if ( is(info,tnode->r,"GetLocalR2V") ) { \
                     auto r2vnode_r = static_cast<SimNode_GetLocalR2V<CTYPE> *>(tnode->r); \

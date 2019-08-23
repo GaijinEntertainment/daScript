@@ -9,12 +9,6 @@
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_typedecl.h"
 
-/*
-TODO:
-    (BinNot_TT<uint> (GetLocalR2V_TT<uint> #448)
-    (Inc_TT<int> (GetLocal #48))
-*/
-
 namespace das {
 
 #define FUSION_OP_PTR_VALUE(CTYPE,expr)    *((CTYPE *)((expr)))

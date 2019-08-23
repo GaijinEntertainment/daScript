@@ -13,7 +13,7 @@ namespace das {
     void SimSource::visit(SimVisitor & vis) {
         switch (type) {
         case SimSourceType::sSimNode:
-            V_OP(ptr);
+            V_SUB(subexpr);
             break;
         case SimSourceType::sConstValue:
             V_ARG(value);
@@ -432,7 +432,7 @@ namespace das {
     SimNode * SimNode_ConstValue::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(ConstValue);
-        V_ARG(value);
+        subexpr.visit(vis);
         V_END();
     }
 

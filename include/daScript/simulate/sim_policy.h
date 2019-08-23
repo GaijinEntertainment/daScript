@@ -8,6 +8,7 @@ namespace  das {
 
     template <typename TT>
     struct SimPolicy_CoreType {
+        static __forceinline void Set ( TT & a, TT b, Context & ) { a = b;}
         static __forceinline bool Equ     ( TT a, TT b, Context & ) { return a == b;  }
         static __forceinline bool NotEqu  ( TT a, TT b, Context & ) { return a != b;  }
     };
@@ -220,6 +221,10 @@ namespace  das {
 
     template <typename TT, int mask>
     struct SimPolicy_Vec {
+        static __forceinline void Set  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *) a;
+            *pa = cast<TT>::to ( b );
+        }
         // setXYZW
         static __forceinline vec4f setXYZW ( float x, float y, float z, float w ) {
             return v_make_vec4f(x, y, z, w);
@@ -298,6 +303,10 @@ namespace  das {
 
     template <typename TT, int mask>
     struct SimPolicy_iVec {
+        static __forceinline void Set  ( char * a, vec4f b, Context & ) {
+            TT * pa = (TT *) a;
+            *pa = cast<TT>::to ( b );
+        }
         // setXYZW
         static __forceinline vec4f setXYZW ( int32_t x, int32_t y, int32_t z, int32_t w ) {
             return v_cast_vec4f(v_make_vec4i(x, y, z, w));

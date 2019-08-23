@@ -195,7 +195,7 @@ namespace das {
                     auto cnode_r = static_cast<SimNode_ConstValue *>(atnode->index); \
                     return context->code->makeNode<SimNode_AtGlobConst>(node->debugInfo, \
                         atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->subexpr.offset, cnode_r->valueU); \
+                            gnode_l->subexpr.offset, cnode_r->subexpr.valueU); \
                 } else { \
                     return context->code->makeNode<SimNode_AtGlobAny>(node->debugInfo, \
                         atnode->index, atnode->stride, atnode->offset, atnode->range, \
