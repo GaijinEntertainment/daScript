@@ -6,53 +6,47 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/ast/ast_typedecl.h"
+#include "daScript/simulate/simulate_fusion_op2set.h"
 
-#undef DAS_NODE
-#define DAS_NODE(TYPE,CTYPE)                                    \
-    virtual vec4f eval ( das::Context & context ) override {    \
-        compute(context);                                       \
-        return v_zero();                                        \
-    }
-
-#include "daScript/simulate/simulate_fusion_vec_settings.h"
-#include "daScript/simulate/simulate_fusion_op2.h"
+#define FUSION_OP2_PTR(CTYPE,expr)              ((expr))
+#define FUSION_OP2_RVALUE(CTYPE,expr)           (v_ldu((const float *)(expr)))
+#define FUSION_OP2_PTR_TO_LVALUE(expr)          ((expr))
 
 namespace das {
 
-    IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(SetAdd);
-    IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(SetSub);
-    IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(SetDiv);
-    IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(SetMod);
-    IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(SetMul);
+    IMPLEMENT_SETOP_NUMERIC_VEC(SetAdd);
+    IMPLEMENT_SETOP_NUMERIC_VEC(SetSub);
+    IMPLEMENT_SETOP_NUMERIC_VEC(SetDiv);
+    IMPLEMENT_SETOP_NUMERIC_VEC(SetMod);
+    IMPLEMENT_SETOP_NUMERIC_VEC(SetMul);
 
-    IMPLEMENT_SET_OP2_VEC_INTEGER_FUSION_POINT(SetBinAnd);
-    IMPLEMENT_SET_OP2_VEC_INTEGER_FUSION_POINT(SetBinOr);
-    IMPLEMENT_SET_OP2_VEC_INTEGER_FUSION_POINT(SetBinXor);
-    IMPLEMENT_SET_OP2_VEC_INTEGER_FUSION_POINT(SetBinShl);
-    IMPLEMENT_SET_OP2_VEC_INTEGER_FUSION_POINT(SetBinShr);
+    IMPLEMENT_SETOP_INTEGER_VEC(SetBinAnd);
+    IMPLEMENT_SETOP_INTEGER_VEC(SetBinOr);
+    IMPLEMENT_SETOP_INTEGER_VEC(SetBinXor);
+    IMPLEMENT_SETOP_INTEGER_VEC(SetBinShl);
+    IMPLEMENT_SETOP_INTEGER_VEC(SetBinShr);
 
-#undef FUSION_OP_PTR_VALUE_RIGHT
-#define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   (v_ld_x((const float *)(expr)))
+#define FUSION_OP2_RVALUE(CTYPE,expr)           (v_ld_x((const float *)(expr)))
 
-    IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(SetDivScal);
-    IMPLEMENT_SET_OP2_VEC_NUMERIC_FUSION_POINT(SetMulScal);
+    IMPLEMENT_SETOP_NUMERIC_VEC(SetDivScal);
+    IMPLEMENT_SETOP_NUMERIC_VEC(SetMulScal);
 
     void createFusionEngine_op2_set_vec()
     {
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(SetAdd);
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(SetSub);
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(SetDiv);
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(SetMod);
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(SetMul);
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(SetDivScal);
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(SetMulScal);
+        REGISTER_SETOP_NUMERIC_VEC(SetAdd);
+        REGISTER_SETOP_NUMERIC_VEC(SetSub);
+        REGISTER_SETOP_NUMERIC_VEC(SetDiv);
+        REGISTER_SETOP_NUMERIC_VEC(SetMod);
+        REGISTER_SETOP_NUMERIC_VEC(SetMul);
+        REGISTER_SETOP_NUMERIC_VEC(SetDivScal);
+        REGISTER_SETOP_NUMERIC_VEC(SetMulScal);
 
-        REGISTER_OP2_VEC_INTEGER_FUSION_POINT(SetBinAnd);
-        REGISTER_OP2_VEC_INTEGER_FUSION_POINT(SetBinOr);
-        REGISTER_OP2_VEC_INTEGER_FUSION_POINT(SetBinXor);
-        REGISTER_OP2_VEC_INTEGER_FUSION_POINT(SetBinShl);
-        REGISTER_OP2_VEC_INTEGER_FUSION_POINT(SetBinShr);
+        REGISTER_SETOP_INTEGER_VEC(SetBinAnd);
+        REGISTER_SETOP_INTEGER_VEC(SetBinOr);
+        REGISTER_SETOP_INTEGER_VEC(SetBinXor);
+        REGISTER_SETOP_INTEGER_VEC(SetBinShl);
+        REGISTER_SETOP_INTEGER_VEC(SetBinShr);
     }
 }
 
