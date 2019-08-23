@@ -1444,8 +1444,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // COPY VALUE
     template <typename TT>
-    struct SimNode_CopyValue : SimNode {
-        SimNode_CopyValue(const LineInfo & at, SimNode * ll, SimNode * rr)
+    struct SimNode_Set : SimNode {
+        SimNode_Set(const LineInfo & at, SimNode * ll, SimNode * rr)
             : SimNode(at), l(ll), r(rr) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {

@@ -89,7 +89,7 @@ namespace das
         } else if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
 
@@ -164,7 +164,7 @@ namespace das
         } else if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
 
@@ -239,7 +239,7 @@ namespace das
         } else if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
 
@@ -281,7 +281,7 @@ namespace das
         } else if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_CopyRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            return context.code->makeValueNode<SimNode_CopyValue>(rightType.baseType, at, left, right);
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
 

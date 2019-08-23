@@ -7,45 +7,14 @@
 #include "daScript/misc/copy_bytes.h"
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_typedecl.h"
+#include "daScript/simulate/simulate_fusion_op2set.h"
 
 namespace das {
-
-    //  &a = b
-    struct FusionPointOp2 : FusionPoint {
-        FusionPointOp2() {}
-        virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, SimNode *, Context *) {
-            return nullptr;
-        }
-        virtual void set(SimNode_Op2Fusion * result, SimNode * node) = 0;
-        virtual SimNode * fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) {
-            anyLeft = anyRight = false;
-            SimNode_Op2Fusion * result = (SimNode_Op2Fusion *) match(info,node,node_l,node_r,context);
-            if ( result ) { 
-                set(result,node); 
-                if ( !anyLeft && node_l->rtti_isSourceBase() ) {
-                    result->l = static_cast<SimNode_SourceBase *>(node_l)->subexpr;
-                } else {
-                    result->l.setSimNode(node_l);
-                }
-                if ( !anyRight && node_r->rtti_isSourceBase() ) {
-                    result->r = static_cast<SimNode_SourceBase *>(node_r)->subexpr;
-                } else {
-                    result->r.setSimNode(node_r);
-                }
-                return result; 
-            } else { 
-                return node; 
-            } 
-        }
-        bool anyLeft, anyRight;
-    };
 
     // copy reference
     //  &a = b
     struct FusionPoint_MiscCopyReference : FusionPointOp2 {
-        FusionPoint_MiscCopyReference() {}
         struct SimNode_CopyReferenceLocAny : SimNode_Op2Fusion {
             virtual vec4f eval ( Context & context ) override {
                 char  ** pl = (char **)l.computeLocal(context);
@@ -112,7 +81,6 @@ namespace das {
     // copy reference value
     //  *a = *b
     struct FusionPoint_MiscCopyRefValue : FusionPointOp2 {
-        FusionPoint_MiscCopyRefValue() {}
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(Local, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(Local, Local);
@@ -151,76 +119,7 @@ namespace das {
         }
     };
 
-#define FUSION_OP2_PTR(CTYPE,expr)              (((CTYPE *)(expr)))
-#define FUSION_OP2_RVALUE(CTYPE,expr)           (*((CTYPE *)(expr)))
-#define FUSION_OP2_PTR_TO_LVALUE(expr)          (*(expr))
-
-#define IMPLEMENT_OP2_SET_NODE_ANY(TYPE,CTYPE,COMPUTEL) \
-    struct SimNode_CopyValue_##COMPUTEL##_Any : SimNode_Op2Fusion { \
-        virtual vec4f eval ( Context & context ) override { \
-            auto pl = FUSION_OP2_PTR(CTYPE,l.compute##COMPUTEL(context)); \
-            auto rr = r.subexpr->eval##TYPE(context); \
-            SimPolicy<CTYPE>::Set(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context); \
-            return v_zero(); \
-        } \
-    }; 
-
-#define IMPLEMENT_OP2_SET_NODE(TYPE,CTYPE,COMPUTEL,COMPUTER) \
-        struct SimNode_CopyValue_##COMPUTEL##_##COMPUTER : SimNode_Op2Fusion { \
-            virtual vec4f eval ( Context & context ) override { \
-                auto pl = FUSION_OP2_PTR(CTYPE,l.compute##COMPUTEL(context)); \
-                auto rr = FUSION_OP2_RVALUE(CTYPE,r.compute##COMPUTER(context)); \
-                SimPolicy<CTYPE>::Set(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context); \
-                return v_zero(); \
-            } \
-        }; \
-
-#define MATCH_OP2_SET(LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
-    else if ( is(info, node_l,LNODENAME) &&  is(info,node_r,RNODENAME) ) { \
-        return context->code->makeNode<SimNode_CopyValue_##COMPUTEL##_##COMPUTER>(); \
-    } 
-
-#define MATCH_OP2_SET_ANY(LNODENAME,COMPUTEL) \
-    else if ( is(info, node_l,LNODENAME) ) { \
-        anyRight = true; \
-        return context->code->makeNode<SimNode_CopyValue_##COMPUTEL##_Any>(); \
-    } 
-
-    // copy value
-    //  *a = b
-#define IMPLEMENT_ANY_COPY_VALUE(TYPE,CTYPE) \
-    struct FusionPoint_MiscCopyValue_##CTYPE : FusionPointOp2 { \
-        FusionPoint_MiscCopyValue_##CTYPE() {} \
-        IMPLEMENT_OP2_SET_NODE(TYPE,CTYPE,Local,Const); \
-        IMPLEMENT_OP2_SET_NODE_ANY(TYPE,CTYPE,AnyPtr); \
-        IMPLEMENT_OP2_SET_NODE_ANY(TYPE,CTYPE,Local); \
-        IMPLEMENT_OP2_SET_NODE_ANY(TYPE,CTYPE,CMResOfs); \
-        IMPLEMENT_OP2_SET_NODE_ANY(TYPE,CTYPE,LocalRefOff); \
-        IMPLEMENT_OP2_SET_NODE_ANY(TYPE,CTYPE,ArgumentRef); \
-        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
-            if ( false ) {} \
-            MATCH_OP2_SET("GetLocal","ConstValue",Local,Const) \
-            MATCH_OP2_SET_ANY("GetLocal",Local) \
-            MATCH_OP2_SET_ANY("GetCMResOfs",CMResOfs) \
-            MATCH_OP2_SET_ANY("GetLocalRefOff",LocalRefOff) \
-            MATCH_OP2_SET_ANY("GetArgument",ArgumentRef) \
-            return nullptr; \
-        } \
-        virtual void set(SimNode_Op2Fusion * result, SimNode * node) override { \
-            result->set("CopyValue",Type(ToBasicType<CTYPE>::type),node->debugInfo); \
-        } \
-        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override { \
-            auto cnode = static_cast<SimNode_CopyValue<CTYPE> *>(node); \
-            return fuseOp2(info, node, cnode->l, cnode->r, context); \
-        } \
-    };
-
-#define IMPLEMENT_VEC_COPY_VALUE(CTYPE) \
-    IMPLEMENT_ANY_COPY_VALUE(,CTYPE)
-
-#define REGISTER_COPY_VALUE(CTYPE) \
-    (*g_fusionEngine)[fuseName("CopyValue",typeName<CTYPE>::name())].push_back(make_shared<FusionPoint_MiscCopyValue_##CTYPE>());
-
+/*
     IMPLEMENT_ANY_COPY_VALUE(Int,    int32_t);
     IMPLEMENT_ANY_COPY_VALUE(UInt,   uint32_t);
     IMPLEMENT_ANY_COPY_VALUE(Int64,  int64_t);
@@ -244,10 +143,12 @@ namespace das {
     IMPLEMENT_VEC_COPY_VALUE(float4);
     IMPLEMENT_VEC_COPY_VALUE(range);
     IMPLEMENT_VEC_COPY_VALUE(urange);
+*/
 
     void createFusionEngine_misc_copy_reference() {
         (*g_fusionEngine)["CopyReference"].push_back(make_shared<FusionPoint_MiscCopyReference>());
         (*g_fusionEngine)["CopyRefValue"].push_back(make_shared<FusionPoint_MiscCopyRefValue>());
+/*
         // scalar copy-value
         REGISTER_COPY_VALUE(int32_t);
         REGISTER_COPY_VALUE(uint32_t);
@@ -268,5 +169,6 @@ namespace das {
         REGISTER_COPY_VALUE(float4);
         REGISTER_COPY_VALUE(range);
         REGISTER_COPY_VALUE(urange);
+*/
     }
 }

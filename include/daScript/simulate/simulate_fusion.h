@@ -63,6 +63,15 @@ namespace das {
         SimSource       l, r;
     };
 
+    struct FusionPointOp2 : FusionPoint {
+        FusionPointOp2() {}
+        virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, SimNode *, Context *) = 0;
+        virtual void set(SimNode_Op2Fusion * result, SimNode * node) = 0;
+        virtual SimNode * fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context);
+        bool anyLeft, anyRight;
+    };
+
+
     string fuseName ( const string & name, const string & typeName );
     void resetFusionEngine();
     void createFusionEngine();

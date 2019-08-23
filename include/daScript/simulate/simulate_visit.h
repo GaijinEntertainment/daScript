@@ -245,9 +245,9 @@ namespace das {
     }
 
     template <typename TT>
-    SimNode * SimNode_CopyValue<TT>::visit ( SimVisitor & vis ) {
+    SimNode * SimNode_Set<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(CopyValue);
+        V_OP_TT(Set);
         V_SUB(l);
         V_SUB(r);
         V_END();
