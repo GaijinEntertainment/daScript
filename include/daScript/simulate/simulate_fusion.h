@@ -37,6 +37,32 @@ namespace das {
 
     const char * getSimSourceName(SimSourceType st);
 
+    struct SimNode_Op1Fusion : SimNode {
+        SimNode_Op1Fusion() : SimNode(LineInfo()) {}
+        void set(const char * opn, Type bt, const LineInfo & at) {
+            op = opn;
+            baseType = bt;
+            debugInfo = at;
+        }
+        virtual SimNode * visit(SimVisitor & vis) override;
+        const char *    op = nullptr;
+        Type            baseType;
+        SimSource       subexpr;
+    };
+
+    struct SimNode_Op2Fusion : SimNode {
+        SimNode_Op2Fusion() : SimNode(LineInfo()) {}
+        void set(const char * opn, Type bt, const LineInfo & at) {
+            op = opn;
+            baseType = bt;
+            debugInfo = at;
+        }
+        virtual SimNode * visit(SimVisitor & vis) override;
+        const char *    op = nullptr;
+        Type            baseType;
+        SimSource       l, r;
+    };
+
     string fuseName ( const string & name, const string & typeName );
     void resetFusionEngine();
     void createFusionEngine();

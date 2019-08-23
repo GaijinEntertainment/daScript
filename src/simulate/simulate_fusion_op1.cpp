@@ -7,6 +7,7 @@
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/ast/ast_typedecl.h"
 
 /*
 TODO:
@@ -15,24 +16,6 @@ TODO:
 */
 
 namespace das {
-
-    struct SimNode_Op1Fusion : SimNode_SourceBase {
-        SimNode_Op1Fusion() : SimNode_SourceBase(LineInfo()) {}
-        void set(const char * opn, const LineInfo & at) {
-            op = opn;
-            debugInfo = at;
-        }
-        virtual SimNode * visit(SimVisitor & vis) override {
-            V_BEGIN();
-            string name = op;
-            name += getSimSourceName(subexpr.type);
-            vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
-            subexpr.visit(vis);
-            V_END();
-        }
-        const char *    op = nullptr;
-        Type            baseType;
-    };
 
 #define FUSION_OP_PTR_VALUE(CTYPE,expr)    *((CTYPE *)((expr)))
 #define FUSION_OP_PTR_RVALUE(CTYPE,expr)   ((CTYPE *)((expr)))
@@ -71,7 +54,7 @@ namespace das {
             MATCH_ANY_OP1_NODE("GetLocalR2V",Local) \
             MATCH_ANY_OP1_NODE("GetArgument",Argument) \
             if ( result ) { \
-                result->set(#OPNAME,tnode->debugInfo); \
+                result->set(#OPNAME,Type(ToBasicType<CTYPE>::type),tnode->debugInfo); \
                 SimNode_SourceBase * sbnode = static_cast<SimNode_SourceBase *>(tnode->x); \
                 result->subexpr = sbnode->subexpr; \
                 return result; \
@@ -91,7 +74,7 @@ namespace das {
             if ( false ) {} \
             MATCH_ANY_OP1_NODE("GetLocal",Local) \
             if ( result ) { \
-                result->set(#OPNAME,tnode->debugInfo); \
+                result->set(#OPNAME,Type(ToBasicType<CTYPE>::type),tnode->debugInfo); \
                 SimNode_SourceBase * sbnode = static_cast<SimNode_SourceBase *>(tnode->x); \
                 result->subexpr = sbnode->subexpr; \
                 return result; \

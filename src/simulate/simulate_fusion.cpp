@@ -7,8 +7,37 @@
 #include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
+#include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
+
+    SimNode * SimNode_Op1Fusion::visit(SimVisitor & vis) {
+        V_BEGIN();
+        string name = op;
+        name += getSimSourceName(subexpr.type);
+        if (baseType != Type::none) {
+            vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
+        } else {
+            vis.op(name.c_str());
+        }
+        subexpr.visit(vis);
+        V_END();
+    }
+
+    SimNode * SimNode_Op2Fusion::visit(SimVisitor & vis) {
+        V_BEGIN();
+        string name = op;
+        name += getSimSourceName(l.type);
+        name += getSimSourceName(r.type);
+        if (baseType != Type::none) {
+            vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
+        } else {
+            vis.op(name.c_str());
+        }
+        l.visit(vis);
+        r.visit(vis);
+        V_END();
+    }
 
     const char * getSimSourceName(SimSourceType st) {
         switch ( st ) {

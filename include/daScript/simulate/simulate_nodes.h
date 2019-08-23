@@ -99,6 +99,9 @@ namespace das {
             index = i;
         }
         // compute
+        __forceinline char * computeAnyPtr ( Context & context ) const { 
+            return subexpr->evalPtr(context);
+        }
         __forceinline char * computeCMResOfs ( Context & context ) const { 
             return context.abiCopyOrMoveResult() + offset; 
         }
