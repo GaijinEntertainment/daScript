@@ -6,7 +6,7 @@ require testProfile
 def fibR(n)
     if (n < 2)
         return n
-	return fibR(n - 1) + fibR(n - 2)
+    return fibR(n - 1) + fibR(n - 2)
 
 [sideeffects]
 def fibI(n)
