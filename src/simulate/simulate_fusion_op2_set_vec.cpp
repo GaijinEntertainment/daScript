@@ -7,11 +7,8 @@
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast_typedecl.h"
-#include "daScript/simulate/simulate_fusion_op2set.h"
-
-#define FUSION_OP2_PTR(CTYPE,expr)              ((expr))
-#define FUSION_OP2_RVALUE(CTYPE,expr)           (v_ldu((const float *)(expr)))
-#define FUSION_OP2_PTR_TO_LVALUE(expr)          ((expr))
+#include "daScript/simulate/simulate_fusion_op2.h"
+#include "daScript/simulate/simulate_fusion_op2_vec_settings.h"
 
 namespace das {
 
@@ -27,7 +24,7 @@ namespace das {
     IMPLEMENT_SETOP_INTEGER_VEC(SetBinShl);
     IMPLEMENT_SETOP_INTEGER_VEC(SetBinShr);
 
-#define FUSION_OP2_RVALUE(CTYPE,expr)           (v_ld_x((const float *)(expr)))
+#define FUSION_OP2_RVALUE_RIGHT(CTYPE,expr)     (v_ld_x((const float *)(expr)))
 
     IMPLEMENT_SETOP_NUMERIC_VEC(SetDivScal);
     IMPLEMENT_SETOP_NUMERIC_VEC(SetMulScal);

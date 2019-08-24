@@ -6,27 +6,28 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinAnd);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinOr);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinXor);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinShl);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinShr);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinRotl);
-    IMPLEMENT_OP2_INTEGER_FUSION_POINT(BinRotr);
+
+    IMPLEMENT_OP2_INTEGER(BinAnd);
+    IMPLEMENT_OP2_INTEGER(BinOr);
+    IMPLEMENT_OP2_INTEGER(BinXor);
+    IMPLEMENT_OP2_INTEGER(BinShl);
+    IMPLEMENT_OP2_INTEGER(BinShr);
+    IMPLEMENT_OP2_INTEGER(BinRotl);
+    IMPLEMENT_OP2_INTEGER(BinRotr);
 
     void createFusionEngine_op2_bin()
     {
-        REGISTER_OP2_INTEGER_FUSION_POINT(BinAnd);
-        REGISTER_OP2_INTEGER_FUSION_POINT(BinOr);
-        REGISTER_OP2_INTEGER_FUSION_POINT(BinXor);
-        REGISTER_OP2_INTEGER_FUSION_POINT(BinShl);
-        REGISTER_OP2_INTEGER_FUSION_POINT(BinShr);
-        REGISTER_OP2_INTEGER_FUSION_POINT(BinRotl);
-        REGISTER_OP2_INTEGER_FUSION_POINT(BinRotr);
+        REGISTER_OP2_INTEGER(BinAnd);
+        REGISTER_OP2_INTEGER(BinOr);
+        REGISTER_OP2_INTEGER(BinXor);
+        REGISTER_OP2_INTEGER(BinShl);
+        REGISTER_OP2_INTEGER(BinShr);
+        REGISTER_OP2_INTEGER(BinRotl);
+        REGISTER_OP2_INTEGER(BinRotr);
     }
 }
 

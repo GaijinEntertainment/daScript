@@ -6,27 +6,27 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_visit_op.h"
-
+#include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
+
 
 namespace das {
 
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(Equ);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(NotEqu);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(LessEqu);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(GtEqu);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(Gt);
-    IMPLEMENT_BOOL_OP2_NUMERIC_FUSION_POINT(Less);
+    IMPLEMENT_OP2_NUMERIC(Equ);
+    IMPLEMENT_OP2_NUMERIC(NotEqu);
+    IMPLEMENT_OP2_NUMERIC(LessEqu);
+    IMPLEMENT_OP2_NUMERIC(GtEqu);
+    IMPLEMENT_OP2_NUMERIC(Gt);
+    IMPLEMENT_OP2_NUMERIC(Less);
 
     void createFusionEngine_op2_bool()
     {
-        REGISTER_OP2_NUMERIC_FUSION_POINT(Equ);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(NotEqu);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(LessEqu);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(GtEqu);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(Gt);
-        REGISTER_OP2_NUMERIC_FUSION_POINT(Less);
+        REGISTER_OP2_NUMERIC(Equ);
+        REGISTER_OP2_NUMERIC(NotEqu);
+        REGISTER_OP2_NUMERIC(LessEqu);
+        REGISTER_OP2_NUMERIC(GtEqu);
+        REGISTER_OP2_NUMERIC(Gt);
+        REGISTER_OP2_NUMERIC(Less);
     }
 }
 

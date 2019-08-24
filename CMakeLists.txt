@@ -151,8 +151,9 @@ src/simulate/simulate_fusion_op2_scalar_vec.cpp
 src/simulate/simulate_fusion_at.cpp
 src/simulate/simulate_fusion_misc_copy.cpp
 include/daScript/simulate/simulate_fusion.h
+include/daScript/simulate/simulate_fusion_op2_old.h
 include/daScript/simulate/simulate_fusion_op2.h
-include/daScript/simulate/simulate_fusion_vec_settings.h
+include/daScript/simulate/simulate_fusion_op2_vec_settings.h
 )
 list(SORT SIMULATE_FUSION_SRC)
 SOURCE_GROUP_FILES("fusion" SIMULATE_FUSION_SRC)
@@ -422,7 +423,7 @@ list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 SET(TEST_GENERATED_SRC)
-DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC)
+#DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}

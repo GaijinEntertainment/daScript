@@ -6,20 +6,23 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_visit_op.h"
-
-#include "daScript/simulate/simulate_fusion_vec_settings.h"
+#include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
+#include "daScript/simulate/simulate_fusion_op2_vec_settings.h"
 
 namespace das {
 
+    /*
     IMPLEMENT_BOOL_OP2_VEC_NUMERIC_FUSION_POINT(Equ);
     IMPLEMENT_BOOL_OP2_VEC_NUMERIC_FUSION_POINT(NotEqu);
+    */
 
     void createFusionEngine_op2_bool_vec()
     {
+        /*
         REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(Equ);
         REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(NotEqu);
+        */
     }
 }
 

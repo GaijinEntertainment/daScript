@@ -2,7 +2,7 @@
 // options logCpp=true
 // options logNodes=true
 
-// options noaot=true, fusion=true
+options noaot=true, fusion=true
 
 require math
 require PathTracerHelper

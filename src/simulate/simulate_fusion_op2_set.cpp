@@ -7,7 +7,7 @@
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast_typedecl.h"
-#include "daScript/simulate/simulate_fusion_op2set.h"
+#include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
 

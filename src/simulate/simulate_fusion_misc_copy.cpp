@@ -119,56 +119,8 @@ namespace das {
         }
     };
 
-/*
-    IMPLEMENT_ANY_COPY_VALUE(Int,    int32_t);
-    IMPLEMENT_ANY_COPY_VALUE(UInt,   uint32_t);
-    IMPLEMENT_ANY_COPY_VALUE(Int64,  int64_t);
-    IMPLEMENT_ANY_COPY_VALUE(UInt64, uint64_t);
-    IMPLEMENT_ANY_COPY_VALUE(Float,  float);    
-    IMPLEMENT_ANY_COPY_VALUE(Double, double);
-    IMPLEMENT_ANY_COPY_VALUE(Bool,   bool);
-
-#define FUSION_OP2_PTR(CTYPE,expr)              (((char *)(expr)))
-#define FUSION_OP2_RVALUE(CTYPE,expr)           ((v_ldu((const float *)expr)))
-#define FUSION_OP2_PTR_TO_LVALUE(expr)          ((expr))
-
-    IMPLEMENT_VEC_COPY_VALUE(int2);
-    IMPLEMENT_VEC_COPY_VALUE(int3);
-    IMPLEMENT_VEC_COPY_VALUE(int4);
-    IMPLEMENT_VEC_COPY_VALUE(uint2);
-    IMPLEMENT_VEC_COPY_VALUE(uint3);
-    IMPLEMENT_VEC_COPY_VALUE(uint4);
-    IMPLEMENT_VEC_COPY_VALUE(float2);
-    IMPLEMENT_VEC_COPY_VALUE(float3);
-    IMPLEMENT_VEC_COPY_VALUE(float4);
-    IMPLEMENT_VEC_COPY_VALUE(range);
-    IMPLEMENT_VEC_COPY_VALUE(urange);
-*/
-
     void createFusionEngine_misc_copy_reference() {
         (*g_fusionEngine)["CopyReference"].push_back(make_shared<FusionPoint_MiscCopyReference>());
         (*g_fusionEngine)["CopyRefValue"].push_back(make_shared<FusionPoint_MiscCopyRefValue>());
-/*
-        // scalar copy-value
-        REGISTER_COPY_VALUE(int32_t);
-        REGISTER_COPY_VALUE(uint32_t);
-        REGISTER_COPY_VALUE(int64_t);
-        REGISTER_COPY_VALUE(uint64_t);
-        REGISTER_COPY_VALUE(float);
-        REGISTER_COPY_VALUE(double);
-        REGISTER_COPY_VALUE(bool);
-        // vector copy-value
-        REGISTER_COPY_VALUE(int2);
-        REGISTER_COPY_VALUE(int3);
-        REGISTER_COPY_VALUE(int4);
-        REGISTER_COPY_VALUE(uint2);
-        REGISTER_COPY_VALUE(uint3);
-        REGISTER_COPY_VALUE(uint4);
-        REGISTER_COPY_VALUE(float2);
-        REGISTER_COPY_VALUE(float3);
-        REGISTER_COPY_VALUE(float4);
-        REGISTER_COPY_VALUE(range);
-        REGISTER_COPY_VALUE(urange);
-*/
     }
 }

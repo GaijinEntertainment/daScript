@@ -46,7 +46,7 @@ bool unit_test ( const string & fn ) {
             AotListBase::registerAot(aotLib);
             program->linkCppAot(ctx, aotLib, tout);
 #endif
-#if 1
+#if 0
             int width = 1280;
             int height = 720;
             int frameCount = 16;

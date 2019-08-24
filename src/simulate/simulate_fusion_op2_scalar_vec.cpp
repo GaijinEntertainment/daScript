@@ -6,21 +6,13 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/simulate/simulate_visit_op.h"
-
-// fake DAS_NODE to support regular eval
-#undef DAS_NODE
-#define DAS_NODE(TYPE,CTYPE)                                    \
-    virtual vec4f eval ( das::Context & context ) override {    \
-        return compute(context);                                \
-    }
-
-#include "daScript/simulate/simulate_fusion_vec_settings.h"
-
+#include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
+#include "daScript/simulate/simulate_fusion_op2_vec_settings.h"
 
 namespace das {
 
+    /*
 #undef FUSION_OP_PTR_VALUE_RIGHT
 #define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   (v_ld_x((const float *)(expr)))
 
@@ -34,13 +26,16 @@ namespace das {
 
     IMPLEMENT_OP2_VEC_NUMERIC_FUSION_POINT(MulScalVec);
     IMPLEMENT_OP2_VEC_NUMERIC_FUSION_POINT(DivScalVec);
+    */
 
     void createFusionEngine_op2_scalar_vec()
     {
+        /*
         REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(MulVecScal);
         REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(DivVecScal);
         REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(MulScalVec);
         REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(DivScalVec);
+        */
     }
 }
 
