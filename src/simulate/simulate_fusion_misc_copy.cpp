@@ -8,7 +8,7 @@
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast_typedecl.h"
-#include "daScript/simulate/simulate_fusion_op2set.h"
+#include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
 
@@ -84,6 +84,7 @@ namespace das {
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(Local, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(Local, Local);
+        IMPLEMENT_OP2_COPYREF_NODE(Local, ThisBlockArgument);
         IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, AnyPtr);
@@ -93,6 +94,7 @@ namespace das {
             if (false) { } 
             // *, *
             MATCH_OP2_COPYREF("GetLocal","GetLocal",Local, Local)
+            MATCH_OP2_COPYREF("GetLocal","GetThisBlockArgument",Local, ThisBlockArgument)
             // *, any
             MATCH_OP2_COPYREF_LEFT_ANY("GetLocal",Local)
             MATCH_OP2_COPYREF_LEFT_ANY("GetCMResOfs",CMResOfs)

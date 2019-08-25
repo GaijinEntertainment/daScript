@@ -40,7 +40,7 @@ namespace das {
             V_SP(index);
             break;
         case SimSourceType::sArgumentRefOff:
-        case SimSourceType::sThisBlockArgumentRefOff:
+        case SimSourceType::sThisBlockArgumentRef:
             V_SP(index);
             V_ARG(offset);
             break;
@@ -48,7 +48,7 @@ namespace das {
             V_SP(argStackTop);
             V_SP(index);
             break;
-        case SimSourceType::sBlockArgumentRefOff:
+        case SimSourceType::sBlockArgumentRef:
             V_SP(argStackTop);
             V_SP(index);
             V_ARG(offset);

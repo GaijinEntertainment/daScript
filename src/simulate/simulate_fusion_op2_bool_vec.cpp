@@ -10,19 +10,24 @@
 #include "daScript/simulate/simulate_fusion_op2.h"
 #include "daScript/simulate/simulate_fusion_op2_vec_settings.h"
 
+// fake DAS_NODE to support boolean eval
+#define DAS_NODE(TYPE,CTYPE)                                    \
+    virtual bool evalBool ( das::Context & context ) override { \
+        return compute(context);                                \
+    }                                                           \
+    virtual vec4f eval ( das::Context & context ) override {    \
+        return cast<bool>::from(compute(context));              \
+    }
+
 namespace das {
 
-    /*
-    IMPLEMENT_BOOL_OP2_VEC_NUMERIC_FUSION_POINT(Equ);
-    IMPLEMENT_BOOL_OP2_VEC_NUMERIC_FUSION_POINT(NotEqu);
-    */
+    IMPLEMENT_OP2_NUMERIC_VEC(Equ);
+    IMPLEMENT_OP2_NUMERIC_VEC(NotEqu);
 
     void createFusionEngine_op2_bool_vec()
     {
-        /*
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(Equ);
-        REGISTER_OP2_VEC_NUMERIC_FUSION_POINT(NotEqu);
-        */
+        REGISTER_OP2_NUMERIC_VEC(Equ);
+        REGISTER_OP2_NUMERIC_VEC(NotEqu);
     }
 }
 

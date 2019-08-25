@@ -69,11 +69,11 @@ namespace das {
         case SimSourceType::sLocal:                            return "Loc";
         case SimSourceType::sLocalRefOff:                      return "Locro";
         case SimSourceType::sArgument:                         return "Arg";
-        case SimSourceType::sArgumentRefOff:                   return "Argo";
+        case SimSourceType::sArgumentRefOff:                   return "Argro";
         case SimSourceType::sBlockArgument:                    return "Barg";
-        case SimSourceType::sBlockArgumentRefOff:              return "Bargo";
+        case SimSourceType::sBlockArgumentRef:                 return "Bargr";
         case SimSourceType::sThisBlockArgument:                return "Tbarg";
-        case SimSourceType::sThisBlockArgumentRefOff:          return "Tbargo";
+        case SimSourceType::sThisBlockArgumentRef:             return "Tbargr";
         case SimSourceType::sGlobal:                           return "Glob";
         };
         return "???";

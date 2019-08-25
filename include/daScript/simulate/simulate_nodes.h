@@ -16,9 +16,9 @@ namespace das {
         ,   sArgument
         ,   sArgumentRefOff
         ,   sBlockArgument
-        ,   sBlockArgumentRefOff
+        ,   sBlockArgumentRef
         ,   sThisBlockArgument
-        ,   sThisBlockArgumentRefOff
+        ,   sThisBlockArgumentRef
         ,   sGlobal
     };
 
@@ -93,8 +93,17 @@ namespace das {
             type = SimSourceType::sThisBlockArgument; 
             index = i;
         }
+        __forceinline void setThisBlockArgumentRef(int32_t i) { 
+            type = SimSourceType::sThisBlockArgumentRef; 
+            index = i;
+        }
         __forceinline void setBlockArgument(uint32_t asp, int32_t i) { 
             type = SimSourceType::sBlockArgument; 
+            argStackTop = asp;
+            index = i;
+        }
+        __forceinline void setBlockArgumentRef(uint32_t asp, int32_t i) { 
+            type = SimSourceType::sBlockArgumentRef; 
             argStackTop = asp;
             index = i;
         }
@@ -997,7 +1006,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <typename TT>
     struct SimNode_GetBlockArgumentR2V : SimNode_GetBlockArgument {
         SimNode_GetBlockArgumentR2V ( const LineInfo & at, int32_t i, uint32_t sp )
-            : SimNode_GetBlockArgument(at,i,sp) {}
+            : SimNode_GetBlockArgument(at,i,sp) {
+            subexpr.setBlockArgumentRef(sp, i);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
             return subexpr.computeBlockArgumentRef(context);
@@ -1018,7 +1029,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetThisBlockArgument : SimNode_SourceBase {
         SimNode_GetThisBlockArgument ( const LineInfo & at, int32_t i )
             : SimNode_SourceBase(at) {
-            subexpr.setArgument(i);
+            subexpr.setThisBlockArgument(i);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
@@ -1045,7 +1056,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <typename TT>
     struct SimNode_GetThisBlockArgumentR2V : SimNode_GetThisBlockArgument {
         SimNode_GetThisBlockArgumentR2V ( const LineInfo & at, int32_t i )
-            : SimNode_GetThisBlockArgument(at,i) {}
+            : SimNode_GetThisBlockArgument(at,i) {
+            subexpr.setThisBlockArgumentRef(i);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
             return subexpr.computeThisBlockArgumentRef(context);

@@ -149,21 +149,23 @@
     REGISTER_SETOP_VEC(OPNAME,float3 ); \
     REGISTER_SETOP_VEC(OPNAME,float4 );
 
-#define IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,COMPUTER) \
-    struct SimNode_##OPNAME##_Any_##COMPUTER : SimNode_Op2Fusion { \
+// OP(COMPUTEL,*) 
+#define IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2Fusion { \
         __forceinline auto compute ( Context & context ) { \
-            auto ll = FUSION_OP2_RVALUE_LEFT(CTYPE,l.compute##COMPUTER(context)); \
-            auto rr = r.subexpr->eval##TYPE(context); \
+            auto ll = l.subexpr->eval##TYPE(context); \
+            auto rr = FUSION_OP2_RVALUE_RIGHT(CTYPE,r.compute##COMPUTEL(context)); \
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
         } \
         DAS_NODE(TYPE,CTYPE); \
     }; 
 
-#define IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,COMPUTEL) \
-    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2Fusion { \
+// OP((*,COMPUTER)
+#define IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2Fusion { \
         __forceinline auto compute ( Context & context ) { \
-            auto ll = l.subexpr->eval##TYPE(context); \
-            auto rr = FUSION_OP2_RVALUE_RIGHT(CTYPE,r.compute##COMPUTEL(context)); \
+            auto ll = FUSION_OP2_RVALUE_LEFT (CTYPE,l.compute##COMPUTER(context)); \
+            auto rr = r.subexpr->eval##TYPE(context); \
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
         } \
         DAS_NODE(TYPE,CTYPE); \
@@ -180,33 +182,45 @@
     }; 
 
 #define MATCH_OP2(OPNAME,LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
-    else if ( is(info, node_l,LNODENAME) &&  is(info,node_r,RNODENAME) ) { \
+    else if ( is(info,node_l,LNODENAME) &&  is(info,node_r,RNODENAME) ) { \
         return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER>(); \
     } 
 
 #define MATCH_OP2_ANYR(OPNAME,LNODENAME,COMPUTEL) \
-    else if ( is(info, node_l,LNODENAME) ) { \
+    else if ( is(info,node_l,LNODENAME) ) { \
         anyRight = true; \
         return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_Any>(); \
     } 
 
 #define MATCH_OP2_ANYL(OPNAME,RNODENAME,COMPUTER) \
-    else if ( is(info, node_r,RNODENAME) ) { \
+    else if ( is(info,node_r,RNODENAME) ) { \
         anyLeft = true; \
-        return context->code->makeNode<SimNode_##OPNAME##_##COMPUTER##_Any>(); \
+        return context->code->makeNode<SimNode_##OPNAME##_Any_##COMPUTER>(); \
     } 
 
 //  SimPolicy::Set##OPNAME(a,b)
 #define IMPLEMENT_ANY_OP2(OPNAME,TYPE,CTYPE) \
     struct FusionPoint_##OPNAME##_##CTYPE : FusionPointOp2 { \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgument,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgument,Argument); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Argument); \
-        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Argument); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,ThisBlockArgumentRef); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Argument); \
+        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Argument); \
+        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
             if ( false ) {} \
+            MATCH_OP2(OPNAME,"GetThisBlockArgumentR2V","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
+            MATCH_OP2(OPNAME,"GetThisBlockArgument","GetThisBlockArgument",ThisBlockArgument,ThisBlockArgument) \
+            MATCH_OP2(OPNAME,"GetThisBlockArgument","GetArgument",ThisBlockArgument,Argument) \
             MATCH_OP2(OPNAME,"GetArgument","GetArgument",Argument,Argument) \
+            MATCH_OP2(OPNAME,"GetLocalR2V","GetThisBlockArgumentR2V",Local,ThisBlockArgumentRef) \
+            MATCH_OP2_ANYR(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYL(OPNAME,"GetArgument",Argument) \
-            MATCH_OP2_ANYL(OPNAME,"GetArgument",Argument) \
+            MATCH_OP2_ANYR(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
+            MATCH_OP2_ANYL(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
             return nullptr; \
         } \
         virtual void set(SimNode_Op2Fusion * result, SimNode * node) override { \
