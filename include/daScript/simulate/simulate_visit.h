@@ -152,9 +152,9 @@ namespace das {
     }
 
     template <typename TT>
-    SimNode * SimNode_GetLocalRefR2VOff<TT>::visit ( SimVisitor & vis ) {
+    SimNode * SimNode_GetLocalRefOffR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(GetLocalRefR2VOff);
+        V_OP_TT(GetLocalRefOffR2V);
         subexpr.visit(vis);
         V_END();
     }
@@ -168,9 +168,9 @@ namespace das {
     }
 
     template <typename TT>
-    SimNode * SimNode_GetArgumentRefR2VOff<TT>::visit ( SimVisitor & vis ) {
+    SimNode * SimNode_GetArgumentRefOffR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(GetArgumentRefR2VOff);
+        V_OP_TT(GetArgumentRefOffR2V);
         subexpr.visit(vis);
         V_END();
     }

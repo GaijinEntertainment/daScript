@@ -827,8 +827,8 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     template <typename TT>
-    struct SimNode_GetLocalRefR2VOff : SimNode_GetLocalRefOff {
-        SimNode_GetLocalRefR2VOff(const LineInfo & at, uint32_t sp, uint32_t o)
+    struct SimNode_GetLocalRefOffR2V : SimNode_GetLocalRefOff {
+        SimNode_GetLocalRefOffR2V(const LineInfo & at, uint32_t sp, uint32_t o)
             : SimNode_GetLocalRefOff(at,sp,o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -959,8 +959,8 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     template <typename TT>
-    struct SimNode_GetArgumentRefR2VOff : SimNode_GetArgumentRefOff {
-        SimNode_GetArgumentRefR2VOff ( const LineInfo & at, int32_t i, uint32_t o )
+    struct SimNode_GetArgumentRefOffR2V : SimNode_GetArgumentRefOff {
+        SimNode_GetArgumentRefOffR2V ( const LineInfo & at, int32_t i, uint32_t o )
             : SimNode_GetArgumentRefOff(at,i, o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {

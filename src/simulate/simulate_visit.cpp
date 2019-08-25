@@ -252,7 +252,7 @@ namespace das {
 
     SimNode * SimNode_GetArgumentRefOff::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP(GetArgumentOff);
+        V_OP(GetArgumentRefOff);
         subexpr.visit(vis);
         V_END();
     }

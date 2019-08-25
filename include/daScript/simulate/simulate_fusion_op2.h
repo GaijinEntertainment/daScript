@@ -41,9 +41,11 @@
     struct FusionPoint_Set_##OPNAME##_##CTYPE : FusionPointOp2 { \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,Local,Const); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,Local,Local); \
+        IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,Local,LocalRefOff); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,LocalRefOff); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Argument); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,ArgumentRefOff,ArgumentRefOff); \
+        IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,ArgumentRef,Argument); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgumentRef); \
         IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,AnyPtr); \
@@ -57,9 +59,11 @@
             if ( false ) {} \
             MATCH_OP2_SET(OPNAME,"GetLocal","ConstValue",Local,Const) \
             MATCH_OP2_SET(OPNAME,"GetLocal","GetLocalR2V",Local,Local) \
+            MATCH_OP2_SET(OPNAME,"GetLocal","GetLocalRefOffR2V",Local,LocalRefOff) \
             MATCH_OP2_SET(OPNAME,"GetLocalRefOff","GetLocalRefOffR2V",LocalRefOff,LocalRefOff) \
             MATCH_OP2_SET(OPNAME,"GetLocalRefOff","GetArgument",LocalRefOff,Argument) \
             MATCH_OP2_SET(OPNAME,"GetArgumentRefOff","GetArgumentRefOffR2V",ArgumentRefOff,ArgumentRefOff) \
+            MATCH_OP2_SET(OPNAME,"GetArgument","GetArgument",ArgumentRef,Argument) \
             MATCH_OP2_SET(OPNAME,"GetThisBlockArgument","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
             MATCH_OP2_SET(OPNAME,"GetThisBlockArgument","GetThisBlockArgumentR2V",ThisBlockArgumentRef,ThisBlockArgumentRef) \
             MATCH_OP2_SET_ANY(OPNAME,"GetLocal",Local) \
@@ -206,10 +210,15 @@
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgument,Argument); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Argument); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,ThisBlockArgumentRef); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Const); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Argument); \
         IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Argument); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
         IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Const); \
+        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Const); \
+        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Local); \
+        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Local); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
             if ( false ) {} \
             MATCH_OP2(OPNAME,"GetThisBlockArgumentR2V","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
@@ -217,10 +226,15 @@
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetArgument",ThisBlockArgument,Argument) \
             MATCH_OP2(OPNAME,"GetArgument","GetArgument",Argument,Argument) \
             MATCH_OP2(OPNAME,"GetLocalR2V","GetThisBlockArgumentR2V",Local,ThisBlockArgumentRef) \
+            MATCH_OP2(OPNAME,"GetLocalR2V","ConstValue",Local,Const) \
             MATCH_OP2_ANYR(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYL(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYR(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
             MATCH_OP2_ANYL(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
+            MATCH_OP2_ANYR(OPNAME,"ConstValue",Const) \
+            MATCH_OP2_ANYL(OPNAME,"ConstValue",Const) \
+            MATCH_OP2_ANYR(OPNAME,"GetLocalR2V",Local) \
+            MATCH_OP2_ANYL(OPNAME,"GetLocalR2V",Local) \
             return nullptr; \
         } \
         virtual void set(SimNode_Op2Fusion * result, SimNode * node) override { \

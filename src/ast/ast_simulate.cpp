@@ -1239,7 +1239,7 @@ namespace das
         } else if ( local ) {
             if ( variable->type->ref ) {
                 if ( r2vType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_GetLocalRefR2VOff>(r2vType, at,
+                    return context.code->makeValueNode<SimNode_GetLocalRefOffR2V>(r2vType, at,
                                                     variable->stackTop, extraOffset);
                 } else {
                     return context.code->makeNode<SimNode_GetLocalRefOff>(at,
@@ -1262,7 +1262,7 @@ namespace das
         } else if ( argument ) {
             if ( variable->type->isRef() ) {
                 if ( r2vType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_GetArgumentRefR2VOff>(r2vType, at, argumentIndex, extraOffset);
+                    return context.code->makeValueNode<SimNode_GetArgumentRefOffR2V>(r2vType, at, argumentIndex, extraOffset);
                 } else {
                     return context.code->makeNode<SimNode_GetArgumentRefOff>(at, argumentIndex, extraOffset);
                 }

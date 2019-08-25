@@ -270,12 +270,19 @@ namespace das
     struct ManagedVectorAnnotation<OT,false> : TypeAnnotation {
         typedef vector<OT> VectorType;
         struct SimNode_VectorLength : SimNode {
+            using TT = OT;
             DAS_INT_NODE;
             SimNode_VectorLength ( const LineInfo & at, SimNode * rv )
                 : SimNode(at), value(rv) {}
             __forceinline int32_t compute ( Context & context ) {
                 auto pValue = (VectorType *) value->evalPtr(context);
                 return int32_t(pValue->size());
+            }
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP_TT(StdVectorLength);
+                V_SUB(value);
+                V_END();
             }
             SimNode * value;
         };
