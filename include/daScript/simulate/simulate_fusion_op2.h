@@ -44,6 +44,7 @@
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,Local,LocalRefOff); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,LocalRefOff); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Argument); \
+        IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Const); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,ArgumentRefOff,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,ArgumentRefOff,Local); \
         IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,ArgumentRef,Argument); \
@@ -63,6 +64,7 @@
             MATCH_OP2_SET(OPNAME,"GetLocal","GetLocalRefOffR2V",Local,LocalRefOff) \
             MATCH_OP2_SET(OPNAME,"GetLocalRefOff","GetLocalRefOffR2V",LocalRefOff,LocalRefOff) \
             MATCH_OP2_SET(OPNAME,"GetLocalRefOff","GetArgument",LocalRefOff,Argument) \
+            MATCH_OP2_SET(OPNAME,"GetLocalRefOff","ConstValue",LocalRefOff,Const) \
             MATCH_OP2_SET(OPNAME,"GetArgumentRefOff","GetArgumentRefOffR2V",ArgumentRefOff,ArgumentRefOff) \
             MATCH_OP2_SET(OPNAME,"GetArgumentRefOff","GetLocalR2V",ArgumentRefOff,Local) \
             MATCH_OP2_SET(OPNAME,"GetArgument","GetArgument",ArgumentRef,Argument) \
@@ -224,6 +226,8 @@
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Const,Argument); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Argument); \
         IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Argument); \
+        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,ArgumentRefOff); \
+        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,ArgumentRefOff); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
         IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Const); \
@@ -252,9 +256,12 @@
             \
             MATCH_OP2(OPNAME,"ConstValue","GetLocalR2V",Const,Local) \
             MATCH_OP2(OPNAME,"ConstValue","GetLocalRefOffR2V",Const,LocalRefOff) \
+            MATCH_OP2(OPNAME,"ConstValue","GetArgument",Const,Argument) \
             \
             MATCH_OP2_ANYR(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYL(OPNAME,"GetArgument",Argument) \
+            MATCH_OP2_ANYR(OPNAME,"GetArgumentRefOffR2V",ArgumentRefOff) \
+            MATCH_OP2_ANYL(OPNAME,"GetArgumentRefOffR2V",ArgumentRefOff) \
             MATCH_OP2_ANYR(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
             MATCH_OP2_ANYL(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
             MATCH_OP2_ANYR(OPNAME,"ConstValue",Const) \

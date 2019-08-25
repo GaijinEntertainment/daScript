@@ -62,11 +62,13 @@ namespace das {
     struct Op1FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op1FusionPoint_##OPNAME##_##CTYPE ( ) {} \
         IMPLEMENT_ANY_OP1_SET_NODE(OPNAME,TYPE,CTYPE,RTYPE,Local); \
+        IMPLEMENT_ANY_OP1_SET_NODE(OPNAME,TYPE,CTYPE,RTYPE,Argument); \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
             SimNode_Op1Fusion * result = nullptr; \
             auto tnode = static_cast<SimNode_Op1 *>(node); \
             if ( false ) {} \
             MATCH_ANY_OP1_NODE("GetLocal",Local) \
+            MATCH_ANY_OP1_NODE("GetArgument",Argument) \
             if ( result ) { \
                 result->set(#OPNAME,Type(ToBasicType<CTYPE>::type),tnode->debugInfo); \
                 SimNode_SourceBase * sbnode = static_cast<SimNode_SourceBase *>(tnode->x); \
@@ -126,7 +128,9 @@ namespace das {
     REGISTER_OP1_FUSION_POINT(OPNAME,Float,float); \
     REGISTER_OP1_FUSION_POINT(OPNAME,Double,double);
 
-
+    // unary
+    IMPLEMENT_OP1_NUMERIC_FUSION_POINT(Unm);
+    IMPLEMENT_OP1_NUMERIC_FUSION_POINT(Unp);
     // binary
     IMPLEMENT_OP1_INTEGER_FUSION_POINT(BinNot);
     // boolean
@@ -139,6 +143,9 @@ namespace das {
 
     void createFusionEngine_op1()
     {
+        // unary
+        REGISTER_OP1_NUMERIC_FUSION_POINT(Unm);
+        REGISTER_OP1_NUMERIC_FUSION_POINT(Unp);
         // binary
         REGISTER_OP1_INTEGER_FUSION_POINT(BinNot);
         // boolean

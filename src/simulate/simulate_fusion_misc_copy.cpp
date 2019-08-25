@@ -88,6 +88,8 @@ namespace das {
         IMPLEMENT_OP2_COPYREF_NODE(Local, ArgumentRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, Local);
+        IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, ArgumentRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, AnyPtr);
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
@@ -97,6 +99,8 @@ namespace das {
             MATCH_OP2_COPYREF("GetLocal","GetLocal",Local, Local)
             MATCH_OP2_COPYREF("GetLocal","GetThisBlockArgument",Local, ThisBlockArgumentRef)
             MATCH_OP2_COPYREF("GetLocal","GetArgumentRefOff",Local, ArgumentRefOff)
+            MATCH_OP2_COPYREF("GetLocalRefOff","GetLocal",LocalRefOff, Local)
+            MATCH_OP2_COPYREF("GetLocalRefOff","GetArgumentRefOff",LocalRefOff, ArgumentRefOff)
             // *, any
             MATCH_OP2_COPYREF_LEFT_ANY("GetLocal",Local)
             MATCH_OP2_COPYREF_LEFT_ANY("GetCMResOfs",CMResOfs)
