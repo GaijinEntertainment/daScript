@@ -26,11 +26,11 @@ namespace das {
 
     void createFusionEngine_op2_vec()
     {
-        IMPLEMENT_OP2_NUMERIC_VEC(Add);
-        IMPLEMENT_OP2_NUMERIC_VEC(Sub);
-        IMPLEMENT_OP2_NUMERIC_VEC(Div);
-        IMPLEMENT_OP2_NUMERIC_VEC(Mod);
-        IMPLEMENT_OP2_NUMERIC_VEC(Mul);
+        REGISTER_OP2_INTEGER_VEC(Add);
+        REGISTER_OP2_INTEGER_VEC(Sub);
+        REGISTER_OP2_INTEGER_VEC(Div);
+        REGISTER_OP2_INTEGER_VEC(Mod);
+        REGISTER_OP2_INTEGER_VEC(Mul);
     }
 }
 

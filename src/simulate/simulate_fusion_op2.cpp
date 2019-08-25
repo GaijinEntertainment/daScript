@@ -14,6 +14,7 @@ namespace das {
     IMPLEMENT_OP2_NUMERIC(Add);
     IMPLEMENT_OP2_NUMERIC(Sub);
     IMPLEMENT_OP2_NUMERIC(Div);
+    IMPLEMENT_OP2_NUMERIC(Mod);
     IMPLEMENT_OP2_NUMERIC(Mul);
 
     void createFusionEngine_op2()
@@ -21,6 +22,7 @@ namespace das {
         REGISTER_OP2_NUMERIC(Add);
         REGISTER_OP2_NUMERIC(Sub);
         REGISTER_OP2_NUMERIC(Div);
+        REGISTER_OP2_NUMERIC(Mod);
         REGISTER_OP2_NUMERIC(Mul);
     }
 }
