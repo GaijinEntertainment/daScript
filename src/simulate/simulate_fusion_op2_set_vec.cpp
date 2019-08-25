@@ -12,6 +12,8 @@
 
 namespace das {
 
+    IMPLEMENT_SETOP_NUMERIC_VEC(Set);
+
     IMPLEMENT_SETOP_NUMERIC_VEC(SetAdd);
     IMPLEMENT_SETOP_NUMERIC_VEC(SetSub);
     IMPLEMENT_SETOP_NUMERIC_VEC(SetDiv);
@@ -31,6 +33,8 @@ namespace das {
 
     void createFusionEngine_op2_set_vec()
     {
+        REGISTER_SETOP_NUMERIC_VEC(Set);
+
         REGISTER_SETOP_NUMERIC_VEC(SetAdd);
         REGISTER_SETOP_NUMERIC_VEC(SetSub);
         REGISTER_SETOP_NUMERIC_VEC(SetDiv);

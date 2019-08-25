@@ -209,8 +209,14 @@
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgument,ThisBlockArgument); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgument,Argument); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Argument); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Local); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Const); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,ThisBlockArgumentRef); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Local); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Argument); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Const); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Const,Local); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Const,Argument); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Argument); \
         IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Argument); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
@@ -225,8 +231,14 @@
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetThisBlockArgument",ThisBlockArgument,ThisBlockArgument) \
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetArgument",ThisBlockArgument,Argument) \
             MATCH_OP2(OPNAME,"GetArgument","GetArgument",Argument,Argument) \
+            MATCH_OP2(OPNAME,"GetArgument","GetLocalR2V",Argument,Local) \
+            MATCH_OP2(OPNAME,"GetArgument","ConstValue",Argument,Const) \
             MATCH_OP2(OPNAME,"GetLocalR2V","GetThisBlockArgumentR2V",Local,ThisBlockArgumentRef) \
+            MATCH_OP2(OPNAME,"GetLocalR2V","GetLocalR2V",Local,Local) \
+            MATCH_OP2(OPNAME,"GetLocalR2V","GetArgument",Local,Argument) \
             MATCH_OP2(OPNAME,"GetLocalR2V","ConstValue",Local,Const) \
+            MATCH_OP2(OPNAME,"ConstValue","GetLocalR2V",Const,Local) \
+            MATCH_OP2(OPNAME,"ConstValue","GetArgument",Const,Argument) \
             MATCH_OP2_ANYR(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYL(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYR(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
