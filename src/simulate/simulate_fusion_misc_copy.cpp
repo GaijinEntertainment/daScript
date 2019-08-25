@@ -85,6 +85,7 @@ namespace das {
         IMPLEMENT_OP2_COPYREF_NODE(Local, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(Local, Local);
         IMPLEMENT_OP2_COPYREF_NODE(Local, ThisBlockArgument);
+        IMPLEMENT_OP2_COPYREF_NODE(Local, ArgumentRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, AnyPtr);
@@ -95,6 +96,7 @@ namespace das {
             // *, *
             MATCH_OP2_COPYREF("GetLocal","GetLocal",Local, Local)
             MATCH_OP2_COPYREF("GetLocal","GetThisBlockArgument",Local, ThisBlockArgument)
+            MATCH_OP2_COPYREF("GetLocal","GetArgumentRefOff",Local, ArgumentRefOff)
             // *, any
             MATCH_OP2_COPYREF_LEFT_ANY("GetLocal",Local)
             MATCH_OP2_COPYREF_LEFT_ANY("GetCMResOfs",CMResOfs)
