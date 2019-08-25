@@ -26,6 +26,7 @@ namespace das {
     IMPLEMENT_SETOP_INTEGER_VEC(SetBinShl);
     IMPLEMENT_SETOP_INTEGER_VEC(SetBinShr);
 
+#undef FUSION_OP2_RVALUE_RIGHT
 #define FUSION_OP2_RVALUE_RIGHT(CTYPE,expr)     (v_ld_x((const float *)(expr)))
 
     IMPLEMENT_SETOP_NUMERIC_VEC(SetDivScal);

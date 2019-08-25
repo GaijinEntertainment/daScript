@@ -11,6 +11,8 @@
 #include "daScript/simulate/simulate_fusion_op2_vec_settings.h"
 
 // fake DAS_NODE to support regular eval
+#undef DAS_NODE
+#undef DAS_NODE
 #define DAS_NODE(TYPE,CTYPE)                                    \
     virtual vec4f eval ( das::Context & context ) override {    \
         return compute(context);                                \
