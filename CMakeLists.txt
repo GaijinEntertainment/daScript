@@ -151,7 +151,6 @@ src/simulate/simulate_fusion_op2_scalar_vec.cpp
 src/simulate/simulate_fusion_at.cpp
 src/simulate/simulate_fusion_misc_copy.cpp
 include/daScript/simulate/simulate_fusion.h
-include/daScript/simulate/simulate_fusion_op2_old.h
 include/daScript/simulate/simulate_fusion_op2.h
 include/daScript/simulate/simulate_fusion_op2_vec_settings.h
 )
