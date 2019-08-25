@@ -56,7 +56,7 @@
         IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,ThisBlockArgumentRef); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
-            if ( false ) {} \
+            /* match set */ if ( false ) {} \
             MATCH_OP2_SET(OPNAME,"GetLocal","ConstValue",Local,Const) \
             MATCH_OP2_SET(OPNAME,"GetLocal","GetLocalR2V",Local,Local) \
             MATCH_OP2_SET(OPNAME,"GetLocal","GetLocalRefOffR2V",Local,LocalRefOff) \
@@ -202,7 +202,7 @@
         return context->code->makeNode<SimNode_##OPNAME##_Any_##COMPUTER>(); \
     } 
 
-//  SimPolicy::Set##OPNAME(a,b)
+//  SimPolicy::OPNAME(a,b)
 #define IMPLEMENT_ANY_OP2(OPNAME,TYPE,CTYPE) \
     struct FusionPoint_##OPNAME##_##CTYPE : FusionPointOp2 { \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
@@ -211,6 +211,8 @@
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Argument); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Local); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Const); \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,LocalRefOff) \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Local) \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,ThisBlockArgumentRef); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Local); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Argument); \
@@ -225,20 +227,29 @@
         IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Const); \
         IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Local); \
         IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Local); \
+        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,LocalRefOff); \
+        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,LocalRefOff); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
-            if ( false ) {} \
+            /* match op2 */ if ( false ) {} \
             MATCH_OP2(OPNAME,"GetThisBlockArgumentR2V","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetThisBlockArgument",ThisBlockArgument,ThisBlockArgument) \
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetArgument",ThisBlockArgument,Argument) \
+            \
             MATCH_OP2(OPNAME,"GetArgument","GetArgument",Argument,Argument) \
             MATCH_OP2(OPNAME,"GetArgument","GetLocalR2V",Argument,Local) \
             MATCH_OP2(OPNAME,"GetArgument","ConstValue",Argument,Const) \
-            MATCH_OP2(OPNAME,"GetLocalR2V","GetThisBlockArgumentR2V",Local,ThisBlockArgumentRef) \
+            \
+            MATCH_OP2(OPNAME,"GetLocalRefOffR2V","GetLocalRefOffR2V",LocalRefOff,LocalRefOff) \
+            MATCH_OP2(OPNAME,"GetLocalRefOffR2V","GetLocalR2V",LocalRefOff,Local) \
+            \
             MATCH_OP2(OPNAME,"GetLocalR2V","GetLocalR2V",Local,Local) \
+            MATCH_OP2(OPNAME,"GetLocalR2V","GetThisBlockArgumentR2V",Local,ThisBlockArgumentRef) \
             MATCH_OP2(OPNAME,"GetLocalR2V","GetArgument",Local,Argument) \
             MATCH_OP2(OPNAME,"GetLocalR2V","ConstValue",Local,Const) \
+            \
             MATCH_OP2(OPNAME,"ConstValue","GetLocalR2V",Const,Local) \
             MATCH_OP2(OPNAME,"ConstValue","GetArgument",Const,Argument) \
+            \
             MATCH_OP2_ANYR(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYL(OPNAME,"GetArgument",Argument) \
             MATCH_OP2_ANYR(OPNAME,"GetThisBlockArgument",ThisBlockArgument) \
@@ -247,6 +258,8 @@
             MATCH_OP2_ANYL(OPNAME,"ConstValue",Const) \
             MATCH_OP2_ANYR(OPNAME,"GetLocalR2V",Local) \
             MATCH_OP2_ANYL(OPNAME,"GetLocalR2V",Local) \
+            MATCH_OP2_ANYR(OPNAME,"GetLocalRefOffR2V",LocalRefOff) \
+            MATCH_OP2_ANYL(OPNAME,"GetLocalRefOffR2V",LocalRefOff) \
             return nullptr; \
         } \
         virtual void set(SimNode_Op2Fusion * result, SimNode * node) override { \
