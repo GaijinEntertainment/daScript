@@ -10,6 +10,8 @@
 #pragma warning(disable:4800)    // forcing value to bool 'true' or 'false' (performance warning)
 #pragma warning(disable:4127)    // conditional expression is constant
 #pragma warning(disable:4702)    // unreachable code (due to exceptions)
+
+#pragma warning(disable:4316)    // '__m128': object allocated on the heap may not be aligned 16
 #endif
 
 #ifdef __clang__

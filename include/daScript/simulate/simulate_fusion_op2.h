@@ -158,9 +158,9 @@
     REGISTER_SETOP_VEC(OPNAME,float4 );
 
 // OP(COMPUTEL,*) 
-#define IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,COMPUTEL) \
+#define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2Fusion { \
-        __forceinline auto compute ( Context & context ) { \
+        INLINE auto compute ( Context & context ) { \
             auto ll = l.subexpr->eval##TYPE(context); \
             auto rr = FUSION_OP2_RVALUE_RIGHT(CTYPE,r.compute##COMPUTEL(context)); \
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
@@ -169,9 +169,9 @@
     }; 
 
 // OP((*,COMPUTER)
-#define IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,COMPUTER) \
+#define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2Fusion { \
-        __forceinline auto compute ( Context & context ) { \
+        INLINE auto compute ( Context & context ) { \
             auto ll = FUSION_OP2_RVALUE_LEFT (CTYPE,l.compute##COMPUTER(context)); \
             auto rr = r.subexpr->eval##TYPE(context); \
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
@@ -179,9 +179,9 @@
         DAS_NODE(TYPE,CTYPE); \
     }; 
 
-#define IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+#define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2Fusion { \
-        __forceinline auto compute ( Context & context ) { \
+        INLINE auto compute ( Context & context ) { \
             auto ll = FUSION_OP2_RVALUE_LEFT (CTYPE,l.compute##COMPUTEL(context)); \
             auto rr = FUSION_OP2_RVALUE_RIGHT(CTYPE,r.compute##COMPUTER(context)); \
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
@@ -207,36 +207,36 @@
     } 
 
 //  SimPolicy::OPNAME(a,b)
-#define IMPLEMENT_ANY_OP2(OPNAME,TYPE,CTYPE) \
+#define IMPLEMENT_ANY_OP2(INLINE,OPNAME,TYPE,CTYPE) \
     struct FusionPoint_##OPNAME##_##CTYPE : FusionPointOp2 { \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgument,ThisBlockArgument); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,ThisBlockArgument,Argument); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Argument); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Local); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Const); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,LocalRefOff) \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Local) \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Argument) \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,ThisBlockArgumentRef); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Local); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Argument); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Const); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Const,Local); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Const,LocalRefOff); \
-        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Const,Argument); \
-        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Argument); \
-        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Argument); \
-        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,ArgumentRefOff); \
-        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,ArgumentRefOff); \
-        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
-        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,ThisBlockArgument); \
-        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Const); \
-        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Const); \
-        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,Local); \
-        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,Local); \
-        IMPLEMENT_OP2_NODE_ANYR(OPNAME,TYPE,CTYPE,LocalRefOff); \
-        IMPLEMENT_OP2_NODE_ANYL(OPNAME,TYPE,CTYPE,LocalRefOff); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgument,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgument,Argument); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Argument,Argument); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Argument,Local); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Argument,Const); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff,LocalRefOff) \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff,Local) \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff,Argument) \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Local,ThisBlockArgumentRef); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Local,Local); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Local,Argument); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Local,Const); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Const,Local); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Const,LocalRefOff); \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Const,Argument); \
+        IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,Argument); \
+        IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,Argument); \
+        IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff); \
+        IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff); \
+        IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgument); \
+        IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,Const); \
+        IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,Const); \
+        IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,Local); \
+        IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,Local); \
+        IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff); \
+        IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
             /* match op2 */ if ( false ) {} \
             MATCH_OP2(OPNAME,"GetThisBlockArgumentR2V","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
@@ -290,18 +290,18 @@
     (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_shared<FusionPoint_##OPNAME##_##CTYPE>());
 
 #define IMPLEMENT_OP2_INTEGER(OPNAME) \
-    IMPLEMENT_ANY_OP2(OPNAME,Int,int32_t); \
-    IMPLEMENT_ANY_OP2(OPNAME,UInt,uint32_t); \
-    IMPLEMENT_ANY_OP2(OPNAME,Int64,int64_t); \
-    IMPLEMENT_ANY_OP2(OPNAME,UInt64,uint64_t);
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Int,int32_t); \
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,UInt,uint32_t); \
+    IMPLEMENT_ANY_OP2(_msc_inline_bug,OPNAME,Int64,int64_t); \
+    IMPLEMENT_ANY_OP2(_msc_inline_bug,OPNAME,UInt64,uint64_t);
 
 #define IMPLEMENT_OP2_NUMERIC(OPNAME) \
     IMPLEMENT_OP2_INTEGER(OPNAME); \
-    IMPLEMENT_ANY_OP2(OPNAME,Float,float); \
-    IMPLEMENT_ANY_OP2(OPNAME,Double,double);
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Float,float); \
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Double,double);
 
 #define IMPLEMENT_OP2_SCALAR(OPNAME) \
-    IMPLEMENT_ANY_OP2(OPNAME,Bool,bool); \
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Bool,bool); \
     IMPLEMENT_OP2_NUMERIC(OPNAME);
 
 #define REGISTER_OP2_INTEGER(OPNAME) \
@@ -320,7 +320,7 @@
     REGISTER_OP2_NUMERIC(OPNAME); 
 
 #define IMPLEMENT_OP2_VEC(OPNAME,CTYPE) \
-    IMPLEMENT_ANY_OP2(OPNAME,,CTYPE)
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,,CTYPE)
 
 #define IMPLEMENT_OP2_INTEGER_VEC(OPNAME) \
     IMPLEMENT_OP2_VEC(OPNAME,int2 ); \
