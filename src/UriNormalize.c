@@ -768,4 +768,35 @@ static URI_INLINE int URI_FUNC(NormalizeSyntaxEngine)(URI_TYPE(Uri) * uri,
 
 
 
+int URI_FUNC(MakeOwnerMm)(URI_TYPE(Uri) * uri, UriMemoryManager * memory) {
+	unsigned int doneMask = URI_NORMALIZED;
+
+	URI_CHECK_MEMORY_MANAGER(memory);  /* may return */
+
+	if (uri == NULL) {
+		return URI_ERROR_NULL;
+	}
+
+	if (uri->owner == URI_TRUE) {
+		return URI_SUCCESS;
+	}
+
+	if (! URI_FUNC(MakeOwnerEngine)(uri, &doneMask, memory)) {
+		URI_FUNC(PreventLeakage)(uri, doneMask, memory);
+		return URI_ERROR_MALLOC;
+	}
+
+	uri->owner = URI_TRUE;
+
+	return URI_SUCCESS;
+}
+
+
+
+int URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri) {
+	return URI_FUNC(MakeOwnerMm)(uri, NULL);
+}
+
+
+
 #endif

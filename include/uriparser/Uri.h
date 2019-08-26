@@ -1080,6 +1080,40 @@ URI_PUBLIC int URI_FUNC(FreeQueryListMm)(URI_TYPE(QueryList) * queryList,
 
 
 
+/**
+ * Makes the %URI hold copies of strings so that it no longer depends
+ * on the original %URI string.  If the %URI is already owner of copies,
+ * this function returns <c>URI_TRUE</c> and does not modify the %URI further.
+ *
+ * Uses default libc-based memory manager.
+ *
+ * @param uri    <b>INOUT</b>: %URI to make independent
+ * @return       Error code or 0 on success
+ *
+ * @see uriMakeOwnerMmA
+ * @since 0.9.4
+ */
+URI_PUBLIC int URI_FUNC(MakeOwner)(URI_TYPE(Uri) * uri);
+
+
+
+/**
+ * Makes the %URI hold copies of strings so that it no longer depends
+ * on the original %URI string.  If the %URI is already owner of copies,
+ * this function returns <c>URI_TRUE</c> and does not modify the %URI further.
+ *
+ * @param uri     <b>INOUT</b>: %URI to make independent
+ * @param memory  <b>IN</b>: Memory manager to use, NULL for default libc
+ * @return        Error code or 0 on success
+ *
+ * @see uriMakeOwnerA
+ * @since 0.9.4
+ */
+URI_PUBLIC int URI_FUNC(MakeOwnerMm)(URI_TYPE(Uri) * uri,
+                                     UriMemoryManager * memory);
+
+
+
 #ifdef __cplusplus
 }
 #endif
