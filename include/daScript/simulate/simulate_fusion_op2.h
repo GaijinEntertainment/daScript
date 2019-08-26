@@ -217,6 +217,7 @@
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Argument,Const); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,LocalRefOff) \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Local) \
+        IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,LocalRefOff,Argument) \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,ThisBlockArgumentRef); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Local); \
         IMPLEMENT_OP2_NODE(OPNAME,TYPE,CTYPE,Local,Argument); \
@@ -248,6 +249,7 @@
             \
             MATCH_OP2(OPNAME,"GetLocalRefOffR2V","GetLocalRefOffR2V",LocalRefOff,LocalRefOff) \
             MATCH_OP2(OPNAME,"GetLocalRefOffR2V","GetLocalR2V",LocalRefOff,Local) \
+            MATCH_OP2(OPNAME,"GetLocalRefOffR2V","GetArgument",LocalRefOff,Argument) \
             \
             MATCH_OP2(OPNAME,"GetLocalR2V","GetLocalR2V",Local,Local) \
             MATCH_OP2(OPNAME,"GetLocalR2V","GetThisBlockArgumentR2V",Local,ThisBlockArgumentRef) \
