@@ -46,6 +46,24 @@ int uriCompareRangeA(const UriTextRangeA * a, const UriTextRangeA * b);
 #define URI_TEST_IP_SIX_FAIL(x) ASSERT_TRUE(URI_FALSE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
 #define URI_TEST_IP_SIX_PASS(x) ASSERT_TRUE(URI_TRUE == uri_TESTING_ONLY_ParseIpSixA(x "]"))
 
+#define URI_EXPECT_BETWEEN(candidate, first, afterLast)  \
+	EXPECT_TRUE((candidate >= first) && (candidate <= afterLast))
+
+#define URI_EXPECT_OUTSIDE(candidate, first, afterLast)  \
+	EXPECT_TRUE((candidate < first) || (candidate > afterLast))
+
+#define URI_EXPECT_RANGE_BETWEEN(range, uriFirst, uriAfterLast)  \
+	URI_EXPECT_BETWEEN(range.first, uriFirst, uriAfterLast);  \
+	URI_EXPECT_BETWEEN(range.afterLast, uriFirst, uriAfterLast)
+
+#define URI_EXPECT_RANGE_OUTSIDE(range, uriFirst, uriAfterLast)  \
+	URI_EXPECT_OUTSIDE(range.first, uriFirst, uriAfterLast);  \
+	URI_EXPECT_OUTSIDE(range.afterLast, uriFirst, uriAfterLast)
+
+#define URI_EXPECT_RANGE_EMPTY(range)  \
+	EXPECT_TRUE((range.first != NULL)  \
+			&& (range.afterLast != NULL)  \
+			&& (range.first == range.afterLast))
 
 namespace {
 	bool testDistinctionHelper(const char * uriText, bool expectedHostSet,
@@ -2141,6 +2159,65 @@ TEST(FreeUriMembersSuite, MultiFreeWorksFine) {
 	EXPECT_NE(memcmp(&uriBackup, &uri, sizeof(UriUriA)), 0);
 
 	uriFreeUriMembersA(&uri);  // second time
+}
+
+TEST(MakeOwnerSuite, MakeOwner) {
+	const char * const uriString = "scheme://user:pass@[v7.X]:55555/path/../path/?query#fragment";
+	UriUriA uri;
+	char * uriFirst = strdup(uriString);
+	const size_t uriLen = strlen(uriFirst);
+	char * uriAfterLast = uriFirst + uriLen;
+
+	EXPECT_EQ(uriParseSingleUriExA(&uri, uriFirst, uriAfterLast, NULL), URI_SUCCESS);
+
+	// After plain parse, all strings should point inside the original URI string
+	EXPECT_EQ(uri.owner, URI_FALSE);
+	URI_EXPECT_RANGE_BETWEEN(uri.scheme, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.userInfo, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.hostText, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.hostData.ipFuture, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.portText, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.pathHead->text, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.pathHead->next->text, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.pathHead->next->next->text, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_EMPTY(uri.pathHead->next->next->next->text);
+	EXPECT_TRUE(uri.pathHead->next->next->next->next == NULL);
+	URI_EXPECT_RANGE_BETWEEN(uri.query, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_BETWEEN(uri.fragment, uriFirst, uriAfterLast);
+
+	EXPECT_EQ(uriMakeOwnerA(&uri), URI_SUCCESS);
+
+	// After making owner, *none* of the strings should point inside the original URI string
+	EXPECT_EQ(uri.owner, URI_TRUE);
+	URI_EXPECT_RANGE_OUTSIDE(uri.scheme, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.userInfo, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.hostText, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.hostData.ipFuture, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.portText, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.pathHead->text, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.pathHead->next->text, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.pathHead->next->next->text, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_EMPTY(uri.pathHead->next->next->next->text);
+	EXPECT_TRUE(uri.pathHead->next->next->next->next == NULL);
+	URI_EXPECT_RANGE_OUTSIDE(uri.query, uriFirst, uriAfterLast);
+	URI_EXPECT_RANGE_OUTSIDE(uri.fragment, uriFirst, uriAfterLast);
+
+	// Free originally used memory so we'd get violations on access with ASan
+	uriAfterLast = NULL;
+	free(uriFirst);
+	uriFirst = NULL;
+
+	// Can we recompose the URI without accessing any old freed memory?
+	int charsRequired;
+	EXPECT_EQ(uriToStringCharsRequiredA(&uri, &charsRequired), URI_SUCCESS);
+	EXPECT_TRUE((charsRequired >= 0) && (charsRequired >= static_cast<int>(uriLen)));
+	char * const uriRemake = new char[charsRequired + 1];
+	EXPECT_TRUE(uriRemake != NULL);
+	EXPECT_EQ(uriToStringA(uriRemake, &uri, charsRequired + 1, NULL), URI_SUCCESS);
+	EXPECT_TRUE(! strcmp(uriString, uriRemake));
+	delete [] uriRemake;
+
+	uriFreeUriMembersA(&uri);
 }
 
 TEST(ParseIpFourAddressSuite, FourSaneOctets) {
