@@ -61,8 +61,8 @@ def advance()
       b.vx = b.vx - dx * (b2.mass*mag)
       b.vy = b.vy - dy * (b2.mass*mag)
       b.vz = b.vz - dz * (b2.mass*mag)
-      b2.vx = b2.vz + dx * (b.mass*mag)
-      b2.vy = b2.vz + dy * (b.mass*mag)
+      b2.vx = b2.vx + dx * (b.mass*mag)
+      b2.vy = b2.vy + dy * (b.mass*mag)
       b2.vz = b2.vz + dz * (b.mass*mag)
     b.x += b.vx
     b.y += b.vy
