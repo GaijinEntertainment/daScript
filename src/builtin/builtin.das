@@ -16,6 +16,9 @@ def emplace(var Arr:array<auto(numT)>;value:numT;at:int=-1)
 def erase(var Arr:array<auto(numT)>;at:int)
   __builtin_array_erase(Arr,at,typeinfo(sizeof type numT))
 
+def length(a:auto[])
+	return typeinfo(dim a)
+
 // table
 
 def find(var Tab:table<auto(keyT),auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
