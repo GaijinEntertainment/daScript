@@ -28,7 +28,7 @@ namespace das
     #define DAS_ENABLE_EXCEPTIONS   0
     #endif
 
-    #define MAX_FOR_ITERATORS   16
+    #define MAX_FOR_ITERATORS   32
 
     class Context;
     struct SimNode;
