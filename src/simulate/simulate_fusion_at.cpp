@@ -70,6 +70,7 @@ namespace das {
 
 /* AtR2V VECTOR */
 
+#undef IMPLEMENT_OP2_SET_NODE_ANY
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
          virtual vec4f eval ( Context & context ) override { \
@@ -80,6 +81,7 @@ namespace das {
         } \
     }; 
 
+#undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
          virtual vec4f eval ( Context & context ) override { \
@@ -95,8 +97,9 @@ namespace das {
 
     IMPLEMENT_SETOP_NUMERIC_VEC(AtR2V);
 
-    /* At */
+/* At */
 
+#undef IMPLEMENT_OP2_SET_NODE_ANY
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
@@ -108,6 +111,7 @@ namespace das {
         DAS_PTR_NODE; \
     }; 
 
+#undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
@@ -119,6 +123,7 @@ namespace das {
         DAS_PTR_NODE; \
     }; 
 
+#undef IMPLEMENT_OP2_SET_SETUP_NODE
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
     auto rn = (SimNode_Op2At *)result; \
     auto sn = (SimNode_At *)node; \
