@@ -15,32 +15,32 @@ namespace das {
 #define FUSION_OP_PTR_RVALUE(CTYPE,expr)   ((CTYPE *)((expr)))
 #define FUSION_OP_EVAL_CAST(expr)          (*(expr))
 
-#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RTYPE,COMPUTE) \
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
-            DAS_NODE(TYPE,CTYPE); \
-            INLINE RTYPE compute ( Context & context ) { \
+            INLINE auto compute ( Context & context ) { \
                 auto lv =  FUSION_OP_PTR_VALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
                 return SimPolicy<CTYPE>::OPNAME(lv,context); \
             } \
+            DAS_NODE(TYPE,CTYPE); \
         }; 
 
-#define IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,RTYPE,COMPUTE) \
+#define IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
-            DAS_NODE(TYPE,CTYPE); \
-            INLINE RTYPE compute ( Context & context ) { \
+            INLINE auto compute ( Context & context ) { \
                 auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
                 return SimPolicy<CTYPE>::OPNAME(FUSION_OP_EVAL_CAST(lv),context); \
             } \
+            DAS_NODE(TYPE,CTYPE); \
         }; 
 
 #define MATCH_ANY_OP1_NODE(NODENAME,COMPUTE) \
     else if ( is(info,tnode->x,NODENAME) ) { result = context->code->makeNode<SimNode_Op1##COMPUTE>(); } \
 
-#define IMPLEMENT_ANY_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE,RTYPE) \
+#define IMPLEMENT_ANY_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE) \
     struct Op1FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op1FusionPoint_##OPNAME##_##CTYPE ( ) {} \
-        IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RTYPE,Local); \
-        IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RTYPE,Argument); \
+        IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,Local); \
+        IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,Argument); \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
             SimNode_Op1Fusion * result = nullptr; \
             auto tnode = static_cast<SimNode_Op1 *>(node); \
@@ -58,11 +58,11 @@ namespace das {
         } \
     };
 
-#define IMPLEMENT_SET_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE,RTYPE) \
+#define IMPLEMENT_SET_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE) \
     struct Op1FusionPoint_##OPNAME##_##CTYPE : FusionPoint { \
         Op1FusionPoint_##OPNAME##_##CTYPE ( ) {} \
-        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,RTYPE,Local); \
-        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,RTYPE,Argument); \
+        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,Local); \
+        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,Argument); \
         virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
             SimNode_Op1Fusion * result = nullptr; \
             auto tnode = static_cast<SimNode_Op1 *>(node); \
@@ -85,35 +85,29 @@ namespace das {
 
 // int and numeric
 
-#define IMPLEMENT_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE) \
-    IMPLEMENT_ANY_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE,CTYPE)
-
 #define IMPLEMENT_OP1_INTEGER_FUSION_POINT(OPNAME) \
-    IMPLEMENT_OP1_FUSION_POINT(__forceinline,OPNAME,Int,int32_t); \
-    IMPLEMENT_OP1_FUSION_POINT(__forceinline,OPNAME,UInt,uint32_t); \
-    IMPLEMENT_OP1_FUSION_POINT(_msc_inline_bug,OPNAME,Int64,int64_t); \
-    IMPLEMENT_OP1_FUSION_POINT(_msc_inline_bug,OPNAME,UInt64,uint64_t);
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Int,int32_t); \
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,UInt,uint32_t); \
+    IMPLEMENT_ANY_OP1_FUSION_POINT(_msc_inline_bug,OPNAME,Int64,int64_t); \
+    IMPLEMENT_ANY_OP1_FUSION_POINT(_msc_inline_bug,OPNAME,UInt64,uint64_t);
 
 #define IMPLEMENT_OP1_NUMERIC_FUSION_POINT(OPNAME) \
     IMPLEMENT_OP1_INTEGER_FUSION_POINT(OPNAME); \
-    IMPLEMENT_OP1_FUSION_POINT(__forceinline,OPNAME,Float,float); \
-    IMPLEMENT_OP1_FUSION_POINT(__forceinline,OPNAME,Double,double);
+   IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Float,float); \
+   IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Double,double);
 
 // set int and numeric
 
-#define IMPLEMENT_OP1_SET_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE) \
-    IMPLEMENT_SET_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE,CTYPE)
-
 #define IMPLEMENT_OP1_SET_INTEGER_FUSION_POINT(OPNAME) \
-    IMPLEMENT_OP1_SET_FUSION_POINT(__forceinline,OPNAME,Int,int32_t); \
-    IMPLEMENT_OP1_SET_FUSION_POINT(__forceinline,OPNAME,UInt,uint32_t); \
-    IMPLEMENT_OP1_SET_FUSION_POINT(_msc_inline_bug,OPNAME,Int64,int64_t); \
-    IMPLEMENT_OP1_SET_FUSION_POINT(_msc_inline_bug,OPNAME,UInt64,uint64_t);
+    IMPLEMENT_SET_OP1_FUSION_POINT(__forceinline,OPNAME,Int,int32_t); \
+    IMPLEMENT_SET_OP1_FUSION_POINT(__forceinline,OPNAME,UInt,uint32_t); \
+    IMPLEMENT_SET_OP1_FUSION_POINT(_msc_inline_bug,OPNAME,Int64,int64_t); \
+    IMPLEMENT_SET_OP1_FUSION_POINT(_msc_inline_bug,OPNAME,UInt64,uint64_t);
 
 #define IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(OPNAME) \
     IMPLEMENT_OP1_SET_INTEGER_FUSION_POINT(OPNAME); \
-    IMPLEMENT_OP1_SET_FUSION_POINT(__forceinline,OPNAME,Float,float); \
-    IMPLEMENT_OP1_SET_FUSION_POINT(__forceinline,OPNAME,Double,double);
+    IMPLEMENT_SET_OP1_FUSION_POINT(__forceinline,OPNAME,Float,float); \
+    IMPLEMENT_SET_OP1_FUSION_POINT(__forceinline,OPNAME,Double,double);
 
 // register
 
@@ -134,7 +128,7 @@ namespace das {
     // binary
     IMPLEMENT_OP1_INTEGER_FUSION_POINT(BinNot);
     // boolean
-    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,BoolNot,Bool,bool,bool);
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,BoolNot,Bool,bool);
     // inc and dec
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(Inc);
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(Dec);
