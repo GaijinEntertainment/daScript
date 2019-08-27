@@ -80,7 +80,7 @@ namespace das {
 
     IMPLEMENT_OP2_SCALAR(AtR2V);
 
-// At(COMPUTEL,*) 
+    // At(COMPUTEL,*) 
 #undef IMPLEMENT_OP2_NODE_ANYR
 #define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2At { \
@@ -119,13 +119,23 @@ namespace das {
         DAS_PTR_NODE; \
     }; 
 
+#undef IMPLEMENT_OP2_SETUP_NODE
+#define IMPLEMENT_OP2_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op2At *)result; \
+    auto sn = (SimNode_At *)node; \
+    rn->stride = sn->stride; \
+    rn->offset = sn->offset; \
+    rn->range = sn->range; \
+    rn->baseType = Type::none;
+
 #include "daScript/simulate/simulate_fusion_op2_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_perm.h"
 
-    IMPLEMENT_OP2_SCALAR(At);
+    typedef char * Dummy;
+    IMPLEMENT_ANY_OP2(__forceinline, At, Ptr, Dummy);
 
     void createFusionEngine_at() {
         REGISTER_OP2_SCALAR(AtR2V);
-        REGISTER_OP2_SCALAR(At);
+        (*g_fusionEngine)["At"].push_back(make_shared<FusionPoint_At_Dummy>());
     }
 }
