@@ -22,6 +22,7 @@
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff,Local); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef,Argument); \
+        IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef,Local); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgumentRef); \
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,AnyPtr); \
@@ -44,6 +45,7 @@
             MATCH_OP2_SET(OPNAME,"GetArgumentRefOff","GetArgumentRefOffR2V",ArgumentRefOff,ArgumentRefOff) \
             MATCH_OP2_SET(OPNAME,"GetArgumentRefOff","GetLocalR2V",ArgumentRefOff,Local) \
             MATCH_OP2_SET(OPNAME,"GetArgument","GetArgument",ArgumentRef,Argument) \
+            MATCH_OP2_SET(OPNAME,"GetArgument","GetLocalR2V",ArgumentRef,Local) \
             MATCH_OP2_SET(OPNAME,"GetThisBlockArgument","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
             MATCH_OP2_SET(OPNAME,"GetThisBlockArgument","GetThisBlockArgumentR2V",ThisBlockArgumentRef,ThisBlockArgumentRef) \
             MATCH_OP2_SET_ANY(OPNAME,"GetGlobal",Global) \
