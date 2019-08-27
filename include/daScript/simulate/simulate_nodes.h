@@ -350,12 +350,8 @@ namespace das {
         __forceinline char * compute (Context & context) {
             auto pValue = value->evalPtr(context);
             uint32_t idx = uint32_t(index->evalInt(context));
-            if (idx >= range) {
-                context.throw_error_at(debugInfo,"index out of range");
-                return nullptr;
-            } else {
-                return pValue + idx*stride + offset;
-            }
+            if (idx >= range) context.throw_error_at(debugInfo,"index out of range");
+            return pValue + idx*stride + offset;
         }
         SimNode * value, * index;
         uint32_t  stride, offset, range;

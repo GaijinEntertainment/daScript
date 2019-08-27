@@ -6,298 +6,126 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
+#include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
 
-/*
- TODO:
-    ArrayAt
-    AtGlobConst - 'do not check index, if index is out of range - do AOT error'
- */
-
-#define FUSION_AT_PTR_TO_RESULT(CTYPE,expr)     (expr)
-
-#define IMPLEMENT_ANY_AT_FUSION_POINT(TYPE,CTYPE,RTYPE,CNAME,ATNAME) \
-    struct AtFusionPoint##CNAME : FusionPoint { \
-        AtFusionPoint##CNAME () {} \
-        struct SimNode_AtGlobAny : SimNode_At { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_AtGlobAny ( const LineInfo & at, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, uint32_t lvo ) \
-                : SimNode_At(at, nullptr, idx, strd, o, rng), goffset_l(lvo) {}\
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                V_OP(ATNAME##GlobAny); \
-                V_ARG(goffset_l); \
-                V_SUB(index); \
-                V_ARG(stride); \
-                V_ARG(offset); \
-                V_ARG(range); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute (Context & context) { \
-                auto pValue = context.globals + goffset_l; \
-                uint32_t idx = uint32_t(index->evalInt(context)); \
-                if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
-                return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
-            } \
-            uint32_t goffset_l; \
-        }; \
-        struct SimNode_AtGlobLocR2VI : SimNode_At { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_AtGlobLocR2VI ( const LineInfo & at, uint32_t strd, uint32_t o, uint32_t rng, uint32_t lvo, uint32_t rvsp ) \
-                : SimNode_At(at, nullptr, nullptr, strd, o, rng), goffset_l(lvo), stackTop_r(rvsp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                V_OP(ATNAME##GlobLocR2VI); \
-                V_ARG(goffset_l); \
-                V_SP(stackTop_r); \
-                V_ARG(stride); \
-                V_ARG(offset); \
-                V_ARG(range); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute (Context & context) { \
-                auto pValue = context.globals + goffset_l; \
-                uint32_t idx = *(uint32_t *)(context.stack.sp() + stackTop_r); \
-                if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
-                return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
-            } \
-            uint32_t goffset_l; \
-            uint32_t stackTop_r; \
-        }; \
-        struct SimNode_AtGlobConst : SimNode_At { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_AtGlobConst ( const LineInfo & at, uint32_t strd, uint32_t o, uint32_t rng, uint32_t lvo, uint32_t rvc ) \
-                : SimNode_At(at, nullptr, nullptr, strd, o, rng), goffset_l(lvo), const_r(rvc) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                V_OP(ATNAME##GlobConst); \
-                V_ARG(goffset_l); \
-                V_ARG(const_r); \
-                V_ARG(stride); \
-                V_ARG(offset); \
-                V_ARG(range); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute (Context & context) { \
-                auto pValue = context.globals + goffset_l; \
-                uint32_t idx = const_r; \
-                if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
-                return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
-            } \
-            uint32_t goffset_l; \
-            uint32_t const_r; \
-        }; \
-        struct SimNode_AtLocAny : SimNode_At { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_AtLocAny ( const LineInfo & at, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, uint32_t spl ) \
-                : SimNode_At(at, nullptr, idx, strd, o, rng), stackTop_l(spl) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                V_OP(ATNAME##LocAny); \
-                V_ARG(stackTop_l); \
-                V_SUB(index); \
-                V_ARG(stride); \
-                V_ARG(offset); \
-                V_ARG(range); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute (Context & context) { \
-                auto pValue = context.stack.sp() + stackTop_l; \
-                uint32_t idx = uint32_t(index->evalInt(context)); \
-                if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
-                return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
-            } \
-            uint32_t stackTop_l; \
-        }; \
-        struct SimNode_AtLocLocR2VI : SimNode_At { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_AtLocLocR2VI ( const LineInfo & at, uint32_t strd, uint32_t o, uint32_t rng, uint32_t spl, uint32_t rvsp ) \
-                : SimNode_At(at, nullptr, nullptr, strd, o, rng), stackTop_l(spl), stackTop_r(rvsp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                V_OP(ATNAME##LocLocR2VI); \
-                V_ARG(stackTop_l); \
-                V_ARG(stackTop_r); \
-                V_ARG(stride); \
-                V_ARG(offset); \
-                V_ARG(range); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute (Context & context) { \
-                auto pValue = context.stack.sp() + stackTop_l; \
-                uint32_t idx = *(uint32_t *)(context.stack.sp() + stackTop_r); \
-                if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
-                return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
-            } \
-            uint32_t stackTop_l; \
-            uint32_t stackTop_r; \
-        }; \
-        struct SimNode_AtArgAny : SimNode_At { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_AtArgAny ( const LineInfo & at, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, int32_t il ) \
-                : SimNode_At(at, nullptr, idx, strd, o, rng), index_l(il) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                V_OP(ATNAME##ArgAny); \
-                V_ARG(index_l); \
-                V_SUB(index); \
-                V_ARG(stride); \
-                V_ARG(offset); \
-                V_ARG(range); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute (Context & context) { \
-                auto pValue = *(char **)(context.abiArguments()+index_l); \
-                uint32_t idx = uint32_t(index->evalInt(context)); \
-                if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
-                return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
-            } \
-            int32_t index_l; \
-        }; \
-        struct SimNode_AtArgLocR2VI : SimNode_At { \
-            DAS_NODE(TYPE,CTYPE); \
-            SimNode_AtArgLocR2VI ( const LineInfo & at, uint32_t strd, uint32_t o, uint32_t rng, int32_t il, uint32_t rvsp ) \
-                : SimNode_At(at, nullptr, nullptr, strd, o, rng), index_l(il), stackTop_r(rvsp) {} \
-            virtual SimNode * visit ( SimVisitor & vis ) override { \
-                V_BEGIN(); \
-                V_OP(ATNAME##ArgLocR2VI); \
-                V_ARG(index_l); \
-                V_SP(stackTop_r); \
-                V_ARG(stride); \
-                V_ARG(offset); \
-                V_ARG(range); \
-                V_END(); \
-            } \
-            __forceinline RTYPE compute (Context & context) { \
-                auto pValue = *(char **)(context.abiArguments()+index_l); \
-                uint32_t idx = *(uint32_t *)(context.stack.sp() + stackTop_r); \
-                if (idx >= range) context.throw_error_at(debugInfo,"index out of range"); \
-                return FUSION_AT_PTR_TO_RESULT(CTYPE,pValue + idx*stride + offset); \
-            } \
-            int32_t index_l; \
-            uint32_t stackTop_r; \
-        }; \
-        virtual SimNode * fuse ( const SimNodeInfoLookup & info, SimNode * node, Context * context ) override { \
-            auto atnode = static_cast<SimNode_At *>(node); \
-            /* At(GetGlobal,*) */ \
-            if ( is(info,atnode->value,"GetGlobal") ) { \
-                auto gnode_l = static_cast<SimNode_GetGlobal *>(atnode->value); \
-                /* At(GetGlobal,GetLocalR2V<int|uint>) */ \
-                if ( is(info,atnode->index,"GetLocalR2V","int") || is(info,atnode->index,"GetLocalR2V","uint") ) { \
-                    auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
-                    return context->code->makeNode<SimNode_AtGlobLocR2VI>(node->debugInfo, \
-                        atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->subexpr.offset, gnode_r->subexpr.stackTop); \
-                /* At(GetGlobal,ConstValue) */ \
-                } else if ( is(info,atnode->index,"ConstValue") ) { \
-                    auto cnode_r = static_cast<SimNode_ConstValue *>(atnode->index); \
-                    return context->code->makeNode<SimNode_AtGlobConst>(node->debugInfo, \
-                        atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->subexpr.offset, cnode_r->subexpr.valueU); \
-                } else { \
-                    return context->code->makeNode<SimNode_AtGlobAny>(node->debugInfo, \
-                        atnode->index, atnode->stride, atnode->offset, atnode->range, \
-                            gnode_l->subexpr.offset); \
-                } \
-            /* At(GetLocal,*) */ \
-            } else if ( is(info,atnode->value,"GetLocal") ) { \
-                auto lnode_l = static_cast<SimNode_GetLocal *>(atnode->value); \
-                /* At(GetLocal,GetLocalR2V<int|uint>) */ \
-                if ( is(info,atnode->index,"GetLocalR2V","int") || is(info,atnode->index,"GetLocalR2V","uint") ) { \
-                    auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
-                    return context->code->makeNode<SimNode_AtLocLocR2VI>(node->debugInfo, \
-                        atnode->stride, atnode->offset, atnode->range, \
-                            lnode_l->subexpr.stackTop, gnode_r->subexpr.stackTop); \
-                } else { \
-                    return context->code->makeNode<SimNode_AtLocAny>(node->debugInfo, \
-                        atnode->index, atnode->stride, atnode->offset, atnode->range, \
-                            lnode_l->subexpr.stackTop); \
-                } \
-            /* At(GetArgument,*) */ \
-            } else if ( is(info,atnode->value,"GetArgument") ) { \
-                auto anode_l = static_cast<SimNode_GetArgument *>(atnode->value); \
-                /* At(GetArgument,GetLocalR2V<int|uint>) */ \
-                if ( is(info,atnode->index,"GetLocalR2V","int") || is(info,atnode->index,"GetLocalR2V","uint") ) { \
-                    auto gnode_r = static_cast<SimNode_GetLocalR2V<int32_t> *>(atnode->index); \
-                    return context->code->makeNode<SimNode_AtArgLocR2VI>(node->debugInfo, \
-                        atnode->stride, atnode->offset, atnode->range, \
-                            anode_l->subexpr.index, gnode_r->subexpr.stackTop); \
-                } else { \
-                    return context->code->makeNode<SimNode_AtArgAny>(node->debugInfo, \
-                        atnode->index, atnode->stride, atnode->offset, atnode->range, \
-                            anode_l->subexpr.index); \
-                } \
-            } \
-            return node; \
-        } \
+    struct SimNode_Op2At : SimNode_Op2Fusion {
+        virtual SimNode * visit(SimVisitor & vis) override {
+            V_BEGIN();
+            string name = op;
+            name += getSimSourceName(l.type);
+            name += getSimSourceName(r.type);
+            if (baseType != Type::none) {
+                vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
+            } else {
+                vis.op(name.c_str());
+            }
+            l.visit(vis);
+            r.visit(vis);
+            V_ARG(stride);
+            V_ARG(offset);
+            V_ARG(range);
+            V_END();
+        }
+        uint32_t  stride, offset, range;
     };
 
-#define IMPLEMENT_ATR2V_FUSION_POINT(TYPE,CTYPE) \
-    IMPLEMENT_ANY_AT_FUSION_POINT(TYPE,CTYPE,CTYPE,_##CTYPE,AtR2V);
+    // At(COMPUTEL,*) 
+#define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2At { \
+        INLINE auto compute ( Context & context ) { \
+            auto ll = l.subexpr->evalPtr(context); \
+            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return *((CTYPE *)(ll + rr*stride + offset)); \
+        } \
+        DAS_NODE(TYPE,CTYPE); \
+    }; 
 
-#define IMPLEMENT_ATR2V_VEC_FUSION_POINT(CTYPE) \
-    IMPLEMENT_ANY_AT_FUSION_POINT(,CTYPE,char *,_##CTYPE,AtR2V);
+// At((*,COMPUTER)
+#define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2At { \
+        INLINE auto compute ( Context & context ) { \
+            auto ll = *(char **)l.compute##COMPUTER(context); \
+            auto rr = uint32_t(r.subexpr->evalInt(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return *((CTYPE *)(ll + rr*stride + offset)); \
+        } \
+        DAS_NODE(TYPE,CTYPE); \
+    }; 
 
-#define REGISTER_ATR2V_FUSION_POINT(CTYPE) \
-    (*g_fusionEngine)[fuseName("AtR2V",typeName<CTYPE>::name())].push_back(make_shared<AtFusionPoint_##CTYPE>());
+// At((COMPUTEL,COMPUTER)
+#define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
+        INLINE auto compute ( Context & context ) { \
+            auto ll = *(char **)l.compute##COMPUTEL(context); \
+            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return *((CTYPE *)(ll + rr*stride + offset)); \
+        } \
+        DAS_NODE(TYPE,CTYPE); \
+    }; 
 
-// IMPLEMENT AT
-    IMPLEMENT_ANY_AT_FUSION_POINT(Ptr,char *,char *,,At);
+#define IMPLEMENT_OP2_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op2At *)result; \
+    auto sn = (SimNode_At *)node; \
+    rn->stride = sn->stride; \
+    rn->offset = sn->offset; \
+    rn->range = sn->range;
 
-// IMPLEMENT AtR2V for scalar types
-#undef FUSION_AT_PTR_TO_RESULT
-#define FUSION_AT_PTR_TO_RESULT(CTYPE,expr)     (*((CTYPE *)(expr)))
+#include "daScript/simulate/simulate_fusion_op2_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_perm.h"
 
-    IMPLEMENT_ATR2V_FUSION_POINT(Int,int32_t);
-    IMPLEMENT_ATR2V_FUSION_POINT(UInt,uint32_t);
-    IMPLEMENT_ATR2V_FUSION_POINT(Int64,int64_t);
-    IMPLEMENT_ATR2V_FUSION_POINT(UInt64,uint64_t);
-    IMPLEMENT_ATR2V_FUSION_POINT(Float,float);
-    IMPLEMENT_ATR2V_FUSION_POINT(Double,double);
-    IMPLEMENT_ATR2V_FUSION_POINT(Bool,bool);
+    IMPLEMENT_OP2_SCALAR(AtR2V);
 
-// IMPLEMENT AtR2V for vector types
-    #undef DAS_NODE
-    #define DAS_NODE(TYPE,CTYPE)                                    \
-        virtual vec4f eval ( das::Context & context ) override {    \
-            return v_ldu((const float *)compute(context));          \
-        }
+// At(COMPUTEL,*) 
+#undef IMPLEMENT_OP2_NODE_ANYR
+#define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2At { \
+        INLINE auto compute ( Context & context ) { \
+            auto ll = l.subexpr->evalPtr(context); \
+            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return ll + rr*stride + offset; \
+        } \
+        DAS_PTR_NODE; \
+    }; 
 
-    #undef  FUSION_AT_PTR_TO_RESULT
-    #define FUSION_AT_PTR_TO_RESULT(CTYPE,expr)     (expr)
+// At((*,COMPUTER)
+#undef IMPLEMENT_OP2_NODE_ANYL
+#define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2At { \
+        INLINE auto compute ( Context & context ) { \
+            auto ll = *(char **)l.compute##COMPUTER(context); \
+            auto rr = uint32_t(r.subexpr->evalInt(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return ll + rr*stride + offset; \
+        } \
+        DAS_PTR_NODE; \
+    }; 
 
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(int2);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(int3);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(int4);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(uint2);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(uint3);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(uint4);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(float2);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(float3);
-    IMPLEMENT_ATR2V_VEC_FUSION_POINT(float4);
+// At((COMPUTEL,COMPUTER)
+#undef IMPLEMENT_OP2_NODE
+#define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
+        INLINE auto compute ( Context & context ) { \
+            auto ll = *(char **)l.compute##COMPUTEL(context); \
+            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return ll + rr*stride + offset; \
+        } \
+        DAS_PTR_NODE; \
+    }; 
+
+#include "daScript/simulate/simulate_fusion_op2_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_perm.h"
+
+    IMPLEMENT_OP2_SCALAR(At);
 
     void createFusionEngine_at() {
-        // regular At
-        (*g_fusionEngine)["At"].push_back(make_shared<AtFusionPoint>());
-        // AtR2V for all the workhorse types
-        REGISTER_ATR2V_FUSION_POINT(int32_t);
-        REGISTER_ATR2V_FUSION_POINT(uint32_t);
-        REGISTER_ATR2V_FUSION_POINT(int64_t);
-        REGISTER_ATR2V_FUSION_POINT(uint64_t);
-        REGISTER_ATR2V_FUSION_POINT(float);
-        REGISTER_ATR2V_FUSION_POINT(double);
-        REGISTER_ATR2V_FUSION_POINT(bool);
-        // AtR2V for all vector types
-        REGISTER_ATR2V_FUSION_POINT(int2);
-        REGISTER_ATR2V_FUSION_POINT(int3);
-        REGISTER_ATR2V_FUSION_POINT(int4);
-        REGISTER_ATR2V_FUSION_POINT(uint2);
-        REGISTER_ATR2V_FUSION_POINT(uint3);
-        REGISTER_ATR2V_FUSION_POINT(uint4);
-        REGISTER_ATR2V_FUSION_POINT(float2);
-        REGISTER_ATR2V_FUSION_POINT(float3);
-        REGISTER_ATR2V_FUSION_POINT(float4);
+        REGISTER_OP2_SCALAR(AtR2V);
+        REGISTER_OP2_SCALAR(At);
     }
 }
