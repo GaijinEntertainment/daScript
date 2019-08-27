@@ -18,6 +18,7 @@
 //  A opname B
 #define IMPLEMENT_ANY_OP2(INLINE,OPNAME,TYPE,CTYPE) \
     struct FusionPoint_##OPNAME##_##CTYPE : FusionPointOp2 { \
+        IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Global,Local); \
         IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
         IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgument,ThisBlockArgument); \
         IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgument,Argument); \
@@ -48,6 +49,8 @@
         IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
             /* match op2 */ if ( false ) {} \
+            MATCH_OP2(OPNAME,"GetGlobal","GetLocalR2V",Global,Local) \
+            \
             MATCH_OP2(OPNAME,"GetThisBlockArgumentR2V","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetThisBlockArgument",ThisBlockArgument,ThisBlockArgument) \
             MATCH_OP2(OPNAME,"GetThisBlockArgument","GetArgument",ThisBlockArgument,Argument) \

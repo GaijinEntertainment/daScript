@@ -154,6 +154,8 @@ include/daScript/simulate/simulate_fusion.h
 include/daScript/simulate/simulate_fusion_op2.h
 include/daScript/simulate/simulate_fusion_op2_impl.h
 include/daScript/simulate/simulate_fusion_op2_perm.h
+include/daScript/simulate/simulate_fusion_op2_set_impl.h
+include/daScript/simulate/simulate_fusion_op2_set_perm.h
 include/daScript/simulate/simulate_fusion_op2_vec_settings.h
 )
 list(SORT SIMULATE_FUSION_SRC)

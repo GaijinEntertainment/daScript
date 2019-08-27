@@ -32,95 +32,66 @@ namespace das {
         uint32_t  stride, offset, range;
     };
 
-    // At(COMPUTEL,*) 
-#define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
-    struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2At { \
-        INLINE auto compute ( Context & context ) { \
-            auto ll = l.subexpr->evalPtr(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
-            return *((CTYPE *)(ll + rr*stride + offset)); \
-        } \
-        DAS_NODE(TYPE,CTYPE); \
-    }; 
+#define INLINE
 
-// At((*,COMPUTER)
-#define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
-    struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2At { \
+#define IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
-            auto ll = *(char **)l.compute##COMPUTER(context); \
+            auto pl = l.compute##COMPUTEL(context); \
             auto rr = uint32_t(r.subexpr->evalInt(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
-            return *((CTYPE *)(ll + rr*stride + offset)); \
+            return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
     }; 
 
-// At((COMPUTEL,COMPUTER)
-#define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+#define IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
-            auto ll = *(char **)l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
+            auto pl = l.compute##COMPUTEL(context); \
+            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
-            return *((CTYPE *)(ll + rr*stride + offset)); \
+            return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
     }; 
 
-#define IMPLEMENT_OP2_SETUP_NODE(result,node) \
+#define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
     auto rn = (SimNode_Op2At *)result; \
     auto sn = (SimNode_At *)node; \
     rn->stride = sn->stride; \
     rn->offset = sn->offset; \
     rn->range = sn->range;
 
-#include "daScript/simulate/simulate_fusion_op2_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_perm.h"
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
-    IMPLEMENT_OP2_SCALAR(AtR2V);
+    IMPLEMENT_SETOP_SCALAR(AtR2V);
 
-    // At(COMPUTEL,*) 
-#undef IMPLEMENT_OP2_NODE_ANYR
-#define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
-    struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2At { \
+#define IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
-            auto ll = l.subexpr->evalPtr(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
-            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
-            return ll + rr*stride + offset; \
-        } \
-        DAS_PTR_NODE; \
-    }; 
-
-// At((*,COMPUTER)
-#undef IMPLEMENT_OP2_NODE_ANYL
-#define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
-    struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2At { \
-        INLINE auto compute ( Context & context ) { \
-            auto ll = *(char **)l.compute##COMPUTER(context); \
+            auto pl = l.compute##COMPUTEL(context); \
             auto rr = uint32_t(r.subexpr->evalInt(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
-            return ll + rr*stride + offset; \
+            return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
     }; 
 
-// At((COMPUTEL,COMPUTER)
-#undef IMPLEMENT_OP2_NODE
-#define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+#define IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
-            auto ll = *(char **)l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
+            auto pl = l.compute##COMPUTEL(context); \
+            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
-            return ll + rr*stride + offset; \
+            return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
     }; 
 
-#undef IMPLEMENT_OP2_SETUP_NODE
-#define IMPLEMENT_OP2_SETUP_NODE(result,node) \
+#undef IMPLEMENT_OP2_SET_SETUP_NODE
+#define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
     auto rn = (SimNode_Op2At *)result; \
     auto sn = (SimNode_At *)node; \
     rn->stride = sn->stride; \
@@ -128,14 +99,14 @@ namespace das {
     rn->range = sn->range; \
     rn->baseType = Type::none;
 
-#include "daScript/simulate/simulate_fusion_op2_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_perm.h"
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
     typedef char * Dummy;
-    IMPLEMENT_ANY_OP2(__forceinline, At, Ptr, Dummy);
+    IMPLEMENT_ANY_SETOP(At, Ptr, Dummy);
 
     void createFusionEngine_at() {
-        REGISTER_OP2_SCALAR(AtR2V);
-        (*g_fusionEngine)["At"].push_back(make_shared<FusionPoint_At_Dummy>());
+        REGISTER_SETOP_SCALAR(AtR2V);
+        (*g_fusionEngine)["At"].push_back(make_shared<FusionPoint_Set_At_Dummy>());
     }
 }
