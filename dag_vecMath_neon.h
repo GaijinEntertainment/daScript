@@ -451,6 +451,12 @@ VECMATH_FINLINE vec4f VECTORCALL v_perm_zxxb(vec4f xyzw, vec4f abcd)
   float32x2x2_t xb_ya = vzip_f32(xy, ba);
   return vcombine_f32(zx_wy.val[0], xb_ya.val[0]);
 }
+VECMATH_FINLINE vec4f VECTORCALL v_perm_yxxc(vec4f xyzw, vec4f abcd)
+{
+  float32x2_t xy = vget_low_f32(xyzw);
+  float32x2_t cd = vget_high_f32(abcd);
+  return vcombine_f32(vrev64_f32(xy), vzip_f32(xy, cd).val[0]);
+}
 VECMATH_FINLINE vec4f VECTORCALL v_perm_yxac(vec4f xyzw, vec4f abcd)
 {
   float32x2_t ac = vtrn_f32(vget_low_f32(abcd), vget_high_f32(abcd)).val[0];
