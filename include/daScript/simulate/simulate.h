@@ -493,6 +493,9 @@ namespace das
     template <>
     struct EvalTT<bool> { static __forceinline bool eval ( Context & context, SimNode * node ) {
         return node->evalBool(context); }};
+    template <>
+    struct EvalTT<char *> { static __forceinline char * eval ( Context & context, SimNode * node ) {
+        return node->evalPtr(context); }};
 
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {

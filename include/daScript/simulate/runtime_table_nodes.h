@@ -35,8 +35,9 @@ namespace das
         SimNode_TableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts, uint32_t o)
             : SimNode_Table(at,t,k,vts), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
+            using TT = KeyType;
             V_BEGIN();
-            V_OP(TableIndex);
+            V_OP_TT(TableIndex);
             V_SUB(tabExpr);
             V_SUB(keyExpr);
             V_ARG(valueTypeSize);
@@ -45,8 +46,7 @@ namespace das
         }
         __forceinline char * compute ( Context & context ) {
             Table * tab = (Table *) tabExpr->evalPtr(context);
-            vec4f xkey = keyExpr->eval(context);
-            KeyType key = cast<KeyType>::to(xkey);
+            auto key = EvalTT<KeyType>::eval(context,keyExpr);
             TableHash<KeyType> thh(&context,valueTypeSize);
             auto hfn = hash_function(context, key);
             int index = thh.reserve(*tab, key, hfn);    // if index==-1, it was a through, so safe to do
@@ -65,8 +65,7 @@ namespace das
         }
         __forceinline bool compute ( Context & context ) {
             Table * tab = (Table *) tabExpr->evalPtr(context);
-            vec4f xkey = keyExpr->eval(context);
-            KeyType key = cast<KeyType>::to(xkey);
+            auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);
             return thh.erase(*tab, key, hfn) != -1;
@@ -83,8 +82,7 @@ namespace das
         }
         __forceinline char * compute(Context & context) {
             Table * tab = (Table *)tabExpr->evalPtr(context);
-            vec4f xkey = keyExpr->eval(context);
-            KeyType key = cast<KeyType>::to(xkey);
+            auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);
             int index = thh.find(*tab, key, hfn);
@@ -102,8 +100,7 @@ namespace das
         }
         __forceinline bool compute(Context & context) {
             Table * tab = (Table *)tabExpr->evalPtr(context);
-            vec4f xkey = keyExpr->eval(context);
-            KeyType key = cast<KeyType>::to(xkey);
+            auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);
             return thh.find(*tab, key, hfn) != -1;
