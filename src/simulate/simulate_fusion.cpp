@@ -110,6 +110,7 @@ namespace das {
             // at
             createFusionEngine_at();
             createFusionEngine_at_array();
+            createFusionEngine_tableindex();
         }
     }
 

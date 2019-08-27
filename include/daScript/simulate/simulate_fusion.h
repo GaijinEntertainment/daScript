@@ -95,4 +95,5 @@ namespace das {
     // at
     void createFusionEngine_at();
     void createFusionEngine_at_array();
+    void createFusionEngine_tableindex();
 }
