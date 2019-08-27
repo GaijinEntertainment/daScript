@@ -32,9 +32,7 @@ namespace das {
         uint32_t  stride, offset, range;
     };
 
-#define INLINE
-
-#define IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,COMPUTEL) \
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
             auto pl = l.compute##COMPUTEL(context); \
@@ -45,7 +43,7 @@ namespace das {
         DAS_NODE(TYPE,CTYPE); \
     }; 
 
-#define IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
             auto pl = l.compute##COMPUTEL(context); \
@@ -68,7 +66,7 @@ namespace das {
 
     IMPLEMENT_SETOP_SCALAR(AtR2V);
 
-#define IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,COMPUTEL) \
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
             auto pl = l.compute##COMPUTEL(context); \
@@ -79,7 +77,7 @@ namespace das {
         DAS_PTR_NODE; \
     }; 
 
-#define IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
             auto pl = l.compute##COMPUTEL(context); \
@@ -90,7 +88,6 @@ namespace das {
         DAS_PTR_NODE; \
     }; 
 
-#undef IMPLEMENT_OP2_SET_SETUP_NODE
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
     auto rn = (SimNode_Op2At *)result; \
     auto sn = (SimNode_At *)node; \
@@ -103,7 +100,7 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
     typedef char * Dummy;
-    IMPLEMENT_ANY_SETOP(At, Ptr, Dummy);
+    IMPLEMENT_ANY_SETOP(__forceinline, At, Ptr, Dummy);
 
     void createFusionEngine_at() {
         REGISTER_SETOP_SCALAR(AtR2V);

@@ -5,7 +5,7 @@
 #define FUSION_OP2_RVALUE_RIGHT(CTYPE,expr)     (*((CTYPE *)(expr)))
 #define FUSION_OP2_PTR_TO_LVALUE(expr)          (*(expr))
 
-#define IMPLEMENT_OP2_SET_NODE_ANY(OPNAME,TYPE,CTYPE,COMPUTEL) \
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2Fusion { \
         virtual vec4f eval ( Context & context ) override { \
             auto pl = FUSION_OP2_PTR(CTYPE,l.compute##COMPUTEL(context)); \
@@ -15,7 +15,7 @@
         } \
     }; 
 
-#define IMPLEMENT_OP2_SET_NODE(OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2Fusion { \
         virtual vec4f eval ( Context & context ) override { \
             auto pl = FUSION_OP2_PTR(CTYPE,l.compute##COMPUTEL(context)); \
