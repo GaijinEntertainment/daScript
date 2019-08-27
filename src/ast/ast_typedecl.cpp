@@ -1187,34 +1187,34 @@ namespace das
         return getBaseSizeOf() * size;
     }
 
-    bool isCircularType ( const TypeDeclPtr & type, set<const TypeDecl *> & all ) {
-        if ( type->baseType==Type::tStructure || type->baseType==Type::tTuple ) {
-            auto thisType = type.get();
-            if ( all.find(thisType)!=all.end() ) return true;
-            all.insert(thisType);
-        }
+    bool isCircularType ( const TypeDeclPtr & type, vector<const TypeDecl *> & all ) {
         if ( type->baseType==Type::tPointer ) {
             return false;
-        } else if ( type->baseType==Type::tStructure ) {
+        } 
+        if ( type->firstType && isCircularType(type->firstType, all) ) return true;
+        if ( type->secondType && isCircularType(type->secondType, all) ) return true;
+        auto pt = type.get();
+        for (auto it : all) {
+            if ( it == pt ) return true;
+        }
+        all.push_back(pt);
+        if ( type->baseType==Type::tStructure ) {
             if ( type->structType ) {
                 for ( auto & fd : type->structType->fields ) {
                     if ( isCircularType(fd.type, all) ) return true;
                 }
             }
-            return false;
-        }
-        if ( type->firstType && isCircularType(type->firstType, all) ) return true;
-        if ( type->secondType && isCircularType(type->secondType, all) ) return true;
-        if ( type->baseType==Type::tTuple ) {
+        }  else if ( type->baseType==Type::tTuple ) {
             for ( auto & arg : type->argTypes ) {
                 if ( isCircularType(arg, all) ) return true;
             }
         }
+        all.pop_back();
         return false;
     }
 
     bool isCircularType ( const TypeDeclPtr & type ) {
-        set<const TypeDecl *> all;
+        vector<const TypeDecl *> all;
         return isCircularType(type, all);
     }
 }
