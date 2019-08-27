@@ -94,4 +94,5 @@ namespace das {
     void createFusionEngine_op2_scalar_vec();
     // at
     void createFusionEngine_at();
+    void createFusionEngine_at_array();
 }

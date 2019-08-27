@@ -16,14 +16,9 @@ namespace das
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             Array * pA = (Array *) l->evalPtr(context);
-            vec4f rr = r->eval(context);
-            uint32_t idx = cast<uint32_t>::to(rr);
-            if ( idx >= pA->size ) {
-                context.throw_error_at(debugInfo,"array index out of range");
-                return nullptr;
-            } else {
-                return pA->data + idx*stride + offset;
-            }
+            auto idx = uint32_t(r->evalInt(context));
+            if ( idx >= pA->size ) context.throw_error_at(debugInfo,"array index out of range");
+            return pA->data + idx*stride + offset;
         }
         SimNode * l, * r;
         uint32_t stride, offset;
