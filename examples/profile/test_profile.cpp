@@ -728,6 +728,12 @@ void testNBodies(int32_t N) {
     }
 }
 
+void testNBodiesS(int32_t N) {
+    for (int32_t n = 0; n != N; ++n) {
+        advance(NBODIES, bodies, 0.01f);
+    }
+}
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -769,6 +775,7 @@ public:
         addExtern<DAS_BIND_FUN(testExpLoop)>(*this, lib, "testExpLoop",SideEffects::modifyExternal,"testExpLoop");
         addExtern<DAS_BIND_FUN(testNBodiesInit)>(*this, lib, "testNBodiesInit",SideEffects::modifyExternal,"testNBodiesInit");
         addExtern<DAS_BIND_FUN(testNBodies)>(*this, lib, "testNBodies",SideEffects::modifyExternal,"testNBodies");
+        addExtern<DAS_BIND_FUN(testNBodiesS)>(*this, lib, "testNBodiesS",SideEffects::modifyExternal,"testNBodiesS");
         // its AOT ready
         verifyAotReady();
     }

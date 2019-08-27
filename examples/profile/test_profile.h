@@ -17,6 +17,7 @@ int testFibR(int n);
 int testFibI(int n);
 void testNBodiesInit();
 void testNBodies(int32_t N);
+void testNBodiesS(int32_t N);
 void testParticles(int count);
 void testParticlesI(int count);
 int testPrimes(int n);
