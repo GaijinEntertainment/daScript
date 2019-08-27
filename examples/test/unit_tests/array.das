@@ -1,28 +1,34 @@
 // options plot=true,plotFile="../../test.dot"
 // options log=true, optimize=false
 // options noaot=true
+// options logNodes=true
 
+[sideeffects]
 def make_test_array(var a:array<int>;extra:int=0)
     var i=0
     resize(a,10)
     for x in a
         x = i++ + extra
 
+[sideeffects]
 def verify_test_array(a:array<int>;extra:int=0)
     assert(length(a)==10)
     var i=0
     for x in a
         verify(x==(extra+i++))
 
+[sideeffects]
 def pass_array ( var arr:array<int> )
     push(arr,4)
 
+[sideeffects]
 def verifyIntArray(a:array<int>;var s:int;c,tail:int)
     for t in range(0,c)
         verify(a[t]==s++)
     for t in range(c,c+tail)
         assert(a[t]==0)
 
+[sideeffects]
 def testIntArray
     var arr,arr2:array<int>
     let val2 = 2

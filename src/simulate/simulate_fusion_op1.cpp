@@ -69,6 +69,7 @@ namespace das {
             if ( false ) {} \
             MATCH_ANY_OP1_NODE("GetLocal",Local) \
             MATCH_ANY_OP1_NODE("GetArgument",Argument) \
+            MATCH_ANY_OP1_NODE("GetArgumentRef",Argument) \
             if ( result ) { \
                 result->set(#OPNAME,Type(ToBasicType<CTYPE>::type),tnode->debugInfo); \
                 SimNode_SourceBase * sbnode = static_cast<SimNode_SourceBase *>(tnode->x); \
