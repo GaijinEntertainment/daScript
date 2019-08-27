@@ -32,6 +32,8 @@ namespace das {
         uint32_t  stride, offset, range;
     };
 
+/* AtR2V SCALAR */
+
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
@@ -65,6 +67,35 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_SETOP_SCALAR(AtR2V);
+
+/* AtR2V VECTOR */
+
+#define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
+         virtual vec4f eval ( Context & context ) override { \
+            auto pl = l.compute##COMPUTEL(context); \
+            auto rr = uint32_t(r.subexpr->evalInt(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return v_ldu((const float *)(pl + rr*stride + offset)); \
+        } \
+    }; 
+
+#define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
+         virtual vec4f eval ( Context & context ) override { \
+            auto pl = l.compute##COMPUTEL(context); \
+            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
+            if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
+            return v_ldu((const float *)(pl + rr*stride + offset)); \
+        } \
+    }; 
+
+#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
+#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+
+    IMPLEMENT_SETOP_NUMERIC_VEC(AtR2V);
+
+/* At */
 
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
@@ -104,6 +135,7 @@ namespace das {
 
     void createFusionEngine_at() {
         REGISTER_SETOP_SCALAR(AtR2V);
+        REGISTER_SETOP_NUMERIC_VEC(AtR2V);
         (*g_fusionEngine)["At"].push_back(make_shared<FusionPoint_Set_At_Dummy>());
     }
 }
