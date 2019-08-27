@@ -49,7 +49,7 @@ namespace das {
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
+            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
@@ -84,7 +84,7 @@ namespace das {
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
          virtual vec4f eval ( Context & context ) override { \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
+            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
             return v_ldu((const float *)(pl + rr*stride + offset)); \
         } \
@@ -95,7 +95,7 @@ namespace das {
 
     IMPLEMENT_SETOP_NUMERIC_VEC(AtR2V);
 
-/* At */
+    /* At */
 
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
@@ -112,7 +112,7 @@ namespace das {
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
             auto pl = l.compute##COMPUTEL(context); \
-            auto rr = *((uint32_t *)r.compute##COMPUTEL(context)); \
+            auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
             return pl + rr*stride + offset; \
         } \
