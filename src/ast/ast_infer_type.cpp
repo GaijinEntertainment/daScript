@@ -263,7 +263,8 @@ namespace das {
                     resT->at = decl->at;
                     resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
-                    resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
+                    resT->dim.clear();
+                    // resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
                     resT->alias = decl->alias;
                     return resT;
                 } else {

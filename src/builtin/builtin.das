@@ -62,6 +62,15 @@ def keys(a:table<auto(keyT),auto(valT)>) : iterator<keyT & const>
 def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
   return __builtin_table_values(a,typeinfo(sizeof type valT))
 
+// functional
+
+def toarray(a:auto(TT)[])
+  var arr : array<TT delete const>
+  reserve(arr,length(a))
+  for x in a
+    push(arr,x)
+  return <- arr
+
 // string writer
 
 options indenting = 0
