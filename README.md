@@ -56,7 +56,7 @@ URIPARSER_BUILD_CHAR:BOOL=ON
 // Build API documentation (requires Doxygen, Graphviz, and (optional) Qt's qhelpgenerator)
 URIPARSER_BUILD_DOCS:BOOL=ON
 --
-// Build test suite (requires GTest >=1.8.1)
+// Build test suite (requires GTest >=1.8.0)
 URIPARSER_BUILD_TESTS:BOOL=ON
 --
 // Build tools (e.g. CLI "uriparse")
@@ -64,6 +64,9 @@ URIPARSER_BUILD_TOOLS:BOOL=ON
 --
 // Build code supporting data type 'wchar_t'
 URIPARSER_BUILD_WCHAR_T:BOOL=ON
+--
+// Enable installation of uriparser
+URIPARSER_ENABLE_INSTALL:BOOL=ON
 --
 // Use of specific runtime library (/MT /MTd /MD /MDd) with MSVC
 URIPARSER_MSVC_RUNTIME:STRING=
