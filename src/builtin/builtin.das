@@ -65,7 +65,7 @@ def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
 // functional
 
 def toarray(a:auto(TT)[])
-  var arr : array<TT delete const delete []>
+  var arr : array<TT delete const>
   reserve(arr,length(a))
   for x in a
     push(arr,x)
