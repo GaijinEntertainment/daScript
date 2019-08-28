@@ -117,7 +117,7 @@ namespace das
     vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
         vec4f ll = source->eval(context);
         char * data = cast<char *>::to(ll);
-        char * iter = context.heap.allocate(sizeof(GoodArrayIterator));
+        char * iter = context.heap.allocate(sizeof(FixedArrayIterator));
         new (iter) FixedArrayIterator(data, size, stride);
         return cast<char *>::from(iter);
     }
