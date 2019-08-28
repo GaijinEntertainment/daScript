@@ -3049,6 +3049,17 @@ namespace das {
             }
             expr->type = make_shared<TypeDecl>(*expr->makeType);
             verifyType(expr->type);
+            if ( expr->isKeyValue ) {
+                auto keyType = expr->makeType->argTypes[0];
+                if ( keyType->ref ) {
+                    error("a => b tuple key can't be declared as a reference",
+                          keyType->at,CompilationError::invalid_table_type);
+                }
+                if ( !keyType->isWorkhorseType() ) {
+                    error("a => b tuple key has to be declare as a basic 'hashable' type",
+                          keyType->at,CompilationError::invalid_table_type);
+                }
+            }
             return Visitor::visit(expr);
         }
     // make array

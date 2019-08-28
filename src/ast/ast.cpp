@@ -1489,6 +1489,7 @@ namespace das {
         if ( makeType ) {
             cexpr->makeType = make_shared<TypeDecl>(*makeType);
         }
+        cexpr->isKeyValue = isKeyValue;
         return cexpr;
     }
 

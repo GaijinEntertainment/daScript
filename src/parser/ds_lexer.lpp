@@ -430,6 +430,7 @@
 <normal>"\<\<\="                            return SHLEQU;
 <normal>"\>\>\>\="                          return ROTREQU;
 <normal>"\<\<\<\="                          return ROTLEQU;
+<normal>"\=\>"                              return MAPTO;
 <normal>[ \t\r]                             /* skip white space */
 <normal>(\/\/.*)*\n                        {
     das_yycolumn = 1;

@@ -71,6 +71,12 @@ def toarray(a:auto(TT)[])
     push(arr,x)
   return <- arr
 
+def totable(a:tuple<auto(keyT);auto(valT)>[])
+  var tab : table<keyT delete const,valT>
+  for x in a
+    tab[x._0] = x._1
+  return <- tab
+
 // string writer
 
 options indenting = 0

@@ -858,6 +858,7 @@ namespace das
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
+        bool isKeyValue = false;
     };
 
     struct ExprArrayComprehension : Expression {

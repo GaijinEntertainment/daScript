@@ -134,6 +134,7 @@
 %token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
 %token  QQ          QDOT        LPIPE       LBPIPE      RPIPE
 %token  CLONEEQU    ROTL        ROTR        ROTLEQU     ROTREQU
+%token  MAPTO
 
 %token<i>       INTEGER
 %token<i64>     LONG_INTEGER
@@ -214,6 +215,8 @@
 %type <pExpression>     make_struct_decl
 %type <pExpression>     make_struct_dim
 %type <pExpression>     make_tuple
+%type <pExpression>     make_map_tuple
+%type <pExpression>     make_any_tuple
 %type <pExpression>     make_dim
 %type <pExpression>     make_dim_decl
 %type <pExpression>     array_comprehension_where
@@ -1587,13 +1590,27 @@ make_tuple
     }
     ;
 
+make_map_tuple
+    :   expr[kval] MAPTO[mkt] expr[vval] {
+        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(@mkt));
+        mt->values.push_back(ExpressionPtr($kval));
+        mt->values.push_back(ExpressionPtr($vval));
+        $$ = mt;
+    }
+    ;
+
+make_any_tuple
+    :   make_tuple[mkt]         { $$ = $mkt; }
+    |   make_map_tuple[mkm]     { $$ = $mkm; }
+    ;
+
 make_dim
-    :   make_tuple[val] {
+    :   make_any_tuple[val] {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_dim[mka] ';' make_tuple[val] {
+    |   make_dim[mka] ';' make_any_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }
