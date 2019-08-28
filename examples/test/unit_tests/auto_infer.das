@@ -24,6 +24,21 @@ def take_arr(a:int[])   // infer array size
         summ += x
     return summ
 
+def random_pick(source : string[]; var seed : int4&) : string
+    return "pick_1"
+
+def random_pick(source : tuple<string; float>[]; var seed : int4&) : string
+    return "pick_2"
+
+def test_pick()
+    let s1 : string[2]
+    let s2 : tuple<string; float>[3]
+    var seed : int4
+    let q1 = random_pick(s1,seed)
+    assert(q1=="pick_1")
+    let q2 = random_pick(s2,seed)
+    assert(q2=="pick_2")
+
 [export]
 def test
     // regular array
@@ -73,6 +88,8 @@ def test
     assert(x==5)
     let y = madd(1.0,2.0,3.0)
     assert(y==5.0)
+    // and pick
+    test_pick()
     return true
 
 def fn3
@@ -83,3 +100,4 @@ def fn2
 
 def fn1
     return fn2() + 2
+

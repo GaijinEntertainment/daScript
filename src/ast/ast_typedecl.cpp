@@ -79,6 +79,11 @@ namespace das
             } else {
                 return nullptr;
             }
+        } else if ( autoT->baseType != Type::autoinfer ) {
+            // if we are matching to strong type, with dim only, then it has to match
+            if ( autoT->baseType != initT->baseType ) {
+                return nullptr;
+            }
         }
         // auto & can't be infered from non-ref
         if ( autoT->ref && !initT->ref )
