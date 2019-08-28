@@ -50,6 +50,7 @@ namespace das
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
         TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant;
+        if ( autoT->removeDim && TT->dim.size() ) TT->dim.pop_back();
         if ( autoT->isPointer() ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tArray ) {
@@ -249,13 +250,16 @@ namespace das
             stream << "&";
         } 
         if (contracts) {
-            if (removeConstant || removeRef) {
+            if (removeConstant || removeRef || removeDim ) {
                 stream << " delete ";
                 if (removeConstant) {
                     stream << "const";
                 }
                 if (removeRef) {
                     stream << "&";
+                }
+                if (removeDim ) {
+                    stream << "[]";
                 }
             }
         }
