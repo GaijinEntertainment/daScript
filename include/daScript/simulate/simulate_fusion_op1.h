@@ -23,9 +23,6 @@
 #define MATCH_ANY_OP1_NODE(CTYPE,NODENAME,COMPUTE) \
     else if ( is(info,tnode->x,NODENAME) ) { result = context->code->makeNode<SimNode_Op1##COMPUTE>(); }
 
-#define MATCH_ANY_OP1_NODE_TYPELESS(CTYPE,NODENAME,COMPUTE) \
-    else if ( is(info,tnode->x,NODENAME) ) { result = context->code->makeNode<SimNode_Op1##COMPUTE>(); }
-
 #include "daScript/simulate/simulate_fusion_op1_impl.h"
 #include "daScript/simulate/simulate_fusion_op1_set_impl.h"
 

@@ -8,7 +8,7 @@
             SimNode_Op1Fusion * result = nullptr; \
             auto tnode = static_cast<SimNode_Op1 *>(node); \
             if ( false ) {} \
-            MATCH_ANY_OP1_NODE_TYPELESS(CTYPE,"ConstValue",Const) \
+            MATCH_ANY_OP1_NODE(CTYPE,"ConstValue",Const) \
             MATCH_ANY_OP1_NODE(CTYPE,"GetLocalR2V",Local) \
             MATCH_ANY_OP1_NODE(CTYPE,"GetArgument",Argument) \
             if ( result ) { \

@@ -313,6 +313,20 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ReturnConst::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnConst);
+        V_ARG(value);
+        V_END();
+    }
+
+    SimNode * SimNode_ReturnConstString::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReturnConstString);
+        V_ARG(value);
+        V_END();
+    }
+
     SimNode * SimNode_ReturnRefAndEval::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(ReturnRefAndEval);
