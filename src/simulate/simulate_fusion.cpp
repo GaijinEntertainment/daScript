@@ -96,6 +96,7 @@ namespace das {
             createFusionEngine_misc_copy_reference();
             // op1
             createFusionEngine_op1();
+            createFusionEngine_return();
             // scalar
             createFusionEngine_op2();
             createFusionEngine_op2_set();

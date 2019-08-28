@@ -5,6 +5,8 @@
 
 namespace das {
 
+    typedef char * StringPtr;
+
     struct SimNodeInfo {
         string  name;
         string  typeName;
@@ -24,7 +26,7 @@ namespace das {
             if ( it==info.end() ) return false;
             return it->second.name == name;
         }
-        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const char * typeName ) {
+        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const string & typeName ) {
             auto it = info.find(node);
             if ( it==info.end() ) return false;
             return (it->second.name == name) && (it->second.typeName==typeName);
@@ -81,6 +83,7 @@ namespace das {
     void createFusionEngine_misc_copy_reference();
     // op1
     void createFusionEngine_op1();
+    void createFusionEngine_return();
     // scalar
     void createFusionEngine_op2();
     void createFusionEngine_op2_set();

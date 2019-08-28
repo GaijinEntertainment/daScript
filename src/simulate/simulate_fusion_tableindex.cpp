@@ -68,13 +68,11 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
-    typedef char * Dummy;
-
     IMPLEMENT_SETOP_NUMERIC(TableIndex);
-    IMPLEMENT_ANY_SETOP(__forceinline,TableIndex,Ptr,Dummy); \
+    IMPLEMENT_ANY_SETOP(__forceinline,TableIndex,Ptr,StringPtr); \
 
     void createFusionEngine_tableindex() {
         REGISTER_SETOP_NUMERIC(TableIndex);
-        REGISTER_SETOP(TableIndex,Ptr,Dummy); 
+        REGISTER_SETOP(TableIndex,Ptr,StringPtr); 
     }
 }

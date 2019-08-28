@@ -133,12 +133,11 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
-    typedef char * Dummy;
-    IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt, Ptr, Dummy);
+    IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt, Ptr, StringPtr);
 
     void createFusionEngine_at_array() {
         REGISTER_SETOP_SCALAR(ArrayAtR2V);
         REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V);
-        (*g_fusionEngine)["ArrayAt"].push_back(make_shared<FusionPoint_Set_ArrayAt_Dummy>());
+        (*g_fusionEngine)["ArrayAt"].push_back(make_shared<FusionPoint_Set_ArrayAt_StringPtr>());
     }
 }

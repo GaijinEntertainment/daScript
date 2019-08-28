@@ -139,6 +139,7 @@ SOURCE_GROUP_FILES("misc" MISC_SRC)
 SET(SIMULATE_FUSION_SRC
 src/simulate/simulate_fusion.cpp
 src/simulate/simulate_fusion_op1.cpp
+src/simulate/simulate_fusion_op1_return.cpp
 src/simulate/simulate_fusion_op2.cpp
 src/simulate/simulate_fusion_op2_set.cpp
 src/simulate/simulate_fusion_op2_bool.cpp
@@ -153,6 +154,12 @@ src/simulate/simulate_fusion_at_array.cpp
 src/simulate/simulate_fusion_tableindex.cpp
 src/simulate/simulate_fusion_misc_copy.cpp
 include/daScript/simulate/simulate_fusion.h
+include/daScript/simulate/simulate_fusion_op1.h
+include/daScript/simulate/simulate_fusion_op1_impl.h
+include/daScript/simulate/simulate_fusion_op1_perm.h
+include/daScript/simulate/simulate_fusion_op1_set_impl.h
+include/daScript/simulate/simulate_fusion_op1_set_perm.h
+include/daScript/simulate/simulate_fusion_op1_reg.h
 include/daScript/simulate/simulate_fusion_op2.h
 include/daScript/simulate/simulate_fusion_op2_impl.h
 include/daScript/simulate/simulate_fusion_op2_perm.h
