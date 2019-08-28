@@ -1,19 +1,19 @@
 #define MATCH_OP2(OPNAME,LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
     else if ( is(info,node_l,LNODENAME) &&  is(info,node_r,RNODENAME) ) { \
         return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER>(); \
-    } 
+    }
 
 #define MATCH_OP2_ANYR(OPNAME,LNODENAME,COMPUTEL) \
     else if ( is(info,node_l,LNODENAME) ) { \
         anyRight = true; \
         return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_Any>(); \
-    } 
+    }
 
 #define MATCH_OP2_ANYL(OPNAME,RNODENAME,COMPUTER) \
     else if ( is(info,node_r,RNODENAME) ) { \
         anyLeft = true; \
         return context->code->makeNode<SimNode_##OPNAME##_Any_##COMPUTER>(); \
-    } 
+    }
 
 //  A opname B
 #define IMPLEMENT_ANY_OP2(INLINE,OPNAME,TYPE,CTYPE) \

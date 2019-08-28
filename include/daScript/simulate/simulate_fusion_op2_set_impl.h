@@ -1,13 +1,13 @@
 #define MATCH_OP2_SET(OPNAME,LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
     else if ( is(info, node_l,LNODENAME) &&  is(info,node_r,RNODENAME) ) { \
         return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER>(); \
-    } 
+    }
 
 #define MATCH_OP2_SET_ANY(OPNAME,LNODENAME,COMPUTEL) \
     else if ( is(info, node_l,LNODENAME) ) { \
         anyRight = true; \
         return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_Any>(); \
-    } 
+    }
 
 //  a SetOPNAME b
 #define IMPLEMENT_ANY_SETOP(INLINE,OPNAME,TYPE,CTYPE) \
