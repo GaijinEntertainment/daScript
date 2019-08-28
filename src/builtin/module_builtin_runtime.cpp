@@ -7,6 +7,7 @@
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/bin_serializer.h"
+#include "daScript/simulate/runtime_array.h"
 
 namespace das
 {
@@ -189,6 +190,24 @@ namespace das
         table_unlock(*context, arr);
     }
 
+    bool builtin_iterator_first ( Iterator * it, void * data, Context * context ) {
+        return it->first(*context, (char *)data);
+    }
+
+    bool builtin_iterator_next ( Iterator * it, void * data, Context * context ) {
+        return it->next(*context, (char *)data);
+    }
+
+    void builtin_iterator_close ( Iterator * it, void * data, Context * context ) {
+        it->close(*context, (char *)&data);
+    }
+
+    Iterator * builtin_make_iterator ( const Array & arr, int stride, Context * context ) {
+        char * iter = context->heap.allocate(sizeof(GoodArrayIterator));
+        new (iter) GoodArrayIterator((Array *)&arr, stride);
+        return (Iterator *) iter;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
@@ -201,6 +220,12 @@ namespace das
         addAnnotation(make_shared<NoAotFunctionAnnotation>());
         addAnnotation(make_shared<InitFunctionAnnotation>());
         addAnnotation(make_shared<HybridFunctionAnnotation>());
+        // iterator functions
+        addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first", SideEffects::modifyExternal, "builtin_iterator_first");
+        addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",  SideEffects::modifyExternal, "builtin_iterator_next");
+        addExtern<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close", SideEffects::modifyExternal, "builtin_iterator_close");
+        // make-iterator functions
+        addExtern<DAS_BIND_FUN(builtin_make_iterator)>(*this, lib,  "_builtin_make_iterator",  SideEffects::modifyExternal, "builtin_make_iterator");
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");

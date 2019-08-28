@@ -170,6 +170,7 @@ namespace das {
             case Type::tURange:         return makeNode<NodeType<urange>>(args...);
             case Type::tString:         return makeNode<NodeType<char *>>(args...);
             case Type::tPointer:        return makeNode<NodeType<void *>>(args...);
+            case Type::tIterator:       return makeNode<NodeType<void *>>(args...);
             case Type::tFunction:       return makeNode<NodeType<Func>>(args...);
             case Type::tLambda:         return makeNode<NodeType<Lambda>>(args...);
             case Type::tDouble:         return makeNode<NodeType<double>>(args...);
