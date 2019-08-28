@@ -43,7 +43,7 @@ namespace das {
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
@@ -54,7 +54,7 @@ namespace das {
             return *((CTYPE *)(pl + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
     auto rn = (SimNode_Op2At *)result; \
@@ -79,7 +79,7 @@ namespace das {
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
             return v_ldu((const float *)(pl + rr*stride + offset)); \
         } \
-    }; 
+    };
 
 #undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
@@ -90,7 +90,7 @@ namespace das {
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range"); \
             return v_ldu((const float *)(pl + rr*stride + offset)); \
         } \
-    }; 
+    };
 
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
@@ -109,7 +109,7 @@ namespace das {
             return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
-    }; 
+    };
 
 #undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
@@ -121,7 +121,7 @@ namespace das {
             return pl + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
-    }; 
+    };
 
 #undef IMPLEMENT_OP2_SET_SETUP_NODE
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
