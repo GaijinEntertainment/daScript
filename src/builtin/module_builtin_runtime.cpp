@@ -221,6 +221,18 @@ namespace das
         return (Iterator *) iter;
     }
 
+    struct NilIterator : Iterator {
+        virtual bool first ( Context &, char * ) override { return false; }
+        virtual bool next  ( Context &, char * ) override { return false; }
+        virtual void close ( Context &, char * ) override { }
+    };
+
+    Iterator * builtin_make_nil_iterator ( Context * context ) {
+        char * iter = context->heap.allocate(sizeof(NilIterator));
+        new (iter) NilIterator();
+        return (Iterator *) iter;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
@@ -244,6 +256,8 @@ namespace das
             SideEffects::modifyExternal, "builtin_make_fixed_array_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
             SideEffects::modifyExternal, "builtin_make_range_iterator");
+        addExtern<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
+            SideEffects::modifyExternal, "builtin_make_nil_iterator");
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");

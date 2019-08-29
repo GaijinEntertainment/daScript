@@ -64,6 +64,38 @@ def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
 
 // functional
 
+def each ( rng : range ) : iterator<int>
+  return _builtin_make_range_iterator(rng)
+
+[unsafe]
+def each ( a : auto(TT)[] ) : iterator<TT&>
+  var parr : void? = reinterpret<void?>(addr(a[0]))
+  return _builtin_make_fixed_array_iterator(parr,typeinfo(dim a),typeinfo(sizeof type TT))
+
+def each ( a : array<auto(TT)> ) : iterator<TT&>
+  return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
+
+[unsafe]
+def toarray ( it : iterator<auto(TT)> ) : array<TT delete const &>
+  var arr : array<TT delete const &>
+  if typeinfo(is_ref type TT)
+    var rkey : TT delete const &?
+    var pkey : void? = reinterpret<void?>(addr(rkey))
+    var loop = _builtin_iterator_first(it,pkey)
+    while loop
+      push(arr,deref(rkey))
+      loop = _builtin_iterator_next(it,pkey)
+    _builtin_iterator_close(it,pkey)
+  else
+    var rkey : TT
+    var pkey : void? = reinterpret<void?>(addr(rkey))
+    var loop = _builtin_iterator_first(it,pkey)
+    while loop
+      push(arr,rkey)
+      loop = _builtin_iterator_next(it,pkey)
+    _builtin_iterator_close(it,pkey)
+  return <- arr
+
 def toarray(a:auto(TT)[])
   var arr : array<TT delete const>
   reserve(arr,length(a))

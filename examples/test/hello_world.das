@@ -1,11 +1,56 @@
 options log=true, logStack=true, logNodes=true
-options printVarAccess=true
+// options logInferPasses=true
+// options printVarAccess=true
 
+/*
 def each ( rng : range ) : iterator<int>
     return _builtin_make_range_iterator(rng)
 
-//def each ( a : auto(TT)[] ) : iterator<TT delete const>
-//    return _builtin_make_fixed_array_iterator()
+[unsafe]
+def each ( a : auto(TT)[] ) : iterator<TT&>
+    var parr : void? = reinterpret<void?>(addr(a[0]))
+    return _builtin_make_fixed_array_iterator(parr,typeinfo(dim a),typeinfo(sizeof type TT))
+
+def each ( a : array<auto(TT)> ) : iterator<TT&>
+    return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
+
+[unsafe]
+def toarray ( it : iterator<auto(TT)> ) : array<TT delete const &>
+    var arr : array<TT delete const &>
+    if typeinfo(is_ref type TT)
+        var rkey : TT delete const &?
+        var pkey : void? = reinterpret<void?>(addr(rkey))
+        var loop = _builtin_iterator_first(it,pkey)
+        while loop
+            push(arr,deref(rkey))
+            loop = _builtin_iterator_next(it,pkey)
+        _builtin_iterator_close(it,pkey)
+    else
+        var rkey : TT
+        var pkey : void? = reinterpret<void?>(addr(rkey))
+        var loop = _builtin_iterator_first(it,pkey)
+        while loop
+            push(arr,rkey)
+            loop = _builtin_iterator_next(it,pkey)
+        _builtin_iterator_close(it,pkey)
+    return <- arr
+*/
+
+def test_each
+    for r in each(range(0,5))
+        print("r={r}\n")
+    for fa in each([[auto 1.1; 2.2; 3.3]])
+        print("fa={fa}\n")
+    for ga in each(toarray([[auto "a";"b";"c"]]))
+        print("ga={ga}\n")
+
+def test_to_array
+    //let ra <- toarray(each(range(0,5)))
+    //print("ra={ra}\n")
+    let fa <- toarray(each([[auto 1.1; 2.2; 3.3]]))
+    print("fa={fa}\n")
+    let ga <- toarray(each(toarray([[auto "a";"b";"c"]])))
+    print("ga={ga}\n")
 
 [unsafe,sideeffects]
 def test_range
@@ -72,8 +117,11 @@ def test_keys_values
 
 [export]
 def test
+    test_to_array()
+    test_each()
     test_range()
     test_fixed_array()
     test_good_array()
     test_keys_values()
     return true
+
