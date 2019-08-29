@@ -470,6 +470,7 @@ namespace das {
         totalFunctions = 0;
         auto log = options.getOption("logStack");
         if ( log ) {
+            logs << "INIT STACK SIZE:\t" << globalInitStackSize << "\n";
             logs << "FUNCTION TABLE:\n";
         }
         for (auto & pm : library.modules) {
@@ -487,7 +488,7 @@ namespace das {
                 if (func->used) {
                     func->index = totalFunctions++;
                     if ( log ) {
-                        logs << func->index << "\t" << func->getMangledName() << "\n";
+                        logs << "\t" << func->index << "\t" << func->totalStackSize << "\t" << func->getMangledName() << "\n";
                     }
                 }
                 else {
