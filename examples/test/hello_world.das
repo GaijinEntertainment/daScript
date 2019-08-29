@@ -1,9 +1,17 @@
 options log=true, logStack=true, logNodes=true
 options printVarAccess=true
 
+def each ( rng : range ) : iterator<int>
+    return _builtin_make_range_iterator(rng)
+
+//def each ( a : auto(TT)[] ) : iterator<TT delete const>
+//    return _builtin_make_fixed_array_iterator()
+
 [unsafe,sideeffects]
 def test_range
-    let rng = range(1,5)
+    let t : range
+    let rng  = range(1,5)
+    debug(rng)
     let rit : iterator<int> = _builtin_make_range_iterator(rng);
     var ikey : int
     var pkey : void? = reinterpret<void?>(addr(ikey))
@@ -65,7 +73,6 @@ def test_keys_values
 [export]
 def test
     test_range()
-    return true
     test_fixed_array()
     test_good_array()
     test_keys_values()
