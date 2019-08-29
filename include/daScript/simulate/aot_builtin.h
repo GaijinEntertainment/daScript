@@ -27,5 +27,6 @@ namespace das {
     bool builtin_iterator_next ( Iterator * it, void * data, Context * context );
     void builtin_iterator_close ( Iterator * it, void * data, Context * context );
 
-    Iterator * builtin_make_iterator ( const Array & arr, int stride, Context * context );
+    Iterator * builtin_make_good_array_iterator ( const Array & arr, int stride, Context * context );
+    Iterator * builtin_make_fixed_array_iterator ( void * data, int size, int stride, Context * context );
 }

@@ -202,9 +202,15 @@ namespace das
         it->close(*context, (char *)&data);
     }
 
-    Iterator * builtin_make_iterator ( const Array & arr, int stride, Context * context ) {
+    Iterator * builtin_make_good_array_iterator ( const Array & arr, int stride, Context * context ) {
         char * iter = context->heap.allocate(sizeof(GoodArrayIterator));
         new (iter) GoodArrayIterator((Array *)&arr, stride);
+        return (Iterator *) iter;
+    }
+
+    Iterator * builtin_make_fixed_array_iterator ( void * data, int size, int stride, Context * context ) {
+        char * iter = context->heap.allocate(sizeof(FixedArrayIterator));
+        new (iter) FixedArrayIterator((char *)data, size, stride);
         return (Iterator *) iter;
     }
 
@@ -225,7 +231,10 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",  SideEffects::modifyExternal, "builtin_iterator_next");
         addExtern<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close", SideEffects::modifyExternal, "builtin_iterator_close");
         // make-iterator functions
-        addExtern<DAS_BIND_FUN(builtin_make_iterator)>(*this, lib,  "_builtin_make_iterator",  SideEffects::modifyExternal, "builtin_make_iterator");
+        addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
+            SideEffects::modifyExternal, "builtin_make_good_array_iterator");
+        addExtern<DAS_BIND_FUN(builtin_make_fixed_array_iterator)>(*this, lib,  "_builtin_make_fixed_array_iterator",
+            SideEffects::modifyExternal, "builtin_make_fixed_array_iterator");
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");

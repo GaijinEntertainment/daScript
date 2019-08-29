@@ -3,7 +3,7 @@ options log=true, logStack=true, logNodes=true
 [unsafe,sideeffects]
 def test_good_array
     let arr <- toarray([[int 1;2;3;4]])
-    let ait : iterator<int&> = _builtin_make_iterator(arr,typeinfo(sizeof type int))
+    let ait : iterator<int&> = _builtin_make_good_array_iterator(arr,typeinfo(sizeof type int))
     var ikey : int?
     var pkey : void? = reinterpret<void?>(addr(ikey))
     var loop = _builtin_iterator_first(ait,pkey)
@@ -11,6 +11,19 @@ def test_good_array
         print("*ait = {deref(ikey)}\n")
         loop = _builtin_iterator_next(ait,pkey)
     _builtin_iterator_close(ait,pkey)
+
+[unsafe,sideeffects]
+def test_fixed_array
+    var arr = [[int 1;2;3;4]]
+    var parr : void? = reinterpret<void?>(addr(arr[0]))
+    let fit : iterator<int&> = _builtin_make_fixed_array_iterator(parr,typeinfo(dim arr),typeinfo(sizeof type int))
+    var ikey : int?
+    var pkey : void? = reinterpret<void?>(addr(ikey))
+    var loop = _builtin_iterator_first(fit,pkey)
+    while loop
+        print("*fit = {deref(ikey)}\n")
+        loop = _builtin_iterator_next(fit,pkey)
+    _builtin_iterator_close(fit,pkey)
 
 [unsafe,sideeffects]
 def test_keys_values
@@ -38,6 +51,7 @@ def test_keys_values
 
 [export]
 def test
+    test_fixed_array()
     test_good_array()
     test_keys_values()
     return true
