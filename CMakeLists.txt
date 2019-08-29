@@ -278,7 +278,7 @@ if(URIPARSER_BUILD_TESTS)
     endif()
 
     target_include_directories(testrunner SYSTEM PRIVATE
-        ${GTEST_INCLUDE_DIR}
+        ${GTEST_INCLUDE_DIRS}
     )
 
     target_include_directories(testrunner PRIVATE
