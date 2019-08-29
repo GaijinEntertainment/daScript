@@ -17,7 +17,7 @@ namespace das
         __forceinline char * compute ( Context & context ) {
             Array * pA = (Array *) l->evalPtr(context);
             auto idx = uint32_t(r->evalInt(context));
-            if ( idx >= pA->size ) context.throw_error_at(debugInfo,"array index out of range");
+            if ( idx >= pA->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %u", idx, pA->size);
             return pA->data + idx*stride + offset;
         }
         SimNode * l, * r;

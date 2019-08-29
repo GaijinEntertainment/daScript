@@ -21,7 +21,7 @@ namespace das
     int32_t get_character_at ( const char * str, int32_t index, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if ( uint32_t(index)>=strLen ) {
-            context->throw_error("string character index out of range");
+            context->throw_error_ex("string character index out of range, %u of %u", uint32_t(index), strLen);
         }
         return str[index];
     }

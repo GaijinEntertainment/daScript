@@ -168,7 +168,7 @@ namespace das {
             }
             auto idx = cast<uint32_t>::to(index->eval(context));
             if ( idx >= pv->Size() ) {
-                context.throw_error_at(debugInfo,"JSON array index out of range");
+                context.throw_error_at(debugInfo,"JSON array index out of range, %u of %u", idx, uint32_t(pv->Size()));
                 return nullptr;
             }
             JsValue & value = (*pv)[idx];
