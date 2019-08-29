@@ -212,6 +212,15 @@ namespace das {
     };
 
     template <>
+    struct typeFactory<const Iterator *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tIterator);
+            t->constant = true;
+            return t;
+        }
+    };
+
+    template <>
     struct typeFactory<Table *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>(Type::tTable);

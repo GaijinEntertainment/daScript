@@ -191,16 +191,16 @@ namespace das
         table_unlock(*context, arr);
     }
 
-    bool builtin_iterator_first ( Iterator * it, void * data, Context * context ) {
-        return it->first(*context, (char *)data);
+    bool builtin_iterator_first ( const Iterator * it, void * data, Context * context ) {
+        return ((Iterator *)it)->first(*context, (char *)data);
     }
 
-    bool builtin_iterator_next ( Iterator * it, void * data, Context * context ) {
-        return it->next(*context, (char *)data);
+    bool builtin_iterator_next ( const Iterator * it, void * data, Context * context ) {
+        return ((Iterator *)it)->next(*context, (char *)data);
     }
 
-    void builtin_iterator_close ( Iterator * it, void * data, Context * context ) {
-        it->close(*context, (char *)&data);
+    void builtin_iterator_close ( const Iterator * it, void * data, Context * context ) {
+        ((Iterator *)it)->close(*context, (char *)&data);
     }
 
     Iterator * builtin_make_good_array_iterator ( const Array & arr, int stride, Context * context ) {

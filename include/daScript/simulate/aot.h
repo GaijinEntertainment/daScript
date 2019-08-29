@@ -1192,15 +1192,15 @@ namespace das {
             // that = nullptr;
         }
         template <typename TT>
-        __forceinline bool first ( Context * context, TT * & i ) {
+        __forceinline bool first ( Context * context, TT & i ) {
             return that->first(*context, (char *)&i);
         }
         template <typename TT>
-        __forceinline bool next  ( Context * context, TT * & i ) {
+        __forceinline bool next  ( Context * context, TT & i ) {
             return that->next(*context,(char *)&i);
         }
         template <typename TT>
-        __forceinline void close ( Context * context, TT * & i ) {
+        __forceinline void close ( Context * context, TT & i ) {
             that->close(*context,(char *)&i);
         }
         Iterator * that = nullptr;
