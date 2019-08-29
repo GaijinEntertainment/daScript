@@ -29,4 +29,5 @@ namespace das {
 
     Iterator * builtin_make_good_array_iterator ( const Array & arr, int stride, Context * context );
     Iterator * builtin_make_fixed_array_iterator ( void * data, int size, int stride, Context * context );
+    Iterator * builtin_make_range_iterator ( range rng, Context * context );
 }

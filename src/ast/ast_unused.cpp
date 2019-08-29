@@ -243,6 +243,13 @@ namespace das {
             //  at some point we should do better data trackng for this type of aliasing
             if ( var->type->ref ) propagateWrite(init);
         }
+    // addr of expression
+    virtual void preVisit ( ExprRef2Ptr * expr ) override {
+        Visitor::preVisit(expr);
+        // TODO:
+        //  at some point we should do better data trackng for this type of aliasing
+        propagateWrite(expr);
+    }
     // ExprField
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);

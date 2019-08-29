@@ -1,4 +1,17 @@
 options log=true, logStack=true, logNodes=true
+options printVarAccess=true
+
+[unsafe,sideeffects]
+def test_range
+    let rng = range(1,5)
+    let rit : iterator<int> = _builtin_make_range_iterator(rng);
+    var ikey : int
+    var pkey : void? = reinterpret<void?>(addr(ikey))
+    var loop = _builtin_iterator_first(rit,pkey)
+    while loop
+        print("rval = {ikey}\n")
+        loop = _builtin_iterator_next(rit,pkey)
+    _builtin_iterator_close(rit,pkey)
 
 [unsafe,sideeffects]
 def test_good_array
@@ -51,6 +64,8 @@ def test_keys_values
 
 [export]
 def test
+    test_range()
+    return true
     test_fixed_array()
     test_good_array()
     test_keys_values()

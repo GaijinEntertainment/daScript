@@ -8,6 +8,7 @@
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/bin_serializer.h"
 #include "daScript/simulate/runtime_array.h"
+#include "daScript/simulate/runtime_range.h"
 
 namespace das
 {
@@ -214,6 +215,12 @@ namespace das
         return (Iterator *) iter;
     }
 
+    Iterator * builtin_make_range_iterator ( range rng, Context * context ) {
+        char * iter = context->heap.allocate(sizeof(RangeIterator));
+        new (iter) RangeIterator(rng);
+        return (Iterator *) iter;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
@@ -235,6 +242,8 @@ namespace das
             SideEffects::modifyExternal, "builtin_make_good_array_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_fixed_array_iterator)>(*this, lib,  "_builtin_make_fixed_array_iterator",
             SideEffects::modifyExternal, "builtin_make_fixed_array_iterator");
+        addExtern<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
+            SideEffects::modifyExternal, "builtin_make_range_iterator");
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
