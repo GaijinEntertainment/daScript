@@ -164,6 +164,16 @@ namespace das {
             bool anyFusion = true;
             while ( anyFusion) {
                 anyFusion = false;
+                for ( int g=0; g!=context.totalVariables; ++g ) {
+                    GlobalVariable * var = context.globalVariables + g;
+                    if ( var->init ) {
+                        SimNodeCollector collector;
+                        var->init->visit(collector);
+                        SimFusion fuse(&context, logs, move(collector.info));
+                        var->init = var->init->visit(fuse);
+                        anyFusion |= fuse.fused;
+                    }
+                }
                 for ( int i=0; i!=context.totalFunctions; ++i ) {
                     SimFunction * fn = context.getFunction(i);
                     SimNodeCollector collector;

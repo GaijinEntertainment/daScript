@@ -103,8 +103,19 @@ namespace das {
             return Visitor::visit(var);
         }
     // global variable init
-        virtual void preVisitGlobalLet ( const VariablePtr & ) override {
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             stackTop = 0;
+            if ( var->init && var->init->rtti_isMakeLocal() ) {
+                uint32_t sz = sizeof(void *);
+                uint32_t refStackTop = allocateStack(sz);
+                if ( log ) {
+                    logs << "\t" << refStackTop << "\t" << sz
+                        << "\tinit global [[ ]], line " << var->init->at.line << "\n";
+                }
+                auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
+                mkl->setRefSp(true, false, refStackTop, 0);
+                mkl->doesNotNeedInit = false;
+            }
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
             program->globalInitStackSize = das::max(program->globalInitStackSize, stackTop);
