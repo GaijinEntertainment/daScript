@@ -2839,8 +2839,10 @@ namespace das {
                     auto oneGeneric = generics.back();
                     auto clone = oneGeneric->clone();
                     clone->fromGeneric = oneGeneric.get();
-                    clone->inferStack.emplace_back(expr->at, func);
-                    clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
+                    if (func) {
+                        clone->inferStack.emplace_back(expr->at, func);
+                        clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
+                    }
                     for ( size_t sz = 0; sz != types.size(); ++sz ) {
                         auto & argT = clone->arguments[sz]->type;
                         if ( argT->isAuto() ) {
