@@ -669,10 +669,18 @@ namespace das {
                 }
             }
         }
+    // call with CMRES
+        virtual void preVisit ( ExprCall * expr ) override {
+            if ( auto block = getCurrentBlock() ) {
+                if ( !expr->doesNotNeedSp && expr->stackTop ) {
+                    localTemps[block].push_back(expr);
+                }
+            }
+        }
     public:
         vector<ExprBlock *>                         stack;
         map<ExprBlock *,vector<Variable *>>         variables;
-        map<ExprBlock *,vector<ExprMakeLocal *>>    localTemps;
+        map<ExprBlock *,vector<Expression *>>    localTemps;
     protected:
         map<Variable *,string>              rename;
         set<Variable *>                     moved;
@@ -888,8 +896,17 @@ namespace das {
             return Visitor::visit(fn);
         }
     // block
-        string makeLocalTempName ( ExprMakeLocal * expr ) const {
-            return "_temp_make_local_" + to_string(expr->at.line) + "_" + to_string(expr->stackTop);
+        string makeLocalTempName ( Expression * expr ) const {
+            uint32_t stackTop = 0;
+            if ( expr->rtti_isMakeLocal() ) {
+                stackTop = ((ExprMakeLocal *)expr)->stackTop;
+            } else if ( expr->rtti_isCall() ) {
+                stackTop = ((ExprCall *)expr)->stackTop;
+            } else {
+                DAS_ASSERT(0 && "we should not be here. we need stacktop for the name");
+                stackTop = (expr->at.line<<16) + expr->at.column;
+            }
+            return "_temp_make_local_" + to_string(expr->at.line) + "_" + to_string(stackTop);
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
@@ -2066,6 +2083,13 @@ namespace das {
             }
             return needsArgPass(expr->type);
         }
+        bool isCallWithTemp ( ExprCallFunc * call ) {
+            if ( call->rtti_isCall() ) {
+                auto expr = (ExprCall *) call;
+                return !expr->doesNotNeedSp && expr->stackTop;
+            }
+            return false;
+        }
         void CallFunc_preVisit ( ExprCallFunc * call ) {
             Visitor::preVisit(call);
             string aotName = call->func->getAotName(call);
@@ -2080,6 +2104,9 @@ namespace das {
             }
             if ( call->func->result->aotAlias ) {
                 ss << "das_alias<" << call->func->result->alias << ">::from(";
+            }
+            if ( isCallWithTemp(call) ) {
+                ss << "(" << makeLocalTempName(call) << " = (";
             }
             if ( call->func->builtIn ) {
                 auto bif = static_cast<BuiltInFunction *>(call->func);
@@ -2197,6 +2224,9 @@ namespace das {
                 ss << ",*__context__";
             }
             ss << ")";
+            if ( isCallWithTemp(call) ) {
+                ss << "))";
+            }
             if ( call->func->result->aotAlias ) {
                 ss << ")";
             }
