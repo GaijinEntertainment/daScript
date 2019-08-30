@@ -648,7 +648,7 @@ namespace das {
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
             if ( auto block = getCurrentBlock() ) {
-                if ( expr->needTempSrc ) {
+                if ( !expr->doesNotNeedSp && expr->stackTop ) {
                     localTemps[block].push_back(expr);
                 }
             }
@@ -656,7 +656,7 @@ namespace das {
     // make tuple
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             if ( auto block = getCurrentBlock() ) {
-                if ( expr->needTempSrc ) {
+                if ( !expr->doesNotNeedSp && expr->stackTop ) {
                     localTemps[block].push_back(expr);
                 }
             }
@@ -664,7 +664,7 @@ namespace das {
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             if ( auto block = getCurrentBlock() ) {
-                if ( expr->needTempSrc ) {
+                if ( !expr->doesNotNeedSp && expr->stackTop ) {
                     localTemps[block].push_back(expr);
                 }
             }
@@ -678,9 +678,9 @@ namespace das {
             }
         }
     public:
-        vector<ExprBlock *>                         stack;
-        map<ExprBlock *,vector<Variable *>>         variables;
-        map<ExprBlock *,vector<Expression *>>    localTemps;
+        vector<ExprBlock *>                     stack;
+        map<ExprBlock *,vector<Variable *>>     variables;
+        map<ExprBlock *,vector<Expression *>>   localTemps;
     protected:
         map<Variable *,string>              rename;
         set<Variable *>                     moved;
@@ -1763,19 +1763,22 @@ namespace das {
             return Visitor::visit(enew);
         }
     // make structure
+        bool needTempSrc ( ExprMakeLocal * expr ) const {
+            return !expr->doesNotNeedSp && expr->stackTop;
+        }
         string mksName ( ExprMakeStructure * expr ) const {
-            if ( !expr->needTempSrc ) {
-                return "__mks_" + to_string(expr->at.line);
-            } else {
+            if ( needTempSrc(expr) ) {
                 return makeLocalTempName(expr);
+            } else {
+                return "__mks_" + to_string(expr->at.line);
             }
         }
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);
             ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
-                << (expr->needTempSrc ? "&" : "") << " {\n";
+                << (needTempSrc(expr) ? "&" : "") << " {\n";
             tab ++;
-            if ( !expr->needTempSrc ) {
+            if ( !needTempSrc(expr) ) {
                 ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                     << " " << mksName(expr) << ";\n";
             }
@@ -1800,7 +1803,7 @@ namespace das {
         }
     // make array
         string mkaName ( ExprMakeArray * expr ) const {
-            if ( !expr->needTempSrc ) {
+            if ( !needTempSrc(expr) ) {
                 return "__mka_" + to_string(expr->at.line);
             } else {
                 return makeLocalTempName(expr);
@@ -1809,9 +1812,9 @@ namespace das {
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
             ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
-                << (expr->needTempSrc ? "&" : "") << " {\n";
+                << (needTempSrc(expr) ? "&" : "") << " {\n";
             tab ++;
-            if ( !expr->needTempSrc ) {
+            if ( !needTempSrc(expr) ) {
                 ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                     << " " << mkaName(expr) << ";\n";
             }
@@ -1833,7 +1836,7 @@ namespace das {
         }
    // make tuple
         string mktName ( ExprMakeTuple * expr ) const {
-            if ( !expr->needTempSrc ) {
+            if ( !needTempSrc(expr) ) {
                 return "__mkt_" + to_string(expr->at.line);
             } else {
                 return makeLocalTempName(expr);
@@ -1842,9 +1845,9 @@ namespace das {
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             Visitor::preVisit(expr);
             ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
-                << (expr->needTempSrc ? "&" : "") << " {\n";
+                << (needTempSrc(expr) ? "&" : "") << " {\n";
             tab ++;
-            if ( !expr->needTempSrc ) {
+            if ( !needTempSrc(expr) ) {
                 ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                     << " " << mktName(expr) << ";\n";
             }

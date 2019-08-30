@@ -1895,12 +1895,12 @@ namespace das
                     if ( pvar->init->rtti_isMakeLocal() ) {
                         auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
                         auto sr = ExprLet::simulateInit(context, pvar, false);
-                        gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, 0);
+                        gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, sizeof(Prologue));
                     } else {
                         gvar.init = ExprLet::simulateInit(context, pvar, false);
                     }
                 } else {
-                    gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
+                    gvar.init = nullptr;
                 }
             }
         }
