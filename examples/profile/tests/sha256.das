@@ -23,7 +23,7 @@ let
     ]]
 
 def toHex(hash:uint[8])
-    let st = build_string() <| $(var writer:StringBuilderWriter)
+    let st = build_string() <| $(var writer)
         for i in hash
             format(writer,"%08x",i)
     return st

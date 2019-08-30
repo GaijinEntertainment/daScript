@@ -264,8 +264,10 @@ namespace das {
                     resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
                     resT->dim.clear();
-                    // resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
-                    resT->alias = decl->alias;
+                    //resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
+                    //if ( decl->removeDim && resT->dim.size() ) resT->dim.pop_back();
+                    // resT->alias = decl->alias;
+                    resT->alias.clear();
                     return resT;
                 } else {
                     return nullptr;
@@ -2818,6 +2820,13 @@ namespace das {
             for ( auto & ar : expr->arguments ) {
                 if ( !ar->type ) {
                     return nullptr;
+                }
+                // if its an auto or an alias
+                // we only allow it, if its a block
+                if ( ar->type->baseType!=Type::tBlock ) {
+                    if ( ar->type->isAlias() || ar->type->isAuto() ) {
+                        return nullptr;
+                    }
                 }
                 types.push_back(ar->type);
             }

@@ -56,6 +56,10 @@ namespace das {
             type = SimSourceType::sConstValue; 
             value = val; 
         }
+        __forceinline void setConstValuePtr(char * val) {
+            type = SimSourceType::sConstValue;
+            valuePtr = val;
+        }
         __forceinline void setCMResOfs(uint32_t ofs) { 
             type = SimSourceType::sCMResOff; 
             offset = ofs; 
@@ -1403,13 +1407,14 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // CONST-VALUE
-    struct SimNode_ConstString : SimNode {
+    struct SimNode_ConstString : SimNode_SourceBase {
         SimNode_ConstString(const LineInfo & at, char * c)
-            : SimNode(at), value(c) { }
+            : SimNode_SourceBase(at) {
+            subexpr.setConstValuePtr(c);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & )      override { return cast<char *>::from(value); }
-        virtual char *      evalPtr(Context &)      override { return value; }
-        char * value;
+        virtual vec4f       eval ( Context & )      override { return subexpr.value; }
+        virtual char *      evalPtr(Context &)      override { return subexpr.valuePtr; }
     };
 
     // CONST-VALUE

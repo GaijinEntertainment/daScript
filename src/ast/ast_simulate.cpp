@@ -1699,7 +1699,11 @@ namespace das
                 get = context.code->makeNode<SimNode_GetLocal>(var->init->at, var->stackTop);
             }
         } else {
-            get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+            if ( var->init && var->init->rtti_isMakeLocal() ) {
+                return var->init->simulate(context);
+            } else {
+                get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+            }
         }
         if ( var->type->ref ) {
             return context.code->makeNode<SimNode_CopyReference>(var->init->at, get,
@@ -1887,7 +1891,17 @@ namespace das
                 if (!pvar->used)
                     continue;
                 auto & gvar = context.globalVariables[pvar->index];
-                gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
+                if ( pvar->init ) {
+                    if ( pvar->init->rtti_isMakeLocal() ) {
+                        auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
+                        auto sr = ExprLet::simulateInit(context, pvar, false);
+                        gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, 0);
+                    } else {
+                        gvar.init = ExprLet::simulateInit(context, pvar, false);
+                    }
+                } else {
+                    gvar.init = pvar->init ? ExprLet::simulateInit(context, pvar, false) : nullptr;
+                }
             }
         }
         //
@@ -1897,15 +1911,16 @@ namespace das
         context.simEnd();
         fusion(context, logs);
         context.restart();
-        context.runInitScript();
-        context.restart();
-        if (options.getOption("logMem")) {
-            logs << "code  " << context.code->bytesAllocated() << "\n";
-            logs << "debug " << context.debugInfo->bytesAllocated() << "\n";
-            logs << "heap  " << context.heap.bytesAllocated() << "\n";
-        }
         // log all functions
         if ( options.getOption("logNodes",false) ) {
+            for ( int i=0; i!=context.totalVariables; ++i ) {
+                auto & pv = context.globalVariables[i];
+                if ( pv.init ) {
+                    logs << "// init " << pv.name << "\n";
+                    printSimNode(logs, pv.init);
+                    logs << "\n\n";
+                }
+            }
             for ( int i=0; i!=context.totalFunctions; ++i ) {
                 SimFunction * fn = context.getFunction(i);
                 logs << "// " << fn->name << "\n";
@@ -1913,6 +1928,15 @@ namespace das
                 logs << "\n\n";
             }
         }
+        // run init script and restart
+        context.runInitScript();
+        context.restart();
+        if (options.getOption("logMem")) {
+            logs << "code  " << context.code->bytesAllocated() << "\n";
+            logs << "debug " << context.debugInfo->bytesAllocated() << "\n";
+            logs << "heap  " << context.heap.bytesAllocated() << "\n";
+        }
+        // log CPP
         if (options.getOption("logCpp")) {
             aotCpp(context,logs);
             registerAotCpp(logs,context);

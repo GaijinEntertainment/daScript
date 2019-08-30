@@ -11,7 +11,7 @@
 
 namespace das {
 
-    IMPLEMENT_SETOP_SCALAR(Set);
+    IMPLEMENT_SETOP_WORKHORSE(Set);
 
     IMPLEMENT_SETOP_NUMERIC(SetAdd);
     IMPLEMENT_SETOP_NUMERIC(SetSub);
@@ -29,7 +29,7 @@ namespace das {
 
     void createFusionEngine_op2_set()
     {
-        REGISTER_SETOP_SCALAR(Set);
+        REGISTER_SETOP_WORKHORSE(Set);
 
         REGISTER_SETOP_NUMERIC(SetAdd);
         REGISTER_SETOP_NUMERIC(SetSub);

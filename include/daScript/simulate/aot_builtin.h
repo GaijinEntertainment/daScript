@@ -22,4 +22,13 @@ namespace das {
     int builtin_array_push ( Array & pArray, int index, int stride, Context * context );
     void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) ;
     void builtin_array_clear ( Array & pArray, Context * context );
+
+    bool builtin_iterator_first ( const Iterator * it, void * data, Context * context );
+    bool builtin_iterator_next ( const Iterator * it, void * data, Context * context );
+    void builtin_iterator_close ( const Iterator * it, void * data, Context * context );
+
+    Iterator * builtin_make_good_array_iterator ( const Array & arr, int stride, Context * context );
+    Iterator * builtin_make_fixed_array_iterator ( void * data, int size, int stride, Context * context );
+    Iterator * builtin_make_range_iterator ( range rng, Context * context );
+    Iterator * builtin_make_nil_iterator ( Context * context );
 }

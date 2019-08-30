@@ -266,6 +266,7 @@
 <normal>"bool"                                          return DAS_TBOOL;
 <normal>"void"                                          return DAS_TVOID;
 <normal>"string"                                        return DAS_TSTRING;
+<normal>"range"                                         return DAS_TRANGE;
 <normal>"int"                                           return DAS_TINT;
 <normal>"int8"                                          return DAS_TINT8;
 <normal>"int16"                                         return DAS_TINT16;

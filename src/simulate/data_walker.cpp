@@ -195,6 +195,7 @@ namespace das {
                     if ( cancel ) return;
                     afterHandle(pa, info);
                     break;
+                case Type::tVoid:       break;  // skip void
                 default:                DAS_ASSERTF(0, "unsupported print type"); break;
             }
         }

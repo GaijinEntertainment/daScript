@@ -493,6 +493,8 @@ namespace  das {
     }
 
     struct SimPolicy_String {
+        // set
+        static __forceinline void Set     ( char * & a, char * b, Context & ) { a = b; }
         // basic
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) { return strcmp(to_rts(a), to_rts(b))==0; }
         static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) { return (bool) strcmp(to_rts(a), to_rts(b)); }

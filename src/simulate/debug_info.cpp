@@ -358,7 +358,7 @@ namespace das
         } else if ( info->type==Type::tTable ) {
             stream << "Table<" << debug_type(info->firstType) << "," << debug_type(info->secondType) << ">";
         } else if ( info->type==Type::tIterator ) {
-            stream << "Iterator<" << debug_type(info->firstType) << ">";
+            stream << "Iterator<" << (info->firstType ? debug_type(info->firstType) : "") << ">";
         } else {
             stream << das_to_string(info->type);
         }

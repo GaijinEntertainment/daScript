@@ -119,6 +119,7 @@ namespace das {
                 bool    constant : 1;
                 bool    removeRef : 1;
                 bool    removeConstant : 1;
+                bool    removeDim : 1;
                 bool    aotAlias : 1;
             };
             uint32_t flags = 0;
@@ -206,6 +207,15 @@ namespace das {
     struct typeFactory<Iterator *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
             auto t = make_shared<TypeDecl>(Type::tIterator);
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<const Iterator *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_shared<TypeDecl>(Type::tIterator);
+            t->constant = true;
             return t;
         }
     };

@@ -50,7 +50,10 @@ namespace das
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
         TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant;
+        if ( autoT->removeDim && TT->dim.size() ) TT->dim.pop_back();
         if ( autoT->isPointer() ) {
+            applyAutoContracts(TT->firstType, autoT->firstType);
+        } else if ( autoT->baseType==Type::tIterator ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tArray ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
@@ -125,6 +128,10 @@ namespace das
         TT->alias = autoT->alias;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
+            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            if ( !TT->firstType ) return nullptr;
+        } else if ( autoT->baseType==Type::tIterator ) {
+            // if it's a iterator, infer iterator-ofo separately
             TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tArray ) {
@@ -249,13 +256,16 @@ namespace das
             stream << "&";
         } 
         if (contracts) {
-            if (removeConstant || removeRef) {
+            if (removeConstant || removeRef || removeDim ) {
                 stream << " delete ";
                 if (removeConstant) {
                     stream << "const";
                 }
                 if (removeRef) {
                     stream << "&";
+                }
+                if (removeDim ) {
+                    stream << "[]";
                 }
             }
         }
@@ -304,6 +314,8 @@ namespace das
             return this;
         }
         if ( baseType==Type::tPointer ) {
+            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
+        } else if ( baseType==Type::tIterator ) {
             return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
         } else if ( baseType==Type::tArray ) {
             return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
@@ -852,6 +864,9 @@ namespace das
         if ( baseType==Type::autoinfer ) {
             return true;
         } else  if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                return firstType->isAuto();
+        } else  if ( baseType==Type::tIterator ) {
             if ( firstType )
                 return firstType->isAuto();
         } else if ( baseType==Type::tArray ) {

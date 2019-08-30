@@ -443,9 +443,10 @@ namespace das {
     }
 
     SimNode * SimNode_ConstString::visit ( SimVisitor & vis ) {
+        using TT = char *;
         V_BEGIN();
-        V_OP(ConstString);
-        V_ARG(value);
+        V_OP_TT(ConstValue);
+        V_ARG(subexpr.valuePtr);
         V_END();
     }
 

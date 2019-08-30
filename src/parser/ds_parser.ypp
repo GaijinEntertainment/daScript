@@ -1409,11 +1409,17 @@ type_declaration
         }
         $typeDecl->dim.push_back(dI);
         $typeDecl->dimExpr.push_back(ExpressionPtr($dimExpr));
+        $typeDecl->removeDim = false;
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '[' ']' {
         $typeDecl->dim.push_back(TypeDecl::dimAuto);
         $typeDecl->dimExpr.push_back(nullptr);
+        $typeDecl->removeDim = false;
+        $$ = $typeDecl;
+    }
+    |   type_declaration[typeDecl] DAS_DELETE '[' ']' {
+        $typeDecl->removeDim = true;
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] DAS_CONST {
