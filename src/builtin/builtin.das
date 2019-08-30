@@ -64,6 +64,7 @@ def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
 
 // functional
 
+[generic]
 def each ( rng : range ) : iterator<int>
   return _builtin_make_range_iterator(rng)
 
