@@ -1,4 +1,4 @@
-[export,noaot]
+[export,noaot,unsafe]
 def test
     // regular to-array
     let d = [[ int 1; 2; 3; 4 ]]

@@ -67,11 +67,12 @@ def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
 def each ( rng : range ) : iterator<int>
   return _builtin_make_range_iterator(rng)
 
-[unsafe]
+[unsafe,unsafeoperation]
 def each ( a : auto(TT)[] ) : iterator<TT&>
   var parr : void? = reinterpret<void?>(addr(a[0]))
   return _builtin_make_fixed_array_iterator(parr,typeinfo(dim a),typeinfo(sizeof type TT))
 
+[unsafeoperation]
 def each ( a : array<auto(TT)> ) : iterator<TT&>
   return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
 
