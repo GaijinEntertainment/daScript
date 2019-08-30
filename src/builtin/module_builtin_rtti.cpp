@@ -97,7 +97,7 @@ namespace das {
             auto pValue = (ST *) value->evalPtr(context);
             uint32_t idx = cast<uint32_t>::to(index->eval(context));
             if ( idx >= pValue->count ) {
-                context.throw_error_at(debugInfo,"field index out of range");
+                context.throw_error_at(debugInfo,"field index out of range, %u of %u", idx, pValue->count);
                 return nullptr;
             } else {
                 return ((char *)(pValue->fields[idx])) + offset;
@@ -273,7 +273,7 @@ namespace das {
             context->throw_error("type is not an array");
         }
         if ( index>=ti.dimSize ) {
-            context->throw_error("dim index out of range");
+            context->throw_error_ex("dim index out of range, %u of %u", index, uint32_t(ti.dimSize));
         }
         return ti.dim[index];
     }
@@ -298,7 +298,7 @@ namespace das {
         int32_t tf = context.getTotalFunctions();
         int32_t index = cast<int32_t>::to(args[0]);
         if ( index<0 || index>=tf ) {
-            context.throw_error("function index out of range");
+            context.throw_error_ex("function index out of range, %i of %i", index, tf);
         }
         FuncInfo * fi = context.getFunction(index)->debugInfo;
         return cast<FuncInfo *>::from(fi);
@@ -308,7 +308,7 @@ namespace das {
         int32_t tf = context.getTotalVariables();
         int32_t index = cast<int32_t>::to(args[0]);
         if ( index<0 || index>=tf ) {
-            context.throw_error("variable index out of range");
+            context.throw_error_ex("variable index out of range, %i of %i", index, tf);
         }
         return cast<VarInfo *>::from(context.getVariableInfo(index));
     }

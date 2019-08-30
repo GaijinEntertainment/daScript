@@ -399,7 +399,7 @@ namespace das {
             auto vec = value->eval(context);                                                    \
             uint32_t idx = uint32_t(index->evalInt(context));                                   \
             if (idx >= range) {                                                                 \
-                context.throw_error_at(debugInfo,"index out of range");                         \
+                context.throw_error_at(debugInfo,"vector index out of range, %u of %u", idx, range);    \
                 return (CTYPE) 0;                                                               \
             } else {                                                                            \
                 CTYPE * pv = (CTYPE *) &vec;                                                    \

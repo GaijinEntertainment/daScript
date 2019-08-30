@@ -31,7 +31,7 @@ namespace das {
         array_resize(*context, pArray, idx + 1, stride, false);
         if ( index >=0 ) {
             if ( uint32_t(index) >= pArray.size ) {
-                context->throw_error("insert index out of range");
+                context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
                 return 0;
             }
             memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
@@ -42,7 +42,7 @@ namespace das {
 
     void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) {
         if ( uint32_t(index) >= pArray.size ) {
-            context->throw_error("erase index out of range");
+            context->throw_error_ex("erase index out of range, %u of %u", uint32_t(index), pArray.size);
             return;
         }
         memmove ( pArray.data+index*stride, pArray.data+(index+1)*stride, (pArray.size-index-1)*stride );
