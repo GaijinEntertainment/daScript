@@ -12,6 +12,7 @@
 //  a SetOPNAME b
 #define IMPLEMENT_ANY_SETOP(INLINE,OPNAME,TYPE,CTYPE) \
     struct FusionPoint_Set_##OPNAME##_##CTYPE : FusionPointOp2 { \
+        IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,CMResOfs,Const); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,Global,Local); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,Local,Const); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,Local,Local); \
@@ -36,6 +37,7 @@
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
             /* match set */ if ( false ) {} \
+            MATCH_OP2_SET(OPNAME,"GetCMResOfs","ConstValue",CMResOfs,Const) \
             MATCH_OP2_SET(OPNAME,"GetGlobal","GetLocalR2V",Global,Local) \
             MATCH_OP2_SET(OPNAME,"GetLocal","ConstValue",Local,Const) \
             MATCH_OP2_SET(OPNAME,"GetLocal","GetLocalR2V",Local,Local) \
