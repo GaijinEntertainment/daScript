@@ -100,8 +100,9 @@ def toarray(a:auto(TT)[]) : array<TT delete const>
     var arr : array<TT delete const>
     if typeinfo(can_copy a)
         resize(arr,length(a))
-        for i in range(0,length(a))
-            arr[i] = a[i]
+        reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) = reinterpret<TT[typeinfo(dim a)]>(addr(a[0]))
+        // for i in range(0,length(a))
+        //    arr[i] = a[i]
     else
         static_assert(false,"can't copy this array")
     return <- arr

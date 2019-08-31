@@ -334,6 +334,22 @@ namespace das {
         }
     };
 
+    template <typename TT, uint32_t size>
+    struct das_cast< TDim<TT,size> > {
+        template <typename QQ>
+        static __forceinline TDim<TT,size> & cast ( const QQ * expr ) {
+            return *((TDim<TT,size> *)expr);
+        }
+    };
+
+    template <typename TT, uint32_t size>
+    struct das_cast< const TDim<TT,size> > {
+        template <typename QQ>
+        static __forceinline const TDim<TT,size> & cast ( const QQ * expr ) {
+            return *((const TDim<TT,size> *)expr);
+        }
+    };
+
     template <typename TT>
     struct TArray : Array {
         TArray() = default;
