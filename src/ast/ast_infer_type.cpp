@@ -3103,7 +3103,21 @@ namespace das {
             if ( !expr->recordType ) {
                 if ( index==0 ) {
                     if ( init->type ) {
-                        auto mkt = TypeDecl::inferAutoType(expr->makeType, init->type);
+                        // blah[] vs blah
+                        TypeDeclPtr mkt;
+                        if ( expr->makeType->dim.size() && !init->type->dim.size() ) {
+                            if (expr->makeType->dim.size() == 1 && expr->makeType->dim[0] == TypeDecl::dimAuto) {
+                                auto infT = make_shared<TypeDecl>(*expr->makeType);
+                                infT->dim.clear();
+                                mkt = TypeDecl::inferAutoType(infT, init->type);
+                                if (mkt) {
+                                    mkt->dim.resize(1);
+                                    mkt->dim[0] = 1;
+                                }
+                            }
+                        } else {
+                            mkt = TypeDecl::inferAutoType(expr->makeType, init->type);
+                        }
                         if ( !mkt ) {
                             error("array type can't be infered, "
                                   + expr->makeType->describe() + " = " + init->type->describe(),
