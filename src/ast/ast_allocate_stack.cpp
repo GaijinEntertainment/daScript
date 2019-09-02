@@ -104,17 +104,30 @@ namespace das {
         }
     // global variable init
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
-            stackTop = 0;
-            if ( var->init && var->init->rtti_isMakeLocal() ) {
-                uint32_t sz = sizeof(void *);
-                uint32_t refStackTop = allocateStack(sz);
-                if ( log ) {
-                    logs << "\t" << refStackTop << "\t" << sz
-                        << "\tinit global [[ ]], line " << var->init->at.line << "\n";
+            stackTop = sizeof(Prologue);
+            if ( var->init  ) {
+                if ( var->init->rtti_isMakeLocal() ) {
+                    uint32_t sz = sizeof(void *);
+                    uint32_t refStackTop = allocateStack(sz);
+                    if ( log ) {
+                        logs << "\t" << refStackTop << "\t" << sz
+                            << "\tinit global " << var->name << " [[ ]], line " << var->init->at.line << "\n";
+                    }
+                    auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
+                    mkl->setRefSp(true, false, refStackTop, 0);
+                    mkl->doesNotNeedInit = false;
+                    mkl->doesNotNeedSp = true;
+                } else if ( var->init->rtti_isCall() ) {
+                    auto cll = static_pointer_cast<ExprCall>(var->init);
+                    if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                        cll->doesNotNeedSp = true;
+                    }
+                } else if ( var->init->rtti_isInvoke() ) {
+                    auto cll = static_pointer_cast<ExprInvoke>(var->init);
+                    if ( cll->isCopyOrMove() ) {
+                        cll->doesNotNeedSp = true;
+                    }
                 }
-                auto mkl = static_pointer_cast<ExprMakeLocal>(var->init);
-                mkl->setRefSp(true, false, refStackTop, 0);
-                mkl->doesNotNeedInit = false;
             }
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
@@ -297,12 +310,14 @@ namespace das {
                         << "\tfor " << var->name << ", line " << var->at.line << "\n";
                 }
             }
+            /*
             for ( auto & src : expr->sources ) {
                 if ( src->rtti_isMakeLocal() ) {
                     auto mkl = static_pointer_cast<ExprMakeLocal>(src);
                     mkl->needTempSrc = true;
                 }
             }
+            */
         }
     // ExprLet
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
@@ -381,6 +396,7 @@ namespace das {
                         << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
                 expr->setRefSp(false, false, cStackTop, 0);
+                expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
         }
@@ -396,6 +412,7 @@ namespace das {
                     << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
                 expr->setRefSp(false, false, cStackTop, 0);
+                expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
         }
@@ -411,6 +428,7 @@ namespace das {
                     << "\t[[" << expr->type->describe() << "]], line " << expr->at.line << "\n";
                 }
                 expr->setRefSp(false, false, cStackTop, 0);
+                expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
         }

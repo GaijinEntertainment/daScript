@@ -71,7 +71,13 @@ namespace das {
     else if (is(info, node_l, NODENAME) ) { \
         anyRight = true; \
         MATCH_OP2_COPYREF_NODE(COMPUTEL,AnyPtr); \
-    } 
+    }
+
+#define MATCH_OP2_COPYREF_RIGHT_ANY(NODENAME,COMPUTER) \
+    else if (is(info, node_r, NODENAME) ) { \
+        anyLeft = true; \
+        MATCH_OP2_COPYREF_NODE(AnyPtr,COMPUTER); \
+    }
 
 #define MATCH_OP2_COPYREF(LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
     else if (is(info, node_l, LNODENAME) && is(info, node_r, RNODENAME)) { \
@@ -83,14 +89,18 @@ namespace das {
     struct FusionPoint_MiscCopyRefValue : FusionPointOp2 {
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(Local, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, Local);
         IMPLEMENT_OP2_COPYREF_NODE(Local, Local);
         IMPLEMENT_OP2_COPYREF_NODE(Local, ThisBlockArgumentRef);
         IMPLEMENT_OP2_COPYREF_NODE(Local, ArgumentRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, CMResOfs);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, LocalRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, Local);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, ArgumentRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, ArgumentRef);
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             uint32_t size = crnode->size;
@@ -106,6 +116,11 @@ namespace das {
             MATCH_OP2_COPYREF_LEFT_ANY("GetCMResOfs",CMResOfs)
             MATCH_OP2_COPYREF_LEFT_ANY("GetLocalRefOff",LocalRefOff)
             MATCH_OP2_COPYREF_LEFT_ANY("GetArgument",ArgumentRef)
+            // any, *
+            MATCH_OP2_COPYREF_RIGHT_ANY("GetLocal",Local)
+            MATCH_OP2_COPYREF_RIGHT_ANY("GetCMResOfs",CMResOfs)
+            MATCH_OP2_COPYREF_RIGHT_ANY("GetLocalRefOff",LocalRefOff)
+            MATCH_OP2_COPYREF_RIGHT_ANY("GetArgument",ArgumentRef)
             // fallback
             else {
                 if (isFastCopyBytes(size)) {

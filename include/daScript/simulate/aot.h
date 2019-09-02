@@ -164,10 +164,6 @@ namespace das {
         static __forceinline TT & cast ( const QQ & expr ) {
             return reinterpret_cast<TT&>(const_cast<QQ &>(expr));
         }
-        template <typename QQ>
-        static __forceinline TT & cast ( QQ && expr ) {
-            return reinterpret_cast<TT&>(expr);
-        }
     };
 
     template <typename TT>
@@ -335,6 +331,22 @@ namespace das {
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
             if ( idx>=size ) __context__->throw_error_ex("index out of range, %u of %u", idx, size);
             return data[idx];
+        }
+    };
+
+    template <typename TT, uint32_t size>
+    struct das_cast< TDim<TT,size> > {
+        template <typename QQ>
+        static __forceinline TDim<TT,size> & cast ( const QQ * expr ) {
+            return *((TDim<TT,size> *)expr);
+        }
+    };
+
+    template <typename TT, uint32_t size>
+    struct das_cast< const TDim<TT,size> > {
+        template <typename QQ>
+        static __forceinline const TDim<TT,size> & cast ( const QQ * expr ) {
+            return *((const TDim<TT,size> *)expr);
         }
     };
 

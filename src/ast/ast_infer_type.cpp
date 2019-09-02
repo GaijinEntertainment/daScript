@@ -263,9 +263,10 @@ namespace das {
                     resT->at = decl->at;
                     resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
-                    resT->dim.clear();
-                    //resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
-                    //if ( decl->removeDim && resT->dim.size() ) resT->dim.pop_back();
+                    resT->dim = decl->dim;
+                    // resT->dim.clear();
+                    // resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
+                    // if ( decl->removeDim && resT->dim.size() ) resT->dim.pop_back();
                     // resT->alias = decl->alias;
                     resT->alias.clear();
                     return resT;
@@ -1428,6 +1429,12 @@ namespace das {
                 } else if ( expr->trait=="is_pointer" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
+                } else if ( expr->trait=="can_copy" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canCopy());
+                } else if ( expr->trait=="can_move" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
                 } else if ( expr->trait=="has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportGenericInfer();
@@ -1593,7 +1600,6 @@ namespace das {
             if ( expr->reinterpret ) {
                 expr->type = make_shared<TypeDecl>(*expr->castType);
                 expr->type->ref = expr->subexpr->type->ref;
-
             } else if ( expr->castType->isGoodBlockType() ||  expr->castType->isGoodFunctionType() || expr->castType->isGoodLambdaType() ) {
                 expr->type = castFunc(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             } else {
