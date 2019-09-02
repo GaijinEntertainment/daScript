@@ -40,6 +40,13 @@ def binary_load(var obj; data:string)
     static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_load(obj,data)
 
+def cloneDim(var a;b)
+	if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
+		for aV,bV in a,b
+			aV := bV
+	else
+		static_assert(false,"can't clone this array")
+
 def clone(var a:array<auto(TT)>;b:array<TT>)
     resize(a,length(b))
     for aV,bV in a,b
@@ -102,13 +109,18 @@ def toarray(a:auto(TT)[]) : array<TT delete const>
         resize(arr,length(a))
         reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) = a
     else
-        static_assert(false,"can't copy this array")
+        resize(arr,length(a))
+        reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) := a
     return <- arr
 
 def totable(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const,valT>
     var tab : table<keyT delete const,valT>
-    for x in a
-        tab[x._0] = x._1
+    if typeinfo(can_copy type valT)    
+		for x in a
+			tab[x._0] = x._1
+	else
+		for x in a
+			tab[x._0] := x._1
     return <- tab
 
 

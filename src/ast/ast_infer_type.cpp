@@ -2301,6 +2301,12 @@ namespace das {
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
+                } else if ( cloneType->dim.size() ) {
+                    reportGenericInfer();
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "cloneDim");
+                    cloneFn->arguments.push_back(expr->left->clone());
+                    cloneFn->arguments.push_back(expr->right->clone());
+                    return ExpressionPtr(cloneFn);
                 } else {
                     error("this type can't be cloned (" + cloneType->describe() + ")", expr->at, CompilationError::cant_copy);
                 }
@@ -3077,6 +3083,12 @@ namespace das {
                           keyType->at,CompilationError::invalid_table_type);
                 }
             }
+            for (auto & argType : expr->makeType->argTypes) {
+                if ( !argType->canCopy() && !argType->canMove() ) {
+                    error("tuple element has to be copyable or moveable", 
+                        expr->at, CompilationError::invalid_type);
+                }
+            }
             return Visitor::visit(expr);
         }
     // make array
@@ -3157,6 +3169,10 @@ namespace das {
             }
             if ( !expr->recordType ) {
                 return Visitor::visit(expr);
+            }
+            if ( !expr->recordType->canCopy() && !expr->recordType->canMove() ) {
+                error("array element has to be copyable or moveable", 
+                    expr->at, CompilationError::invalid_type);
             }
             auto resT = make_shared<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->values.size());

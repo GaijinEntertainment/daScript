@@ -524,11 +524,23 @@ namespace das
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                 continue;
             } else if ( useCMRES ) {
-                cpy = makeLocalCMResCopy(at,context,offset,val);
+                if (val->type->canCopy()) {
+                    cpy = makeLocalCMResCopy(at, context, offset, val);
+                } else {
+                    cpy = makeLocalCMResMove(at, context, offset, val);
+                }
             } else if ( useStackRef ) {
-                cpy = makeLocalRefCopy(at,context,stackTop,offset,val);
+                if (val->type->canCopy()) {
+                    cpy = makeLocalRefCopy(at, context, stackTop, offset, val);
+                } else {
+                    cpy = makeLocalRefMove(at, context, stackTop, offset, val);
+                }
             } else {
-                cpy = makeLocalCopy(at,context,stackTop+offset,val);
+                if (val->type->canCopy()) {
+                    cpy = makeLocalCopy(at, context, stackTop + offset, val);
+                } else {
+                    cpy = makeLocalMove(at, context, stackTop + offset, val);
+                }
             }
             if ( !cpy ) {
                 context.thisProgram->error("internal compilation error, can't generate array initialization", at);
@@ -605,11 +617,23 @@ namespace das
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                 continue;
             } else if ( useCMRES ) {
-                cpy = makeLocalCMResCopy(at,context,offset,val);
+                if (val->type->canCopy()) {
+                    cpy = makeLocalCMResCopy(at, context, offset, val);
+                } else {
+                    cpy = makeLocalCMResMove(at, context, offset, val);
+                }
             } else if ( useStackRef ) {
-                cpy = makeLocalRefCopy(at,context,stackTop,offset,val);
+                if (val->type->canCopy()) {
+                    cpy = makeLocalRefCopy(at, context, stackTop, offset, val);
+                } else {
+                    cpy = makeLocalRefMove(at, context, stackTop, offset, val);
+                }
             } else {
-                cpy = makeLocalCopy(at,context,stackTop+offset,val);
+                if (val->type->canCopy()) {
+                    cpy = makeLocalCopy(at, context, stackTop + offset, val);
+                } else {
+                    cpy = makeLocalMove(at, context, stackTop + offset, val);
+                }
             }
             if ( !cpy ) {
                 context.thisProgram->error("internal compilation error, can't generate array initialization", at);
@@ -1895,7 +1919,7 @@ namespace das
                     if ( pvar->init->rtti_isMakeLocal() ) {
                         auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
                         auto sr = ExprLet::simulateInit(context, pvar, false);
-                        gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, sizeof(Prologue));
+                        gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
                     } else {
                         gvar.init = ExprLet::simulateInit(context, pvar, false);
                     }
