@@ -90,6 +90,11 @@ def test
     assert(y==5.0)
     // and pick
     test_pick()
+	// and array
+	let ZZT = [[auto "two"=>2]]
+	assert(!typeinfo(is_dim ZZT))
+	let ZZA = [[auto[] "two"=>2]]
+	assert(typeinfo(is_dim ZZA) & typeinfo(dim ZZA)==1)
     return true
 
 def fn3
