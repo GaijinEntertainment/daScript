@@ -3120,7 +3120,7 @@ namespace das {
             }
             if ( !expr->recordType ) {
                 if ( index==0 ) {
-                    if ( init->type ) {
+                    if ( init->type && !init->type->isAuto() && !init->type->isAlias() ) {
                         // blah[] vs blah
                         TypeDeclPtr mkt;
                         if ( expr->makeType->dim.size() && !init->type->dim.size() ) {
