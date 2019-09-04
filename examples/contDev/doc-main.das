@@ -6,18 +6,18 @@ require rtti
 
 
 def getModuleDoc(modName:string)
-	let pMod = rttiGetModule(modName)
+	let pMod = rtti::get_module(modName)
 	if pMod==null
 		print("module {modName} not found\n")
 		return
-	rttiModuleForEachStructure(pMod) <| $(info)
+	rtti::module_for_each_structure(pMod) <| $(info)
 		print("struct {info.name}\n")
-	rttiModuleForEachFunction(pMod) <| $(info)
+	rtti::module_for_each_function(pMod) <| $(info)
 		print("def {info.name}")
 		if (info.flags & FUNCINFO_BUILTIN) == FUNCINFO_BUILTIN
 			print(" // {info.cppName=="" ? "WARNING: no CPP name" : info.cppName}")
 		print("\n")
-	rttiModuleForEachGeneric(pMod) <| $(info)
+	rtti::module_for_each_generic(pMod) <| $(info)
 		print("def {info.name} // generic\n")
 
 [export]

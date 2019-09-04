@@ -64,7 +64,7 @@ def cppTypeDim(info)
 	var res = ""
 	if info.dimSize !=0u
 		for index in range(0,int(info.dimSize))
-			let d = getDim(info,index)
+			let d = get_dim(info,index)
   			res += "[{d}]"
 	return res
 
@@ -80,8 +80,8 @@ def cppTypeName(info)
 			res += cppBaseTypeName(info.basicType)
 	return res
 	
-def dumpAnnotations(file,info)
-	rttiStructureForEachAnnotation(info) <| $(ann,annArg)
+def dumpAnnotations(file:FILE const?;info)
+	rtti::structure_for_each_annotation(info) <| $(ann,annArg)
 		fprint(file,"// struct {info.name} annotation {ann.name}\n")
 		for arg in annArg
 			fprint(file,"{INDENT}// {arg.name} = ")
@@ -95,7 +95,7 @@ def dumpAnnotations(file,info)
 				fprint(file,"{arg.sValue}")
 			fprint(file,"\n")
 
-def generateSquirrelBinding(file,info)
+def generateSquirrelBinding(file:FILE const?;info)
     if info.name  == "BaseCoreEvent"
         return
 	let argsN = "{info.name}::NUMBER_OF_FIELDS"
@@ -118,7 +118,7 @@ def generateSquirrelBinding(file,info)
 	fprint(file,"{INDENT}}\n\n")
 
 
-def printArguments(file,info,prefix)
+def printArguments(file:FILE const?;info,prefix)
 	var cArg = 0
 	for field in info
 		cArg++
@@ -128,7 +128,7 @@ def printArguments(file,info,prefix)
         if cArg != int(info.count)
     		fprint(file, ",\n")
 
-def generateCppEvent(file,info)
+def generateCppEvent(file:FILE const?;info)
     if info.name  == "BaseCoreEvent"
         return
 	fprint(file,"class {info.name} final: public Event\n")
@@ -177,12 +177,12 @@ def generateCppEvent(file,info)
 
 	fprint(file,"\};\n\n")
 
-def process(fname:string;hf,cppf:FILE?)
+def process(fname:string;hf,cppf:FILE const?)
 	print("processing {fname}\n")
-    rttiCompileFile(fname) <| $(ok,program,issues)
+    rtti::compile_file(fname) <| $(ok,program,issues)
         if ok
-			let thisModule = rttiGetThisModule(program)
-            rttiModuleForEachStructure(thisModule) <| $(info)
+			let thisModule = rtti::get_this_module(program)
+            rtti::module_for_each_structure(thisModule) <| $(info)
 				dumpAnnotations(hf,info)
 				generateCppEvent(hf,info)
 				generateSquirrelBinding(cppf,info)
@@ -190,8 +190,8 @@ def process(fname:string;hf,cppf:FILE?)
             print("{fname} failed to compile\n{issues}\n")
 
 def generate(atdir)
-	var fh, fcpp : FILE?
-	let eventListName = basename(atdir)
+	var fh, fcpp : FILE const?
+	let eventListName = base_name(atdir)
     let EVENTS_HEADER_FILE = "./{eventListName}.h"
     let EVENTS_CPP_FILE = "./{eventListName}.cpp"
 
@@ -204,8 +204,8 @@ def generate(atdir)
 		print("can't open {EVENTS_CPP_FILE}\n")	
 		return
 	// coreEvents.h header
-	fprint(fh,"#ifndef _DAGOR_GAMELIB_DAECS_CORE_{toupper(eventListName)}_H_\n")
-	fprint(fh,"#define _DAGOR_GAMELIB_DAECS_CORE_{toupper(eventListName)}_H_\n")
+	fprint(fh,"#ifndef _DAGOR_GAMELIB_DAECS_CORE_{to_upper(eventListName)}_H_\n")
+	fprint(fh,"#define _DAGOR_GAMELIB_DAECS_CORE_{to_upper(eventListName)}_H_\n")
 	fprint(fh,"#pragma once\n\n")
 	fprint(fh,"#include <daECS/core/event.h>\n\n")
 	fprint(fh,"namespace ecs\n")

@@ -525,8 +525,10 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_contextVariableInfo");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "rtti_builtin_compile_file", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "rtti_get_this_module", SideEffects::modifyExternal);\
-            addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "rtti_get_module", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "get_this_module",
+                SideEffects::modifyExternal, "rtti_get_this_module");
+            addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "get_module",
+                SideEffects::modifyExternal, "rtti_get_builtin_module");
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "rtti_builtin_program_for_each_module", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_structure)>(*this, lib, "rtti_builtin_module_for_each_structure", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "rtti_builtin_module_for_each_enumeration", SideEffects::modifyExternal);
