@@ -15,7 +15,7 @@ def makeRandomSequence(var src:array<string>)
         let num = (271828183u ^ uint(i*119))%mod
         src[i] = "{num}"
 
-def dict(var tab:table<string,int>; src:array<string>)
+def dict(var tab:table<string;int>; src:array<string>)
     clear(tab)
     var maxOcc = 0
     for s in src
@@ -24,7 +24,7 @@ def dict(var tab:table<string,int>; src:array<string>)
 
 [export]
 def test
-    var tab : table<string,int>
+    var tab : table<string;int>
     var src : array<string>
     makeRandomSequence(src)
 	profile(20,"dictionary") <|

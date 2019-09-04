@@ -182,7 +182,7 @@ namespace das
             }
         } else if ( baseType==Type::tTable ) {
             if ( firstType && secondType ) {
-                stream << "table<" << firstType->describe(extra) << "," << secondType->describe(extra) << ">";
+                stream << "table<" << firstType->describe(extra) << ";" << secondType->describe(extra) << ">";
             } else {
                 stream << "table";
             }

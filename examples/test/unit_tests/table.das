@@ -1,6 +1,6 @@
 [export]
 def test : bool
-    var tab:table<string,int>
+    var tab:table<string;int>
     var i,del:int
     let total:int=32
     verify(!erase(tab,"0"))
@@ -80,7 +80,7 @@ def test : bool
     verify(!erase(tab,"-1"))
 
     
-    var tab_bool:table<bool, int>
+    var tab_bool:table<bool;int>
     assert(!key_exists(tab_bool, false))
     assert(!key_exists(tab_bool, true))
     tab_bool[true] = 0
@@ -88,14 +88,14 @@ def test : bool
     tab_bool[false] = -1
     assert(key_exists(tab_bool, false))
 
-    var tab_int:table<int, int>
+    var tab_int:table<int;int>
     assert(!key_exists(tab_int, -1))
     tab_int[-1] = -1
     assert(key_exists(tab_int, -1))
     erase(tab_int, -1)
     assert(!key_exists(tab_int, -1))
 
-    var tab_string:table<string, int>
+    var tab_string:table<string;int>
     assert(!key_exists(tab_string, "---"))
     tab_string["---"] = -1
     assert(key_exists(tab_string, "---"))

@@ -23,8 +23,8 @@ def test
     var b : array<Foo>
     resize(b,10)
     testA(b)
-    // table<int,int>
-    var c : table<int,Foo>
+    // table<int;int>
+    var c : table<int;Foo>
     testA(c)
     return true
 

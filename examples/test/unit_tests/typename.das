@@ -15,7 +15,7 @@ def testVarValT(var a)
 def arrType(var a:array<auto(arrT)>)
     return typeinfo(typename type arrT)
 
-def tabTypes(var a:table<auto(key),auto(value)>)
+def tabTypes(var a:table<auto(key);auto(value)>)
     return typeinfo(typename type key) + ":" + typeinfo(typename type value)
 
 [export]
@@ -25,7 +25,7 @@ def test:bool
     assert(testInfT(3)=="int")
     assert(testVarRefT(3)=="int")
     assert(testVarValT(3)=="int")
-    var y : table<string,int>
+    var y : table<string;int>
     assert(tabTypes(y)=="string:int")
     var z : array<float>
     var ZZ : array<Foo>

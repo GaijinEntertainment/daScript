@@ -20,7 +20,7 @@ def test_delete_array
 
 [unsafe]
 def test_delete_table
-    var a : table<int,int>
+    var a : table<int;int>
     let w0 = heap_bytes_allocated()
     a[0] = 1
     a[1] = 2

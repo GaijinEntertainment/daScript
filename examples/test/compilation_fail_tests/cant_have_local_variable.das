@@ -11,7 +11,7 @@ def test:bool
     var b:StructureNotLocal             // 30108
     var c:array<StructureNotLocal>      // 30108
                                         // 30101: array type has to be 'local'
-    var d:table<int,StructureNotLocal>  // 30108
+    var d:table<int;StructureNotLocal>  // 30108
                                         // 30101: table value has to be 'local'
     return true
 

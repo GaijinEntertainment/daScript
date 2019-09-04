@@ -20,8 +20,8 @@ struct A
 	l : array<L>
 
 struct C
-	b : table<string, A>
-	c : table<string, A>
+    b : table<string; A>
+    c : table<string; A>
 
 [export]
 def test:bool

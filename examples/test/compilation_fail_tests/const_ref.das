@@ -7,7 +7,7 @@ expect 30504:6    // cant_write_to_const
 expect 30505:2    // cant_move_to_const
 expect 30507      // cant_copy
 
-def const_iter(var a:table<string,int>)
+def const_iter(var a:table<string;int>)
     for k,v in keys(a),values(a)
         k = "foo"       // can't write to constant value    (30504)
         v = 1           // this one okay
@@ -60,8 +60,8 @@ def test
         setFooPtr(pa)        // no matching function         (30304)
         setFooPtr(pb)
     if true
-        var a:table<string,int>
-        var b:table<string,int> const
+        var a:table<string;int>
+        var b:table<string;int> const
         a["key"]++
         b["key"]++      // no matching operator             (30303)
     if true
@@ -69,8 +69,8 @@ def test
         var b:int const?
         a = b
     if true
-        var a,b:table<string,int>
-        var c:table<string,int> const
+        var a,b:table<string;int>
+        var c:table<string;int> const
         var d:int
         a = b           // this type can't be copied        (30507)
         a <- b

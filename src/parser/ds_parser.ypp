@@ -1458,7 +1458,7 @@ type_declaration
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_TABLE[loc] '<' type_declaration[keyTypeDecl] ',' type_declaration[valueTypeDecl] '>' {
+    |   DAS_TABLE[loc] '<' type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] '>' {
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);

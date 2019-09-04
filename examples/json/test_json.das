@@ -14,7 +14,7 @@ struct Bar
     i : int
     j : int[3] = [[int 1;2;3]]
     t : array<float>
-    k : table<string,int>
+    k : table<string;int>
     f : Foo
     m : float4x4
 

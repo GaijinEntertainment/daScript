@@ -20,16 +20,16 @@ def length(a:auto[]):int
 
 // table
 
-def find(var Tab:table<auto(keyT),auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
+def find(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
-def erase(var Tab:table<auto(keyT),auto(valT)>;at:keyT):bool
+def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
     return __builtin_table_erase(Tab,at)
 
-def key_exists(var Tab:table<auto(keyT),auto(valT)>;at:keyT):bool
+def key_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
     return __builtin_table_key_exists(Tab,at)
 
 def binary_save(obj; subexpr:block<(data:string):void>)
@@ -52,7 +52,7 @@ def clone(var a:array<auto(TT)>;b:array<TT>)
     for aV,bV in a,b
         aV := bV
 
-def clone(var a:table<auto(KT),auto(VT)>;b:table<KT,VT>)
+def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>)
     clear(a)
     for k,v in keys(b),values(b)
         a[k] := v
@@ -60,10 +60,10 @@ def clone(var a:table<auto(KT),auto(VT)>;b:table<KT,VT>)
 def clone(var a:das_string;b:string)
     set(a,b)
 
-def keys(a:table<auto(keyT),auto(valT)>) : iterator<keyT & const>
+def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
     return __builtin_table_keys(a,typeinfo(sizeof type keyT))
 
-def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
+def values(a:table<auto(keyT);auto(valT)>) : iterator<valT &>
     return __builtin_table_values(a,typeinfo(sizeof type valT))
 
 // functional
@@ -122,14 +122,14 @@ def to_array_move(var a:auto(TT)[]) : array<TT delete const>
         static_assert(false,"this array can't be copied or moved")
     return <- arr
 
-def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const,valT>
-    var tab : table<keyT delete const,valT>
+def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const;valT>
+    var tab : table<keyT delete const;valT>
     for x in a
         tab[x._0] := x._1
     return <- tab
 
-def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const,valT>
-    var tab : table<keyT delete const,valT>
+def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const;valT>
+    var tab : table<keyT delete const;valT>
     if typeinfo(can_copy type valT)
 		for x in a
 			tab[x._0] = x._1

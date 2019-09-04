@@ -30,6 +30,6 @@ def test3
     blk() <| $(a:auto?=3):int           // 30304: no matching function (blk block<(auto?):int>)
                                         // 31102: block argument initialization type can't be infered, auto? = int
         return a                        // 30102: incompatible return type, expecting int vs auto?
-    let tab : table<string,int>
-    let tabI : table<auto,float> = tab  // 31102: local variable initialization type can't be infered
+    let tab : table<string;int>
+    let tabI : table<auto;float> = tab  // 31102: local variable initialization type can't be infered
                                         // 30106: Table key has to be basic 'hashable' type

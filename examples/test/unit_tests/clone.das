@@ -59,7 +59,7 @@ def test_clone_array
 
 [sideeffects]
 def test_clone_table
-    var x, y : table<int,string>
+    var x, y : table<int;string>
     for t in range(0,3)
         x[t] = string(t)
     y := x

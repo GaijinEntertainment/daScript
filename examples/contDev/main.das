@@ -245,7 +245,7 @@ def main(fn:string)
     let atdir = "./src"
     print("{fn}\ndas network message generator at {atdir}\n")
 	let main_time = stat(fn).mtime
-    var ttab : table<string,clock>
+    var ttab : table<string;clock>
 	while stat(fn).mtime == main_time
 		var any = false
         dir(atdir) <| $ (fname)
