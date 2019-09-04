@@ -3130,7 +3130,7 @@ namespace das {
                                 mkt = TypeDecl::inferAutoType(infT, init->type);
                                 if (mkt) {
                                     mkt->dim.resize(1);
-                                    mkt->dim[0] = 1;
+                                    mkt->dim[0] = int32_t(expr->values.size());
                                 }
                             }
                         } else {

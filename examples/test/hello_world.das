@@ -1,4 +1,4 @@
-// options log=true, log_stack=true, log_nodes=true
+options log=true, log_stack=true, log_nodes=true
 // options log_infer_passes=true
 // options print_var_access=true
 
@@ -13,17 +13,17 @@ struct SoldierScheme
     templ : string
     w : int
     sClass : string
-    itemSlots : table<string, ItemGeneration>
-    perks : array<table<string, float> >
+    itemSlots : table<string; ItemGeneration>
+    perks : array<table<string; float> >
 
 let
-    soldierScheme <- to_table_move([[ auto[]
-        "generic" => to_table_move([[ auto
+    soldierScheme <- {{
+        "generic" => {{
             "soldier_1" => [[ SoldierScheme
                 templ="generic_soldier_1",
                 w = 15,
                 sClass = "noclass",
-                itemSlots <- to_table_move([[ auto
+                itemSlots <- {{
                     "primary" => ItemGeneration([[ auto[] "m1_garand" =>2. ]]);
                     "secondary" => ItemGeneration([[ auto
                         "browning_auto_5" => 2.;
@@ -38,15 +38,15 @@ let
                           "small_medkit" => 2.;
                           "__noitem__" => 1. ]],
                           int2(1, 4))
-                ]]),
+                }},
                 perks <- to_array_move([[ auto[]
-                    to_table_move([[ auto "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. ]]) ]])
+                    {{ "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. }} ]])
             ]];
             "soldier_2" => [[ SoldierScheme
                 templ="generic_soldier_2",
                 w = 15,
                 sClass = "noclass",
-                itemSlots <- to_table_move([[ auto
+                itemSlots <- {{
                     "primary" => ItemGeneration([[ auto
                         "m1903_springfield_tunisia" => 2.;
                         "m1_garand" => 2. ]]);
@@ -64,16 +64,17 @@ let
                           "small_medkit" => 2.;
                           "__noitem__" => 1. ]],
                           int2(1, 4))
-                ]]),
+                }},
                 perks <- to_array_move([[ auto[]
-                // perks <- to_array_move([[ table<string,float>[]
-                    to_table_move([[ auto "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. ]]) ]])
+                    {{ "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. }} ]])
             ]]
-        ]])
-    ]])
+        }}
+    }}
 
 [export]
 def test
-    debug(soldierScheme)
+    //debug(soldierScheme)
+    var qq <- {{ 1 => "one"; 2 => "two" }}
+    debug(qq)
     return true
 
