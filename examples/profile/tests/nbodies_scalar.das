@@ -1,4 +1,4 @@
-// options logNodes=true
+// options log_nodes=true
 // options logCpp=true
 options indenting = 2
 require math

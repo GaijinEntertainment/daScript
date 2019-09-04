@@ -1,4 +1,4 @@
-// options log = true, logInferPasses = true
+// options log = true, log_infer_passes = true
 
 def boo(a:int=1;b:int)
     return a + b

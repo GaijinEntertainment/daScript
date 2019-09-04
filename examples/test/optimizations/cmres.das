@@ -1,4 +1,4 @@
-// options log = true, logStack=true, logNodes = true, optimize=true // , printRef = true, printVarAccess = true, logOptimizationPasses = true
+// options log = true, log_stack=true, log_nodes = true, optimize=true // , print_ref = true, print_var_access = true, log_optimization_passes = true
 
 struct Foo
     x, y : int

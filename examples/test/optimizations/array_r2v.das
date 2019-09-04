@@ -1,4 +1,4 @@
-// options logNodes = true, logStack = true
+// options log_nodes = true, log_stack = true
 
 struct Foo
     x,y,z,w:int

@@ -66,7 +66,7 @@ namespace das
     };
 
     struct UnsafeOpFunctionAnnotation : MarkFunctionAnnotation {
-        UnsafeOpFunctionAnnotation() : MarkFunctionAnnotation("unsafeoperation") { }
+        UnsafeOpFunctionAnnotation() : MarkFunctionAnnotation("unsafe_operation") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->unsafeOperation = true;
             return true;
@@ -82,7 +82,7 @@ namespace das
     };
 
     struct NoAotFunctionAnnotation : MarkFunctionAnnotation {
-        NoAotFunctionAnnotation() : MarkFunctionAnnotation("noaot") { }
+        NoAotFunctionAnnotation() : MarkFunctionAnnotation("no_aot") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->noAot = true;
             return true;

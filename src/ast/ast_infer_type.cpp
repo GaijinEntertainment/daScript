@@ -845,7 +845,7 @@ namespace das {
             if ( !var->genCtor && var->hasAnyInitializers() ) {
                 if ( !hasUserConstructor(var->name) ) {
                     auto ctor = makeConstructor(var);
-                    ctor->exports = program->options.getOption("alwaysExportInitializer", false);
+                    ctor->exports = program->options.getOption("always_export_initializer", false);
                     extraFunctions.push_back(ctor);
                     var->genCtor = true;
                     reportGenericInfer();
@@ -3212,7 +3212,7 @@ namespace das {
     // program
 
     void Program::inferTypes(TextWriter & logs) {
-        const bool log = options.getOption("logInferPasses",false);
+        const bool log = options.getOption("log_infer_passes",false);
         int pass = 0, maxPasses = 50;
         if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
             maxPasses = maxP->iValue;

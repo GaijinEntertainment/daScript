@@ -1,4 +1,4 @@
-// options log=true, logNodes=true, logStack=true
+// options log=true, log_nodes=true, log_stack=true
 
 def make_10
     var a : array<float>

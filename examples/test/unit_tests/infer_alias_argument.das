@@ -1,4 +1,4 @@
-// options log=true,logInferPasses=false,optimize=false
+// options log=true,log_infer_passes=false,optimize=false
 
 def fold(a:array<auto(numt)>;var from:numt)
     for x in a

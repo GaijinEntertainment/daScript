@@ -1,4 +1,4 @@
-//options logOptimizationPasses=true
+//options log_optimization_passes=true
 // options log=true
 
 def two_plus_two : int

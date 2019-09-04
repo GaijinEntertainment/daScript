@@ -1,5 +1,5 @@
 // options optimize=false, log=true
-// options logInferPasses=true
+// options log_infer_passes=true
 
 struct Foo
     bar : int

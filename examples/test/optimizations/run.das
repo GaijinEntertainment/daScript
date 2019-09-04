@@ -1,4 +1,4 @@
-// options printRef = true, printVarAccess = true, log = true// , logOptimizationPasses = true
+// options print_ref = true, print_var_access = true, log = true// , log_optimization_passes = true
 
 def strcat(a,b)
 	var c = a

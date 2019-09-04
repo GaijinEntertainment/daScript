@@ -1,5 +1,5 @@
-// options log=true, logNodes=true, logStack=true
-options alwaysExportInitializer=true
+// options log=true, log_nodes=true, log_stack=true
+options always_export_initializer=true
 
 require UnitTest
 

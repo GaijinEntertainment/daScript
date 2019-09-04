@@ -1,4 +1,4 @@
-// options log=true, logNodes=true, printVarAccess=true, printRef=true
+// options log=true, log_nodes=true, print_var_access=true, print_ref=true
 // options logCpp=true
 require testProfile
 

@@ -818,7 +818,7 @@ namespace das {
             // functionality
             addExtern<DAS_BIND_FUN(readJson)>(*this,lib,"_builtin_parse_json",SideEffects::modifyExternal);
             addInterop<_builtin_save_json,void,vec4f,const Block>(*this, lib, "_builtin_save_json",SideEffects::modifyExternal);
-            addInterop<_builtin_load_json,void,vec4f,const JsValue*>(*this, lib, "readFromJson",SideEffects::modifyExternal);
+            addInterop<_builtin_load_json,void,vec4f,const JsValue*>(*this, lib, "read_from_json",SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(json_set_i)>(*this,lib,"set",SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(json_set_f)>(*this,lib,"set",SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(json_set_b)>(*this,lib,"set",SideEffects::modifyExternal);

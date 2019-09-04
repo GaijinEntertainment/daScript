@@ -1,4 +1,4 @@
-// options log = true // , logInferPasses=true
+// options log = true // , log_infer_passes=true
 
 struct Foo
     a : int

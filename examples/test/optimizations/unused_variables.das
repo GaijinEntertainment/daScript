@@ -1,4 +1,4 @@
-//options logOptimizationPasses=true
+//options log_optimization_passes=true
 //options log=true
 //options optimize=false,log=true
 

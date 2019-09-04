@@ -77,8 +77,8 @@ namespace das {
     public:
         Printer ( const Program * program = nullptr ) {
             if ( program ) {
-                printRef = program->options.getOption("printRef");
-                printVarAccess = program->options.getOption("printVarAccess");
+                printRef = program->options.getOption("print_ref");
+                printVarAccess = program->options.getOption("print_var_access");
             }
         }
         string str() const { return ss.str(); };
@@ -829,7 +829,7 @@ namespace das {
             return true;
         }, "*");
         if (any) stream << "\n";
-        bool logGenerics = program.options.getOption("logGenerics");
+        bool logGenerics = program.options.getOption("log_generics");
         SetPrinterFlags flags;
         const_cast<Program&>(program).visit(flags, logGenerics);
         Printer log(&program);

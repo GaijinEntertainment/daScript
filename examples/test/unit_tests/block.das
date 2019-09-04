@@ -1,5 +1,5 @@
-// options plot=true,plotFile="../../test.dot",plotReadWrite=true
-// options log=true, logOptimizationPasses=true, printRef = true, printVarAccess = true
+// options plot=true,plotFile="../../test.dot",plot_read_write=true
+// options log=true, log_optimization_passes=true, print_ref = true, print_var_access = true
 
 def twice(b:block)
     invoke(b)

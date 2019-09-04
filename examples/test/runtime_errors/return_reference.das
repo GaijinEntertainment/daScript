@@ -1,5 +1,5 @@
-// options log=true, logInferPasses=false, optimize=false
-// options log = true, logOptimizationPasses=true
+// options log=true, log_infer_passes=false, optimize=false
+// options log = true, log_optimization_passes=true
 
 [sideeffects]
 def ret_unsafe_ref : int &

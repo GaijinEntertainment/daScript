@@ -1,4 +1,4 @@
-// options log=true, logStack=true, optimize=true
+// options log=true, log_stack=true, optimize=true
 
 def verifyIdentity(mat:auto(mat))
     let v : auto(vec) = mat[0]

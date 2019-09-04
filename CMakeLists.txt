@@ -338,7 +338,6 @@ ADD_DEPENDENCIES(libPathTracerHelper libDaScript)
 SET(PATH_TRACER_MAIN_SRC
 examples/pathTracer/main.cpp
 examples/pathTracer/path_tracer_helper.h
-examples/pathTracer/toy_random.das
 examples/pathTracer/toy_path_tracer.das
 )
 SOURCE_GROUP_FILES("source" PATH_TRACER_MAIN_SRC)

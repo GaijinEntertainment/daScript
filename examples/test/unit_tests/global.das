@@ -1,4 +1,4 @@
-// options logInferPasses=true
+// options log_infer_passes=true
 // options logCpp = true
 
 struct Foo

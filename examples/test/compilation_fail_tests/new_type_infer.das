@@ -1,4 +1,4 @@
-// options logInferPasses=true
+// options log_infer_passes=true
 
 expect 30109, 30301
 

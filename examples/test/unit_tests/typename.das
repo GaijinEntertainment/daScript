@@ -1,4 +1,4 @@
-// options log=true,logInferPasses=false,optimize=true
+// options log=true,log_infer_passes=false,optimize=true
 
 struct Foo
     bar : int

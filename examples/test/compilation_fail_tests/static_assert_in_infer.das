@@ -1,4 +1,4 @@
-// options log=true,logInferPasses=false,logOptimizationPasses=true,optimize=true
+// options log=true,log_infer_passes=false,log_optimization_passes=true,optimize=true
 
 expect 40100
 

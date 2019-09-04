@@ -170,7 +170,7 @@ namespace das {
                 }
             }
             sort(program->errors.begin(), program->errors.end());
-            if ( program->options.getOption("logCompileTime",false) ) {
+            if ( program->options.getOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << "\n";
             }

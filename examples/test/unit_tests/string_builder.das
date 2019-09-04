@@ -1,4 +1,4 @@
-// options log=true,optimize=true,logOptimizationPasses=false
+// options log=true,optimize=true,log_optimization_passes=false
 
 def test_arg(a:string):string
     return "hello,{a}!"

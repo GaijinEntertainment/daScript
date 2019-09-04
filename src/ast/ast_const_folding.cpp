@@ -713,7 +713,7 @@ namespace das {
         visit(cfe);
         bool any = cfe.didAnything();
         if ( cfe.needRun() ) {
-            if ( !options.getOption("disableRun",false) ) {
+            if ( !options.getOption("disable_run",false) ) {
                 RunFolding rfe(shared_from_this());
                 visit(rfe);
                 any |= rfe.didAnything();

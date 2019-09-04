@@ -1,4 +1,4 @@
-options logNodes=true, log=true
+options log_nodes=true, log=true
 
 options indenting = 2
 require math

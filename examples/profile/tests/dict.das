@@ -1,4 +1,4 @@
-// options log=true, printVarAccess=true, printRef=true
+// options log=true, print_var_access=true, print_ref=true
 
 require math
 

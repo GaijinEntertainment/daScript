@@ -1,21 +1,21 @@
-options log=true, logStack=true, logNodes=true
-// options logInferPasses=true
-// options printVarAccess=true
+options log=true, log_stack=true, log_nodes=true
+// options log_infer_passes=true
+// options print_var_access=true
 
 def test_each
     for r in each(range(0,5))
         print("r={r}\n")
     for fa in each([[auto 1.1; 2.2; 3.3]])
         print("fa={fa}\n")
-    for ga in each(toarray([[auto "a";"b";"c"]]))
+    for ga in each(to_array([[auto "a";"b";"c"]]))
         print("ga={ga}\n")
 
 def test_to_array
-    let ra <- toarray(each(range(0,5)))
+    let ra <- to_array(each(range(0,5)))
     print("ra={ra}\n")
-    let fa <- toarray(each([[auto 1.1; 2.2; 3.3]]))
+    let fa <- to_array(each([[auto 1.1; 2.2; 3.3]]))
     print("fa={fa}\n")
-    let ga <- toarray(each(toarray([[auto "a";"b";"c"]])))
+    let ga <- to_array(each(to_array([[auto "a";"b";"c"]])))
     print("ga={ga}\n")
 
 [unsafe,sideeffects]
@@ -34,7 +34,7 @@ def test_range
 
 [unsafe,sideeffects]
 def test_good_array
-    let arr <- toarray([[int 1;2;3;4]])
+    let arr <- to_array([[int 1;2;3;4]])
     let ait : iterator<int&> = _builtin_make_good_array_iterator(arr,typeinfo(sizeof type int))
     var ikey : int?
     var pkey : void? = reinterpret<void?>(addr(ikey))
@@ -59,7 +59,7 @@ def test_fixed_array
 
 [unsafe,sideeffects]
 def test_keys_values
-    let t <- totable([[auto 1=>"one"; 2=>"two"; 3=>"three"]])
+    let t <- to_table([[auto 1=>"one"; 2=>"two"; 3=>"three"]])
     for k,v in keys(t),values(t)
         print("{k} => {v}\n")
     if true

@@ -1,4 +1,4 @@
-// options log=true, logInferPasses=true, optimize=false, logNodes=true, logStack=true
+// options log=true, log_infer_passes=true, optimize=false, log_nodes=true, log_stack=true
 
 [export]
 def test

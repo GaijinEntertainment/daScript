@@ -1,4 +1,4 @@
-options removeUnusedSymbols=false
+options remove_unused_symbols=false
 
 def resize(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_resize(Arr,newSize,typeinfo(sizeof type numT))
@@ -72,17 +72,17 @@ def values(a:table<auto(keyT),auto(valT)>) : iterator<valT &>
 def each ( rng : range ) : iterator<int>
     return _builtin_make_range_iterator(rng)
 
-[unsafe,unsafeoperation]
+[unsafe,unsafe_operation]
 def each ( a : auto(TT)[] ) : iterator<TT&>
     var parr : void? = reinterpret<void?>(addr(a[0]))
     return _builtin_make_fixed_array_iterator(parr,typeinfo(dim a),typeinfo(sizeof type TT))
 
-[unsafeoperation]
+[unsafe_operation]
 def each ( a : array<auto(TT)> ) : iterator<TT&>
     return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
 
 [unsafe]
-def toarray ( it : iterator<auto(TT)> ) : array<TT delete const &>
+def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>
     if typeinfo(is_ref type TT)
         var rkey : TT delete const &?
@@ -103,25 +103,41 @@ def toarray ( it : iterator<auto(TT)> ) : array<TT delete const &>
     return <- arr
 
 [unsafe]
-def toarray(a:auto(TT)[]) : array<TT delete const>
+def to_array(a:auto(TT)[]) : array<TT delete const>
+    var arr : array<TT delete const>
+    resize(arr,length(a))
+    reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) := a
+    return <- arr
+
+[unsafe]
+def to_array_move(var a:auto(TT)[]) : array<TT delete const>
     var arr : array<TT delete const>
     if typeinfo(can_copy a)
         resize(arr,length(a))
         reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) = a
-    else
+    elif typeinfo(can_move a)
         resize(arr,length(a))
-        reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) := a
+        reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) <- a
+    else
+        static_assert(false,"this array can't be copied or moved")
     return <- arr
 
-def totable(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const,valT>
+def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const,valT>
     var tab : table<keyT delete const,valT>
-    if typeinfo(can_copy type valT)    
-		for x in a
-			tab[x._0] = x._1
-	else
-		for x in a
-			tab[x._0] := x._1
+    for x in a
+        tab[x._0] := x._1
     return <- tab
 
+def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const,valT>
+    var tab : table<keyT delete const,valT>
+    if typeinfo(can_copy type valT)
+		for x in a
+			tab[x._0] = x._1
+	elif typeinfo(can_move type valT)
+		for x in a
+			tab[x._0] <- x._1
+    else
+        static_assert(false,"this array can't be copied or moved")
+    return <- tab
 
 

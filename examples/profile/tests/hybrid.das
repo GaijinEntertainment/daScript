@@ -1,4 +1,4 @@
-// options log=true, printVarAccess=true, printRef=true
+// options log=true, print_var_access=true, print_ref=true
 
 require testProfile
 
@@ -8,7 +8,7 @@ def fibR(n)
         return n
 	return fibR(n - 1) + fibR(n - 2)
 
-[sideeffects,noaot]
+[sideeffects,no_aot]
 def fibRNA(n)
     if (n < 2)
         return n

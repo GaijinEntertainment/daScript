@@ -1830,7 +1830,7 @@ namespace das {
     }
 
     void Program::optimize(TextWriter & logs) {
-        const bool log = options.getOption("logOptimizationPasses",false);
+        const bool log = options.getOption("log_optimization_passes",false);
         bool any, last;
         if (log) {
             logs << *this << "\n";

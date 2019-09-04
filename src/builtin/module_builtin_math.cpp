@@ -211,9 +211,9 @@ namespace das {
             addFunctionCommonTyped<uint64_t>(*this, lib);
 
             addExtern<DAS_BIND_FUN(uint32_hash)>(*this, lib, "uint32_hash", SideEffects::none, "uint32_hash");
-            addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise1D", SideEffects::none, "uint_noise1D");
-            addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise2D", SideEffects::none, "uint_noise2D_int2");
-            addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise3D", SideEffects::none, "uint_noise3D_int3");
+            addExtern<DAS_BIND_FUN(uint_noise1D)>(*this, lib, "uint_noise_1D", SideEffects::none, "uint_noise1D");
+            addExtern<DAS_BIND_FUN(uint_noise2D_int2)>(*this, lib, "uint_noise_2D", SideEffects::none, "uint_noise2D_int2");
+            addExtern<DAS_BIND_FUN(uint_noise3D_int3)>(*this, lib, "uint_noise_3D", SideEffects::none, "uint_noise3D_int3");
 
             addExternEx<float(float2,float2),DAS_BIND_FUN(dot2)>(*this, lib, "dot", SideEffects::none, "dot2");
             addExternEx<float(float3,float3),DAS_BIND_FUN(dot3)>(*this, lib, "dot", SideEffects::none, "dot3");
@@ -232,19 +232,19 @@ namespace das {
             addExternEx<float(float2),DAS_BIND_FUN(length2)>(*this, lib, "length", SideEffects::none, "length2");
             addExternEx<float(float3),DAS_BIND_FUN(length3)>(*this, lib, "length", SideEffects::none, "length3");
             addExternEx<float(float4),DAS_BIND_FUN(length4)>(*this, lib, "length", SideEffects::none, "length4");
-            addExternEx<float(float2),DAS_BIND_FUN(invlength2)>(*this, lib, "invLength", SideEffects::none,"invlength2");
-            addExternEx<float(float3),DAS_BIND_FUN(invlength3)>(*this, lib, "invLength", SideEffects::none,"invlength3");
-            addExternEx<float(float4),DAS_BIND_FUN(invlength4)>(*this, lib, "invLength", SideEffects::none,"invlength4");
-            addExternEx<float(float2),DAS_BIND_FUN(invlengthSq2)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq2");
-            addExternEx<float(float3),DAS_BIND_FUN(invlengthSq3)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq3");
-            addExternEx<float(float4),DAS_BIND_FUN(invlengthSq4)>(*this, lib, "invLengthSq", SideEffects::none, "invlengthSq4");
-            addExternEx<float(float2),DAS_BIND_FUN(lengthSq2)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq2");
-            addExternEx<float(float3),DAS_BIND_FUN(lengthSq3)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq3");
-            addExternEx<float(float4),DAS_BIND_FUN(lengthSq4)>(*this, lib, "lengthSq", SideEffects::none, "lengthSq4");
+            addExternEx<float(float2),DAS_BIND_FUN(invlength2)>(*this, lib, "inv_length", SideEffects::none,"invlength2");
+            addExternEx<float(float3),DAS_BIND_FUN(invlength3)>(*this, lib, "inv_length", SideEffects::none,"invlength3");
+            addExternEx<float(float4),DAS_BIND_FUN(invlength4)>(*this, lib, "inv_length", SideEffects::none,"invlength4");
+            addExternEx<float(float2),DAS_BIND_FUN(invlengthSq2)>(*this, lib, "inv_length_sq", SideEffects::none, "invlengthSq2");
+            addExternEx<float(float3),DAS_BIND_FUN(invlengthSq3)>(*this, lib, "inv_length_sq", SideEffects::none, "invlengthSq3");
+            addExternEx<float(float4),DAS_BIND_FUN(invlengthSq4)>(*this, lib, "inv_length_sq", SideEffects::none, "invlengthSq4");
+            addExternEx<float(float2),DAS_BIND_FUN(lengthSq2)>(*this, lib, "length_sq", SideEffects::none, "lengthSq2");
+            addExternEx<float(float3),DAS_BIND_FUN(lengthSq3)>(*this, lib, "length_sq", SideEffects::none, "lengthSq3");
+            addExternEx<float(float4),DAS_BIND_FUN(lengthSq4)>(*this, lib, "length_sq", SideEffects::none, "lengthSq4");
             addExternEx<float(float3,float3),DAS_BIND_FUN(distance3)>(*this, lib, "distance", SideEffects::none, "distance3");
-            addExternEx<float(float3,float3),DAS_BIND_FUN(distanceSq3)>(*this, lib, "distanceSq", SideEffects::none, "distanceSq3");
-            addExternEx<float(float3,float3),DAS_BIND_FUN(invdistance3)>(*this, lib, "invDistance", SideEffects::none, "invdistance3");
-            addExternEx<float(float3,float3),DAS_BIND_FUN(invdistanceSq3)>(*this, lib, "invDistanceSq", SideEffects::none, "invdistanceSq3");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(distanceSq3)>(*this, lib, "distance_sq", SideEffects::none, "distanceSq3");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(invdistance3)>(*this, lib, "inv_distance", SideEffects::none, "invdistance3");
+            addExternEx<float(float3,float3),DAS_BIND_FUN(invdistanceSq3)>(*this, lib, "inv_distance_sq", SideEffects::none, "invdistanceSq3");
 
             //double functions
             addExtern<DAS_BIND_FUN(dabs)>(*this, lib, "abs",     SideEffects::none, "dabs");

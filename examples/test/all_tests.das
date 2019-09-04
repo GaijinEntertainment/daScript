@@ -1,7 +1,7 @@
 require math
 
 // 8Mb heap
-options heap=8388608, logCompileTime = true
+options heap=8388608, log_compile_time = true
 
 require math
 

@@ -1,4 +1,4 @@
-// options logStack = true
+// options log_stack = true
 
 require UnitTest
 
@@ -6,7 +6,7 @@ require UnitTest
 struct Fields
     a,b,c,d:int
 
-[export,noaot]
+[export,no_aot]
 def testFields(x:Fields?):int
     var t = 0
     t += x?.a ?? 0

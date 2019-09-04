@@ -1,13 +1,12 @@
 // options log=true
 // options logCpp=true
-// options logNodes=true
+// options log_nodes=true
 
-options noaot=true, fusion=true
+options no_aot=true, fusion=true
 
 require math
 require PathTracerHelper
 
-// require toy_random
 require random
 
 let
@@ -72,7 +71,7 @@ def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
     return that
 
 def getRay(that:Camera;s,t:float)
-    let rd = that.lensRadius * randomInUnitDisk(RAND_SEED)
+    let rd = that.lensRadius * random_in_unit_disk(RAND_SEED)
     let offset = mad(that.u,rd.x,that.v*rd.y)
     return [[Ray orig = that.origin + offset,
         dir = normalize(mad(that.vertical,t,mad(that.horizontal,s,that.lowerLeftCorner)) - that.origin - offset) ]]
@@ -125,7 +124,7 @@ def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
     for sph in s_Spheres
         let co = sph.center - r.orig
         let nb = dot(co,r.dir)
-        let discr = mad(nb,nb, sph.radius2 - lengthSq(co))
+        let discr = mad(nb,nb, sph.radius2 - length_sq(co))
         if discr > 0.
             let discrSq = sqrt(discr)
             var t = nb - discrSq
@@ -149,15 +148,15 @@ def hitWorld(r:Ray const;tMin,tMax:float;var outHit:Hit;var outID:int&)
 def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&; var scattered:Ray; var outLightE:float3&; var inoutRayCount:int&)
     outLightE = float3(0)
     if mat.mtype==Type Lambert
-        let target = rec.pos + rec.normal + randomUnitVector(RAND_SEED)
+        let target = rec.pos + rec.normal + random_unit_vector(RAND_SEED)
         scattered = [[Ray orig=rec.pos, dir=normalize(target - rec.pos)]]
         attenuation = mat.albedo
         let s : Sphere & = s_Spheres[LIGHT_SPHERE_ID]
         let sw = normalize(s.center-rec.pos)
         let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
         let sv = cross(sw,su)
-        let cosAMax = sqrt(saturate(1.-s.radius*s.radius*invDistanceSq(rec.pos,s.center)))
-        let eps = randomFloat4(RAND_SEED)
+        let cosAMax = sqrt(saturate(1.-s.radius*s.radius*inv_distance_sq(rec.pos,s.center)))
+        let eps = random_float4(RAND_SEED)
         let cosA = mad(eps.x,cosAMax,1.) - eps.x
         let sinA = sqrt ( 1. - cosA*cosA )
         var sinPhi, cosPhi : float
@@ -173,7 +172,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
-        scattered = [[Ray orig=rec.pos, dir=normalize(mad(randomInUnitSphere(RAND_SEED),mat.roughness,refl))]]
+        scattered = [[Ray orig=rec.pos, dir=normalize(mad(random_in_unit_sphere(RAND_SEED),mat.roughness,refl))]]
         attenuation = mat.albedo
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
@@ -190,7 +189,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
                 reflProb = schlick(-dot(r_in.dir, rec.normal),mat.ri)
             else
                 reflProb = 1.
-        if randomFloat(RAND_SEED) < reflProb
+        if random_float(RAND_SEED) < reflProb
             scattered = [[Ray orig=rec.pos, dir=normalize(reflect(r_in.dir, rec.normal))]]
         else
             scattered = [[Ray orig=rec.pos, dir=normalize(refr)]]
@@ -227,11 +226,11 @@ def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array
     var rayCount = 0
     var backbufferIdx = ymin * screenWidth
     for y in range(ymin,ymax)
-		RAND_SEED = randomSeed(y*117 + frameCount*13)
+		RAND_SEED = random_seed(y*117 + frameCount*13)
         for x in range(0,screenWidth)
             var col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
-                let uv = (float2(x,y) + randomFloat4(RAND_SEED).xy) * invWH
+                let uv = (float2(x,y) + random_float4(RAND_SEED).xy) * invWH
                 col += trace(getRay(cam, uv.x, uv.y), 0, rayCount)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)
             backbuffer[backbufferIdx] = lerp(col, backbuffer[backbufferIdx], lerpFac)

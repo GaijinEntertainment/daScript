@@ -1,4 +1,4 @@
-// options log=true, logStack=true, optimize=true
+// options log=true, log_stack=true, optimize=true
 
 struct Bar
     x:int = 1

@@ -34,7 +34,7 @@ namespace das {
             return "digraph{\n" + sgraph.str() + "\n" + psgraph.str() + "\n}\n";
         };
     public:
-        bool                plotReadWrite = false;
+        bool                plot_read_write = false;
     protected:
         TextWriter        sgraph;
         TextWriter        psgraph;
@@ -423,7 +423,7 @@ namespace das {
         // var
         virtual ExpressionPtr visit(ExprVar * var) override {
             label(var, var->name);
-            if (plotReadWrite) {
+            if (plot_read_write) {
                 if (var->write) {
                     post_connect(var, var->variable, "color=" + flow_write + " constraint=false");
                 } else {
@@ -540,7 +540,7 @@ namespace das {
 
     string Program::dotGraph() {
         GraphPrinter graph;
-        graph.plotReadWrite = options.getOption("plotReadWrite", false);
+        graph.plot_read_write = options.getOption("plot_read_write", false);
         visit(graph);
         return graph.str();
     }

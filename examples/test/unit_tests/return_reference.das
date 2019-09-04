@@ -1,4 +1,4 @@
-// options logStack=true
+// options log_stack=true
 
 var
     g_t = 2

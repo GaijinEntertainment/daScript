@@ -343,8 +343,8 @@ namespace das {
             addInterop<builtin_read,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_read",SideEffects::modifyExternal, "builtin_read");
             addInterop<builtin_write,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_write",SideEffects::modifyExternal, "builtin_write");
             addInterop<builtin_load,void,const FILE*,int32_t,const Block &>(*this, lib, "_builtin_load",das::SideEffects::modifyExternal, "builtin_load");
-            addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dirname", SideEffects::none, "builtin_dirname");
-            addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "basename", SideEffects::none, "builtin_basename");
+            addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dir_name", SideEffects::none, "builtin_dirname");
+            addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "base_name", SideEffects::none, "builtin_basename");
             addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat", SideEffects::modifyExternal, "builtin_fstat");
             addExtern<DAS_BIND_FUN(builtin_stat)>(*this, lib, "stat", SideEffects::modifyExternal, "builtin_stat");
             addExtern<DAS_BIND_FUN(builtin_dir)>(*this, lib, "builtin_dir", SideEffects::modifyExternal, "builtin_dir");

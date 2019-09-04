@@ -1936,7 +1936,7 @@ namespace das
         fusion(context, logs);
         context.restart();
         // log all functions
-        if ( options.getOption("logNodes",false) ) {
+        if ( options.getOption("log_nodes",false) ) {
             for ( int i=0; i!=context.totalVariables; ++i ) {
                 auto & pv = context.globalVariables[i];
                 if ( pv.init ) {
@@ -1955,7 +1955,7 @@ namespace das
         // run init script and restart
         context.runInitScript();
         context.restart();
-        if (options.getOption("logMem")) {
+        if (options.getOption("log_mem")) {
             logs << "code  " << context.code->bytesAllocated() << "\n";
             logs << "debug " << context.debugInfo->bytesAllocated() << "\n";
             logs << "heap  " << context.heap.bytesAllocated() << "\n";

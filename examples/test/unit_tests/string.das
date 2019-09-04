@@ -1,12 +1,12 @@
-// options log=true,optimize=true,logOptimizationPasses=false
+// options log=true,optimize=true,log_optimization_passes=false
 
 // options logCpp=true
 
 [export]
 def test:bool
     let s:string = "hello, world!"
-    assert(toupper(s) == "HELLO, WORLD!")
-    assert(tolower(toupper(s)) == s)
+    assert(to_upper(s) == "HELLO, WORLD!")
+    assert(to_lower(to_upper(s)) == s)
     assert(reverse(s) == "!dlrow ,olleh")
     assert(length(s) == 13)
     assert(find(s, "world!") == 7)
@@ -15,12 +15,12 @@ def test:bool
     assert(find(s, "o", 5) == 8)
     assert(find(s, "o", 9) == -1)
     assert(find(s, "??") == -1)
-    assert(endswith(s, "world!"))
-    assert(startswith(s, "hello"))
-    assert(startswith(s, ""))
-    assert(endswith(s, ""))
-    assert(startswith(s, "a") == false)
-    assert(endswith(s, "b") == false)
+    assert(ends_with(s, "world!"))
+    assert(starts_with(s, "hello"))
+    assert(starts_with(s, ""))
+    assert(ends_with(s, ""))
+    assert(starts_with(s, "a") == false)
+    assert(ends_with(s, "b") == false)
     let s2:string = "   hello, world!   "
     assert(strip(s2) == s)
     assert(strip_right(strip_left(s2)) == s)
@@ -63,7 +63,7 @@ multi line string"
     for ch in st
         if ch=='5'
             count ++
-        let chAt = characterat(st,index)
+        let chAt = character_at(st,index)
         assert(ch==chAt)
         index ++
     assert(count==2)

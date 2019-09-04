@@ -1,4 +1,4 @@
-// options log = true// , optimize = false // , logInferPasses = true, logOptimizationPasses = true
+// options log = true// , optimize = false // , log_infer_passes = true, log_optimization_passes = true
 
 [sideeffects]
 def test_if_finally

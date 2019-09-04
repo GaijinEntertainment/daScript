@@ -513,28 +513,28 @@ namespace das {
             // functions
             //      all the stuff is only resolved after debug info is built
             //      hence SideEffects::modifyExternal is essencial for it to not be optimized out
-            addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "getTypeInfo",
+            addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "get_type_info",
                 SideEffects::modifyExternal,"rtti_getTypeInfo");
-            addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "getDim", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "getDim", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(rtti_contextTotalFunctions)>(*this, lib, "getTotalFunctions", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "getTotalVariables", SideEffects::modifyExternal);
-            addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "getFunctionInfo",
+            addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "get_dim", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "get_dim", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_contextTotalFunctions)>(*this, lib, "get_total_functions", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "get_total_variables", SideEffects::modifyExternal);
+            addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "get_function_info",
                 SideEffects::modifyExternal, "rtti_contextFunctionInfo");
-            addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "getVariableInfo",
+            addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "get_variable_info",
                 SideEffects::modifyExternal, "rtti_contextVariableInfo");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "rtti_builtin_compile", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "rtti_builtin_compile_file", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "rttiGetThisModule", SideEffects::modifyExternal);\
-            addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "rttiGetModule", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "rtti_get_this_module", SideEffects::modifyExternal);\
+            addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "rtti_get_module", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "rtti_builtin_program_for_each_module", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_structure)>(*this, lib, "rtti_builtin_module_for_each_structure", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "rtti_builtin_module_for_each_enumeration", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_function)>(*this, lib, "rtti_builtin_module_for_each_function", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_generic)>(*this, lib, "rtti_builtin_module_for_each_generic", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_isSameType", SideEffects::modifyExternal);
-            addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_isCompatibleCast", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast", SideEffects::modifyExternal);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
         }

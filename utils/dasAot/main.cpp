@@ -41,7 +41,7 @@ bool compile ( const string & fn, const string & cppFn ) {
             }
             // AOT time
             TextWriter tw;
-            bool noAot = program->options.getOption("noaot",false);
+            bool noAot = program->options.getOption("no_aot",false);
             // header
             tw << "#include \"daScript/misc/platform.h\"\n\n";
 

@@ -2,6 +2,6 @@ require rtti
 
 [export]
 def test:bool
-    verify(isSameType(getTypeInfo(1),getTypeInfo(2)))
-    verify(!isSameType(getTypeInfo(1.0),getTypeInfo(2)))
+    verify(is_same_type(get_type_info(1),get_type_info(2)))
+    verify(!is_same_type(get_type_info(1.0),get_type_info(2)))
     return true

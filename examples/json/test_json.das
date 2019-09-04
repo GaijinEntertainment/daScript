@@ -2,7 +2,7 @@
 
 require RapidJson
 
-// options log=true, logInferPasses=false, optimize=true
+// options log=true, log_infer_passes=false, optimize=true
 
 struct Foo
     i : int = 5
@@ -26,16 +26,16 @@ def test_write
     t.k["foo"] = 1
     t.k["bar"] = 2
     t.m[1][1] = 1.
-    writeToJson(t) <| $ ( var root )
-        print("writeToJson = {root}\n")
+    write_to_json(t) <| $ ( var root )
+        print("write_to_json = {root}\n")
         let q : Bar
-        readFromJson(q, root)
-        print("readFromJson = {q}\n")
+        read_from_json(q, root)
+        print("read_from_json = {q}\n")
     return true
 
 def test_parse
     let json_text = "\{ \"hello\": \"world\", \"t\": true , \"f\": false, \"n\": null, \"i\": 123, \"pi\": 3.1416, \"a\": [1, 2, 3, 4] \}"
-    readJson(json_text) <| $ ( var root; error )
+    read_json(json_text) <| $ ( var root; error )
         // general navigation
         print("{root}\n")
         assert(root.is_object)

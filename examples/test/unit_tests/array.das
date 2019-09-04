@@ -1,7 +1,7 @@
 // options plot=true,plotFile="../../test.dot"
 // options log=true, optimize=false
-// options noaot=true
-// options logNodes=true
+// options no_aot=true
+// options log_nodes=true
 
 [sideeffects]
 def make_test_array(var a:array<int>;extra:int=0)

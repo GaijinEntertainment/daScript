@@ -1,4 +1,4 @@
-// options logNodes=true
+// options log_nodes=true
 
 require math
 

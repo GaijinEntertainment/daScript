@@ -5,7 +5,7 @@ var
 def c1
     value++
 
-[init,noaot]
+[init,no_aot]
 def c2
     value+=2
 

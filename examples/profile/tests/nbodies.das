@@ -1,4 +1,4 @@
-// options logNodes=true
+// options log_nodes=true
 // options logCpp=true
 options indenting = 2
 require math
@@ -52,7 +52,7 @@ def advance()
     for j in range(i, nbodies)
       var b2:body& = bodies[j]
       let dx = b.x - b2.x
-      let inv_distance = invLength(dx)
+      let inv_distance = inv_length(dx)
       let mag = inv_distance * inv_distance * inv_distance
       b.v -= dx * (b2.mass*mag)
       b2.v += dx * (b.mass*mag)
@@ -62,7 +62,7 @@ def energy():float
   var e = 0.0
   var i = 0
   for b in bodies
-    e += 0.5 * b.mass * lengthSq(b.v)
+    e += 0.5 * b.mass * length_sq(b.v)
     ++i
     for j in range(i, nbodies)
       let b2 = bodies[j]

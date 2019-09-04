@@ -1,4 +1,4 @@
-// options log=true, logGenerics=false, optimize=true
+// options log=true, log_generics=false, optimize=true
 
 def logT(x:auto(numT)&)
     return typeinfo(typename type numT)

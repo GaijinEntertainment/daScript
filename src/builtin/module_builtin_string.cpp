@@ -257,7 +257,7 @@ namespace das
             SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
         addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
             SideEffects::modifyExternal, "builtin_write_string");
-        addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "writechar", SideEffects::none, "write_string_char");
+        addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::none, "write_string_char");
         addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
@@ -271,11 +271,11 @@ namespace das
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
             SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
         // regular string
-        addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "characterat", SideEffects::none, "get_character_at");
+        addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at", SideEffects::none, "get_character_at");
         addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
-        addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "tochar", SideEffects::none, "to_string_char");
-        addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "endswith", SideEffects::none, "builtin_string_endswith");
-        addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "startswith", SideEffects::none, "builtin_string_startswith");
+        addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char", SideEffects::none, "to_string_char");
+        addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with", SideEffects::none, "builtin_string_endswith");
+        addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with", SideEffects::none, "builtin_string_startswith");
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");
         addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", SideEffects::none, "builtin_string_strip_right");
         addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", SideEffects::none, "builtin_string_strip_left");
@@ -285,8 +285,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", SideEffects::none, "builtin_string_find2");
         addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
         addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
-        addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "toupper", SideEffects::none, "builtin_string_toupper");
-        addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "tolower", SideEffects::none, "builtin_string_tolower");
+        addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
+        addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
