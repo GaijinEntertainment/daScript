@@ -136,6 +136,10 @@
 %token  CLONEEQU    ROTL        ROTR        ROTLEQU     ROTREQU
 %token  MAPTO
 
+%token	BRABRAB		/* [[ */
+%token	BRACBRB		/* [{ */
+%token	CBRCBRB		/* {{ */
+
 %token<i>       INTEGER
 %token<i64>     LONG_INTEGER
 %token<ui>      UNSIGNED_INTEGER
@@ -1569,12 +1573,12 @@ make_struct_dim
     ;
 
 make_struct_decl
-    :   '['[loc] '[' type_declaration[mkt] make_struct_dim[msd] ']' ']' {
+    :   BRABRAB [loc] type_declaration[mkt] make_struct_dim[msd] ']' ']' {
         ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
-    |   '['[loc] '[' type_declaration[mkt] '(' ')' make_struct_dim[msd] ']' ']' {
+    |   BRABRAB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] ']' ']' {
         ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStructure *)$msd)->useInitializer = true;
         $msd->at = tokAt(@loc);
@@ -1626,12 +1630,12 @@ make_dim
     ;
 
 make_dim_decl
-    :   '['[loc] '[' type_declaration[mkt] make_dim[mka] ']' ']' {
+    :   BRABRAB [loc] type_declaration[mkt] make_dim[mka] ']' ']' {
        ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
        $mka->at = tokAt(@loc);
        $$ = $mka;
     }
-    |   '['[loc] '{' type_declaration[mkt] make_dim[mka] '}' ']' {
+    |   BRACBRB [loc] type_declaration[mkt] make_dim[mka] '}' ']' {
        ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
        $mka->at = tokAt(@loc);
        $$ = $mka;
@@ -1654,7 +1658,7 @@ make_table
     ;
 
 make_table_decl
-    :   '{'[loc] '{'  make_dim[mka] '}' '}' {
+    :   CBRCBRB [loc] make_table[mka] '}' '}' {
         auto mkt = make_shared<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)$mka)->makeType = mkt;
@@ -1671,7 +1675,7 @@ array_comprehension_where
     ;
 
 array_comprehension
-    :   '[' '[' DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' {
+    :   BRABRAB DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' {
         auto pFor = make_shared<ExprFor>(tokAt(@loc));
         pFor->iterators = *$iters;
         delete $iters;
