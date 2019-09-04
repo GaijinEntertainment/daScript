@@ -1,6 +1,7 @@
-options log=true, log_stack=true, log_nodes=true
+// options log=true, log_stack=true, log_nodes=true
 // options log_infer_passes=true
 // options print_var_access=true
+options log=true
 
 struct ItemGeneration
     items : array<tuple<string; float> >
@@ -39,8 +40,8 @@ let
                           "__noitem__" => 1. ]],
                           int2(1, 4))
                 }},
-                perks <- to_array_move([[ auto[]
-                    {{ "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. }} ]])
+                perks <- [{ auto[]
+                    {{ "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. }} }]
             ]];
             "soldier_2" => [[ SoldierScheme
                 templ="generic_soldier_2",
@@ -65,16 +66,20 @@ let
                           "__noitem__" => 1. ]],
                           int2(1, 4))
                 }},
-                perks <- to_array_move([[ auto[]
-                    {{ "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. }} ]])
+                perks <- [{ auto[]
+                    {{ "regeneration" => 1.; "stamina" => 3.; "sprint" => 3. }} }]
             ]]
         }}
     }}
+
+
 
 [export]
 def test
     //debug(soldierScheme)
     var qq <- {{ 1 => "one"; 2 => "two" }}
     debug(qq)
+    var pp <- [{ int 1; 2; 3 }]
+    debug(pp)
     return true
 

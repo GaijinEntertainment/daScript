@@ -1631,6 +1631,14 @@ make_dim_decl
        $mka->at = tokAt(@loc);
        $$ = $mka;
     }
+    |   '['[loc] '{' type_declaration[mkt] make_dim[mka] '}' ']' {
+       ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
+       $mka->at = tokAt(@loc);
+       $$ = $mka;
+       auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
+       tam->arguments.push_back(ExpressionPtr($mka));
+       $$ = tam;
+    }
     ;
 
 make_table
@@ -1651,9 +1659,9 @@ make_table_decl
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)$mka)->makeType = mkt;
         $mka->at = tokAt(@loc);
-        auto tam = g_Program->makeCall(tokAt(@loc),"to_table_move");
-        tam->arguments.push_back(ExpressionPtr($mka));
-        $$ = tam;
+        auto ttm = g_Program->makeCall(tokAt(@loc),"to_table_move");
+        ttm->arguments.push_back(ExpressionPtr($mka));
+        $$ = ttm;
     }
     ;
 
