@@ -90,7 +90,7 @@ Table
 
 Tables are associative containers implemented as a set of key/value pairs::
 
-    var tab: table<string, int>
+    var tab: table<string; int>
     tab["10"] = 10
     tab["20"] = 20
     tab["some"] = 10
@@ -118,6 +118,15 @@ Structs are record of data of other types (including structs), similair to C lan
 All structs (as well as other non-POD types, except strings) will be passed by reference
 
 (see :ref:`Structs <structs>`).
+
+--------
+Tuple
+--------
+
+Tuple are anonimous record of data of other types (including structs), similair to C++ std::tuple.
+All tuples (as well as other non-POD types, except strings) will be passed by reference
+
+(see :ref:`Tuples <tuples>`).
 
 --------
 Function
@@ -176,3 +185,12 @@ Pointers can be created using new operator, or with C++ environment.
        return foo?.x ?? -1
     
 All structs are always passed to functions arguments as references.
+
+-----------
+Iterators
+-----------
+
+Iterator is an entity which can be travered, and associated data retrived.
+It is similar to C++ iterators.
+
+(see :ref:`Iterators <iterators>`).

@@ -10,7 +10,7 @@ Tables
 
 Tables are associative containers implemented as a set of key/value pairs::
 
-    var tab: table<string, int>
+    var tab: table<string; int>
     tab["10"] = 10
     tab["20"] = 20
     tab["some"] = 10
@@ -20,7 +20,7 @@ Tables are associative containers implemented as a set of key/value pairs::
 List of relevant builtin functions: clear, key_exists, find, erase.
 for safety, find doesn't return anything. Instead it works with block as last argument. It can be worked with rbpipe operator ::
 
-    var tab: table<string, int>
+    var tab: table<string; int>
     tab["some"] = 10
     find(tab,"some") <| $(var pValue: int?)
         if pValue != null
@@ -29,7 +29,7 @@ for safety, find doesn't return anything. Instead it works with block as last ar
 It is done so, because otherwise find would have to return pointer to value, which would continue to point 'somewhere', even if data is deleted.
 Consider this hypothetical find and the following example :: 
 
-    var tab: table<string, int>
+    var tab: table<string; int>
     tab["some"] = 10
     var v: int? = find(tab,"some")
     assert(v)      // not null!
@@ -50,4 +50,4 @@ Tables can not be assigned, only cloned or moved. ::
   def move_table(var a, b: table<string, int>)
     a <- b  //a is no points to same data as b, and b is empty.
 
-Table key can be not only string, but any other type as well.
+Table key can be not only string, but any other 'workhorse' type as well.

@@ -65,11 +65,6 @@ Misc
 
         let mad = debug(x, "x") * debug(y, "y") + debug(z, "z") // x*y + z
 
-
-.. js:function:: invoke(block_or_function, arguments)
-
-    invoke will call block or pointer to function (`block_or_function`) with provided list of arguments
-
 ^^^^^^^^
 Arrays
 ^^^^^^^^
@@ -98,7 +93,6 @@ Arrays
 
     length will return current size of array `array_arg`.
 
-
 .. js:function:: clear(array_arg)
 
     clear will clear whole array `array_arg`. The size of `array_arg` after clear is 0.
@@ -106,6 +100,14 @@ Arrays
 .. js:function:: capacity(array_arg)
 
     capacity will return current capacity of array `array_arg`. Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
+
+.. js:function:: to_array(arg)
+
+    will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be cloned
+	
+.. js:function:: to_array_move(arg)
+
+    will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
 
 (see :ref:`Arrays <arrays>`).
 
@@ -137,6 +139,22 @@ Tables
 
     will execute `block_arg` with argument pointer-to-value in `table_arg` pointing to value indexed by `key`, or null if `key` doesn't exist in `table_arg`.
 
+.. js:function:: to_table(arg)
+
+    will convert an array of key-value tuples into a table<key;value> type. arguments will be cloned
+	
+.. js:function:: to_table_move(arg)
+
+    will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+	
+.. js:function:: keys(arg)
+
+    returns iterator to all keys of the table
+	
+.. js:function:: values(arg)
+
+    returns iterator to all values of the table
+
 
 (see :ref:`Tables <tables>`).
 
@@ -148,5 +166,16 @@ Functions
 
     invoke will call block or pointer to function (`block_or_function`) with provided list of arguments
 
-
 (see :ref:`Functions <functions>`).
+
+^^^^^^^^^
+Iterators
+^^^^^^^^^
+
+.. js:function:: each(obj)
+
+    returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+
+(see :ref:`Iterators <iterators>`).
+
+

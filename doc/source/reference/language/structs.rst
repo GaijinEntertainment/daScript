@@ -47,6 +47,12 @@ Structs are also initialized as zero by default, regardless of 'initializators' 
 
     let fZero:Foo       // no constructor is called, x, y = 0
     let fInited = Foo() // constructor is called, x = 1, y = 2
+	
+Structure field types are infered, where possible::
+
+	stryct Foo
+		x = 1	// infered as integer
+		y = 2.	// infered as float
 
 Explicit structure initialization during creation will left all un-inited members zeroed::
 
@@ -56,6 +62,16 @@ the previous code example is a syntactic sugar for::
 
     let fExplicit: Foo
     fExplicit.x = 13
+	
+Post construction initialization only needs to specify overwritten fields::
+
+    let fPostConstruction = [[Foo() x=13]]  // x = 13, y = 2
+
+the previous code example is a syntactic sugar for::
+
+	let fPostConstruction: Foo
+	fPostConstruction.x = 13
+	fPostConstruction.y = 2
 
 -----------------------
 Struct Function Members
