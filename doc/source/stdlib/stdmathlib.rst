@@ -146,15 +146,15 @@ Noise functions
 
     returns hashed value of `x`
 
-.. js:function:: uint_noise1D(position: int; seed:uint)
+.. js:function:: uint_noise_1D(position: int; seed:uint)
 
     returns noise value of `position` in `seed` sequence
 
-.. js:function:: uint_noise2D(x,y: int; seed:uint)
+.. js:function:: uint_noise_2D(x,y: int; seed:uint)
 
     returns noise value of `x,y` position in `seed` sequence
 
-.. js:function:: uint_noise3D(x,y,z: int; seed:uint)
+.. js:function:: uint_noise_3D(x,y,z: int; seed:uint)
 
     returns noise value of `x,y,z` position in `seed` sequence
 
@@ -171,15 +171,15 @@ float2, float3, float4:
 
     returns a non-negative value representing magnitude of `x`
 
-.. js:function:: lengthSq(x)
+.. js:function:: length_sq(x)
 
     returns a non-negative value representing squared magnitude of `x`
 
-.. js:function:: invLength(x)
+.. js:function:: inv_length(x)
 
     returns a non-negative value representing 1/magnitude of `x`
 
-.. js:function:: invLengthSq(x)
+.. js:function:: inv_length_sq(x)
 
     returns a non-negative value representing 1/squared magnitude of `x`
 
@@ -187,15 +187,15 @@ float2, float3, float4:
 
     returns a non-negative value representing distance between `x` and `y`
 
-.. js:function:: distanceSq(x)
+.. js:function:: distance_sq(x)
 
     returns a non-negative value representing squared distance between `x` and `y`
 
-.. js:function:: invDistance(x, y)
+.. js:function:: inv_distance(x, y)
 
     returns a non-negative value representing 1/distance between `x` and `y`
 
-.. js:function:: invDistanceSq(x)
+.. js:function:: inv_distance_sq(x)
 
     returns a non-negative value representing 1/squared distance between `x` and `y`
 
@@ -205,7 +205,11 @@ float2, float3, float4:
 
 .. js:function:: normalize(x)
 
-    returns normalized `x`
+    returns normalized `x`, or nan if length(x) is 0
+	
+.. js:function:: safe_normalize(x)
+
+    returns normalized `x`, or 0 if length(x) is 0
 
 ^^^^^^^^^^^^
 float3 only:
