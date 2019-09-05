@@ -1,3 +1,5 @@
+options indenting=4
+
 require fio
 
 def fopen(name:string;mode:string;blk:block<(f:FILE const?):void>)

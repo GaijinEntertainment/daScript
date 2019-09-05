@@ -1,3 +1,4 @@
+options indenting=4
 options remove_unused_symbols=false
 
 def resize(var Arr:array<auto(numT)>;newSize:int)

@@ -1,3 +1,5 @@
+options indenting=4
+
 require rtti
 
 def compile(mod_name,text:string;subexpr:block<(ok:bool;prog:RttiProgram;issues:das_string):void>)
