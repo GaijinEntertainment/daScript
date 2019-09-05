@@ -134,7 +134,7 @@ Executes a loop body statement for every element/iterator in expression, in sequ
 
     // or
 
-    var a: table<string int>
+    var a: table<string; int>
     for k, v in keys(tab), values(tab)
         print("{k}:{v}")   // will print content of table, in form key:value
 
