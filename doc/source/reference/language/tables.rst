@@ -51,3 +51,14 @@ Tables can not be assigned, only cloned or moved. ::
     a <- b  //a is no points to same data as b, and b is empty.
 
 Table key can be not only string, but any other 'workhorse' type as well.
+
+Tables can be constructed inline ::
+
+	let tab = {{ "one"=>1; "two"=>2 }}
+
+Which is syntax sugar for ::
+
+	let tab : table<string;int> = to_table_move([[tuple<string;int>[2] "one"=>1; "two"=>2]])
+	
+
+
