@@ -10,11 +10,11 @@ the string lib implements string formatting and regular expression matching rout
 Global Symbols
 ++++++++++++++
 
-.. js:function:: endswith(str, cmp)
+.. js:function:: ends_with(str, cmp)
 
     returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
 
-.. js:function:: startswith(str, cmp)
+.. js:function:: starts_with(str, cmp)
 
     returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
 
@@ -44,11 +44,11 @@ Global Symbols
 
     Return reversed string
 
-.. js:function:: tolower(str)
+.. js:function:: to_lower(str)
 
     Return all lower case string
 
-.. js:function:: toupper(str)
+.. js:function:: to_upper(str)
 
     Return all upper case string
 
