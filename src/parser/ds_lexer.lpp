@@ -432,6 +432,21 @@
 <normal>"\>\>\>\="                          return ROTREQU;
 <normal>"\<\<\<\="                          return ROTLEQU;
 <normal>"\=\>"                              return MAPTO;
+<normal>"\[\["                              {
+		das_nested_square_braces ++;
+		das_nested_square_braces ++;
+		return BRABRAB;
+	}
+<normal>"\[\{"                              {
+		das_nested_square_braces ++;
+		das_nested_curly_braces ++;
+		return BRACBRB;
+	}
+<normal>"\{\{"                              {
+		das_nested_curly_braces ++;
+		das_nested_curly_braces ++;
+		return CBRCBRB;
+	}
 <normal>[ \t\r]                             /* skip white space */
 <normal>(\/\/.*)*\n                        {
     das_yycolumn = 1;

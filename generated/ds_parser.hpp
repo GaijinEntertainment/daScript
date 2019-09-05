@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.2.1.  */
+/* A Bison parser, made by GNU Bison 3.2.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -33,8 +33,8 @@
 /* Undocumented macros, especially those whose name start with YY_,
    are private implementation details.  Do not rely on them.  */
 
-#ifndef YY_DAS_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
-# define YY_DAS_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+#ifndef YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
+# define YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
 #ifndef DAS_YYDEBUG
 # if defined YYDEBUG
@@ -51,7 +51,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 2 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -92,7 +92,7 @@ extern int das_yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 96 "/Users/borisbatkin/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 96 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -202,25 +202,28 @@ extern int das_yydebug;
     ROTLEQU = 358,
     ROTREQU = 359,
     MAPTO = 360,
-    INTEGER = 361,
-    LONG_INTEGER = 362,
-    UNSIGNED_INTEGER = 363,
-    UNSIGNED_LONG_INTEGER = 364,
-    FLOAT = 365,
-    DOUBLE = 366,
-    NAME = 367,
-    BEGIN_STRING = 368,
-    STRING_CHARACTER = 369,
-    END_STRING = 370,
-    BEGIN_STRING_EXPR = 371,
-    END_STRING_EXPR = 372,
-    UNARY_MINUS = 373,
-    UNARY_PLUS = 374,
-    PRE_INC = 375,
-    PRE_DEC = 376,
-    POST_INC = 377,
-    POST_DEC = 378,
-    COLCOL = 379
+    BRABRAB = 361,
+    BRACBRB = 362,
+    CBRCBRB = 363,
+    INTEGER = 364,
+    LONG_INTEGER = 365,
+    UNSIGNED_INTEGER = 366,
+    UNSIGNED_LONG_INTEGER = 367,
+    FLOAT = 368,
+    DOUBLE = 369,
+    NAME = 370,
+    BEGIN_STRING = 371,
+    STRING_CHARACTER = 372,
+    END_STRING = 373,
+    BEGIN_STRING_EXPR = 374,
+    END_STRING_EXPR = 375,
+    UNARY_MINUS = 376,
+    UNARY_PLUS = 377,
+    PRE_INC = 378,
+    PRE_DEC = 379,
+    POST_INC = 380,
+    POST_DEC = 381,
+    COLCOL = 382
   };
 #endif
 
@@ -229,7 +232,7 @@ extern int das_yydebug;
 
 union DAS_YYSTYPE
 {
-#line 67 "src/parser/ds_parser.ypp" /* yacc.c:1912  */
+#line 67 "src/parser/ds_parser.ypp" /* yacc.c:1906  */
 
     char                            ch;
     bool                            b;
@@ -254,7 +257,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 258 "/Users/borisbatkin/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1912  */
+#line 261 "C:/Users/Boris/Work/yzg/generated/ds_parser.hpp" /* yacc.c:1906  */
 };
 
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
@@ -281,4 +284,4 @@ extern DAS_YYSTYPE das_yylval;
 extern DAS_YYLTYPE das_yylloc;
 int das_yyparse (void);
 
-#endif /* !YY_DAS_YY_USERS_BORISBATKIN_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */
+#endif /* !YY_DAS_YY_C_USERS_BORIS_WORK_YZG_GENERATED_DS_PARSER_HPP_INCLUDED  */
