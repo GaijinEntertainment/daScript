@@ -41,3 +41,29 @@ Arrays can not be assigned, only cloned or moved. ::
 
   def move_array(var a, b: array<string>)
     a <- b  // a is no points to same data as b, and b is empty.
+
+Arrays can be constructed inline ::
+
+	let arr = [[auto 1.; 2.; 3.; 4.5]]
+	
+Which infers to ::
+
+	let arr : float[4] = [[float[4] 1.; 2.; 3.; 4.5]]
+	
+Dynamic arrays can also be constructed inline::
+
+	let arr = [{auto "one"; "two"; "three"}]
+	
+Which is syntatic equivalent to::
+
+	let arr : array<string> = to_array_move([[string[4] "one"; "two"; "three"]])
+	
+If only one elmeent is specified, local data construction is that element::
+
+	let i1 = [[int 1]]	// same is the line bellow
+	let i2 = 1
+	
+To create an array of unspecified type, use [] syntax::
+
+	let ai1 = [[int[] 1]]	// actually [[int[1] 1]]
+	let ai2 = [[autop[] 1]	// same as above
