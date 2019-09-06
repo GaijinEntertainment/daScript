@@ -635,13 +635,15 @@ expression_any
     ;
 
 expressions
-    :   [loc]                                           {
+    :   {
         $$ = new ExprBlock();
-        $$->at = tokAt(@loc);
     }
     |   expressions[block] expression_any[subexpr]      {
         $$ = $block;
         if ( $subexpr ) {
+			if ( !$block->at.line ) {
+				$block->at = $subexpr->at;
+			}
             static_cast<ExprBlock*>($block)->list.push_back(ExpressionPtr($subexpr));
         }
     }

@@ -59,13 +59,15 @@ MACRO(FIND_XXD)
 ENDMACRO(FIND_XXD)
 
 MACRO(XXD input)
-	get_filename_component(input_src ${input} ABSOLUTE)
-	get_filename_component(input_dir ${input_src} DIRECTORY)
-	get_filename_component(input_name ${input} NAME)	
-	ADD_CUSTOM_COMMAND(
-		DEPENDS ${input_src}
-		OUTPUT ${input_src}.inc
-		WORKING_DIRECTORY ${input_dir}
-		COMMAND ${XXD_BIN} -i ${input_name} ${input_name}.inc
-		COMMENT "compiling ${input} to c++ string")
+	IF(xxd_FOUND)
+		get_filename_component(input_src ${input} ABSOLUTE)
+		get_filename_component(input_dir ${input_src} DIRECTORY)
+		get_filename_component(input_name ${input} NAME)	
+		ADD_CUSTOM_COMMAND(
+			DEPENDS ${input_src}
+			OUTPUT ${input_src}.inc
+			WORKING_DIRECTORY ${input_dir}
+			COMMAND ${XXD_BIN} -i ${input_name} ${input_name}.inc
+			COMMENT "compiling ${input} to c++ string")
+	ENDIF()
 ENDMACRO()
