@@ -58,8 +58,15 @@ MACRO(FIND_XXD)
 	find_program(XXD_BIN xxd)
 ENDMACRO(FIND_XXD)
 
+MACRO(FIND_FLEX_AND_BISON)
+	find_program(FLEX_BIN flex)
+	find_program(BISON_BIN bison)
+ENDMACRO(FIND_FLEX_AND_BISON)
+
 MACRO(XXD input)
-	IF(xxd_FOUND)
+	IF(XXD_BIN-NOTFOUND)
+		MESSAGE(STATUS "XXD not found, pre-generated files will be used." )
+	ELSE()
 		get_filename_component(input_src ${input} ABSOLUTE)
 		get_filename_component(input_dir ${input_src} DIRECTORY)
 		get_filename_component(input_name ${input} NAME)	
@@ -69,5 +76,39 @@ MACRO(XXD input)
 			WORKING_DIRECTORY ${input_dir}
 			COMMAND ${XXD_BIN} -i ${input_name} ${input_name}.inc
 			COMMENT "compiling ${input} to c++ string")
+	ENDIF()
+ENDMACRO()
+
+MACRO(FLEX input)
+	IF(FLEX_BIN-NOTFOUND)
+		MESSAGE(STATUS "FLEX not found, pre-generated files will be used." )
+	ELSE()
+		get_filename_component(input_src ${input} ABSOLUTE)
+		get_filename_component(input_dir ${input_src} DIRECTORY)
+		get_filename_component(input_name ${input} NAME_WE)	
+		get_filename_component(input_name_ext ${input} NAME)	
+		ADD_CUSTOM_COMMAND(
+			DEPENDS ${input_src}
+			OUTPUT ${input_dir}/${input_name}.cpp
+			WORKING_DIRECTORY ${input_dir}
+			COMMAND ${FLEX_BIN} --outfile=${input_name}.cpp ${input_name_ext}
+			COMMENT "flex ${input} to ${input_dir}/${input_name}.cpp")
+	ENDIF()
+ENDMACRO()
+
+MACRO(BISON input)
+	IF(BISON_BIN-NOTFOUND)
+		MESSAGE(STATUS "BISON not found, pre-generated files will be used." )
+	ELSE()
+		get_filename_component(input_src ${input} ABSOLUTE)
+		get_filename_component(input_dir ${input_src} DIRECTORY)
+		get_filename_component(input_name ${input} NAME_WE)	
+		get_filename_component(input_name_ext ${input} NAME)	
+		ADD_CUSTOM_COMMAND(
+			DEPENDS ${input_src}
+			OUTPUT ${input_dir}/${input_name}.cpp ${input_dir}/${input_name}.hpp ${input_dir}/${input_name}.output
+			WORKING_DIRECTORY ${input_dir}
+			COMMAND ${BISON_BIN} --output=${input_name}.cpp --defines=${input_name}.hpp ${input_name_ext}
+			COMMENT "bison ${input} to ${input_dir}/${input_name}.cpp + ${input_dir}/${input_name}.hpp + ${input_dir}/${input_name}.output")
 	ENDIF()
 ENDMACRO()

@@ -7,21 +7,19 @@ IF(MSVC)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
 ENDIF()
 
-find_package(BISON REQUIRED)
-find_package(FLEX REQUIRED)
-
 FIND_XXD()
+FIND_FLEX_AND_BISON()
 
 SETUP_COMPILER()
 
-set(GEN_FILE_DIR ${PROJECT_SOURCE_DIR}/generated)
-BISON_TARGET(DSParser src/parser/ds_parser.ypp ${GEN_FILE_DIR}/ds_parser.cpp)
-FLEX_TARGET(DSScanner src/parser/ds_lexer.lpp  ${GEN_FILE_DIR}/ds_lexer.cpp)
-ADD_FLEX_BISON_DEPENDENCY(DSScanner DSParser)
+FLEX(src/parser/ds_lexer.lpp)
+BISON(src/parser/ds_parser.ypp)
 
 SET(PARSER_GENERATED_SRC
-${BISON_DSParser_OUTPUTS}
-${FLEX_DSScanner_OUTPUTS}
+src/parser/ds_parser.hpp
+src/parser/ds_parser.cpp
+src/parser/ds_parser.output
+src/parser/ds_lexer.cpp
 )
 
 SET(PARSER_SRC
@@ -241,9 +239,6 @@ include_directories(include)
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
 SETUP_CPP11(libDaScript)
-
-add_custom_target(daScriptGenDir ${CMAKE_COMMAND} -E make_directory ${GEN_FILE_DIR})
-add_dependencies(libDaScript daScriptGenDir)
 
 # AOT compiler
 
