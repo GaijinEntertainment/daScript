@@ -59,8 +59,8 @@ MACRO(FIND_XXD)
 ENDMACRO(FIND_XXD)
 
 MACRO(FIND_FLEX_AND_BISON)
-	find_program(FLEX_BIN flex)
-	find_program(BISON_BIN bison)
+	find_package(BISON)
+	find_package(FLEX)
 ENDMACRO(FIND_FLEX_AND_BISON)
 
 MACRO(XXD input)
@@ -80,7 +80,7 @@ MACRO(XXD input)
 ENDMACRO()
 
 MACRO(FLEX input)
-	IF(FLEX_BIN-NOTFOUND)
+	IF(NOT FLEX_FOUND)
 		MESSAGE(STATUS "FLEX not found, pre-generated files will be used." )
 	ELSE()
 		get_filename_component(input_src ${input} ABSOLUTE)
@@ -91,13 +91,13 @@ MACRO(FLEX input)
 			DEPENDS ${input_src}
 			OUTPUT ${input_dir}/${input_name}.cpp
 			WORKING_DIRECTORY ${input_dir}
-			COMMAND ${FLEX_BIN} --outfile=${input_name}.cpp ${input_name_ext}
-			COMMENT "flex ${input} to ${input_dir}/${input_name}.cpp")
+			COMMAND ${FLEX_EXECUTABLE} --outfile=${input_name}.cpp ${input_name_ext}
+			COMMENT "flex (v ${FLEX_VERSION}) ${input} to ${input_dir}/${input_name}.cpp")
 	ENDIF()
 ENDMACRO()
 
 MACRO(BISON input)
-	IF(BISON_BIN-NOTFOUND)
+	IF(NOT BISON_FOUND)
 		MESSAGE(STATUS "BISON not found, pre-generated files will be used." )
 	ELSE()
 		get_filename_component(input_src ${input} ABSOLUTE)
@@ -108,7 +108,7 @@ MACRO(BISON input)
 			DEPENDS ${input_src}
 			OUTPUT ${input_dir}/${input_name}.cpp ${input_dir}/${input_name}.hpp ${input_dir}/${input_name}.output
 			WORKING_DIRECTORY ${input_dir}
-			COMMAND ${BISON_BIN} --output=${input_name}.cpp --defines=${input_name}.hpp ${input_name_ext}
-			COMMENT "bison ${input} to ${input_dir}/${input_name}.cpp + ${input_dir}/${input_name}.hpp + ${input_dir}/${input_name}.output")
+			COMMAND ${BISON_EXECUTABLE} --output=${input_name}.cpp --defines=${input_name}.hpp ${input_name_ext}
+			COMMENT "bison (v ${BISON_VERSION}) ${input} to ${input_dir}/${input_name}.cpp + ${input_dir}/${input_name}.hpp + ${input_dir}/${input_name}.output")
 	ENDIF()
 ENDMACRO()
