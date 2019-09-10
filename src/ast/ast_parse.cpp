@@ -87,12 +87,13 @@ namespace das {
                 auto module = Module::require(mod);
                 if ( !module ) {
                     if ( find(req.begin(), req.end(), mod)==req.end() ) {
-                        req.push_back(mod);
                         // module file name
                         string modFn = access->getIncludeFileName(fileName, mod) + ".das";
                         if ( !getPrerequisits(modFn, access, req, missing, libGroup) ) {
                             return false;
                         }
+
+                        req.push_back(mod);
                     }
                 } else {
                     libGroup.addModule(module);
@@ -181,7 +182,6 @@ namespace das {
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll ) {
         vector<string> req, missing;
         if ( getPrerequisits(fileName, access, req, missing, libGroup) ) {
-            reverse(req.begin(), req.end());
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod) ) {
                     string modFn = access->getIncludeFileName(fileName, mod) + ".das";
