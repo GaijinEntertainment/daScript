@@ -6,7 +6,10 @@ namespace das {
 
     char * HeapWriterPolicy::c_str() {
         if (!data) return nullptr;
+        auto sh = ((StringHeader *)data) - 1;
         data[dataSize] = 0;
+        sh->hash = 0;
+        sh->length = dataSize;
         return data;
     }
 
@@ -18,24 +21,24 @@ namespace das {
         if (newSize > dataCapacity) {
             int newCapacity = das::max(dataCapacity * 2, newSize);
             if (data) {
-                char * oldDataBase = data;
+                char * oldDataBase = data - sizeof(StringHeader);
                 char * newDataBase = (char *)heap->reallocate(oldDataBase,
-                    dataCapacity + 1, newCapacity + 1);
+                    dataCapacity + sizeof(StringHeader) + 1, newCapacity + sizeof(StringHeader) + 1);
                 if (newDataBase == nullptr) {
                     data = nullptr;
                     dataSize = 0;
                     return;
                 } else if (oldDataBase != newDataBase) {
-                    data = newDataBase;
-                    memcpy(data, oldDataBase, dataSize);
+                    data = newDataBase + sizeof(StringHeader);
+                    memcpy(data, oldDataBase + sizeof(StringHeader), dataSize);
                 }
-            }
-            else {
-                data = (char *) heap->allocate(newCapacity + 1);
+            } else {
+                data = (char *) heap->allocate(newCapacity + sizeof(StringHeader) + 1);
                 if (!data) {
                     dataSize = 0;
                     return;
                 }
+                data += sizeof(StringHeader);
             }
             dataCapacity = newCapacity;
         }

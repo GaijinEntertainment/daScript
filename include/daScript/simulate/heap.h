@@ -91,6 +91,14 @@ namespace das {
         char * allocateName ( const string & name );
     };
 
+    struct StringHeader {
+        uint32_t    hash;
+        uint32_t    length;
+        uint32_t    padd0;
+        uint32_t    padd1;
+    };
+    static_assert(sizeof(StringHeader)==16, "has to be 16 bytes, or else");
+
     class StringAllocator : public HeapAllocator {
     public:
         StringAllocator() : HeapAllocator() {}
@@ -98,6 +106,7 @@ namespace das {
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
         }
+        void freeString ( char * text, uint32_t length );
     };
 
     class NodeAllocator : public HeapAllocator {

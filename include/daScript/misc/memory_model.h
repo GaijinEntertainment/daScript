@@ -9,21 +9,17 @@ namespace das {
 
     struct Page {
         __forceinline uint32_t allocate ( uint32_t size, uint32_t pageSize ) {
-            DAS_ASSERTF(!(size & 15),"size must be aligned");
             if ( offset + size > pageSize ) return -1u;
             offset += size;
             total += size;
             return offset - size;
         }
         __forceinline void free ( uint32_t loc, uint32_t size ) {
-            DAS_ASSERTF(!(size & 15),"size must be aligned");
             if ( loc + size == offset ) offset -= size;
             total -= size;
             if ( total==0 ) offset = 0;
         }
         __forceinline bool reallocate ( uint32_t loc, uint32_t size, uint32_t nsize, uint32_t pageSize ) {
-            DAS_ASSERTF(!(size & 15),"size must be aligned");
-            DAS_ASSERTF(!(nsize & 15),"new size must be aligned");
             if ( loc + size != offset ) return false;
             if ( loc + nsize > pageSize ) return false;
             offset = offset - size + nsize;
@@ -43,7 +39,6 @@ namespace das {
         Book & operator = (Book && b) { moveBook(b); return * this; };
         void moveBook ( Book & b );
         Book ( uint32_t ps, uint32_t tp ) : pageSize(ps), totalPages(tp) {
-            DAS_ASSERTF((ps & 15)==0, "page size must be 16 bytes algined");
             totalSize = totalFree = pageSize * totalPages;
             freePageIndex = 0;
             data = (char *) das_aligned_alloc16(totalSize);
@@ -53,8 +48,7 @@ namespace das {
         __forceinline bool isOwnPtr ( char * ptr ) const {
             return (ptr>=data) && (ptr<(data + totalSize));
         }
-        char * allocate ( uint32_t size ) {
-            DAS_ASSERTF(!(size & 15),"size must be aligned");
+        __forceinline char * allocate ( uint32_t size ) {
             if ( size > pageSize ) return nullptr;
             if ( size > totalFree ) return nullptr;
             for ( uint32_t i=0; i!=totalPages; ++i ) {
@@ -68,18 +62,14 @@ namespace das {
             }
             return nullptr;
         }
-        void free ( char * ptr, uint32_t size ) {
-            DAS_ASSERTF(!(size & 15),"size must be aligned");
-            DAS_ASSERTF(isOwnPtr(ptr),"deleting pointer, which does not belong to the book");
+        __forceinline void free ( char * ptr, uint32_t size ) {
             uint32_t gofs = ptr - data;
             uint32_t idx = gofs / pageSize;
             uint32_t ofs = gofs % pageSize;
             pages[idx].free(ofs, size);
             totalFree += size;
         }
-        char * reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
-            DAS_ASSERTF(!(size & 15),"size must be aligned");
-            DAS_ASSERTF(!(nsize & 15),"new size must be aligned");
+        __forceinline char * reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
             if ( !ptr ) return allocate(size);
             if ( size==nsize ) return ptr;
             uint32_t gofs = ptr - data;
@@ -111,6 +101,14 @@ namespace das {
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
+        __forceinline bool isOwnPtr( char * ptr ) const {
+            for ( auto & book : shelf ) {
+                if ( book.isOwnPtr(ptr) ) {
+                    return true;
+                }
+            }
+            return bigStuff.find(ptr) != bigStuff.end();
+        }
         uint32_t bytesAllocated() const;
         uint32_t pagesAllocated() const;
         uint32_t                pageSize;

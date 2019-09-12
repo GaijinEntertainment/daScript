@@ -19,12 +19,20 @@ namespace das {
 
     char * StringAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
-            if (auto str = (char *)allocate(length + 1)) {
+            if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {
+                StringHeader * header = (StringHeader *) str;
+                header->length = length;
+                header->hash = 0;
+                str += sizeof(StringHeader);
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
                 return str;
             }
         }
         return nullptr;
+    }
+
+    void StringAllocator::freeString ( char * text, uint32_t length ) {
+        free ( text - sizeof(StringHeader), length + 1 + sizeof(StringHeader) );
     }
 }

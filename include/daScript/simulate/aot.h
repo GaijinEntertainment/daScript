@@ -602,7 +602,7 @@ namespace das {
     struct das_delete_ptr<char *> {
         static __forceinline void clear ( Context * __context__, char * string ) {
             const uint32_t size = stringLengthSafe(*__context__, string);
-            __context__->stringHeap.free(string, size);
+            __context__->stringHeap.freeString(string, size);
         }
     };
 

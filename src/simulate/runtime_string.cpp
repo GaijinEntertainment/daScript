@@ -183,7 +183,7 @@ namespace das
             char * string = *str;
             if ( string ) {
                 const uint32_t size = stringLengthSafe(context, string);
-                context.stringHeap.free(string, size);
+                context.stringHeap.freeString(string, size);
                 *str = nullptr;
             }
         }
