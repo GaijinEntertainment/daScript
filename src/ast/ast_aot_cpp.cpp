@@ -1002,8 +1002,14 @@ namespace das {
             if ( expr->type->isPointer() && (!expr->type->firstType || expr->type->firstType->isVoid()) ) {
                 ss << "(" << describeCppType(var->type) << ")(";
             }
+            if ( expr->type->isString() ) {
+                ss << "(char *)(";
+            }
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * let , const VariablePtr & var, Expression * expr ) override {
+            if ( expr->type->isString() ) {
+                ss << ")";
+            }
             if ( expr->type->isPointer() && (!expr->type->firstType || expr->type->firstType->isVoid()) ) {
                 ss << ")";
             }
