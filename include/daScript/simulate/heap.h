@@ -89,6 +89,11 @@ namespace das {
     public:
         HeapAllocator() : MemoryModel(default_page_size) {}
         char * allocateName ( const string & name );
+    };
+
+    class StringAllocator : public HeapAllocator {
+    public:
+        StringAllocator() : HeapAllocator() {}
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );

@@ -5,7 +5,6 @@
 
 namespace das {
 
-
     char * HeapAllocator::allocateName ( const string & name ) {
         if (!name.empty()) {
             auto length = uint32_t(name.length());
@@ -18,7 +17,7 @@ namespace das {
         return nullptr;
     }
 
-    char * HeapAllocator::allocateString ( const char * text, uint32_t length ) {
+    char * StringAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
             if (auto str = (char *)allocate(length + 1)) {
                 if ( text ) memcpy(str, text, length);

@@ -3,7 +3,7 @@
 require math
 
 // 8Mb heap
-options heap=8388608
+options string_heap=8388608
 
 require testProfile
 
@@ -31,6 +31,6 @@ def test
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
-    verify(heap_depth()==1)
+    verify(string_heap_depth()==1)
     return true
 

@@ -709,7 +709,7 @@ namespace das
     }
 
     SimNode * ExprConstString::simulate (Context & context) const {
-        char * str = context.code->allocateString(text);
+        char * str = context.constStringHeap->allocateString(text);
         return context.code->makeNode<SimNode_ConstString>(at,str);
     }
 
@@ -721,7 +721,7 @@ namespace das
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
-        return context.code->makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.code->allocateString(message));
+        return context.code->makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.constStringHeap->allocateString(message));
     }
 
     SimNode * ExprDebug::simulate (Context & context) const {
@@ -732,7 +732,7 @@ namespace das
         return context.code->makeNode<SimNode_Debug>(at,
                                                arguments[0]->simulate(context),
                                                pTypeInfo,
-                                               context.code->allocateString(message));
+                                               context.constStringHeap->allocateString(message));
     }
 
     SimNode * ExprMakeLambda::simulate (Context & context) const {
@@ -1457,7 +1457,7 @@ namespace das
         } else if ( subexpr->rtti_isConstant() ) {
             if (subexpr->type->isSimpleType(Type::tString)) {
                 auto cVal = static_pointer_cast<ExprConstString>(subexpr);
-                char * str = context.code->allocateString(cVal->text);
+                char * str = context.constStringHeap->allocateString(cVal->text);
                 return context.code->makeNode<SimNode_ReturnConstString>(at, str);
             } else {
                 auto cVal = static_pointer_cast<ExprConst>(subexpr);
@@ -1868,6 +1868,9 @@ namespace das
         context.thisProgram = this;
         if ( auto optHeap = options.find("heap",Type::tInt) ) {
             context.heap.setInitialSize( uint32_t(optHeap->iValue) );
+        }
+        if ( auto optStringHeap = options.find("string_heap",Type::tInt) ) {
+            context.stringHeap.setInitialSize( uint32_t(optStringHeap->iValue) );
         }
         DebugInfoHelper helper(context.debugInfo);
         helper.rtti = options.getOption("rtti",false);

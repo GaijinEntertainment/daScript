@@ -398,8 +398,10 @@ namespace das
 
     public:
         uint64_t *                      annotationData = nullptr;
+        StringAllocator                 stringHeap;
         HeapAllocator                   heap;
         char *                          globals = nullptr;
+        shared_ptr<StringAllocator>     constStringHeap;
         shared_ptr<NodeAllocator>       code;
         shared_ptr<DebugInfoAllocator>  debugInfo;
         StackAllocator                  stack;

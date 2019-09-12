@@ -20,7 +20,7 @@ namespace das
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return v_zero();
-        } else if ( char * sAB = (char * ) context.heap.allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.stringHeap.allocateString(nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             return cast<char *>::from(sAB);
@@ -40,7 +40,7 @@ namespace das
         if ( !commonLength ) {
             // *pA = nullptr; is unnecessary, because its already nullptr
             return;
-        } else if ( char * sAB = (char * ) context.heap.allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.stringHeap.allocateString(nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             *pA = sAB;
@@ -164,7 +164,7 @@ namespace das
     vec4f SimNode_StringBuilder::eval ( Context & context ) {
         vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
-        StringBuilderWriter writer(context.heap);
+        StringBuilderWriter writer(context.stringHeap);
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
         for ( int i = 0; i!=nArguments; ++i ) {
             walker.walk(argValues[i], types[i]);
@@ -183,7 +183,7 @@ namespace das
             char * string = *str;
             if ( string ) {
                 const uint32_t size = stringLengthSafe(context, string);
-                context.heap.free(string, size);
+                context.stringHeap.free(string, size);
                 *str = nullptr;
             }
         }

@@ -366,11 +366,13 @@ namespace das
 
     Context::Context() : stack(16*1024) {
         code = make_shared<NodeAllocator>();
+        constStringHeap = make_shared<StringAllocator>();
         debugInfo = make_shared<DebugInfoAllocator>();
     }
 
     Context::Context(const Context & ctx) : stack(16*1024) {
         code = ctx.code;
+        constStringHeap = ctx.constStringHeap;
         debugInfo = ctx.debugInfo;
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;

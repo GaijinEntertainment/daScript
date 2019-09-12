@@ -36,7 +36,7 @@ namespace das {
     __forceinline char * format ( const char * fmt, TT value, Context * context ) {
         char buf[256];
         snprintf(buf, 256, fmt, value);
-        return context->heap.allocateString(buf, uint32_t(strlen(buf)));
+        return context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
 
     template <typename TT>
@@ -53,7 +53,7 @@ namespace das {
 
     template <typename TT>
     char * builtin_build_string_T ( TT && block, Context * context ) {
-        StringBuilderWriter writer(context->heap);
+        StringBuilderWriter writer(context->stringHeap);
         block(writer);
         auto pStr = writer.c_str();
         if ( !pStr ) {

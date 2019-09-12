@@ -182,6 +182,9 @@ namespace das
     int32_t heap_depth ( Context * context ) {
         return (int32_t) context->heap.shelf.size();
     }
+    int32_t string_heap_depth ( Context * context ) {
+        return (int32_t) context->stringHeap.shelf.size();
+    }
 
     void builtin_table_lock ( Table & arr, Context * context ) {
         table_lock(*context, arr);
@@ -268,6 +271,7 @@ namespace das
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated", SideEffects::modifyExternal, "heap_bytes_allocated");
         addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark", SideEffects::modifyExternal, "heap_high_watermark");
         addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal, "heap_depth");
+        addExtern<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth", SideEffects::modifyExternal, "string_heap_depth");
         // binary serializer
         addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument, "_builtin_binary_load");
         addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal, "_builtin_binary_save");

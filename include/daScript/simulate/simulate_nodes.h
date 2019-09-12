@@ -720,7 +720,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             vec4f res = arguments[0]->eval(context);
             auto str = to_string ( cast<CastFrom>::to(res) );
-            auto cpy = context.heap.allocateString(str);
+            auto cpy = context.stringHeap.allocateString(str);
             if ( !cpy ) {
                 context.throw_error_at(debugInfo,"can't cast to string, out of heap");
                 return v_zero();

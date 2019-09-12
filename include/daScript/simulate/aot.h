@@ -602,7 +602,7 @@ namespace das {
     struct das_delete_ptr<char *> {
         static __forceinline void clear ( Context * __context__, char * string ) {
             const uint32_t size = stringLengthSafe(*__context__, string);
-            __context__->heap.free(string, size);
+            __context__->stringHeap.free(string, size);
         }
     };
 
@@ -846,7 +846,7 @@ namespace das {
 
     template <typename TT>
     __forceinline char * das_lexical_cast ( TT x, Context * __context__ ) {
-        StringBuilderWriter writer(__context__->heap);
+        StringBuilderWriter writer(__context__->stringHeap);
         writer << x;
         auto pStr = writer.c_str();
         if ( !pStr ) {
@@ -856,7 +856,7 @@ namespace das {
     }
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
-        StringBuilderWriter writer(__context__->heap);
+        StringBuilderWriter writer(__context__->stringHeap);
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
         for ( int i = 0; i!=node.nArguments; ++i ) {
             walker.walk(node.argumentValues[i], node.types[i]);

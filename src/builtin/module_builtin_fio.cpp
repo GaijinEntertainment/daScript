@@ -169,7 +169,7 @@ namespace das {
         fseek(f, pos, SEEK_SET);
         char * res = nullptr;
         if (fread(buf, 1, len, f) == len)
-          res = context->heap.allocateString(buf, len);
+          res = context->stringHeap.allocateString(buf, len);
         delete [] buf;
         return res;
     }
@@ -231,11 +231,11 @@ namespace das {
                     full_path[--len] = 0;
                 }
             }
-            return context->heap.allocateString(full_path, len);
+            return context->stringHeap.allocateString(full_path, len);
 #else
             char * tempName = strdup(name);
             char * dirName = dirname(tempName);
-            char * result = context->heap.allocateString(dirName, strlen(dirName));
+            char * result = context->stringHeap.allocateString(dirName, strlen(dirName));
             free(tempName);
             return result;
 #endif
@@ -253,11 +253,11 @@ namespace das {
             char ext[ _MAX_EXT ];
             _splitpath(name, drive, dir, full_path, ext);
             strcat(full_path, ext);
-            return context->heap.allocateString(full_path, uint32_t(strlen(full_path)));
+            return context->stringHeap.allocateString(full_path, uint32_t(strlen(full_path)));
 #else
             char * tempName = strdup(name);
             char * dirName = basename(tempName);
-            char * result = context->heap.allocateString(dirName, strlen(dirName));
+            char * result = context->stringHeap.allocateString(dirName, strlen(dirName));
             free(tempName);
             return result;
 #endif
@@ -285,7 +285,7 @@ namespace das {
         string findPath = string(path) + "/*";
         if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                char * fname = context->heap.allocateString(c_file.name, uint32_t(strlen(c_file.name)));
+                char * fname = context->stringHeap.allocateString(c_file.name, uint32_t(strlen(c_file.name)));
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
@@ -298,7 +298,7 @@ namespace das {
         struct dirent *ent;
         if ((dir = opendir (path)) != NULL) {
             while ((ent = readdir (dir)) != NULL) {
-                char * fname = context->heap.allocateString(ent->d_name,uint32_t(strlen(ent->d_name)));
+                char * fname = context->stringHeap.allocateString(ent->d_name,uint32_t(strlen(ent->d_name)));
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };

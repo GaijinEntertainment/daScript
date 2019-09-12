@@ -25,7 +25,7 @@ namespace das {
 
     class StringBuilderWriter : public StringWriter<HeapWriterPolicy> {
     public:
-        StringBuilderWriter(HeapAllocator & h) { heap = &h; }
+        StringBuilderWriter(StringAllocator & h) { heap = &h; }
     };
 
     template <typename Writer>
