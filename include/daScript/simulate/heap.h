@@ -94,14 +94,13 @@ namespace das {
     struct StringHeader {
         uint32_t    hash;
         uint32_t    length;
-        uint32_t    padd0;
-        uint32_t    padd1;
     };
-    static_assert(sizeof(StringHeader)==16, "has to be 16 bytes, or else");
+    static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
 
     class StringAllocator : public HeapAllocator {
     public:
-        StringAllocator() : HeapAllocator() {}
+        StringAllocator() : HeapAllocator() { alignMask = 0; }
+        virtual void setInitialSize ( uint32_t size );
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );

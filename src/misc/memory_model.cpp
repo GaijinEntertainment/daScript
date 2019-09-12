@@ -28,6 +28,9 @@ namespace das {
     MemoryModel::MemoryModel ( uint32_t ps ) {
         DAS_ASSERTF(!(ps & 15), "page size must be 16 bytes aligned");
         pageSize = ps;
+        alignMask = 15;
+        totalAllocated = 0;
+        maxAllocated = 0;
     }
 
     MemoryModel::~MemoryModel() {
@@ -47,7 +50,9 @@ namespace das {
 
     char * MemoryModel::allocate ( uint32_t size ) {
         if ( !size ) return nullptr;
-        size = (size + 15) & ~15;
+        size = (size + alignMask) & ~alignMask;
+        totalAllocated += size;
+        maxAllocated = max(maxAllocated, totalAllocated);
         if ( size > pageSize ) {
             char * ptr = (char *) das_aligned_alloc16(size);
             bigStuff[ptr] = size;
@@ -65,7 +70,8 @@ namespace das {
 
     bool MemoryModel::free ( char * ptr, uint32_t size ) {
         if ( !size ) return true;
-        size = (size + 15) & ~15;
+        size = (size + alignMask) & ~alignMask;
+        totalAllocated -= size;
         for ( auto & book : shelf ) {
             if ( book.isOwnPtr(ptr) ) {
                 book.free(ptr, size);
@@ -84,8 +90,10 @@ namespace das {
 
     char * MemoryModel::reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
         if ( !ptr ) return allocate(nsize);
-        size = (size + 15) & ~15;
-        nsize = (nsize + 15) & ~15;
+        size = (size + alignMask) & ~alignMask;
+        nsize = (nsize + alignMask) & ~alignMask;
+        totalAllocated = totalAllocated - size + nsize;
+        maxAllocated = max(maxAllocated, totalAllocated);
         if ( size<pageSize && nsize<pageSize ) {
             for ( auto & book : shelf ) {
                 if ( auto nptr = book.reallocate(ptr, size, nsize) ) {
@@ -97,17 +105,6 @@ namespace das {
         memcpy ( nptr, ptr, size );
         free(ptr, size);
         return nptr;
-    }
-
-    uint32_t MemoryModel::bytesAllocated() const {
-        uint32_t total = 0;
-        for ( const auto & book : shelf ) {
-            total += book.totalSize - book.totalFree;
-        }
-        for ( const auto & itb : bigStuff ) {
-            total += itb.second;
-        }
-        return total;
     }
 
     uint32_t MemoryModel::pagesAllocated() const {

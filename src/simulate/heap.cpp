@@ -17,6 +17,13 @@ namespace das {
         return nullptr;
     }
 
+    void StringAllocator::setInitialSize ( uint32_t size ) {
+        if ( shelf.empty() ) {
+            pageSize = size;
+            shelf.emplace_back(pageSize,1);
+        }
+    }
+
     char * StringAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
             if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {

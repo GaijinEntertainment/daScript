@@ -3,7 +3,7 @@
 require math
 
 // 8Mb heap
-options string_heap=16000000
+options string_heap=8388608
 
 require testProfile
 

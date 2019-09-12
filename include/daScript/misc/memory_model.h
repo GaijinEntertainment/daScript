@@ -1,10 +1,5 @@
 #pragma once
 
-/*
- all allocations are 16 bytes aligned
- pageSize is 16 bytes aligned
- */
-
 namespace das {
 
     struct Page {
@@ -96,8 +91,8 @@ namespace das {
         MemoryModel(const MemoryModel &) = delete;
         MemoryModel & operator = (const MemoryModel &) = delete;
         MemoryModel ( uint32_t ps );
-        ~MemoryModel ();
-        void setInitialSize ( uint32_t size );
+        virtual ~MemoryModel ();
+        virtual void setInitialSize ( uint32_t size );
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
@@ -109,9 +104,13 @@ namespace das {
             }
             return bigStuff.find(ptr) != bigStuff.end();
         }
-        uint32_t bytesAllocated() const;
+        uint32_t bytesAllocated() const { return totalAllocated; }
+        uint32_t maxBytesAllocated() const { return maxAllocated; }
         uint32_t pagesAllocated() const;
+        uint32_t                alignMask;
         uint32_t                pageSize;
+        uint32_t                totalAllocated;
+        uint32_t                maxAllocated;
         vector<Book>            shelf;
         map<char *,uint32_t>    bigStuff;
     };
