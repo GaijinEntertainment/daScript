@@ -58,7 +58,7 @@ namespace das {
             return nullptr;
         }
         __forceinline void free ( char * ptr, uint32_t size ) {
-            uint32_t gofs = ptr - data;
+            uint32_t gofs = uint32_t(ptr - data);
             uint32_t idx = gofs / pageSize;
             uint32_t ofs = gofs % pageSize;
             pages[idx].free(ofs, size);
@@ -67,7 +67,7 @@ namespace das {
         __forceinline char * reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
             if ( !ptr ) return allocate(size);
             if ( size==nsize ) return ptr;
-            uint32_t gofs = ptr - data;
+            uint32_t gofs = uint32_t(ptr - data);
             uint32_t idx = gofs / pageSize;
             uint32_t ofs = gofs % pageSize;
             if ( pages[idx].reallocate(ofs,size,nsize,pageSize) ) {

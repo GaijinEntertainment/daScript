@@ -64,7 +64,8 @@ namespace das {
                 }
             }
             uint32_t npc = shelf.empty() ? initial_page_count : (shelf.back().totalPages * 2);
-            return shelf.emplace_back(pageSize,npc).allocate(size);
+            shelf.emplace_back(pageSize, npc);
+            return shelf.back().allocate(size);
         }
     }
 
