@@ -173,6 +173,7 @@
 %type <s>               annotation_declaration_name
 %type <s>               function_name
 %type <s>               optional_structure_parent
+%type <s>               require_module_name
 %type <aa>              annotation_argument
 %type <aaList>          annotation_argument_list
 %type <aaList>          optional_field_annotation
@@ -339,9 +340,22 @@ require_list
     |   require_list ',' require_module
     ;
 
-require_module
+require_module_name
     :   NAME[name] {
-        if ( !g_Program->addModule(*$name) ) {
+        $$ = $name;
+    }
+    |   require_module_name[req] '.' NAME[name] {
+        *$req += ".";
+        *$req += *$name;
+        delete $name;
+        $$ = $req;
+    }
+    ;
+
+require_module
+    :   require_module_name[name] {
+        auto modN = getModuleName(*$name);
+        if ( !g_Program->addModule(modN) ) {
             das_yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }

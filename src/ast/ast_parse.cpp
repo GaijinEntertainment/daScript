@@ -54,9 +54,9 @@ namespace das {
                         if ( src >= src_end ) {
                             continue;
                         }
-                        if ( src[0]=='_' || isalpha(src[0]) ) {
+                        if ( src[0]=='_' || isalpha(src[0]) || src[0] ) {
                             string mod;
-                            while ( src < src_end && (isalnum(src[0]) || src[0]=='_') ) {
+                            while ( src < src_end && (isalnum(src[0]) || src[0]=='_' || src[0]=='.') ) {
                                 mod += *src ++;
                             }
                             req.push_back(mod);
@@ -80,19 +80,32 @@ namespace das {
         return req;
     }
 
+    string getModuleName ( const string & nameWithDots ) {
+        auto idx = nameWithDots.find_last_of('.');
+        if ( idx==string::npos ) return nameWithDots;
+        return nameWithDots.substr(idx+1);
+    }
+
+    string getModuleFileName ( const string & nameWithDots ) {
+        auto fname = nameWithDots;
+        replace ( fname.begin(), fname.end(), '.', '/' );
+        return fname;
+    }
+
     bool getPrerequisits ( const string & fileName, const FileAccessPtr & access, vector<string> & req, vector<string> & missing, ModuleGroup & libGroup) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
             for ( auto & mod : ownReq ) {
-                auto module = Module::require(mod);
+                auto modName = getModuleName(mod);
+                auto module = Module::require(modName);
                 if ( !module ) {
                     if ( find(req.begin(), req.end(), mod)==req.end() ) {
                         // module file name
-                        string modFn = access->getIncludeFileName(fileName, mod) + ".das";
+                        string modFName = getModuleFileName(mod);
+                        string modFn = access->getIncludeFileName(fileName, modFName) + ".das";
                         if ( !getPrerequisits(modFn, access, req, missing, libGroup) ) {
                             return false;
                         }
-
                         req.push_back(mod);
                     }
                 } else {
@@ -183,13 +196,15 @@ namespace das {
         vector<string> req, missing;
         if ( getPrerequisits(fileName, access, req, missing, libGroup) ) {
             for ( auto & mod : req ) {
-                if ( !libGroup.findModule(mod) ) {
-                    string modFn = access->getIncludeFileName(fileName, mod) + ".das";
+                auto modName = getModuleName(mod);
+                if ( !libGroup.findModule(modName) ) {
+                    string modFName = getModuleFileName(mod);
+                    string modFn = access->getIncludeFileName(fileName, modFName) + ".das";
                     auto program = parseDaScript(modFn, access, logs, libGroup, true);
                     if ( program->failed() ) {
                         return program;
                     }
-                    program->thisModule->name = mod;
+                    program->thisModule->name = modName;
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {
                         if ( !pm->name.empty() && pm->name!="$" ) {

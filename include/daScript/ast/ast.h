@@ -696,6 +696,10 @@ namespace das
         AnnotationArgumentList      options;
     };
 
+    // module parsing routines
+    string getModuleName ( const string & nameWithDots );
+    string getModuleFileName ( const string & nameWithDots );
+
     // this one works for single module only
     ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false );
 
