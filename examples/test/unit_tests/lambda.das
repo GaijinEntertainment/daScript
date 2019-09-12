@@ -1,7 +1,7 @@
 // options log = true
 
 var
-    network : string
+    network : array<uint8>
 
 struct Message
     cnt : lambda<(arg:int):int>
@@ -9,7 +9,7 @@ struct Message
 def send(t:lambda<(arg:int):int>)
     var msg = [[Message cnt=t]]
     binary_save(msg) <| $(data)
-        network = data
+        network := data
 
 def recv
     var t : Message

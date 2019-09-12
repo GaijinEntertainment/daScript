@@ -177,10 +177,10 @@ namespace das
         return context->heap.bytesAllocated();
     }
     uint32_t heap_high_watermark ( Context * context ) {
-      return (uint32_t) context->heap.buddyHighWatermark();
+        return (int32_t) context->heap.bytesAllocated();
     }
     int32_t heap_depth ( Context * context ) {
-      return (int32_t) context->heap.buddyChunksCount();
+        return (int32_t) context->heap.shelf.size();
     }
 
     void builtin_table_lock ( Table & arr, Context * context ) {
@@ -269,7 +269,7 @@ namespace das
         addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark", SideEffects::modifyExternal, "heap_high_watermark");
         addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth", SideEffects::modifyExternal, "heap_depth");
         // binary serializer
-        addInterop<_builtin_binary_load,void,vec4f,char *>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument, "_builtin_binary_load");
+        addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument, "_builtin_binary_load");
         addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal, "_builtin_binary_save");
         // function-like expresions
         addCall<ExprAssert>         ("assert",false);

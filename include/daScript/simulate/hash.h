@@ -71,20 +71,10 @@ namespace das
     }
 
     __forceinline uint32_t stringLength ( Context & ctx, const char * str ) {//should be non-null
-        if ( ctx.heap.isFastHeapPtr(str) ) {
-            auto header = (StringHeader *) ( str - sizeof(StringHeader) );
-            return header->length;
-        } else {
-            return uint32_t(strlen(str));
-        }
+        return uint32_t(strlen(str));
     }
     __forceinline uint32_t stringLengthSafe ( Context & ctx, const char * str ) {//accepts nullptr
-        if ( ctx.heap.isFastHeapPtr(str) ) {
-            auto header = (StringHeader *) ( str - sizeof(StringHeader) );
-            return header->length;
-        } else {
-            return str ? uint32_t(strlen(str)) : 0;
-        }
+        return str ? uint32_t(strlen(str)) : 0;
     }
 
     template <typename TT>
@@ -98,16 +88,7 @@ namespace das
 
     template <>
     __forceinline uint32_t hash_function ( Context & ctx, char * str ) {
-        if ( ctx.heap.isFastHeapPtr(str) ) {
-            auto header = (StringHeader *) ( str - sizeof(StringHeader) );
-            auto hh = header->hash;
-            if ( !hh ) {
-                header->hash = hh = hash_block32((uint8_t *)str, header->length);
-            }
-            return hh;
-        } else {
-            return str ? hash_blockz32((uint8_t *)str) : 16777619;
-        }
+        return str ? hash_blockz32((uint8_t *)str) : 16777619;
     }
 
     uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );

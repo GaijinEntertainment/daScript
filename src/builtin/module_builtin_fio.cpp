@@ -200,11 +200,7 @@ namespace das {
         auto fp = cast<FILE *>::to(args[0]);
         int32_t len = cast<int32_t>::to(args[1]);
         Block * block = cast<Block *>::to(args[2]);
-        void * temp = malloc(len + 1 + sizeof(StringHeader));
-        StringHeader * header = (StringHeader *) temp;
-        char * buf = (char *) (header + 1);
-        header->hash = 0;
-        header->length = len;
+        char * buf = (char *) malloc(len + 1);
         vec4f bargs[1];
         int32_t rlen = int32_t(fread(buf, 1, len, fp));
         if ( rlen != len ) {
@@ -215,7 +211,7 @@ namespace das {
             bargs[0] = cast<char *>::from(buf);
             context.invoke(*block, bargs, nullptr);
         }
-        free(temp);
+        free(buf);
         return v_zero();
     }
 

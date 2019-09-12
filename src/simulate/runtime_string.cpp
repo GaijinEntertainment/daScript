@@ -181,10 +181,9 @@ namespace das
         str = str + total - 1;
         for ( uint32_t i=0; i!=total; ++i, str-- ) {
             char * string = *str;
-            if ( context.heap.isHeapPtr(string) ) {
-                auto header = ((StringHeader *) string) - 1;
-                const uint32_t size = header->length + sizeof(StringHeader) + 1;
-                context.heap.free((char *)header, size);
+            if ( string ) {
+                const uint32_t size = stringLengthSafe(context, string);
+                context.heap.free(string, size);
                 *str = nullptr;
             }
         }

@@ -38,7 +38,7 @@ def fload(f:FILE const?;buf:auto(BufType)delete const)
 	if dfh.magic!=df_magic
 		return false
 	var loaded = false
-	_builtin_load(f,dfh.size) <| $(data:string)
+    _builtin_load(f,dfh.size) <| $(data:array<uint8>)
 		if length(data)!=0
 			binary_load(buf,data)
 			loaded = true

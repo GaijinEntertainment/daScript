@@ -1,42 +1,8 @@
 #pragma once
 
-#include "buddy.h"
+#include "daScript/misc/memory_model.h"
 
 namespace das {
-
-    struct StringHeader {
-        uint32_t    hash;
-        uint32_t    length;
-    };
-    static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
-
-    class HeapAllocator {
-    public:
-        HeapAllocator();
-        virtual ~HeapAllocator();
-        HeapAllocator(const HeapAllocator &) = delete;
-        HeapAllocator & operator = (const HeapAllocator &) = delete;
-        void setInitialSize ( uint32_t size );
-        bool isHeapPtr ( const char * data ) const;
-        bool isFastHeapPtr ( const char * data ) const {return buddy.isHeapPtr(data);}
-        char * allocate ( uint32_t size );
-        bool free ( char * data, uint32_t size );
-        char * reallocate ( char * data, uint32_t size, uint32_t newSize );
-        void reset();
-        uint32_t bytesAllocated() const { return bytesTotal; }
-        char * allocateName ( const string & name );
-        char * allocateString ( const char * text, uint32_t length );
-        __forceinline char * allocateString ( const string & str ) {
-            return allocateString ( str.c_str(), uint32_t(str.length()) );
-        }
-        uint32_t buddyHighWatermark() const{return buddy.calcUsed();}
-        uint32_t buddyChunksCount() const{return buddy.getChunksCount();}
-    protected:
-        BuddyAllocator          buddy;
-        map<char *,uint32_t>    bigAllocations;
-        uint32_t                bigAllocationThreshold = 64*1024;
-        uint32_t                bytesTotal = 0;
-    };
 
     class StackAllocator {
     public:
@@ -116,6 +82,17 @@ namespace das {
         char *      evalTop = nullptr;
         char *      stackTop = nullptr;
         uint32_t    stackSize;
+    };
+
+    class HeapAllocator : public MemoryModel {
+        enum { default_page_size = 4096 };
+    public:
+        HeapAllocator() : MemoryModel(default_page_size) {}
+        char * allocateName ( const string & name );
+        char * allocateString ( const char * text, uint32_t length );
+        __forceinline char * allocateString ( const string & str ) {
+            return allocateString ( str.c_str(), uint32_t(str.length()) );
+        }
     };
 
     class NodeAllocator : public HeapAllocator {

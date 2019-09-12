@@ -601,11 +601,8 @@ namespace das {
     template <>
     struct das_delete_ptr<char *> {
         static __forceinline void clear ( Context * __context__, char * string ) {
-            if ( __context__->heap.isHeapPtr(string) ) {
-                auto header = ((StringHeader *) string) - 1;
-                const uint32_t size = header->length + sizeof(StringHeader) + 1;
-                __context__->heap.free((char *)header, size);
-            }
+            const uint32_t size = stringLengthSafe(*__context__, string);
+            __context__->heap.free(string, size);
         }
     };
 

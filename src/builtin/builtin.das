@@ -33,11 +33,11 @@ def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
 def key_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
     return __builtin_table_key_exists(Tab,at)
 
-def binary_save(obj; subexpr:block<(data:string):void>)
+def binary_save(obj; subexpr:block<(data:array<uint8>):void>)
     static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_save(obj,subexpr)
 
-def binary_load(var obj; data:string)
+def binary_load(var obj; data:array<uint8>)
     static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_load(obj,data)
 

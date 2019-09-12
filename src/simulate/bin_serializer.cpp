@@ -116,10 +116,7 @@ namespace das {
             if ( reading ) {
                 uint32_t length;
                 load ( length );
-                auto hh = (StringHeader *) context->heap.allocate(length + 1 + sizeof(StringHeader));
-                hh->length = length;
-                hh->hash = 0;
-                data = (char *) (hh + 1);
+                data = (char *) context->heap.allocate(length + 1);
                 read ( data, length );
                 data[length] = 0;
             } else {
@@ -237,16 +234,15 @@ namespace das {
         // args
         Block * block = cast<Block *>::to(args[1]);
         auto info = call->types[0];
-        StringHeader header;
-        header.hash = 0;
-        header.length = 0;
-        writer.write(&header, sizeof(StringHeader));
         writer.walk(args[0], info);
         writer.close();
         vec4f bargs[2];
-        StringHeader * hh = (StringHeader *) writer.bytesAt;
-        hh->length = writer.bytesWritten;
-        bargs[0] = cast<char *>::from(writer.bytesAt + sizeof(StringHeader));
+        Array arr;
+        arr.data = writer.bytesAt;
+        arr.size = writer.bytesWritten;
+        arr.capacity = writer.bytesWritten;
+        arr.lock = 1;
+        bargs[0] = cast<char *>::from((char *)&arr);
         context.invoke(*block, bargs, nullptr);
         return v_zero();
     }
@@ -260,9 +256,8 @@ namespace das {
     }
 
     vec4f _builtin_binary_load ( Context & context, SimNode_CallBase * call, vec4f * args ) {
-        char * ba = cast<char *>::to(args[1]);
-        StringHeader * hh = ((StringHeader *)ba) - 1;
-        _builtin_binary_load(context, call->types[0], ba, hh->length, cast<char *>::to(args[0]));
+        Array * ba = cast<Array *>::to(args[1]);
+        _builtin_binary_load(context, call->types[0], ba->data, ba->size, cast<char *>::to(args[0]));
         return v_zero();
     }
 

@@ -129,7 +129,9 @@ include/daScript/misc/rangetype.h
 include/daScript/misc/string_writer.h
 include/daScript/misc/type_name.h
 include/daScript/misc/lookup1.h
+include/daScript/misc/memory_model.h
 src/misc/string_writer.cpp
+src/misc/memory_model.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
@@ -186,7 +188,6 @@ src/simulate/simulate_fn_hash.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/heap.h
-include/daScript/simulate/buddy.h
 src/simulate/heap.cpp
 include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h
