@@ -12,12 +12,11 @@ namespace das {
         void propageteVarUse(const VariablePtr & var) {
             if (var->used) return;
             var->used = true;
-            auto mn = var->getMangledName();
-            for (const auto & gv : gVarVarUse[mn]) {
-                propageteVarUse(gv);
+            for (const auto & gv : var->useGlobalVariables) {
+                propageteVarUse(gv->shared_from_this());
             }
-            for (const auto & fn : gVarFuncUse[mn]) {
-                propagateFunctionUse(fn);
+            for (const auto & it : var->useFunctions) {
+                propagateFunctionUse(it->shared_from_this());
             }
         }
         void propagateFunctionUse(const FunctionPtr & fn) {
@@ -31,10 +30,14 @@ namespace das {
                 propagateFunctionUse(it->shared_from_this());
             }
         }
-        void markAllVarsUsed( ModuleLibrary & lib ){
+        void markVarsUsed( ModuleLibrary & lib, bool forceAll ){
             lib.foreach([&](Module * pm) {
                 for (const auto & it : pm->globals) {
-                    propageteVarUse(it.second);
+                    auto & var = it.second;
+                    if ( forceAll || var->used ) {
+                        var->used = false;
+                        propageteVarUse(var);
+                    }
                 }
                 return true;
             }, "*");
@@ -72,21 +75,21 @@ namespace das {
             }
         }
     protected:
-        ProgramPtr                                program;
-        FunctionPtr                               func;
-        map<string, vector<FunctionPtr>>          gVarFuncUse;
-        map<string, vector<VariablePtr>>          gVarVarUse;
-        string                                    gVar;
-        bool                                      builtInDependencies;
+        ProgramPtr  program;
+        FunctionPtr func;
+        Variable *  gVar = nullptr;
+        bool        builtInDependencies;
     protected:
         // global variable declaration
         virtual void preVisitGlobalLet(const VariablePtr & var) override {
             Visitor::preVisitGlobalLet(var);
-            gVar = var->getMangledName();
+            gVar = var.get();
+            var->useFunctions.clear();
+            var->useGlobalVariables.clear();
             var->used = false;
         }
         virtual VariablePtr visitGlobalLet(const VariablePtr & var) override {
-            gVar.clear();
+            gVar = nullptr;
             return Visitor::visitGlobalLet(var);
         }
         // function
@@ -109,7 +112,7 @@ namespace das {
                 if (func) {
                     func->useGlobalVariables.insert(expr->variable.get());
                 } else {
-                    gVarVarUse[gVar].push_back(expr->variable);
+                    gVar->useGlobalVariables.insert(expr->variable.get());
                 }
             }
         }
@@ -120,7 +123,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(addr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(addr->func->shared_from_this());
+                    gVar->useFunctions.insert(addr->func);
                 }
             }
         }
@@ -131,7 +134,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(call->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(call->func->shared_from_this());
+                    gVar->useFunctions.insert(call->func);
                 }
             }
         }
@@ -143,7 +146,7 @@ namespace das {
                     if (func) {
                         func->useFunctions.insert(call->func);
                     } else {
-                        gVarFuncUse[gVar].push_back(call->func->shared_from_this());
+                        gVar->useFunctions.insert(call->func);
                     }
                 }
             }
@@ -155,7 +158,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(expr->func->shared_from_this());
+                    gVar->useFunctions.insert(expr->func);
                 }
             }
         }
@@ -166,7 +169,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(expr->func->shared_from_this());
+                    gVar->useFunctions.insert(expr->func);
                 }
             }
         }
@@ -177,7 +180,7 @@ namespace das {
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else {
-                    gVarFuncUse[gVar].push_back(expr->func->shared_from_this());
+                    gVar->useFunctions.insert(expr->func);
                 }
             }
         }
@@ -201,6 +204,7 @@ namespace das {
         MarkSymbolUse vis(builtInSym);
         visit(vis);
         vis.markUsedFunctions(library, false);
+        vis.markVarsUsed(library, false);
     }
 
     void Program::markOrRemoveUnusedSymbols(bool forceAll) {
@@ -208,9 +212,7 @@ namespace das {
         MarkSymbolUse vis(false);
         visit(vis);
         vis.markUsedFunctions(library, forceAll);
-        if (forceAll) {
-            vis.markAllVarsUsed(library);
-        }
+        vis.markVarsUsed(library, forceAll);
         if ( options.getOption("removeUnusedSymbols",true) ) {
             vis.RemoveUnusedSymbols(*thisModule);
         }

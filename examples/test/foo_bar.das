@@ -1,10 +1,45 @@
-// module foo_bar
+options indenting=2
 
-[export]
-def getValue
-    return 13
+struct Campaign
+  title : string
+  id : string
+  queue : string
+  armies : array<string>
 
-[export]
-def test
-    // this is here because we compile all tests
-    return true
+struct GameProfile
+  campaigns : table<string; Campaign>
+  availableCampaigns : array<string>
+  visibleCampaigns : array<string>
+  minSoldiersInSquad : int
+  maxSquadSoldiersInBattle : int
+  baseSoldiersAmount : int2
+
+let
+  gameProfile = [[ GameProfile
+    campaigns <- {{
+      "normandy" => [[ Campaign
+        title = "Invasion of Normandy",
+        id = "normandy",
+        queue = "enlisted_normandy",
+        armies <- [{ auto[] "normandy_allies"; "normandy_axis" }]
+      ]];
+
+      "moscow" => [[ Campaign
+        title = "Battle for Moscow",
+        queue = "enlisted_moscow",
+        armies <- [{ auto[] "moscow_allies"; "moscow_axis" }]
+      ]];
+
+      "tunisia" => [[ Campaign
+        title = "Battle of Tunisia",
+        queue = "enlisted_tunisia",
+        armies <- [{ auto[] "tunisia_allies"; "tunisia_axis" }]
+      ]]
+    }},
+
+    availableCampaigns <- [{ auto[] "normandy"; "moscow"; "tunisia" }],
+    visibleCampaigns <- [{ auto[] "normandy"; "moscow"; "tunisia" }],
+
+    minSoldiersInSquad = 4,
+    maxSquadSoldiersInBattle = 7
+  ]]

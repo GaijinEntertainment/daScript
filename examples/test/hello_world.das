@@ -1,13 +1,8 @@
-// options log=true, log_stack=true, log_nodes=true
-// options log_infer_passes=true
-// options print_var_access=true
+options log=true, log_generics=true, log_nodes=true
 
-options log=true
-
-require unit_tests.foo_bar
+require foo_bar
 
 [export]
 def test
-    print("{getValue()}")
-    return true
-
+	print("{gameProfile}")
+	return true

@@ -156,6 +156,8 @@ namespace das
         int             index = -1;
         uint32_t        stackTop = 0;
         Module *        module = nullptr;
+        set<Function *> useFunctions;
+        set<Variable *> useGlobalVariables;
         union {
             struct {
                 bool    move_to_init : 1;
