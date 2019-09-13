@@ -231,6 +231,7 @@ namespace das {
             pVar->source = source->clone();
         pVar->at = at;
         pVar->flags = flags;
+        pVar->initStackSize = initStackSize;
         return pVar;
     }
 

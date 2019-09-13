@@ -111,7 +111,7 @@ namespace das {
             if (!expr->local && !expr->argument && !expr->block) {
                 if (func) {
                     func->useGlobalVariables.insert(expr->variable.get());
-                } else {
+                } else if (gVar) {
                     gVar->useGlobalVariables.insert(expr->variable.get());
                 }
             }
@@ -122,7 +122,7 @@ namespace das {
             if (builtInDependencies || !addr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(addr->func);
-                } else {
+                } else if (gVar) {
                     gVar->useFunctions.insert(addr->func);
                 }
             }
@@ -133,7 +133,7 @@ namespace das {
             if (builtInDependencies || !call->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(call->func);
-                } else {
+                } else if (gVar) {
                     gVar->useFunctions.insert(call->func);
                 }
             }
@@ -145,7 +145,7 @@ namespace das {
                 if (builtInDependencies || !call->func->builtIn) {
                     if (func) {
                         func->useFunctions.insert(call->func);
-                    } else {
+                    } else if (gVar) {
                         gVar->useFunctions.insert(call->func);
                     }
                 }
@@ -157,7 +157,7 @@ namespace das {
             if (builtInDependencies || !expr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
-                } else {
+                } else if (gVar) {
                     gVar->useFunctions.insert(expr->func);
                 }
             }
@@ -168,7 +168,7 @@ namespace das {
             if (builtInDependencies || !expr->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
-                } else {
+                } else if (gVar) {
                     gVar->useFunctions.insert(expr->func);
                 }
             }
@@ -179,7 +179,7 @@ namespace das {
             if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) {
                 if (func) {
                     func->useFunctions.insert(expr->func);
-                } else {
+                } else if (gVar) {
                     gVar->useFunctions.insert(expr->func);
                 }
             }

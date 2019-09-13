@@ -104,6 +104,7 @@ namespace das {
         }
     // global variable init
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
+            var->initStackSize = 0;
             stackTop = sizeof(Prologue);
             if ( var->init  ) {
                 if ( var->init->rtti_isMakeLocal() ) {
@@ -131,6 +132,7 @@ namespace das {
             }
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
+            var->initStackSize = stackTop;
             program->globalInitStackSize = das::max(program->globalInitStackSize, stackTop);
             return Visitor::visitGlobalLet(var);
         }
@@ -483,6 +485,15 @@ namespace das {
         // allocate stack for the rest of them
         AllocateStack context(shared_from_this(), logs);
         visit(context);
+        // adjust stack size for all the used variables
+        for (auto & pm : library.modules) {
+            for (auto & pv : pm->globals) {
+                auto & var = pv.second;
+                if ( var->used ) {
+                    globalInitStackSize = max(globalInitStackSize, var->initStackSize);
+                }
+            }
+        }
         // allocate used variables and functions indices
         totalVariables = 0;
         totalFunctions = 0;
