@@ -110,6 +110,11 @@ namespace das
         const char * extFnName = nullptr;
         SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
             : SimNode_CallBase(at) { extFnName = fnName; }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_ExtFuncCall<FuncT,fn> *) SimNode_CallBase::copyNode(context, code);
+            that->extFnName = code->allocateName(extFnName);
+            return that;
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             vis.op(extFnName);
@@ -146,6 +151,11 @@ namespace das
         const char * extFnName = nullptr;
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName )
             : SimNode_CallBase(at) { extFnName = fnName; }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_ExtFuncCallAndCopyOrMove<FuncT,fn> *) SimNode_CallBase::copyNode(context, code);
+            that->extFnName = code->allocateName(extFnName);
+            return that;
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             vis.op(extFnName);
@@ -172,6 +182,11 @@ namespace das
         const char * extFnName = nullptr;
         SimNode_InteropFuncCall ( const LineInfo & at, const char * fnName )
             : SimNode_CallBase(at) { extFnName = fnName; }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_InteropFuncCall<fn> *) SimNode_CallBase::copyNode(context, code);
+            that->extFnName = code->allocateName(extFnName);
+            return that;
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             vis.op(extFnName);

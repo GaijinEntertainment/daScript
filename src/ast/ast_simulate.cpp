@@ -1370,6 +1370,7 @@ namespace das
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
             pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
+            pCall->fnIndex = func->index;
             pCall->arguments = (SimNode **) context.code->allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = subexpr->simulate(context);
@@ -1388,6 +1389,7 @@ namespace das
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
             pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
+            pCall->fnIndex = func->index;
             pCall->arguments = (SimNode **) context.code->allocate(2 * sizeof(SimNode *));
             pCall->nArguments = 2;
             pCall->arguments[0] = left->simulate(context);
@@ -1779,6 +1781,7 @@ namespace das
         pCall->debugInfo = expr->at;
         DAS_ASSERTF((func->builtIn || func->index>=0), "calling function which is not used. how?");
         pCall->fnPtr = context.getFunction(func->index);
+        pCall->fnIndex = func->index;
         if ( int nArg = (int) expr->arguments.size() ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             if ( needTypeInfo ) {
@@ -1831,16 +1834,16 @@ namespace das
             htab[mnh] = i + 1;
         }
         auto tab = buildLookup(htab, context.tabMnMask, context.tabMnRot);
-        uint32_t ts = uint32_t(tab.size());
+        context.tabMnSize = uint32_t(tab.size());
         if ( options.getOption("logMNHash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
-                << "tabMnLookup:" << ts << "\n"
+                << "tabMnLookup:" << context.tabMnSize << "\n"
                 << "tabMnMask:" << context.tabMnMask << "\n"
                 << "tabMnRot:" << context.tabMnRot << "\n";
         }
-        context.tabMnLookup = (uint32_t *) context.code->allocate(ts * sizeof(uint32_t));
-        memcpy ( context.tabMnLookup, tab.data(), ts * sizeof(uint32_t));
+        context.tabMnLookup = (uint32_t *) context.code->allocate(context.tabMnSize * sizeof(uint32_t));
+        memcpy ( context.tabMnLookup, tab.data(), context.tabMnSize * sizeof(uint32_t));
     }
 
     void Program::buildADLookup ( Context & context, TextWriter & logs ) {
@@ -1852,12 +1855,12 @@ namespace das
         }
         if ( tabAd.size() ) {
             auto tab = buildLookup(tabAd, context.tabAdMask, context.tabAdRot);
-            uint32_t ts = uint32_t(tab.size());
-            context.tabAdLookup = (uint64_t *) context.code->allocate(ts * sizeof(uint64_t));
-            memcpy ( context.tabAdLookup, tab.data(), ts * sizeof(uint64_t));
+            context.tabAdSize = uint32_t(tab.size());
+            context.tabAdLookup = (uint64_t *) context.code->allocate(context.tabAdSize * sizeof(uint64_t));
+            memcpy ( context.tabAdLookup, tab.data(), context.tabAdSize * sizeof(uint64_t));
             if ( options.getOption("logAdHash",false) ) {
                 logs
-                << "tabAdLookup:" << ts << "\n"
+                << "tabAdLookup:" << context.tabAdSize << "\n"
                 << "tabAdMask:" << context.tabAdMask << "\n"
                 << "tabAdRot:" << context.tabAdRot << "\n";
             }
@@ -1959,9 +1962,11 @@ namespace das
         context.runInitScript();
         context.restart();
         if (options.getOption("log_mem")) {
-            logs << "code  " << context.code->bytesAllocated() << "\n";
-            logs << "debug " << context.debugInfo->bytesAllocated() << "\n";
-            logs << "heap  " << context.heap.bytesAllocated() << "\n";
+            logs << "code          " << context.code->bytesAllocated() << "\n";
+            logs << "const strings " << context.constStringHeap->bytesAllocated() << "\n";
+            logs << "debug         " << context.debugInfo->bytesAllocated() << "\n";
+            logs << "heap          " << context.heap.bytesAllocated() << "\n";
+            logs << "string        " << context.stringHeap.bytesAllocated() << "\n";
         }
         // log CPP
         if (options.getOption("logCpp")) {

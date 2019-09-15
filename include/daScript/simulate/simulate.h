@@ -61,6 +61,7 @@ namespace das
 
     struct SimNode {
         SimNode ( const LineInfo & at ) : debugInfo(at) {}
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code );
         virtual vec4f eval ( Context & ) = 0;
         virtual SimNode * visit ( SimVisitor & vis );
         virtual char *      evalPtr ( Context & context );
@@ -396,6 +397,8 @@ namespace das
             return exception;
         }
 
+        void relocateCode();
+
     public:
         uint64_t *                      annotationData = nullptr;
         StringAllocator                 stringHeap;
@@ -428,10 +431,12 @@ namespace das
         uint32_t *  tabMnLookup = nullptr;
         uint32_t    tabMnMask = 0;
         uint32_t    tabMnRot = 0;
+        uint32_t    tabMnSize = 0;
     public:
         uint64_t *  tabAdLookup = nullptr;
         uint32_t    tabAdMask = 0;
         uint32_t    tabAdRot = 0;
+        uint32_t    tabAdSize = 0;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
@@ -502,6 +507,7 @@ namespace das
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {
         SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitCall ( SimVisitor & vis );
         __forceinline void evalArgs ( Context & context, vec4f * argValues ) {
             for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
@@ -517,16 +523,18 @@ namespace das
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
-        SimNode ** arguments;
-        TypeInfo ** types;
+        SimNode ** arguments = nullptr;
+        TypeInfo ** types = nullptr;
         SimFunction * fnPtr = nullptr;
-        int32_t  nArguments;
+        int32_t  fnIndex = -1;
+        int32_t  nArguments = 0;
         SimNode * cmresEval = nullptr;
         // uint32_t stackTop = 0;
     };
 
     struct SimNode_Final : SimNode {
         SimNode_Final ( const LineInfo & a ) : SimNode(a) {}
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitFinal ( SimVisitor & vis );
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline void evalFinal ( Context & context ) {
@@ -545,6 +553,7 @@ namespace das
 
     struct SimNode_Block : SimNode_Final {
         SimNode_Block ( const LineInfo & at ) : SimNode_Final(at) {}
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitBlock ( SimVisitor & vis );
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
@@ -563,7 +572,8 @@ namespace das
 
     struct SimNode_Delete : SimNode {
         SimNode_Delete ( const LineInfo & a, SimNode * s, uint32_t t )
-        : SimNode(a), subexpr(s), total(t) {}
+            : SimNode(a), subexpr(s), total(t) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         SimNode *   subexpr;
         uint32_t    total;
     };

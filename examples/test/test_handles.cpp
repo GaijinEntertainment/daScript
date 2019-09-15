@@ -3,6 +3,8 @@
 #include "unitTest.h"
 #include "module_unitTest.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
 template<> struct das::cast <Point3>  : cast_fVec<Point3> {};
 
@@ -109,6 +111,18 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     struct SimNode_IntFieldDeref : SimNode {
         DAS_PTR_NODE;
         SimNode_IntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode(at), value(rv), name(n) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(IntFieldDeref);
+            V_SUB(value);
+            V_ARG(name);
+            V_END();
+        }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            SimNode_IntFieldDeref * that = (SimNode_IntFieldDeref *) SimNode::copyNode(context, code);
+            that->name = code->allocateName(name);
+            return that;
+        }
         char * compute ( Context & context ) {
             vec4f rv = value->eval(context);
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
@@ -132,6 +146,13 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         DAS_INT_NODE;
         SimNode_IntFieldDerefR2V ( const LineInfo & at, SimNode * rv, char * n )
             : SimNode_IntFieldDeref(at,rv,n) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(IntFieldDerefR2V);
+            V_SUB(value);
+            V_ARG(name);
+            V_END();
+        }
         __forceinline int32_t compute ( Context & context ) {
             vec4f rv = value->eval(context);
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
@@ -147,14 +168,19 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
                 return 0;
             }
         }
-        SimNode *   value;
-        char *      name;
     };
 
     // FIELD ?.
     struct SimNode_SafeIntFieldDeref : SimNode_IntFieldDeref {
         DAS_PTR_NODE;
         SimNode_SafeIntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode_IntFieldDeref(at,rv,n) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(SafeIntFieldDeref);
+            V_SUB(value);
+            V_ARG(name);
+            V_END();
+        }
         __forceinline char * compute ( Context & context ) {
             vec4f rv = value->eval(context);
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {

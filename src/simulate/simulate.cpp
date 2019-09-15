@@ -17,6 +17,14 @@ namespace das
     #define WARN_SLOW_CAST(TYPE)
     // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
 
+    SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
+        auto prefix = ((NodePrefix *)this) - 1;
+        DAS_ASSERTF(prefix->magic==0xdeadc0de,"node was allocated on the heap without prefix");
+        char * newNode = code->allocate(prefix->size);
+        memcpy ( newNode, (char *)this, prefix->size );
+        return (SimNode *) newNode;
+    }
+
     bool SimNode::evalBool ( Context & context ) {
         WARN_SLOW_CAST(Bool);
         return cast<bool>::to(eval(context));
@@ -192,7 +200,49 @@ namespace das
         return v_zero();
     }
 
+    // SimNode_CallBase
+
+    SimNode * SimNode_CallBase::copyNode ( Context & context, NodeAllocator * code ) {
+        SimNode_CallBase * that = (SimNode_CallBase *) SimNode::copyNode(context, code);
+        if ( nArguments ) {
+            SimNode ** newArguments = (SimNode **) code->allocate(nArguments * sizeof(SimNode *));
+            memcpy ( newArguments, that->arguments, nArguments * sizeof(SimNode *));
+            that->arguments = newArguments;
+            if ( that->types ) {
+                TypeInfo ** newTypes = (TypeInfo **) code->allocate(nArguments * sizeof(TypeInfo **));
+                memcpy ( newTypes, that->types, nArguments * sizeof(TypeInfo **));
+                that->types = newTypes;
+            }
+        }
+        if ( fnPtr ) {
+            that->fnPtr = context.getFunction(fnIndex);
+        }
+        return that;
+    }
+
+    // SimNode_Final
+
+    SimNode * SimNode_Final::copyNode ( Context & context, NodeAllocator * code ) {
+        SimNode_Final * that = (SimNode_Final *) SimNode::copyNode(context, code);
+        if ( totalFinal ) {
+            SimNode ** newList = (SimNode **) code->allocate(totalFinal * sizeof(SimNode *));
+            memcpy ( newList, that->finalList, totalFinal*sizeof(SimNode *));
+            that->finalList = newList;
+        }
+        return that;
+    }
+
     // SimNode_Block
+
+    SimNode * SimNode_Block::copyNode ( Context & context, NodeAllocator * code ) {
+        SimNode_Block * that = (SimNode_Block *) SimNode_Final::copyNode(context, code);
+        if ( total ) {
+            SimNode ** newList = (SimNode **) code->allocate(total * sizeof(SimNode *));
+            memcpy ( newList, that->list, total*sizeof(SimNode *));
+            that->list = newList;
+        }
+        return that;
+    }
 
     vec4f SimNode_Block::eval ( Context & context ) {
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
@@ -406,6 +456,66 @@ namespace das
         if ( globals ) {
             das_aligned_free16(globals);
         }
+    }
+
+    struct SimNodeRelocator : SimVisitor {
+        shared_ptr<NodeAllocator>   newCode;
+        Context * context = nullptr;
+        virtual SimNode * visit ( SimNode * node ) override {
+            return node->copyNode(*context, newCode.get());
+        }
+    };
+
+    void Context::relocateCode() {
+        SimNodeRelocator rel;
+        rel.context = this;
+        rel.newCode = make_shared<NodeAllocator>();
+        rel.newCode->prefixWithHeader = false;
+        if ( totalFunctions ) {
+            SimFunction * newFunctions = (SimFunction *) rel.newCode->allocate(totalFunctions*sizeof(SimFunction));
+            memcpy ( newFunctions, functions, totalFunctions*sizeof(SimFunction));
+            for ( int i=0; i!=totalFunctions; ++i ) {
+                newFunctions[i].name = rel.newCode->allocateName(functions[i].name);
+                newFunctions[i].mangledName = rel.newCode->allocateName(functions[i].mangledName);
+            }
+            functions = newFunctions;
+        }
+        if ( totalVariables ) {
+            GlobalVariable * newVariables = (GlobalVariable *) rel.newCode->allocate(totalVariables*sizeof(GlobalVariable));
+            memcpy ( newVariables, globalVariables, totalVariables*sizeof(GlobalVariable));
+            for ( int i=0; i!=totalVariables; ++i ) {
+                newVariables[i].name = rel.newCode->allocateName(globalVariables[i].name);
+            }
+            globalVariables = newVariables;
+        }
+        // relocate functions
+        for ( int i=0; i!=totalFunctions; ++i ) {
+            auto & fn = functions[i];
+            fn.code = fn.code->visit(rel);
+        }
+        // relocate variables
+        if ( totalVariables ) {
+            for ( int j=0; j!=totalVariables; ++j ) {
+                auto & var = globalVariables[j];
+                if ( var.init) {
+                    var.init = var.init->visit(rel);
+                }
+            }
+        }
+        // relocate mangle-name lookup
+        if ( tabMnLookup ) {
+            uint32_t * newMnLookup = (uint32_t *) rel.newCode->allocate(tabMnSize * sizeof(uint32_t));
+            memcpy ( newMnLookup, tabMnLookup, tabMnSize * sizeof(uint32_t));
+            tabMnLookup = newMnLookup;
+        }
+        // relocate annotation data lookup
+        if ( tabAdLookup ) {
+            uint64_t * newAdLookup = (uint64_t *) rel.newCode->allocate(tabAdSize * sizeof(uint64_t));
+            memcpy ( newAdLookup, tabAdLookup, tabAdSize * sizeof(uint64_t));
+            tabAdLookup = newAdLookup;
+        }
+        // swap the code
+        code = rel.newCode;
     }
 
     void Context::runInitScript ( void ) {

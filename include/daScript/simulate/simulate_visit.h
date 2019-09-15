@@ -12,6 +12,7 @@ namespace das {
     SimNode * SimNode_DeleteHandlePtr<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(DeleteHandlePtr);
+        V_SUB(subexpr);
         V_ARG(total);
         V_END();
     }

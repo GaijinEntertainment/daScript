@@ -71,6 +71,7 @@ namespace das {
     void SimNode_CallBase::visitCall ( SimVisitor & vis ) {
         if ( fnPtr ) {
             vis.arg(fnPtr->name,"fnPtr");
+            vis.arg(fnIndex, "fnIndex");
         }
         if ( cmresEval ) {
             V_SUB(cmresEval);
@@ -419,6 +420,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_Delete::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Delete);
+        V_ARG(total);
+        V_SUB(subexpr);
+        V_END();
+    }
+
     SimNode * SimNode_New::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(New);
@@ -576,7 +585,7 @@ namespace das {
             vis.sp(stackTop[t],nbuf);
             snprintf(nbuf, sizeof(nbuf), "strides[%i]", t );
             vis.arg(strides[t],nbuf);
-            vis.sub(sources[t]);
+            sources[t] = vis.sub(sources[t]);
         }
         vis.sub(list,total,"list");
         V_FINAL();
@@ -591,7 +600,7 @@ namespace das {
         for ( int t=0; t!=totalC; ++t ) {
             snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t );
             vis.sp(stackTop[t],nbuf);
-            vis.sub(source_iterators[t]);
+            source_iterators[t] = vis.sub(source_iterators[t]);
         }
         vis.sub(list,total,"list");
         V_FINAL();
@@ -687,9 +696,9 @@ namespace das {
     SimNode * SimNode_DeleteTable::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(DeleteTable);
-        V_SUB(subexpr);
         V_ARG(total);
         V_ARG(vts_add_kts);
+        V_SUB(subexpr);
         V_END();
     }
 
@@ -730,17 +739,17 @@ namespace das {
     SimNode * SimNode_DeleteArray::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(DeleteArray);
-        V_SUB(subexpr);
         V_ARG(total);
         V_ARG(stride);
+        V_SUB(subexpr);
         V_END();
     }
 
     SimNode * SimNode_DeleteString::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(DeleteString);
-        V_SUB(subexpr);
         V_ARG(total);
+        V_SUB(subexpr);
         V_END();
     }
 }

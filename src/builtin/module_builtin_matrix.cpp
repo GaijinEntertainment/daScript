@@ -216,6 +216,7 @@ namespace das {
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(MatrixCtor);
+            V_CALL();
             V_END();
         }
         virtual vec4f eval(Context & context) override {

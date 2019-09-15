@@ -108,13 +108,28 @@ namespace das {
         void freeString ( char * text, uint32_t length );
     };
 
+    struct NodePrefix {
+        uint32_t    magic = 0xdeadc0de;
+        uint32_t    size = 0;
+        uint32_t    padd0 = 0, padd1 = 0;
+        NodePrefix ( size_t sz ) : size(uint32_t(sz)) {}
+    };
+    static_assert(sizeof(NodePrefix)==sizeof(vec4f), "node prefix must be one alignment line");
+
     class NodeAllocator : public HeapAllocator {
     public:
+        bool prefixWithHeader = true;
         NodeAllocator() = default;
 
         template<typename TT, typename... Params>
         __forceinline TT * makeNode(Params... args) {
-            return new (allocate(sizeof(TT))) TT(args...);
+            if ( prefixWithHeader ) {
+                char * data = allocate(sizeof(TT) + sizeof(NodePrefix));
+                new (data) NodePrefix(sizeof(TT));
+                return new (data + sizeof(NodePrefix)) TT(args...);
+            } else {
+                return new (allocate(sizeof(TT))) TT(args...);
+            }
         }
 
         template < template <typename TT> class NodeType, typename... Params>
