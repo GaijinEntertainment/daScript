@@ -490,26 +490,6 @@ namespace das {
             Visitor::preVisit(expr);
             allocateString(expr->text);
         }
-        virtual void preVisit ( ExprDebug * expr ) override {
-            Visitor::preVisit(expr);
-            if ( expr->arguments.size()==2 && expr->arguments[1]->rtti_isStringConstant() ) {
-                allocateString(static_pointer_cast<ExprConstString>(expr->arguments[1])->text);
-            }
-        }
-        virtual void preVisit ( ExprAssert * expr ) override {
-            Visitor::preVisit(expr);
-            if ( expr->arguments.size()==2 && expr->arguments[1]->rtti_isStringConstant() ) {
-                allocateString(static_pointer_cast<ExprConstString>(expr->arguments[1])->text);
-            }
-        }
-        virtual void preVisit ( ExprReturn * expr ) override {
-            Visitor::preVisit(expr);
-            if ( expr->subexpr && expr->subexpr->rtti_isConstant() ) {
-                if ( expr->subexpr->type->isSimpleType(Type::tString) ) {
-                    allocateString(static_pointer_cast<ExprConstString>(expr->subexpr)->text);
-                }
-            }
-        }
     };
 
     // program
@@ -517,7 +497,20 @@ namespace das {
     void Program::allocateStack(TextWriter & logs) {
         // string heap
         AllocateConstString vstr;
-        visit(vstr);
+        for (auto & pm : library.modules) {
+            for (auto & pv : pm->globals) {
+                auto & var = pv.second;
+                if (var->used && var->init) {
+                    var->init->visit(vstr);
+                }
+            }
+            for (auto & pf : pm->functions) {
+                auto & func = pf.second;
+                if (func->used) {
+                    func->visit(vstr);
+                }
+            }
+        }
         globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
         VarCMRes vcm(shared_from_this());

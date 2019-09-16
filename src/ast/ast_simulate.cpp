@@ -1453,18 +1453,21 @@ namespace das
     }
 
     SimNode * ExprReturn::simulate (Context & context) const {
-        SimNode * simSubE = subexpr ? subexpr->simulate(context) : nullptr;
-        if (!subexpr) {
-            return context.code->makeNode<SimNode_ReturnNothing>(at);
-        } else if ( subexpr->rtti_isConstant() ) {
+        // return string is its own thing
+        if (subexpr && subexpr->rtti_isConstant()) {
             if (subexpr->type->isSimpleType(Type::tString)) {
                 auto cVal = static_pointer_cast<ExprConstString>(subexpr);
                 char * str = context.constStringHeap->allocateString(cVal->text);
                 return context.code->makeNode<SimNode_ReturnConstString>(at, str);
-            } else {
-                auto cVal = static_pointer_cast<ExprConst>(subexpr);
-                return context.code->makeNode<SimNode_ReturnConst>(at, cVal->value);
             }
+        }
+        // now, lets do the standard everything
+        SimNode * simSubE = subexpr ? subexpr->simulate(context) : nullptr;
+        if (!subexpr) {
+            return context.code->makeNode<SimNode_ReturnNothing>(at);
+        } else if ( subexpr->rtti_isConstant() ) {
+            auto cVal = static_pointer_cast<ExprConst>(subexpr);
+            return context.code->makeNode<SimNode_ReturnConst>(at, cVal->value);
         }
         if ( returnReference ) {
             if ( returnInBlock ) {
@@ -1869,6 +1872,7 @@ namespace das
 
     bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
+        context.constStringHeap = make_shared<StringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
         }
@@ -1969,11 +1973,11 @@ namespace das
         context.runInitScript();
         context.restart();
         if (options.getOption("log_mem")) {
-            logs << "code          " << context.code->bytesAllocated() << "\n";
-            logs << "const strings " << context.constStringHeap->bytesAllocated() << "\n";
+            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated() << " pages\n";
+            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->pagesAllocated() << " pages\n";
             logs << "debug         " << context.debugInfo->bytesAllocated() << "\n";
-            logs << "heap          " << context.heap.bytesAllocated() << "\n";
-            logs << "string        " << context.stringHeap.bytesAllocated() << "\n";
+            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.pagesAllocated() << " pages\n";
+            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.pagesAllocated() << " pages\n";
         }
         // log CPP
         if (options.getOption("logCpp")) {
