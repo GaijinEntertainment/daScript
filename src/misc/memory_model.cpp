@@ -97,8 +97,10 @@ namespace das {
         maxAllocated = max(maxAllocated, totalAllocated);
         if ( size<pageSize && nsize<pageSize ) {
             for ( auto & book : shelf ) {
-                if ( auto nptr = book.reallocate(ptr, size, nsize) ) {
-                    return nptr;
+                if ( book.isOwnPtr(ptr) ) {
+                    if ( auto nptr = book.reallocate(ptr, size, nsize) ) {
+                        return nptr;
+                    }
                 }
             }
         }
