@@ -183,9 +183,6 @@ namespace das {
                     anyFusion |= fuse.fused;
                 }
             }
-            if ( true || anyFusion ) {
-                context.relocateCode();
-            }
         }
     }
 }

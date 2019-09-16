@@ -1940,6 +1940,7 @@ namespace das
         buildADLookup(context, logs);
         context.simEnd();
         fusion(context, logs);
+        context.relocateCode();
         context.restart();
         // log all functions
         if ( options.getOption("log_nodes",false) ) {

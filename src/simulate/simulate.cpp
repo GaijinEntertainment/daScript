@@ -471,6 +471,9 @@ namespace das
         rel.context = this;
         rel.newCode = make_shared<NodeAllocator>();
         rel.newCode->prefixWithHeader = false;
+        uint32_t codeSize = code->bytesAllocated() - code->totalNodesAllocated * uint32_t(sizeof(NodePrefix));
+        rel.newCode->pageSize = (codeSize + rel.newCode->alignMask) & ~rel.newCode->alignMask;
+        rel.newCode->setInitialSize(codeSize);
         if ( totalFunctions ) {
             SimFunction * newFunctions = (SimFunction *) rel.newCode->allocate(totalFunctions*sizeof(SimFunction));
             memcpy ( newFunctions, functions, totalFunctions*sizeof(SimFunction));
@@ -515,6 +518,7 @@ namespace das
             tabAdLookup = newAdLookup;
         }
         // swap the code
+        DAS_ASSERTF(rel.newCode->pagesAllocated()==1,"after code relocation all code should be on one page");
         code = rel.newCode;
     }
 

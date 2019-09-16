@@ -119,10 +119,13 @@ namespace das {
     class NodeAllocator : public HeapAllocator {
     public:
         bool prefixWithHeader = true;
+        uint32_t totalNodesAllocated = 0;
+    public:
         NodeAllocator() = default;
 
         template<typename TT, typename... Params>
         __forceinline TT * makeNode(Params... args) {
+            totalNodesAllocated ++;
             if ( prefixWithHeader ) {
                 char * data = allocate(sizeof(TT) + sizeof(NodePrefix));
                 new (data) NodePrefix(sizeof(TT));
