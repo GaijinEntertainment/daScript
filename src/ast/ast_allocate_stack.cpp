@@ -483,7 +483,7 @@ namespace das {
         void allocateString ( const string & message ) {
             if ( !message.empty() ) {
                 bytesTotal += uint32_t(sizeof(StringHeader));
-                bytesTotal += message.length() + 1;
+                bytesTotal += uint32_t(message.length()) + 1;
             }
         }
         virtual void preVisit ( ExprConstString * expr ) override {
