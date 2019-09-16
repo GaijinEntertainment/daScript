@@ -3,6 +3,8 @@
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das {
 
     typedef rapidjson::Value JsValue;
@@ -18,6 +20,12 @@ namespace das {
     struct SimNode_SafeAs : SimNode {
         DAS_PTR_NODE;
         SimNode_SafeAs(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_SafeAs);
+            V_SUB(subexpr);
+            V_END();
+        }
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv || !(pv->*BOOL_PROP)() ) { return nullptr; }
@@ -29,6 +37,12 @@ namespace das {
     struct SimNode_AsBool : SimNode {
         DAS_BOOL_NODE;
         SimNode_AsBool(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_AsBool);
+            V_SUB(subexpr);
+            V_END();
+        }
         __forceinline bool compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return false; }
@@ -41,6 +55,12 @@ namespace das {
     struct SimNode_AsInt : SimNode {
         DAS_INT_NODE;
         SimNode_AsInt(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_AsInt);
+            V_SUB(subexpr);
+            V_END();
+        }
         __forceinline int32_t compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0; }
@@ -53,6 +73,12 @@ namespace das {
     struct SimNode_AsFloat : SimNode {
         DAS_FLOAT_NODE;
         SimNode_AsFloat(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_AsFloat);
+            V_SUB(subexpr);
+            V_END();
+        }
         __forceinline float compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0.0f; }
@@ -65,6 +91,12 @@ namespace das {
     struct SimNode_AsDouble : SimNode {
         DAS_DOUBLE_NODE;
         SimNode_AsDouble(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_AsDouble);
+            V_SUB(subexpr);
+            V_END();
+        }
         __forceinline double compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0.0f; }
@@ -77,13 +109,19 @@ namespace das {
     struct SimNode_AsString : SimNode {
         DAS_PTR_NODE;
         SimNode_AsString(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_AsString);
+            V_SUB(subexpr);
+            V_END();
+        }
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return nullptr; }
             if ( !pv->IsString() ) { context.throw_error_at(debugInfo,"JSON not a string"); return nullptr; }
             auto ps = pv->GetString();
             auto psl = pv->GetStringLength();
-            return context.heap.allocateString(ps,psl);
+            return context.stringHeap.allocateString(ps,psl);
         }
         SimNode * subexpr;
     };
@@ -91,6 +129,12 @@ namespace das {
     struct SimNode_GetJsonArraySize : SimNode {
         DAS_INT_NODE;
         SimNode_GetJsonArraySize(const LineInfo & a, SimNode * se) : SimNode(a), subexpr(se) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_GetJsonArraySize);
+            V_SUB(subexpr);
+            V_END();
+        }
         __forceinline int32_t compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) return 0;
@@ -103,7 +147,19 @@ namespace das {
     struct SimNode_GetJsonFieldConst : SimNode {
         DAS_PTR_NODE;
         SimNode_GetJsonFieldConst(const LineInfo & a, SimNode * se, char * i )
-        : SimNode(a), subexpr(se), index(i) {}
+            : SimNode(a), subexpr(se), index(i) {}
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_GetJsonFieldConst<SAFE> *) SimNode::copyNode(context, code);
+            that->index = code->allocateName(index);
+            return that;
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_GetJsonFieldConst);
+            V_SUB(subexpr);
+            V_ARG(index);
+            V_END();
+        }
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
@@ -130,6 +186,13 @@ namespace das {
         DAS_PTR_NODE;
         SimNode_GetJsonField(const LineInfo & a, SimNode * se, SimNode * i)
             : SimNode(a), subexpr(se), index(i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_GetJsonField);
+            V_SUB(subexpr);
+            V_SUB(index);
+            V_END();
+        }
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
@@ -156,6 +219,13 @@ namespace das {
         DAS_PTR_NODE;
         SimNode_GetJsonAt(const LineInfo & a, SimNode * se, SimNode * i)
             : SimNode(a), subexpr(se), index(i) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Json_GetJsonAt);
+            V_SUB(subexpr);
+            V_SUB(index);
+            V_END();
+        }
         __forceinline char * compute(Context & context) {
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
@@ -642,7 +712,7 @@ namespace das {
                     }
                     auto str = top->GetString();
                     auto strl = top->GetStringLength();
-                    st = context->heap.allocateString(str, strl);
+                    st = context->stringHeap.allocateString(str, strl);
                 }
             } else {
                 if ( st ) {

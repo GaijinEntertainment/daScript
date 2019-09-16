@@ -1869,6 +1869,9 @@ namespace das
 
     bool Program::simulate ( Context & context, TextWriter & logs ) {
         context.thisProgram = this;
+        if ( globalStringHeapSize ) {
+            context.constStringHeap->setInitialSize(globalStringHeapSize);
+        }
         if ( auto optHeap = options.find("heap",Type::tInt) ) {
             context.heap.setInitialSize( uint32_t(optHeap->iValue) );
         }
@@ -1942,6 +1945,9 @@ namespace das
         fusion(context, logs);
         context.relocateCode();
         context.restart();
+        // verify code and string heaps
+        DAS_ASSERTF(context.code->pagesAllocated()<=1, "code must come in one page");
+        DAS_ASSERTF(context.constStringHeap->pagesAllocated()<=1, "strings must come in one page");
         // log all functions
         if ( options.getOption("log_nodes",false) ) {
             for ( int i=0; i!=context.totalVariables; ++i ) {

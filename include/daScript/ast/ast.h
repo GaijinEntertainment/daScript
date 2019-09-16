@@ -693,6 +693,7 @@ namespace das
         vector<Error>               errors;
         bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;
+        uint32_t                    globalStringHeapSize = 0;
     public:
         map<CompilationError,int>   expectErrors;
     public:

@@ -476,9 +476,49 @@ namespace das {
         }
     };
 
+    class AllocateConstString : public Visitor {
+    public:
+        uint32_t bytesTotal = 0;
+    public:
+        void allocateString ( const string & message ) {
+            if ( !message.empty() ) {
+                bytesTotal += uint32_t(sizeof(StringHeader));
+                bytesTotal += message.length() + 1;
+            }
+        }
+        virtual void preVisit ( ExprConstString * expr ) override {
+            Visitor::preVisit(expr);
+            allocateString(expr->text);
+        }
+        virtual void preVisit ( ExprDebug * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->arguments.size()==2 && expr->arguments[1]->rtti_isStringConstant() ) {
+                allocateString(static_pointer_cast<ExprConstString>(expr->arguments[1])->text);
+            }
+        }
+        virtual void preVisit ( ExprAssert * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->arguments.size()==2 && expr->arguments[1]->rtti_isStringConstant() ) {
+                allocateString(static_pointer_cast<ExprConstString>(expr->arguments[1])->text);
+            }
+        }
+        virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->subexpr && expr->subexpr->rtti_isConstant() ) {
+                if ( expr->subexpr->type->isSimpleType(Type::tString) ) {
+                    allocateString(static_pointer_cast<ExprConstString>(expr->subexpr)->text);
+                }
+            }
+        }
+    };
+
     // program
 
     void Program::allocateStack(TextWriter & logs) {
+        // string heap
+        AllocateConstString vstr;
+        visit(vstr);
+        globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
         VarCMRes vcm(shared_from_this());
         visit(vcm);

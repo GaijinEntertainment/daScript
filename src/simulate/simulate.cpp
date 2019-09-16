@@ -518,7 +518,7 @@ namespace das
             tabAdLookup = newAdLookup;
         }
         // swap the code
-        DAS_ASSERTF(rel.newCode->pagesAllocated()==1,"after code relocation all code should be on one page");
+        DAS_ASSERTF(rel.newCode->pagesAllocated()<=1,"after code relocation all code should be on one page");
         code = rel.newCode;
     }
 

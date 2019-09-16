@@ -30,7 +30,6 @@ namespace das {
                     return;
                 } else if (oldDataBase != newDataBase) {
                     data = newDataBase + sizeof(StringHeader);
-                    memcpy(data, oldDataBase + sizeof(StringHeader), dataSize);
                 }
             } else {
                 data = (char *) heap->allocate(newCapacity + sizeof(StringHeader) + 1);
