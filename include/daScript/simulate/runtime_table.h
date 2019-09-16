@@ -53,7 +53,7 @@ namespace das
             return das::max(minLookups, desired * 6);
         }
 
-        __forceinline int find ( Table & tab, KeyType key, uint32_t hash ) const {
+        __forceinline int find ( const Table & tab, KeyType key, uint32_t hash ) const {
             uint32_t mask = tab.capacity - 1;
             uint32_t index = indexFromHash(hash, tab.shift);
             uint32_t lastI = (index+tab.maxLookups) & mask;

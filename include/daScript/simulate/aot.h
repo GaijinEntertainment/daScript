@@ -1216,7 +1216,7 @@ namespace das {
     };
 
     template <typename TK, typename TV, typename TKey>
-    TV * __builtin_table_find ( Context * context, TTable<TK, TV> & tab, TKey _key ) {
+    TV * __builtin_table_find ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,sizeof(TV));
@@ -1225,7 +1225,7 @@ namespace das {
     }
 
     template <typename TK, typename TV, typename TKey>
-    bool __builtin_table_key_exists ( Context * context, TTable<TK, TV> & tab, TKey _key ) {
+    bool __builtin_table_key_exists ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context, sizeof(TV));
