@@ -197,12 +197,12 @@ namespace das
         return (int32_t) context->stringHeap.shelf.size();
     }
 
-    void builtin_table_lock ( Table & arr, Context * context ) {
-        table_lock(*context, arr);
+    void builtin_table_lock ( const Table & arr, Context * context ) {
+        table_lock(*context, const_cast<Table&>(arr));
     }
 
-    void builtin_table_unlock ( Table & arr, Context * context ) {
-        table_unlock(*context, arr);
+    void builtin_table_unlock ( const Table & arr, Context * context ) {
+        table_unlock(*context, const_cast<Table&>(arr));
     }
 
     bool builtin_iterator_first ( const Iterator * it, void * data, Context * context ) {

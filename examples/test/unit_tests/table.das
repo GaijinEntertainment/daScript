@@ -1,4 +1,4 @@
-[export]
+[export,unsafe]
 def test : bool
     var tab:table<string;int>
     var i,del:int
@@ -33,6 +33,13 @@ def test : bool
                 assert(deref(pValue)==i)
             else
                 assert(i%7==0)
+        i ++
+    while i < total
+        let pValue = find(tab,string(i))
+        if pValue!=null
+            assert(deref(pValue)==i)
+        else
+            assert(i%7==0)
         i ++
     if true
         var j,k:int=0

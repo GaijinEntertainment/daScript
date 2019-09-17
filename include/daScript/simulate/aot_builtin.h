@@ -16,8 +16,8 @@ namespace das {
     uint32_t string_heap_bytes_allocated ( Context * context );
     uint32_t string_heap_high_watermark ( Context * context );
     int32_t string_heap_depth ( Context * context );
-    void builtin_table_lock ( Table & arr, Context * context );
-    void builtin_table_unlock ( Table & arr, Context * context );
+    void builtin_table_lock ( const Table & arr, Context * context );
+    void builtin_table_unlock ( const Table & arr, Context * context );
     int builtin_array_size ( const Array & arr );
     int builtin_array_capacity ( const Array & arr );
     void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context );

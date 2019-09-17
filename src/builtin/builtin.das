@@ -21,11 +21,15 @@ def length(a:auto[]):int
 
 // table
 
-def find(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
+
+[unsafe_operation]
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT?
+    return __builtin_table_find(Tab,at)
 
 def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
     return __builtin_table_erase(Tab,at)
