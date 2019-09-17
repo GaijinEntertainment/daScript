@@ -9,6 +9,10 @@ let
     floatnum = 5.5
     stringval = "hello, world"
 
+let 
+	some_a = "test"
+	some_b <- [{ auto[] some_a }]
+
 def foo(b:block<(a:int):int>)
     return invoke(b, 3)
 
@@ -41,6 +45,8 @@ def test_pick()
 
 [export]
 def test
+	// global infer
+	assert(length(some_b)==1)
     // regular array
     let a:int[10]
     let b = a

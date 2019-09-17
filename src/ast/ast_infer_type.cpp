@@ -3141,6 +3141,7 @@ namespace das {
                                   + expr->makeType->describe() + " = " + init->type->describe(),
                                   init->at, CompilationError::invalid_array_type );
                         } else {
+                            mkt->ref = false;
                             mkt->constant = false;
                             TypeDecl::applyAutoContracts(mkt, init->type);
                             expr->makeType = mkt;

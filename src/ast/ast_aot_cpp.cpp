@@ -647,34 +647,30 @@ namespace das {
         }
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
-            if ( auto block = getCurrentBlock() ) {
-                if ( !expr->doesNotNeedSp && expr->stackTop ) {
-                    localTemps[block].push_back(expr);
-                }
+            auto block = getCurrentBlock();
+            if ( !expr->doesNotNeedSp && expr->stackTop ) {
+                localTemps[block].push_back(expr);
             }
         }
     // make tuple
         virtual void preVisit ( ExprMakeTuple * expr ) override {
-            if ( auto block = getCurrentBlock() ) {
-                if ( !expr->doesNotNeedSp && expr->stackTop ) {
-                    localTemps[block].push_back(expr);
-                }
+            auto block = getCurrentBlock();
+            if ( !expr->doesNotNeedSp && expr->stackTop ) {
+                localTemps[block].push_back(expr);
             }
         }
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
-            if ( auto block = getCurrentBlock() ) {
-                if ( !expr->doesNotNeedSp && expr->stackTop ) {
-                    localTemps[block].push_back(expr);
-                }
+            auto block = getCurrentBlock();
+            if ( !expr->doesNotNeedSp && expr->stackTop ) {
+                localTemps[block].push_back(expr);
             }
         }
     // call with CMRES
         virtual void preVisit ( ExprCall * expr ) override {
-            if ( auto block = getCurrentBlock() ) {
-                if ( !expr->doesNotNeedSp && expr->stackTop ) {
-                    localTemps[block].push_back(expr);
-                }
+            auto block = getCurrentBlock();
+            if ( !expr->doesNotNeedSp && expr->stackTop ) {
+                localTemps[block].push_back(expr);
             }
         }
     public:
@@ -808,6 +804,13 @@ namespace das {
             Visitor::preVisitGlobalLetBody(prog);
             ss << "void __init_script ( Context * __context__ )\n{\n";
             tab ++;
+            // pre-declare locals
+            auto & temps = collector.localTemps[nullptr];
+            for ( auto & tmp : temps ) {
+                ss << string(tab,'\t');
+                describeVarLocalCppType(ss, tmp->type);
+                ss << " " << makeLocalTempName(tmp) << ";\n";
+            }
         }
         virtual void visitGlobalLetBody ( Program * prog ) override {
             for ( auto & fnI : program->thisModule->functions ) {
