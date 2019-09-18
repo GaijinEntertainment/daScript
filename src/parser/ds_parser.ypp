@@ -70,7 +70,8 @@
 %locations
 %verbose
 %debug
-%error-verbose
+
+%define parse.error verbose
 
 %union {
     char                            ch;
@@ -655,7 +656,7 @@ expression_any
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }
     |   expression_continue[subexpr] ';'    { $$ = $subexpr; }
-    |   expression_return[subexpr] ';'      { $$ = $subexpr; }
+    |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
     ;
@@ -734,13 +735,21 @@ expression_continue
     ;
 
 expression_return
-    :   DAS_RETURN[loc] {
+    :   DAS_RETURN[loc] ';' {
         $$ = new ExprReturn(tokAt(@loc),nullptr);
     }
-    |   DAS_RETURN[loc] expr[subexpr] {
+    |   DAS_RETURN[loc] expr[subexpr] ';' {
         $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
     }
-    |   DAS_RETURN[loc] LARROW expr[subexpr] {
+    |   DAS_RETURN[loc] LARROW expr[subexpr] ';' {
+        auto pRet = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
+        pRet->moveSemantics = true;
+        $$ = pRet;
+    }
+    |   DAS_RETURN[loc] expr_pipe[subexpr] {
+        $$ = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
+    }
+    |   DAS_RETURN[loc] LARROW expr_pipe[subexpr] {
         auto pRet = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
         pRet->moveSemantics = true;
         $$ = pRet;

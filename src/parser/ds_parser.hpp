@@ -239,7 +239,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 75 "ds_parser.ypp"
+#line 76 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;

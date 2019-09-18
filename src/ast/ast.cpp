@@ -343,9 +343,11 @@ namespace das {
 
     bool Function::isGeneric() const {
         for ( const auto & ann : annotations ) {
-            auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
-            if ( fna->isGeneric() ) {
-                return true;
+            if (ann->annotation) {
+                auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                if (fna->isGeneric()) {
+                    return true;
+                }
             }
         }
         for ( auto & arg : arguments ) {
