@@ -167,7 +167,9 @@ namespace das {
         }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitGlobalLetInit(var, init);
-            ss << " = ";
+            if ( var->init_via_move ) ss << " <- ";
+            else if ( var->init_via_clone ) ss << " := ";
+            else ss << " = ";
         }
     // function
         virtual void preVisit ( Function * fn) override {
@@ -319,7 +321,9 @@ namespace das {
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
-            ss << " = ";
+            if ( var->init_via_move ) ss << " <- ";
+            else if ( var->init_via_clone ) ss << " := ";
+            else ss << " = ";
         }
     // if then else
         virtual void preVisit ( ExprIfThenElse * ifte ) override {

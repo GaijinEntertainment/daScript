@@ -4,6 +4,12 @@
 	#include "daScript/ast/ast.h"
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
+
+    enum {
+        CorM_COPY   = 0,
+        CorM_MOVE   = (1<<0),
+        CorM_CLONE  = (1<<1)
+    };
     
     namespace das {
         extern ProgramPtr			g_Program;
@@ -25,7 +31,8 @@
         vector<string>          *pNameList;
         TypeDecl                *pTypeDecl;
         Expression              *pInit;
-        bool                    move_to_init = false;
+        bool                    init_via_move = false;
+        bool                    init_via_clone = false;
         bool                    override = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
@@ -161,6 +168,7 @@
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
 %type <pVarDeclList>    struct_variable_declaration_list
+%type <pVarDeclList>    global_variable_declaration_list
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
@@ -186,6 +194,8 @@
 %type <b>               let_scope
 %type <b>               optional_override
 %type <b>               kwd_let
+
+%type <i>               copy_or_move_or_clone
 
 %type <pEnum>           enum_list
 
@@ -569,7 +579,8 @@ function_declaration
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
-                                pVar->move_to_init = pDecl->move_to_init;
+                                pVar->init_via_move = pDecl->init_via_move;
+                                pVar->init_via_clone = pDecl->init_via_clone;
                             }
                             pFunction->arguments.push_back(pVar);
                         } else {
@@ -764,7 +775,8 @@ expression_let
                     pVar->type = make_shared<TypeDecl>(*$decl->pTypeDecl);
                     if ( $decl->pInit ) {
                         pVar->init = $decl->pInit->clone();
-                        pVar->move_to_init = $decl->move_to_init;
+                        pVar->init_via_move = $decl->init_via_move;
+                        pVar->init_via_clone = $decl->init_via_clone;
                     }
                     if ( $kwd_let ) {
                         pVar->type->constant = true;
@@ -851,7 +863,8 @@ expr_block
                             pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
-                                pVar->move_to_init = pDecl->move_to_init;
+                                pVar->init_via_move = pDecl->init_via_move;
+                                pVar->init_via_clone = pDecl->init_via_clone;
                             }
                             closure->arguments.push_back(pVar);
                         } else {
@@ -1123,46 +1136,66 @@ variable_declaration        /* this one can have uninitialized variable which ha
     }
     |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
-        $$->move_to_init = $com;
+        $$->init_via_move = $com;
     }
     |   variable_name_list[list] copy_or_move[com] expr[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
-        $$->move_to_init = $com;
+        $$->init_via_move = $com;
     }
     |   variable_name_list[list] copy_or_move[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
-        $$->move_to_init = $com;
+        $$->init_via_move = $com;
     }
+    ;
+
+copy_or_move_or_clone
+    :   '='         { $$ = CorM_COPY; }
+    |   LARROW      { $$ = CorM_MOVE; }
+    |   CLONEEQU    { $$ = CorM_CLONE; }
     ;
 
 let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
     :   variable_name_list[list] ':' type_declaration[typeDecl] ';' {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,nullptr);
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] ';' {
+    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
-        $$->move_to_init = $com;
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr_pipe[init] {
+    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
         $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
-        $$->move_to_init = $com;
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_list[list] copy_or_move[com] expr[init] ';' {
+    |   variable_name_list[list] copy_or_move_or_clone[com] expr[init] ';' {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
-        $$->move_to_init = $com;
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_list[list] copy_or_move[com] expr_pipe[init] {
+    |   variable_name_list[list] copy_or_move_or_clone[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
-        $$->move_to_init = $com;
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+    }
+    ;
+
+global_variable_declaration_list
+    :   {
+        $$ = new vector<VariableDeclaration*>();
+    }
+    |   global_variable_declaration_list[list] let_variable_declaration[decl] {
+        $$ = $list;
+        $list->push_back($decl);
     }
     ;
 
 global_let
-    :   kwd_let '{' struct_variable_declaration_list[list] '}' {
+    :   kwd_let '{' global_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -1172,7 +1205,8 @@ global_let
                     pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
                     if ( pDecl->pInit ) {
                         pVar->init = pDecl->pInit->clone();
-                        pVar->move_to_init = pDecl->move_to_init;
+                        pVar->init_via_move = pDecl->init_via_move;
+                        pVar->init_via_clone = pDecl->init_via_clone;
                     }
                     if ( $kwd_let ) {
                         pVar->type->constant = true;
@@ -1300,7 +1334,7 @@ structure_declaration
                             auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
                             pStruct->fields.emplace_back(name, td, init,
                                 pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
-                                pDecl->move_to_init, pDecl->at);
+                                pDecl->init_via_move, pDecl->at);
                         }
                     } else {
                         if ( pDecl->override ) {

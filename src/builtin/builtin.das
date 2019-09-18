@@ -45,7 +45,12 @@ def binary_load(var obj; data:array<uint8>)
     static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_load(obj,data)
 
-def cloneDim(var a;b)
+def clone_to_move(clone_src:auto(TT)) : TT delete const
+    var clone_dest : TT
+    clone_dest := clone_src
+    return <- clone_dest
+
+def clone_dim(var a;b)
 	if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
 		for aV,bV in a,b
 			aV := bV

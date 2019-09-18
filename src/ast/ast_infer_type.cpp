@@ -874,7 +874,7 @@ namespace das {
             if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferAutoType(var->type, var->init->type);
-                if ( !varT ) {
+                if ( !varT || varT->isAlias() ) {
                     error("global variable initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
@@ -892,15 +892,28 @@ namespace das {
                 error("global variable initialization type mismatch, const matters "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                       CompilationError::invalid_initialization_type);
-            } else if ( !var->init->type->canCopy() && !var->init->type->canMove() ) {
+            } else if ( !var->init_via_clone && (!var->init->type->canCopy() && !var->init->type->canMove()) ) {
                 error("this global variable can't be initialized at all", var->at,
                     CompilationError::invalid_initialization_type);
+            } else if ( var->init_via_move && var->init->type->isConst() ) {
+                error("this global variable can't init (move) from a constant value", var->at, CompilationError::cant_move);
+            } else if ( var->init_via_clone && !var->init->type->canClone() ) {
+                error("this global variable init can't be cloned", var->at, CompilationError::cant_copy);
+            } else {
+                if ( var->init_via_clone ) {
+                    reportGenericInfer();
+                    var->init_via_clone = false;
+                    var->init_via_move = true;
+                    auto c2m = make_shared<ExprCall>(var->at,"clone_to_move");
+                    c2m->arguments.push_back(var->init);
+                    return c2m;
+                }
             }
             return Visitor::visitGlobalLetInit(var, init);
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
             if ( var->type && var->type->isExprType() ) {
-                return Visitor::visitGlobalLet(var);;
+                return Visitor::visitGlobalLet(var);
             }
             if ( var->type->ref )
                 error("global variable can't be declared a reference", var->at,
@@ -2303,7 +2316,7 @@ namespace das {
                     return ExpressionPtr(cloneFn);
                 } else if ( cloneType->dim.size() ) {
                     reportGenericInfer();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "cloneDim");
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone_dim");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
@@ -2676,7 +2689,7 @@ namespace das {
             }
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferAutoType(var->type, var->init->type);
-                if ( !varT ) {
+                if ( !varT || varT->isAlias() ) {
                     error("local variable initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
@@ -2702,11 +2715,22 @@ namespace das {
                 error("this local variable can't be initialized at all", var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy()
-                       && var->init->type->canMove() && !var->move_to_init ) {
+                       && var->init->type->canMove() && !(var->init_via_move || var->init_via_clone) ) {
                 error("this local variable can only be move-initialized, use <- for that", var->at,
                     CompilationError::invalid_initialization_type);
-            } else if ( var->move_to_init && var->init->type->isConst() ) {
+            } else if ( var->init_via_move && var->init->type->isConst() ) {
                 error("can't init (move) from a constant value", expr->at, CompilationError::cant_move);
+            } else if ( var->init_via_clone && !var->init->type->canClone() ) {
+                error("this type can't be cloned", expr->at, CompilationError::cant_copy);
+            } else {
+                if ( var->init_via_clone ) {
+                    reportGenericInfer();
+                    var->init_via_clone = false;
+                    var->init_via_move = true;
+                    auto c2m = make_shared<ExprCall>(var->at,"clone_to_move");
+                    c2m->arguments.push_back(var->init);
+                    return c2m;
+                }
             }
             return Visitor::visitLetInit(expr, var, init);
         }

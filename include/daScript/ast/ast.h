@@ -161,7 +161,8 @@ namespace das
         uint32_t        initStackSize = 0;
         union {
             struct {
-                bool    move_to_init : 1;
+                bool    init_via_move : 1;
+                bool    init_via_clone : 1;
                 bool    used : 1;
                 bool    aliasCMRES : 1;
             };

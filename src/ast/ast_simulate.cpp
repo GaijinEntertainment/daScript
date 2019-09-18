@@ -1737,17 +1737,7 @@ namespace das
         if ( var->type->ref ) {
             return context.code->makeNode<SimNode_CopyReference>(var->init->at, get,
                                                                  var->init->simulate(context));
-        } else if ( var->type->canCopy() ) {
-            auto varExpr = make_shared<ExprVar>(var->at, var->name);
-            varExpr->variable = var;
-            varExpr->local = local;
-            varExpr->type = make_shared<TypeDecl>(*var->type);
-            auto retN = makeCopy(var->init->at, context, varExpr, var->init);
-            if ( !retN ) {
-                context.thisProgram->error("internal compilation error, can't generate copy", var->at);
-            }
-            return retN;
-        } else if ( var->type->canMove() ) {
+        } else if ( var->init_via_move && var->type->canMove() ) {
             auto varExpr = make_shared<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
@@ -1755,6 +1745,16 @@ namespace das
             auto retN = makeMove(var->init->at, context, varExpr, var->init);
             if ( !retN ) {
                 context.thisProgram->error("internal compilation error, can't generate move", var->at);
+            }
+            return retN;
+        } else if ( !var->init_via_move && var->type->canCopy() ) {
+            auto varExpr = make_shared<ExprVar>(var->at, var->name);
+            varExpr->variable = var;
+            varExpr->local = local;
+            varExpr->type = make_shared<TypeDecl>(*var->type);
+            auto retN = makeCopy(var->init->at, context, varExpr, var->init);
+            if ( !retN ) {
+                context.thisProgram->error("internal compilation error, can't generate copy", var->at);
             }
             return retN;
         } else {
