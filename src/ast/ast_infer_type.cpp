@@ -1837,7 +1837,7 @@ namespace das {
                       var->at, CompilationError::variable_not_found);
             }
             if ( var->type->isAuto() && !var->init) {
-                error("block argument type can't be infered, it needs an initializer",
+                error("block argument type can't be infered, it needs an initializer or to be passed to the function with the explicit block definition",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
             if ( var->type->ref && var->type->isRefType() ) {
@@ -2858,7 +2858,7 @@ namespace das {
             auto can1 = findCandidates(expr->name, types);
             auto can2 = findGenericCandidates(expr->name, types);
             can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(msg + expr->describe(), expr->at, can1, types, false, true, reportDetails, cerror);
+            reportFunctionNotFound(msg + expr->describe(), expr->at, can1, types, true, true, reportDetails, cerror);
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
