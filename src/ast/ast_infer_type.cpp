@@ -2166,14 +2166,25 @@ namespace das {
                     error("operations on different enumerations are prohibited", expr->at);
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
             auto functions = findMatchingFunctions(expr->op, types);
-            if ( functions.size()==0 ) {
-                reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
-            } else if ( functions.size()>1 ) {
-                string candidates = program->describeCandidates(functions);
-                error("too many matching operators '" + expr->op
-                      + "' with arguments (" + expr->left->type->describe() + ", " + expr->right->type->describe()
-                      + ")\n" + candidates, expr->at, CompilationError::operator_not_found);
-            } else {
+            if (functions.size() != 1) {
+                if (expr->left->type->isNumeric() && expr->right->type->isNumeric()) {
+                    TextWriter tw;
+                    tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
+                    tw << "\t" << das_to_string(expr->right->type->baseType) << "(" << *expr->left << ") " << expr->op << " " << *expr->right << "\n";
+                    error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
+                        das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType) 
+                        + " is not defined\ntry one of the following\n" + tw.str(), 
+                        expr->at, CompilationError::operator_not_found);
+                } else if (functions.size() == 0) {
+                    reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
+                } else if (functions.size() > 1) {
+                    string candidates = program->describeCandidates(functions);
+                    error("too many matching operators '" + expr->op
+                        + "' with arguments (" + expr->left->type->describe() + ", " + expr->right->type->describe()
+                        + ")\n" + candidates, expr->at, CompilationError::operator_not_found);
+                }
+            }
+            else {
                 expr->func = functions[0].get();
                 expr->type = make_shared<TypeDecl>(*expr->func->result);
                 if ( !expr->func->arguments[0]->type->isRef() )

@@ -59,6 +59,7 @@ namespace das {
         bool isRef() const;
         bool isRefType() const;
         bool isIndex() const;
+        bool isNumeric() const;
         bool isPointer() const;
         bool isEnum() const;
         bool isHandle() const;

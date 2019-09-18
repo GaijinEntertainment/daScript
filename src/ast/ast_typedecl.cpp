@@ -1128,6 +1128,24 @@ namespace das
                 || dim.size();
     }
 
+    bool TypeDecl::isNumeric() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tInt:
+        case Type::tUInt:
+        case Type::tInt8:
+        case Type::tUInt8:
+        case Type::tInt16:
+        case Type::tUInt16:
+        case Type::tInt64:
+        case Type::tUInt64:
+        case Type::tFloat:
+        case Type::tDouble:
+            return true;
+        }
+        return false;
+    }
+
     bool TypeDecl::isIndex() const {
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
