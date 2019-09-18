@@ -71,10 +71,18 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferAutoType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
+    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
         // can't infer from the type, which is already 'auto'
-        if ( initT->isAuto() )
-            return nullptr;
+        if (initT->isAuto()) {
+            if (!autoT->isAuto()) {
+                return make_shared<TypeDecl>(*autoT);
+            } else if (autoT->baseType == Type::tBlock || autoT->baseType == Type::tFunction
+                || autoT->baseType == Type::tLambda || autoT->baseType == Type::tTuple) {
+                // ok. if its fancy, we allow two-sided infer
+            } else {
+                return nullptr;
+            }
+        }
         // if its not an auto type, return as is
         if ( !autoT->isAuto() ) {
             if ( autoT->isSameType(*initT) ) {
@@ -128,32 +136,32 @@ namespace das
         TT->alias = autoT->alias;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
-            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tIterator ) {
             // if it's a iterator, infer iterator-ofo separately
-            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tArray ) {
             // if it's an array, infer array type separately
-            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tTable ) {
             // if it's a table, infer table keys and values types separately
-            TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType);
             if ( !TT->firstType ) return nullptr;
             if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
-            TT->secondType = inferAutoType(autoT->secondType, initT->secondType);
+            TT->secondType = inferGenericType(autoT->secondType, initT->secondType);
             if ( !TT->secondType ) return nullptr;
         } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction
                    || autoT->baseType==Type::tLambda || autoT->baseType==Type::tTuple ) {
             // if it's a block or function, infer argument and return types
             if ( autoT->firstType ) {
-                TT->firstType = inferAutoType(autoT->firstType, initT->firstType);
+                TT->firstType = inferGenericType(autoT->firstType, initT->firstType);
                 if ( !TT->firstType ) return nullptr;
             }
             for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
-                TT->argTypes[i] = inferAutoType(autoT->argTypes[i], initT->argTypes[i]);
+                TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i]);
                 if ( !TT->argTypes[i] ) return nullptr;
             }
         }

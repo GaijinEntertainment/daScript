@@ -407,12 +407,12 @@ namespace das {
                 }
                 // match auto argument
                 if (argType->isAuto()) {
-                    return TypeDecl::inferAutoType(argType, passType) != nullptr;
+                    return TypeDecl::inferGenericType(argType, passType) != nullptr;
                 }
             }
             // match inferable block
             if (inferBlock && passType->isAuto() && passType->isGoodBlockType()) {
-                return TypeDecl::inferAutoType(passType, argType) != nullptr;
+                return TypeDecl::inferGenericType(passType, argType) != nullptr;
             }
             // compare types which don't need inference
             if (passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false))) {
@@ -788,7 +788,7 @@ namespace das {
                 }
             }
             if ( decl.type->isAuto() && decl.init && decl.init->type ) {
-                auto varT = TypeDecl::inferAutoType(decl.type, decl.init->type);
+                auto varT = TypeDecl::inferGenericType(decl.type, decl.init->type);
                 if ( !varT ) {
                     error("structure field initialization type can't be infered, "
                           + decl.type->describe() + " = " + decl.init->type->describe(),
@@ -873,7 +873,7 @@ namespace das {
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
             if ( var->type->isAuto() ) {
-                auto varT = TypeDecl::inferAutoType(var->type, var->init->type);
+                auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
                     error("global variable initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
@@ -1847,7 +1847,7 @@ namespace das {
         }
         virtual ExpressionPtr visitBlockArgumentInit (ExprBlock * block, const VariablePtr & arg, Expression * that ) override {
             if ( arg->type->isAuto() ) {
-                auto argT = TypeDecl::inferAutoType(arg->type, arg->init->type);
+                auto argT = TypeDecl::inferGenericType(arg->type, arg->init->type);
                 if ( !argT ) {
                     error("block argument initialization type can't be infered, "
                           + arg->type->describe() + " = " + arg->init->type->describe(),
@@ -2332,7 +2332,7 @@ namespace das {
         bool inferReturnType ( TypeDeclPtr & resType, ExprReturn * expr ) {
             if ( resType->isAuto() ) {
                 if ( expr->subexpr ) {
-                    auto resT = TypeDecl::inferAutoType(resType, expr->subexpr->type);
+                    auto resT = TypeDecl::inferGenericType(resType, expr->subexpr->type);
                     if ( !resT ) {
                         error("type can't be infered, "
                               + resType->describe() + ", returns " + expr->subexpr->type->describe(),
@@ -2688,7 +2688,7 @@ namespace das {
                 return Visitor::visitLetInit(expr, var, init);
             }
             if ( var->type->isAuto() ) {
-                auto varT = TypeDecl::inferAutoType(var->type, var->init->type);
+                auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
                     error("local variable initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
@@ -2883,7 +2883,7 @@ namespace das {
                         auto & argT = clone->arguments[sz]->type;
                         if ( argT->isAuto() ) {
                             auto & passT = types[sz];
-                            auto resT = TypeDecl::inferAutoType(argT, passT);
+                            auto resT = TypeDecl::inferGenericType(argT, passT);
                             DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                             resT->ref = false;              // by default no ref
                             TypeDecl::applyAutoContracts(resT, argT);
@@ -2929,7 +2929,7 @@ namespace das {
                         DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                        auto retT = TypeDecl::inferAutoType(mkBlock->type, funcC->arguments[iF]->type);
+                        auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
                         DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                         TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                         block->returnType = make_shared<TypeDecl>(*retT->firstType);
@@ -3151,14 +3151,14 @@ namespace das {
                             if (expr->makeType->dim.size() == 1 && expr->makeType->dim[0] == TypeDecl::dimAuto) {
                                 auto infT = make_shared<TypeDecl>(*expr->makeType);
                                 infT->dim.clear();
-                                mkt = TypeDecl::inferAutoType(infT, init->type);
+                                mkt = TypeDecl::inferGenericType(infT, init->type);
                                 if (mkt) {
                                     mkt->dim.resize(1);
                                     mkt->dim[0] = int32_t(expr->values.size());
                                 }
                             }
                         } else {
-                            mkt = TypeDecl::inferAutoType(expr->makeType, init->type);
+                            mkt = TypeDecl::inferGenericType(expr->makeType, init->type);
                         }
                         if ( !mkt ) {
                             error("array type can't be infered, "
