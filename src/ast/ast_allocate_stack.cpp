@@ -523,7 +523,7 @@ namespace das {
             for (auto & pv : pm->globals) {
                 auto & var = pv.second;
                 if ( var->used ) {
-                    globalInitStackSize = max(globalInitStackSize, var->initStackSize);
+                    globalInitStackSize = das::max(globalInitStackSize, var->initStackSize);
                 }
             }
         }

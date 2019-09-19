@@ -17,10 +17,6 @@ call remove_folder.bat %DEST_DIR%\examples\profile\tests\angelscript
 call remove_folder.bat %DEST_DIR%\examples\profile\tests\squirrel
 call remove_folder.bat %DEST_DIR%\examples\profile\tests\lua
 
-echo syncing generated
-call make_empty_folder.bat %DEST_DIR%\generated
-call sync_folder.bat %SRC_DIR%\generated %DEST_DIR%\generated
-
 echo syncing utils
 call make_empty_folder.bat %DEST_DIR%\utils
 call sync_folder.bat %SRC_DIR%\utils %DEST_DIR%\utils

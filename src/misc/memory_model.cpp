@@ -44,7 +44,7 @@ namespace das {
     void MemoryModel::setInitialSize ( uint32_t size ) {
         if ( shelf.empty() ) {
             uint32_t tp = (size+pageSize-1) / pageSize;
-            shelf.emplace_back(pageSize, max(tp,1u));
+            shelf.emplace_back(pageSize, das::max(tp,1u));
         }
     }
 
@@ -52,7 +52,7 @@ namespace das {
         if ( !size ) return nullptr;
         size = (size + alignMask) & ~alignMask;
         totalAllocated += size;
-        maxAllocated = max(maxAllocated, totalAllocated);
+        maxAllocated = das::max(maxAllocated, totalAllocated);
         if ( size > pageSize ) {
             char * ptr = (char *) das_aligned_alloc16(size);
             bigStuff[ptr] = size;
@@ -94,7 +94,7 @@ namespace das {
         size = (size + alignMask) & ~alignMask;
         nsize = (nsize + alignMask) & ~alignMask;
         totalAllocated = totalAllocated - size + nsize;
-        maxAllocated = max(maxAllocated, totalAllocated);
+        maxAllocated = das::max(maxAllocated, totalAllocated);
         if ( size<pageSize && nsize<pageSize ) {
             for ( auto & book : shelf ) {
                 if ( book.isOwnPtr(ptr) ) {
