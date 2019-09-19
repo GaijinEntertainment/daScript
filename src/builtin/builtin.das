@@ -34,7 +34,7 @@ def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT?
 def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
     return __builtin_table_erase(Tab,at)
 
-def key_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
+def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
     return __builtin_table_key_exists(Tab,at)
 
 def binary_save(obj; subexpr:block<(data:array<uint8>):void>)

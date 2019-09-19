@@ -1142,6 +1142,7 @@ namespace das
         case Type::tFloat:
         case Type::tDouble:
             return true;
+        default:;
         }
         return false;
     }
