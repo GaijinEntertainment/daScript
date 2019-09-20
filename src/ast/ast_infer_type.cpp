@@ -1743,14 +1743,15 @@ namespace das {
                 expr->type->constant |= seT->constant;
             } else if ( seT->isHandle() ) {
                 if ( !seT->annotation->isIndexable(ixT) ) {
-                    error("handle does not support this index type", expr->index->at, CompilationError::invalid_index_type);
+                    error("handle " + seT->annotation->name + " does not support index type " + ixT->describe(), 
+                        expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
                 expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
                 expr->type->constant |= seT->constant;
             } else if ( seT->isPointer() ) {
                 if ( !ixT->isIndex() ) {
-                    error("index must be int or uint, not " + expr->index->type->describe(), expr->index->at, CompilationError::invalid_index_type);
+                    error("index must be int or uint, not " + ixT->describe(), expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 } else if ( !seT->firstType || seT->firstType->getSizeOf()==0 ){
                     error("can't index void pointer", expr->index->at, CompilationError::invalid_index_type);
@@ -1763,10 +1764,6 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             } else {
-                if ( !ixT->isIndex() ) {
-                    error("index must be int or uint, not " + expr->index->type->describe(), expr->index->at, CompilationError::invalid_index_type);
-                    return Visitor::visit(expr);
-                }
                 if ( seT->isVectorType() ) {
                     expr->type = make_shared<TypeDecl>(seT->getVectorBaseType());
                     expr->type->ref = seT->ref;
@@ -1776,13 +1773,18 @@ namespace das {
                     expr->type->ref = true;
                     expr->type->constant |= seT->constant;
                 } else if ( !seT->isRef() ) {
-                    error("can only index a reference", expr->subexpr->at, CompilationError::cant_index);
+                    error("can only index a reference, not " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
                 } else if ( !seT->dim.size() ) {
-                    error("can only index an array", expr->subexpr->at, CompilationError::cant_index);
+                    error("can only index an array, not " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
                 } else {
                     expr->type = make_shared<TypeDecl>(*seT);
                     expr->type->ref = true;
                     expr->type->dim.pop_back();
+                }
+                if ( !ixT->isIndex() ) {
+                    expr->type.reset();
+                    error("index must be int or uint, not " + ixT->describe(), expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
                 }
             }
             return Visitor::visit(expr);
