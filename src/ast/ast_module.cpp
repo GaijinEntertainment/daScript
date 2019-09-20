@@ -136,6 +136,7 @@ namespace das {
     bool Module::addVariable ( const VariablePtr & var, bool canFail ) {
         if ( globals.insert(make_pair(var->name, var)).second ) {
             var->module = this;
+            globalsInOrder.push_back(var);
             return true;
         } else {
             if ( !canFail ) {
@@ -283,8 +284,8 @@ namespace das {
             for (auto & gen : program->thisModule->generics) {
                 addGeneric(gen.second);
             }
-            for (auto & glob : program->thisModule->globals) {
-                addVariable(glob.second);
+            for (auto & gvar : program->thisModule->globalsInOrder) {
+                addVariable(gvar);
             }
             for (auto & fun : program->thisModule->functions) {
                 addFunction(fun.second);

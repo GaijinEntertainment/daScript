@@ -1798,8 +1798,7 @@ namespace das {
         vis.preVisitProgramBody(this);
         // globals
         vis.preVisitGlobalLetBody(this);
-        for ( auto & it : thisModule->globals ) {
-            auto & var = it.second;
+        for ( auto & var : thisModule->globalsInOrder ) {
             vis.preVisitGlobalLet(var);
             if ( var->type ) {
                 vis.preVisit(var->type.get());

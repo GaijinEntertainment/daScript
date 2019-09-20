@@ -56,8 +56,10 @@ namespace das {
         void RemoveUnusedSymbols ( Module & mod ) {
             map<string,FunctionPtr> functions;
             map<string,VariablePtr> globals;
+            vector<VariablePtr> globalsInOrder;
             swap(functions,mod.functions);
             swap(globals,mod.globals);
+            swap(globalsInOrder, mod.globalsInOrder);
             mod.functionsByName.clear();
             for ( auto & fn : functions ) {
                 if ( fn.second->used ) {
@@ -66,10 +68,10 @@ namespace das {
                     }
                 }
             }
-            for ( auto & var : globals ) {
-                if ( var.second->used ) {
-                    if ( !mod.addVariable(var.second, true) ) {
-                        program->error("internal error, failed to add variable " + var.first, var.second->at );
+            for ( auto & var : globalsInOrder ) {
+                if ( var->used ) {
+                    if ( !mod.addVariable(var, true) ) {
+                        program->error("internal error, failed to add variable " + var->name, var->at );
                     }
                 }
             }
@@ -188,8 +190,7 @@ namespace das {
 
     void Program::clearSymbolUse() {
         for (auto & pm : library.modules) {
-            for (auto & pv : pm->globals) {
-                auto & var = pv.second;
+            for (auto & var : pm->globalsInOrder) {
                 var->used = false;
             }
             for (auto & pf : pm->functions) {

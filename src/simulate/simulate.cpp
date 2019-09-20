@@ -535,9 +535,23 @@ namespace das
             abiCMRES = nullptr;
             aotInitScript->eval(*this);
         } else {
+
+#if DAS_ENABLE_STACK_WALK
+            FuncInfo finfo;
+            memset(&finfo, 0, sizeof(finfo));
+            finfo.name = "Context::runInitScript";
+#endif
             for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( pv.init ) {
+#if DAS_ENABLE_STACK_WALK
+                    finfo.stackSize = globalInitStackSize;
+
+                    Prologue * pp = (Prologue *)stack.sp();
+                    pp->arguments = nullptr;
+                    pp->info = &finfo;
+                    pp->line = 0;
+#endif
                     pv.init->eval(*this);
                 } else {
                     memset ( globals + pv.offset, 0, pv.size );

@@ -169,8 +169,7 @@ namespace das {
             if ( auto rT = fptr->result->findAlias(name,true) ) {
                 return rT;
             }
-            for ( auto & gvKV : program->thisModule->globals ) {
-                auto & gvar = gvKV.second;
+            for ( auto & gvar : program->thisModule->globalsInOrder ) {
                 if ( auto vT = gvar->type->findAlias(name,false) ) {
                     return vT;
                 }
@@ -243,8 +242,7 @@ namespace das {
                     return rT;
                 }
             }
-            for ( auto & gvKV : program->thisModule->globals ) {
-                auto & gvar = gvKV.second;
+            for ( auto & gvar : program->thisModule->globalsInOrder ) {
                 if ( auto vT = gvar->type->findAlias(name) ) {
                     return vT;
                 }

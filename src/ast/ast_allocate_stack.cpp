@@ -520,8 +520,7 @@ namespace das {
         visit(context);
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {
-            for (auto & pv : pm->globals) {
-                auto & var = pv.second;
+            for (auto & var : pm->globalsInOrder ) {
                 if ( var->used ) {
                     globalInitStackSize = das::max(globalInitStackSize, var->initStackSize);
                 }
@@ -536,8 +535,7 @@ namespace das {
             logs << "FUNCTION TABLE:\n";
         }
         for (auto & pm : library.modules) {
-            for (auto & pv : pm->globals) {
-                auto & var = pv.second;
+            for (auto & var : pm->globalsInOrder) {
                 if (var->used) {
                     var->index = totalVariables++;
                 }

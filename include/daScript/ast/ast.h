@@ -536,6 +536,7 @@ namespace das
         vector<StructurePtr>                    structuresInOrder;
         map<string, EnumerationPtr>             enumerations;
         map<string, VariablePtr>                globals;
+        vector<VariablePtr>                     globalsInOrder;
         map<string, FunctionPtr>                functions;          // mangled name 2 function name
         map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
         map<string, FunctionPtr>                generics;           // mangled name 2 generic name

@@ -1888,15 +1888,14 @@ namespace das
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;
         for (auto & pm : library.modules ) {
-            for (auto & it : pm->globals) {
-                auto pvar = it.second;
+            for (auto & pvar : pm->globalsInOrder) {
                 if (!pvar->used)
                     continue;
                 DAS_ASSERTF(pvar->index >= 0, "we are simulating variable, which is not used");
                 auto & gvar = context.globalVariables[pvar->index];
                 gvar.name = context.code->allocateName(pvar->name);
                 gvar.size = pvar->type->getSizeOf();
-                gvar.debugInfo = helper.makeVariableDebugInfo(*it.second);
+                gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
                 gvar.offset = pvar->stackTop = context.globalsSize;
                 context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
             }
@@ -1923,8 +1922,7 @@ namespace das
             }
         }
         for (auto & pm : library.modules ) {
-            for (auto & it : pm->globals) {
-                auto pvar = it.second;
+            for (auto & pvar : pm->globalsInOrder) {
                 if (!pvar->used)
                     continue;
                 auto & gvar = context.globalVariables[pvar->index];
