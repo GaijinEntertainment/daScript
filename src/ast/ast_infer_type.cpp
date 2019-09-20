@@ -1773,9 +1773,9 @@ namespace das {
                     expr->type->ref = true;
                     expr->type->constant |= seT->constant;
                 } else if ( !seT->isRef() ) {
-                    error("can only index a reference, not " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
+                    error("can only index a reference type, not " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
                 } else if ( !seT->dim.size() ) {
-                    error("can only index an array, not " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
+                    error("type can't be indexed " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
                 } else {
                     expr->type = make_shared<TypeDecl>(*seT);
                     expr->type->ref = true;
@@ -2247,37 +2247,42 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMove
+        string moveErrorInfo(ExprMove * expr) const {
+            return "\t" + expr->left->type->describe() + " <- " + expr->right->type->describe();
+        }
         virtual ExpressionPtr visit ( ExprMove * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
             if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
-                error("can only move the same type", expr->at, CompilationError::operator_not_found);
+                error("can only move the same type\n"+moveErrorInfo(expr), expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
-                error("can only move to a reference", expr->at, CompilationError::cant_write_to_non_reference);
+                error("can only move to a reference\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {
-                error("can't move to a constant value", expr->at, CompilationError::cant_move_to_const);
+                error("can't move to a constant value\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_move_to_const);
             } else if ( !expr->left->type->canMove() ) {
-                error("this type can't be moved, use clone (:=) instead", expr->at, CompilationError::cant_move);
+                error("this type can't be moved, use clone (:=) instead\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_move);
             } else if ( expr->right->type->constant ) {
-                error("can't move from a constant value", expr->at, CompilationError::cant_move);
+                error("can't move from a constant value\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_move);
             }
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
         }
     // ExprCopy
+        string copyErrorInfo(ExprCopy * expr) const {
+            return "\t" + expr->left->type->describe() + " = " + expr->right->type->describe();
+        }
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
             if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
-                error("can only copy the same type " + expr->left->type->describe() + " vs " + expr->right->type->describe(),
-                      expr->at, CompilationError::operator_not_found);
+                error("can only copy the same type\n"+copyErrorInfo(expr), expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
-                error("can only copy to a reference", expr->at, CompilationError::cant_write_to_non_reference);
+                error("can only copy to a reference\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {
-                error("can't write to a constant value", expr->at, CompilationError::cant_write_to_const);
+                error("can't write to a constant value\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_write_to_const);
             }
             if ( !expr->left->type->canCopy() ) {
-                error("this type can't be copied, use move (<-) or clone (:=) instead", expr->at, CompilationError::cant_copy);
+                error("this type can't be copied, use move (<-) or clone (:=) instead\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_copy);
             }
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
