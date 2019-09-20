@@ -48,9 +48,12 @@ namespace das
 
     void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
         if ( !autoT->isAuto() ) return;
-        TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef;
-        TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant;
-        if ( autoT->removeDim && TT->dim.size() ) TT->dim.pop_back();
+        TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
+        TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
+        if ( (autoT->removeDim || TT->removeDim) && TT->dim.size() ) TT->dim.pop_back();
+        TT->removeConstant = false;
+        TT->removeDim = false;
+        TT->removeRef = false;
         if ( autoT->isPointer() ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tIterator ) {
