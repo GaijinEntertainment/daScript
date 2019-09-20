@@ -1750,7 +1750,7 @@ namespace das {
                 expr->type->constant |= seT->constant;
             } else if ( seT->isPointer() ) {
                 if ( !ixT->isIndex() ) {
-                    error("index must be int or uint", expr->index->at, CompilationError::invalid_index_type);
+                    error("index must be int or uint, not " + expr->index->type->describe(), expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 } else if ( !seT->firstType || seT->firstType->getSizeOf()==0 ){
                     error("can't index void pointer", expr->index->at, CompilationError::invalid_index_type);
@@ -1764,7 +1764,7 @@ namespace das {
                 }
             } else {
                 if ( !ixT->isIndex() ) {
-                    error("index must be int or uint", expr->index->at, CompilationError::invalid_index_type);
+                    error("index must be int or uint, not " + expr->index->type->describe(), expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
                 if ( seT->isVectorType() ) {

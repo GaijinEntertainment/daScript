@@ -289,6 +289,7 @@ string_constant
 string_builder_body
     :   {
         $$ = new ExprStringBuilder();
+		$$->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
     }
     |   string_builder_body[sb] character_sequence[sconst] {
         bool err;
@@ -664,13 +665,11 @@ expression_any
 expressions
     :   {
         $$ = new ExprBlock();
+		$$->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
     }
     |   expressions[block] expression_any[subexpr]      {
         $$ = $block;
         if ( $subexpr ) {
-			if ( !$block->at.line ) {
-				$block->at = $subexpr->at;
-			}
             static_cast<ExprBlock*>($block)->list.push_back(ExpressionPtr($subexpr));
         }
     }
