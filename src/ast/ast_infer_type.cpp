@@ -1258,9 +1258,15 @@ namespace das {
             // infer
             expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
             auto blockT = expr->arguments[0]->type;
+            if ( blockT->isAuto() || blockT->isAlias() ) {
+                error("invoke argument not fully infered " + blockT->describe(), expr->at,
+                      CompilationError::invalid_argument_type);
+                return Visitor::visit(expr);
+            }
             if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() ) {
                 error("expecting block, or function, or lambda, not a " + blockT->describe(), expr->at,
                       CompilationError::invalid_argument_type);
+                 return Visitor::visit(expr);
             }
             if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
                 error("invalid number of arguments, expecting " + blockT->describe(),

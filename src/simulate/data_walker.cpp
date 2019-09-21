@@ -187,7 +187,13 @@ namespace das {
                 case Type::tTuple:      walk_tuple(pa, info); break;
                 case Type::tBlock:      WalkBlock((Block *)pa); break;
                 case Type::tFunction:   WalkFunction((Func *)pa); break;
-                case Type::tLambda:     WalkLambda((Lambda *)pa); break;
+                case Type::tLambda: {
+                        auto ll = (Lambda *) pa;
+                        beforeLambda(ll, info);
+                        walk ( ll->capture, ll->getTypeInfo() );
+                        afterLambda(ll, info);
+                    }
+                    break;
                 case Type::tHandle:
                     beforeHandle(pa, info);
                     if ( cancel ) return;

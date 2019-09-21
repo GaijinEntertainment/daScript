@@ -152,6 +152,16 @@ namespace das {
                 ss << "]]";
             }
         }
+        virtual void beforeLambda ( Lambda *, TypeInfo * ti ) override {
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << "(" << debug_type(ti) << " ";
+            }
+        }
+        virtual void afterLambda ( Lambda *, TypeInfo * ti ) override {
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << ")";
+            }
+        }
     // types
         virtual void Null ( TypeInfo * ) override {
             ss << "null";

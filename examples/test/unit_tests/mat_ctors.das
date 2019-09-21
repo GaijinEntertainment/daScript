@@ -48,13 +48,13 @@ def test_4x4
     verifyIdentity(t)
     var ops = false
     try
-        t[pass(4)] = float4(0)  // the reason to use pass here is so that we don't get compile time error
+        t[passx(4)] = float4(0)  // the reason to use pass here is so that we don't get compile time error
     recover
         ops = true
     assert(ops)
 
 [sideeffects]
-def pass(a)
+def passx(a)
     return a
 
 def test_any(var t:auto(mat))
@@ -72,7 +72,7 @@ def test_any(var t:auto(mat))
     verifyIdentity(t)
     var ops = false
     try
-        t[pass(row)] = vec(0)   // the reason to use pass here is so that we don't get compile time error
+        t[passx(row)] = vec(0)   // the reason to use pass here is so that we don't get compile time error
     recover
         ops = true
     assert(ops)

@@ -207,7 +207,7 @@ namespace das {
         virtual void WalkFunction ( Func * func ) override {
             serialize(func->index);
         }
-        virtual void WalkLambda ( Lambda * lambda ) override {
+        virtual void beforeLambda ( Lambda * lambda, TypeInfo * ) override {
             TypeInfo * info = nullptr;
             if ( reading ) {
                 uint32_t hash = 0;
@@ -221,10 +221,9 @@ namespace das {
                 ptr += 16;
                 lambda->capture = ptr;
             } else {
-                info = *((TypeInfo **) (((char *)lambda->capture)-16));
+                info = lambda->getTypeInfo();
                 serialize(info->hash);
             }
-            walk ( (char *) lambda->capture, info );
         }
     };
 

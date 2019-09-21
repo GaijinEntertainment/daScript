@@ -3,6 +3,7 @@
 namespace das
 {
     struct SimNode;
+    struct TypeInfo;
 
     struct Block {
         uint32_t    stackOffset;
@@ -43,8 +44,11 @@ namespace das
 
     struct Lambda {
         Lambda() = default;
-        Lambda(void * ptr) : capture(ptr) {}
-        void *      capture;
+        Lambda(void * ptr) : capture((char *)ptr) {}
+        char *      capture;
+        __forceinline TypeInfo * getTypeInfo() const {
+            return *(TypeInfo **)(capture-16);
+        }
         __forceinline bool operator == ( const Lambda & b ) const {
             return capture == b.capture;
         }
