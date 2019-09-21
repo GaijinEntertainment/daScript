@@ -243,6 +243,7 @@
 <normal>"where"                                         return DAS_WHERE;
 <normal>"cast"                                          return DAS_CAST;
 <normal>"upcast"                                        return DAS_UPCAST;
+<normal>"pass"                                          return DAS_PASS;
 <normal>"reinterpret"                                   return DAS_REINTERPRET;
 <normal>"override"                                      return DAS_OVERRIDE;
 <normal>"expect"                                        return DAS_EXPECT;

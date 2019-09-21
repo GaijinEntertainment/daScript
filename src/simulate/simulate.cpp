@@ -539,7 +539,7 @@ namespace das
 #if DAS_ENABLE_STACK_WALK
             FuncInfo finfo;
             memset(&finfo, 0, sizeof(finfo));
-            finfo.name = "Context::runInitScript";
+            finfo.name = (char *) "Context::runInitScript";
 #endif
             for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];

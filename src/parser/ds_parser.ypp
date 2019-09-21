@@ -124,7 +124,7 @@
 %token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
 %token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
 %token  DAS_ITERATOR   DAS_VAR		  DAS_ADDR       DAS_CONTINUE
-%token  DAS_WHERE      DAS_REINTERPRET
+%token  DAS_WHERE      DAS_PASS       DAS_REINTERPRET
 
 /* basic types */
 %token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
@@ -660,6 +660,7 @@ expression_any
     |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
+    |   DAS_PASS ';'                        { $$ = nullptr; }
     ;
 
 expressions
