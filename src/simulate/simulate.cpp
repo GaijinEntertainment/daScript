@@ -282,8 +282,7 @@ namespace das
         while ( cond->evalBool(context) && !context.stopFlags ) {
             for (SimNode ** __restrict body = list; body!=tail; ++body) {
                 (*body)->eval(context);
-                context.stopFlags &= ~EvalFlags::stopForContinue;
-                if (context.stopFlags) goto loopend;
+                DAS_PROCESS_LOOP_FLAGS(break);
             }
         }
     loopend:;

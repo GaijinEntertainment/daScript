@@ -39,8 +39,7 @@ namespace das
             *pi = i;
             for (SimNode ** __restrict body = list; body!=tail; ++body) {
                 (*body)->eval(context);
-                context.stopFlags &= ~EvalFlags::stopForContinue;
-                if (context.stopFlags) goto loopend;
+                DAS_PROCESS_LOOP_FLAGS(break);
             }
         }
     loopend:;
@@ -70,24 +69,14 @@ namespace das
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
-        int32_t count = r.to - r.from; // [0,3] 0,1,2
-        auto i = r.from;
+        int32_t r_to = r.to;
         SimNode * __restrict pbody = list[0];
-        while ( count>=4 ) {
-            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
-            count -= 4;
+        for (int32_t i = r.from; i != r_to; ++i) {
+            *pi = i;
+            pbody->eval(context);
+            DAS_PROCESS_LOOP_FLAGS(continue);
         }
-        if ( count & 2 ) {
-            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
-            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
-        }
-        if ( count & 1 ) {
-            *pi=i++; pbody->eval(context); context.stopFlags &= ~EvalFlags::stopForContinue;    if ( context.stopFlags ) goto done;
-        }
-    done:;
+    loopend:;
         evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
@@ -97,22 +86,11 @@ namespace das
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
-        int32_t count = r.to - r.from; // [0,3] 0,1,2
-        auto i = r.from;
+        int32_t r_to = r.to;
         SimNode * __restrict pbody = list[0];
-        while ( count>=4 ) {
-            *pi=i++; pbody->eval(context);
-            *pi=i++; pbody->eval(context);
-            *pi=i++; pbody->eval(context);
-            *pi=i++; pbody->eval(context);
-            count -= 4;
-        }
-        if ( count & 2 ) {
-            *pi=i++; pbody->eval(context);
-            *pi=i++; pbody->eval(context);
-        }
-        if ( count & 1 ) {
-            *pi=i++; pbody->eval(context);
+        for (int32_t i = r.from; i != r_to; ++i) {
+            *pi = i;
+            pbody->eval(context);
         }
         evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);

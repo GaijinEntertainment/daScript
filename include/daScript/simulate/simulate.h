@@ -101,6 +101,16 @@ namespace das
     ,   stopForContinue     = 1 << 2
     };
 
+#define DAS_PROCESS_LOOP_FLAGS(howtostop) \
+    { if (context.stopFlags) { \
+        if (context.stopFlags & EvalFlags::stopForContinue) { \
+            context.stopFlags &= ~EvalFlags::stopForContinue; \
+            howtostop; \
+        } else { \
+            goto loopend; \
+        } \
+    } }
+
 #if DAS_ENABLE_EXCEPTIONS
     class dasException : public runtime_error {
     public:

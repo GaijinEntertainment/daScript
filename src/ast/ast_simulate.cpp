@@ -1987,7 +1987,7 @@ namespace das
     }
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
-        bool logIt = options.getOption("logAot",false);
+        bool logIt = options.getOption("log_aot",false);
 
         // make list of functions
         vector<Function *> fnn; fnn.reserve(totalFunctions);

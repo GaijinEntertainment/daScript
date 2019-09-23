@@ -1826,8 +1826,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
-                    context.stopFlags &= ~EvalFlags::stopForContinue;
-                    if (context.stopFlags) goto loopend;
+                    DAS_PROCESS_LOOP_FLAGS(break);
                 }
                 for ( int t=0; t!=totalCount; ++t ){
                     if ( !sources[t]->next(context, (char *)(ph+t)) ) goto loopend;
@@ -1881,8 +1880,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 *pi = ph;
                 for (SimNode ** __restrict body = list; body!=tail; ++body) {
                     (*body)->eval(context);
-                    context.stopFlags &= ~EvalFlags::stopForContinue;
-                    if (context.stopFlags) goto loopend;
+                    DAS_PROCESS_LOOP_FLAGS(break);
                 }
                 if ( !sources->next(context, (char *)&ph) ) goto loopend;
                 if ( context.stopFlags ) goto loopend;
