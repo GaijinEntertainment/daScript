@@ -19,7 +19,12 @@ namespace das {
 
     void HeapWriterPolicy::reserve(int newSize) {
         if (newSize > dataCapacity) {
-            int newCapacity = das::max(dataCapacity * 2, newSize);
+            int newCapacity = newSize;
+            if ( newCapacity > heap->pageSize ) {
+                // if we exceed page size, we go to double-or-nothing grow mode
+                // that way string heap pages stay without holes, but big pages get allocated less often
+                newCapacity = das::max(dataCapacity * 2, newSize);
+            }
             if (data) {
                 char * oldDataBase = data - sizeof(StringHeader);
                 char * newDataBase = (char *)heap->reallocate(oldDataBase,

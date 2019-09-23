@@ -40,7 +40,7 @@ namespace das
             return;
         }
         if (newData != arr.data) {
-            memcpy(newData, arr.data, arr.capacity);
+            // memcpy(newData, arr.data, arr.capacity);
             arr.data = newData;
         }
         arr.capacity = newCapacity;

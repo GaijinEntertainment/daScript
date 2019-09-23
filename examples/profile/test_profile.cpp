@@ -171,7 +171,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
                            const AnnotationArgumentList &, string & err ) override {
         auto esData = getGroupData(group);
         auto tab = make_unique<EsPassAttributeTable>();
-        if ( auto pp = args.find("pass", Type::tString) ) {
+        if ( auto pp = args.find("es_pass", Type::tString) ) {
             tab->pass = pp->sValue;
         } else {
             err = "pass is not specified";

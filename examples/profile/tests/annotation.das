@@ -4,16 +4,16 @@
 
 require testProfile
 
-[es (pass="ks")]
+[es (es_pass="ks")]
 def update(var pos:float3&;vel:float3 const&)   // all by ref
     pos += vel
 
 // note, when optimization off won't compile, since float3(...) is not a const, but a function
-[es (pass="ks2")]
+[es (es_pass="ks2")]
 def update2(var pos:float3&;vel:float3 const = float3(1.0f,2.0f,3.0f))   // deref .
     pos += vel
 
-[es (pass="ks3")]
+[es (es_pass="ks3")]
 def update3(var pos:float3&;vel:float3 const &;dt:float = 1.0f)
     pos += vel * dt
 

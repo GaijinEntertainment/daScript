@@ -106,6 +106,7 @@ namespace das {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
         }
         void freeString ( char * text, uint32_t length );
+        void reportAllocations();
     };
 
     struct NodePrefix {

@@ -2,6 +2,8 @@
 
 namespace das {
 
+    #define DAS_PAGE_GC_MASK    0x80000000
+
     struct Page {
         __forceinline uint32_t allocate ( uint32_t size, uint32_t pageSize ) {
             if ( offset + size > pageSize ) return -1u;
@@ -76,6 +78,11 @@ namespace das {
             }
             return nullptr;
         }
+        __forceinline void mark ( char * ptr ) {
+            uint32_t gofs = uint32_t(ptr - data);
+            uint32_t idx = gofs / pageSize;
+            pages[idx].total |= DAS_PAGE_GC_MASK;
+        }
         uint32_t    pageSize;
         uint32_t    totalPages;
         uint32_t    totalSize;
@@ -93,6 +100,7 @@ namespace das {
         MemoryModel ( uint32_t ps );
         virtual ~MemoryModel ();
         virtual void setInitialSize ( uint32_t size );
+        void sweep();
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );

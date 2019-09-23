@@ -120,5 +120,30 @@ namespace das {
         }
         return total;
     }
+
+    void MemoryModel::sweep() {
+        totalAllocated = 0;
+        for ( auto & book : shelf ) {
+            for ( uint32_t i=0; i!=book.totalPages; ++i ) {
+                auto & page = book.pages[i];
+                if ( page.total & DAS_PAGE_GC_MASK ) {
+                    page.total &= ~DAS_PAGE_GC_MASK;
+                    totalAllocated += page.total;
+                } else {
+                    page.offset = 0;
+                    page.total = 0;
+                }
+            }
+        }
+        for ( auto it = bigStuff.begin(); it!=bigStuff.end() ; ) {
+            if ( it->second & DAS_PAGE_GC_MASK ) {
+                it->second &= ~DAS_PAGE_GC_MASK;
+                totalAllocated += it->second;
+                ++ it;
+            } else {
+                it = bigStuff.erase(it);
+            }
+        }
+    }
 }
 

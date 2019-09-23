@@ -398,7 +398,7 @@ namespace das
         }
 
         void relocateCode();
-
+        void collectStringHeap();
     public:
         uint64_t *                      annotationData = nullptr;
         StringAllocator                 stringHeap;
