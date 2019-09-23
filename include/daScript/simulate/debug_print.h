@@ -157,7 +157,7 @@ namespace das {
                 ss << "(" << debug_type(ti) << " ";
             }
         }
-        virtual void afterLambda ( Lambda *, TypeInfo * ti ) override {
+        virtual void afterLambda ( Lambda *, TypeInfo * ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << ")";
             }
