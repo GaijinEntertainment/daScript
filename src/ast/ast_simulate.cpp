@@ -1092,6 +1092,7 @@ namespace das
             } else {
                 block = context.code->makeNode<SimNode_Block>(at);
             }
+            block->annotationDataSid = annotationDataSid;
             block->total = int(simlist.size());
             if ( block->total ) {
                 block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
@@ -1978,7 +1979,7 @@ namespace das
             logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.pagesAllocated() << " pages\n";
         }
         // log CPP
-        if (options.getOption("logCpp")) {
+        if (options.getOption("log_cpp")) {
             aotCpp(context,logs);
             registerAotCpp(logs,context);
         }

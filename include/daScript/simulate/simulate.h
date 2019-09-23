@@ -559,6 +559,7 @@ namespace das
         virtual vec4f eval ( Context & context ) override;
         SimNode ** list = nullptr;
         uint32_t total = 0;
+        uint32_t annotationDataSid = 0;
     };
 
     struct SimNode_ForBase : SimNode_Block {
