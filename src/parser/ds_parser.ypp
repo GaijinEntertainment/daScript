@@ -111,57 +111,136 @@
 %destructor { delete $$; } <pMakeStruct>
 %destructor { delete $$; } <pEnum>
 
-%token  LEXER_ERROR
+%token  LEXER_ERROR         "lexer error"
 
 /* keywords */
-%token  DAS_STRUCT     DAS_LET        DAS_DEF        DAS_WHILE
-%token  DAS_IF         DAS_ELSE       DAS_FOR        DAS_CATCH
-%token  DAS_TRUE       DAS_FALSE      DAS_NEWT       DAS_TYPEINFO
-%token  DAS_TYPE       DAS_IN         DAS_ELIF       DAS_ARRAY
-%token  DAS_RETURN     DAS_NULL       DAS_BREAK      DAS_TRY
-%token  DAS_OPTIONS    DAS_TABLE      DAS_EXPECT     DAS_CONST
-%token  DAS_REQUIRE    DAS_OPERATOR   DAS_ENUM       DAS_FINALLY
-%token  DAS_DELETE     DAS_DEREF      DAS_SCOPE      DAS_TYPEDEF
-%token  DAS_WITH       DAS_CAST       DAS_OVERRIDE   DAS_UPCAST
-%token  DAS_ITERATOR   DAS_VAR		  DAS_ADDR       DAS_CONTINUE
-%token  DAS_WHERE      DAS_PASS       DAS_REINTERPRET
+%token  DAS_STRUCT          "struct"
+%token  DAS_LET             "let"
+%token  DAS_DEF             "def"
+%token  DAS_WHILE           "while"
+%token  DAS_IF              "if"
+%token  DAS_ELSE            "else"
+%token  DAS_FOR             "for"
+%token  DAS_CATCH           "catch"
+%token  DAS_TRUE            "true"
+%token  DAS_FALSE           "false"
+%token  DAS_NEWT            "new"
+%token  DAS_TYPEINFO        "typeinfo"
+%token  DAS_TYPE            "type"
+%token  DAS_IN              "in"
+%token  DAS_ELIF            "elif"
+%token  DAS_ARRAY           "array"
+%token  DAS_RETURN          "return"
+%token  DAS_NULL            "null"
+%token  DAS_BREAK           "break"
+%token  DAS_TRY             "try"
+%token  DAS_OPTIONS         "options"
+%token  DAS_TABLE           "table"
+%token  DAS_EXPECT          "expect"
+%token  DAS_CONST           "const"
+%token  DAS_REQUIRE         "require"
+%token  DAS_OPERATOR        "operator"
+%token  DAS_ENUM            "enum"
+%token  DAS_FINALLY         "finally"
+%token  DAS_DELETE          "delete"
+%token  DAS_DEREF           "deref"
+%token  DAS_SCOPE           "scope"
+%token  DAS_TYPEDEF         "typedef"
+%token  DAS_WITH            "with"
+%token  DAS_CAST            "cast"
+%token  DAS_OVERRIDE        "override"
+%token  DAS_UPCAST          "upcast"
+%token  DAS_ITERATOR        "iterator"
+%token  DAS_VAR             "var"
+%token  DAS_ADDR            "addr"
+%token  DAS_CONTINUE        "continue"
+%token  DAS_WHERE           "where"
+%token  DAS_PASS            "pass"
+%token  DAS_REINTERPRET     "reinterpret"
 
 /* basic types */
-%token  DAS_TBOOL       DAS_TVOID       DAS_TSTRING     DAS_TAUTO
-%token  DAS_TINT        DAS_TINT2       DAS_TINT3       DAS_TINT4
-%token  DAS_TUINT       DAS_TUINT2      DAS_TUINT3      DAS_TUINT4
-%token  DAS_TFLOAT      DAS_TFLOAT2     DAS_TFLOAT3     DAS_TFLOAT4
-%token  DAS_TRANGE      DAS_TURANGE     DAS_TBLOCK      DAS_TINT64
-%token  DAS_TUINT64     DAS_TDOUBLE	    DAS_TFUNCTION   DAS_TLAMBDA
-%token  DAS_TINT8       DAS_TUINT8      DAS_TINT16      DAS_TUINT16
-%token  DAS_TTUPLE
+%token  DAS_TBOOL           "bool"
+%token  DAS_TVOID           "void"
+%token  DAS_TSTRING         "string"
+%token  DAS_TAUTO           "auto"
+%token  DAS_TINT            "int"
+%token  DAS_TINT2           "int2"
+%token  DAS_TINT3           "int3"
+%token  DAS_TINT4           "int4"
+%token  DAS_TUINT           "uint"
+%token  DAS_TUINT2          "uint2"
+%token  DAS_TUINT3          "uint3"
+%token  DAS_TUINT4          "uint4"
+%token  DAS_TFLOAT          "float"
+%token  DAS_TFLOAT2         "float2"
+%token  DAS_TFLOAT3         "float3"
+%token  DAS_TFLOAT4         "float4"
+%token  DAS_TRANGE          "range"
+%token  DAS_TURANGE         "urange"
+%token  DAS_TBLOCK          "block"
+%token  DAS_TINT64          "int64"
+%token  DAS_TUINT64         "uint64"
+%token  DAS_TDOUBLE         "double"
+%token  DAS_TFUNCTION       "function"
+%token  DAS_TLAMBDA         "lambda"
+%token  DAS_TINT8           "int8"
+%token  DAS_TUINT8          "uint8"
+%token  DAS_TINT16          "int16"
+%token  DAS_TUINT16         "uint16"
+%token  DAS_TTUPLE          "tuple"
 
 /* operators */
-%token  ADDEQU      SUBEQU      DIVEQU      MULEQU      MODEQU
-%token  ANDEQU      OREQU       XOREQU      SHL         SHR
-%token  ADDADD      SUBSUB      LEEQU       SHLEQU      SHREQU
-%token  GREQU       EQUEQU      NOTEQU      RARROW      LARROW
-%token  QQ          QDOT        LPIPE       LBPIPE      RPIPE
-%token  CLONEEQU    ROTL        ROTR        ROTLEQU     ROTREQU
-%token  MAPTO
+%token  ADDEQU              "+="
+%token  SUBEQU              "-="
+%token  DIVEQU              "/="
+%token  MULEQU              "*="
+%token  MODEQU              "%="
+%token  ANDEQU              "&="
+%token  OREQU               "|="
+%token  XOREQU              "^="
+%token  SHL                 "<<"
+%token  SHR                 ">>"
+%token  ADDADD              "++"
+%token  SUBSUB              "--"
+%token  LEEQU               "<="
+%token  SHLEQU              "<<="
+%token  SHREQU              ">>="
+%token  GREQU               ">="
+%token  EQUEQU              "=="
+%token  NOTEQU              "!="
+%token  RARROW              "->"
+%token  LARROW              "<-"
+%token  QQ                  "??"
+%token  QDOT                "?."
+%token  LPIPE               "<|"
+%token  LBPIPE              "<|"
+%token  RPIPE               "|>"
+%token  CLONEEQU            ":="
+%token  ROTL                "<<<"
+%token  ROTR                ">>>"
+%token  ROTLEQU             "<<<="
+%token  ROTREQU             ">>>="
+%token  MAPTO               "=>"
 
-%token	BRABRAB		/* [[ */
-%token	BRACBRB		/* [{ */
-%token	CBRCBRB		/* {{ */
+%token	BRABRAB		        "[["    /* [[ */
+%token	BRACBRB		        "[{"    /* [{ */
+%token	CBRCBRB		        "{{"    /* {{ */
 
-%token<i>       INTEGER
-%token<i64>     LONG_INTEGER
-%token<ui>      UNSIGNED_INTEGER
-%token<ui64>    UNSIGNED_LONG_INTEGER
-%token<fd>      FLOAT
-%token<d>       DOUBLE
-%token<s>       NAME
+%token<i>       INTEGER                 "integer"
+%token<i64>     LONG_INTEGER            "long integer"
+%token<ui>      UNSIGNED_INTEGER        "unsigned integer"
+%token<ui64>    UNSIGNED_LONG_INTEGER   "unsigned long integer"
+%token<fd>      FLOAT                   "float"
+%token<d>       DOUBLE                  "double"
+%token<s>       NAME                    "name"
 
-%token      BEGIN_STRING
+/* %printer { fprintf (yyo, "%i", $$); } <i> */
+
+%token      BEGIN_STRING            "start of the string"
 %token<ch>  STRING_CHARACTER
-%token      END_STRING
-%token		BEGIN_STRING_EXPR
-%token		END_STRING_EXPR
+%token      END_STRING              "end of the string"
+%token		BEGIN_STRING_EXPR       "{"
+%token		END_STRING_EXPR         "}"
 
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration

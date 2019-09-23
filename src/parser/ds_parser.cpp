@@ -1,9 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.4.1.  */
+/* A Bison parser, made by GNU Bison 3.2.1.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
-   Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -48,7 +47,7 @@
 #define YYBISON 1
 
 /* Bison version.  */
-#define YYBISON_VERSION "3.4.1"
+#define YYBISON_VERSION "3.2.1"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -77,7 +76,7 @@
 #define yylloc          das_yylloc
 
 /* First part of user prologue.  */
-#line 50 "ds_parser.ypp"
+#line 50 "ds_parser.ypp" /* yacc.c:338  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/simulate/debug_info.h"
@@ -97,8 +96,7 @@
     int yylex();
     void yybegin(const char * str);
 
-#line 101 "ds_parser.cpp"
-
+#line 100 "ds_parser.cpp" /* yacc.c:338  */
 # ifndef YY_NULLPTR
 #  if defined __cplusplus
 #   if 201103L <= __cplusplus
@@ -119,8 +117,8 @@
 # define YYERROR_VERBOSE 1
 #endif
 
-/* Use api.header.include to #include this header
-   instead of duplicating it here.  */
+/* In a future release of Bison, this section will be replaced
+   by #include "ds_parser.hpp".  */
 #ifndef YY_DAS_YY_DS_PARSER_HPP_INCLUDED
 # define YY_DAS_YY_DS_PARSER_HPP_INCLUDED
 /* Debug traces.  */
@@ -139,7 +137,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "ds_parser.ypp"
+#line 2 "ds_parser.ypp" /* yacc.c:353  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -187,7 +185,7 @@ extern int das_yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 191 "ds_parser.cpp"
+#line 189 "ds_parser.cpp" /* yacc.c:353  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -325,9 +323,10 @@ extern int das_yydebug;
 
 /* Value type.  */
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
+
 union DAS_YYSTYPE
 {
-#line 76 "ds_parser.ypp"
+#line 76 "ds_parser.ypp" /* yacc.c:353  */
 
     char                            ch;
     bool                            b;
@@ -352,9 +351,9 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 356 "ds_parser.cpp"
-
+#line 355 "ds_parser.cpp" /* yacc.c:353  */
 };
+
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
 # define DAS_YYSTYPE_IS_TRIVIAL 1
 # define DAS_YYSTYPE_IS_DECLARED 1
@@ -482,8 +481,6 @@ typedef short yytype_int16;
 # define YY_INITIAL_VALUE(Value) /* Nothing. */
 #endif
 
-
-#define YY_ASSERT(E) ((void) (0 && (E)))
 
 #if ! defined yyoverflow || YYERROR_VERBOSE
 
@@ -629,16 +626,16 @@ union yyalloc
 /* YYNSTATES -- Number of states.  */
 #define YYNSTATES  623
 
+/* YYTRANSLATE[YYX] -- Symbol number corresponding to YYX as returned
+   by yylex, with out-of-bounds checking.  */
 #define YYUNDEFTOK  2
 #define YYMAXUTOK   383
 
-/* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
-   as returned by yylex, with out-of-bounds checking.  */
 #define YYTRANSLATE(YYX)                                                \
   ((unsigned) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
 
 /* YYTRANSLATE[TOKEN-NUM] -- Symbol number corresponding to TOKEN-NUM
-   as returned by yylex.  */
+   as returned by yylex, without out-of-bounds checking.  */
 static const yytype_uint8 yytranslate[] =
 {
        0,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -686,41 +683,41 @@ static const yytype_uint8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] =
 {
-       0,   269,   269,   270,   271,   272,   273,   274,   275,   276,
-     277,   281,   282,   286,   290,   294,   303,   311,   327,   348,
-     352,   353,   357,   360,   369,   380,   384,   385,   389,   392,
-     398,   399,   400,   407,   414,   426,   436,   445,   446,   447,
-     448,   449,   450,   454,   459,   467,   468,   472,   479,   491,
-     495,   502,   503,   507,   508,   509,   513,   517,   524,   528,
-     529,   530,   531,   532,   533,   534,   535,   536,   537,   538,
-     539,   540,   541,   542,   543,   544,   545,   546,   547,   548,
-     549,   550,   551,   552,   553,   554,   555,   556,   557,   558,
-     559,   560,   561,   562,   563,   567,   637,   640,   650,   651,
-     652,   653,   654,   655,   656,   657,   658,   659,   660,   661,
-     662,   663,   667,   671,   677,   683,   697,   698,   704,   708,
-     714,   717,   720,   724,   730,   734,   738,   741,   744,   749,
-     752,   760,   766,   767,   771,   772,   776,   809,   812,   817,
-     825,   829,   834,   838,   846,   849,   855,   860,   912,   913,
-     914,   915,   916,   917,   921,   922,   923,   924,   925,   926,
-     927,   928,   929,   930,   931,   932,   933,   934,   935,   936,
-     940,   951,   956,   966,   967,   968,   969,   970,   971,   972,
-     973,   974,   975,   976,   977,   978,   979,   980,   981,   982,
-     983,   984,   985,   986,   987,   988,   989,   990,   991,   992,
-     993,   994,   995,   996,   997,   998,   999,  1000,  1001,  1002,
-    1003,  1004,  1008,  1012,  1015,  1018,  1019,  1020,  1021,  1022,
-    1023,  1026,  1027,  1028,  1029,  1030,  1031,  1032,  1042,  1052,
-    1086,  1087,  1091,  1092,  1096,  1104,  1107,  1114,  1115,  1119,
-    1120,  1124,  1130,  1131,  1135,  1136,  1140,  1145,  1148,  1152,
-    1158,  1167,  1168,  1169,  1173,  1176,  1181,  1186,  1193,  1203,
-    1206,  1213,  1242,  1245,  1254,  1266,  1278,  1292,  1293,  1297,
-    1336,  1402,  1409,  1418,  1419,  1420,  1421,  1422,  1423,  1424,
-    1425,  1426,  1427,  1428,  1429,  1430,  1431,  1432,  1433,  1434,
-    1435,  1436,  1437,  1438,  1439,  1440,  1441,  1445,  1456,  1460,
-    1470,  1471,  1472,  1473,  1487,  1493,  1497,  1502,  1507,  1512,
-    1517,  1524,  1529,  1534,  1540,  1545,  1549,  1554,  1563,  1567,
-    1572,  1581,  1585,  1590,  1599,  1608,  1609,  1610,  1611,  1615,
-    1622,  1631,  1636,  1643,  1648,  1657,  1660,  1674,  1683,  1684,
-    1688,  1693,  1700,  1705,  1716,  1721,  1728,  1740,  1741,  1745
+       0,   347,   347,   349,   350,   351,   352,   353,   354,   355,
+     356,   360,   361,   365,   369,   373,   382,   390,   406,   427,
+     431,   432,   436,   439,   448,   459,   463,   464,   468,   471,
+     477,   478,   479,   486,   493,   505,   515,   524,   525,   526,
+     527,   528,   529,   533,   538,   546,   547,   551,   558,   570,
+     574,   581,   582,   586,   587,   588,   592,   596,   603,   607,
+     608,   609,   610,   611,   612,   613,   614,   615,   616,   617,
+     618,   619,   620,   621,   622,   623,   624,   625,   626,   627,
+     628,   629,   630,   631,   632,   633,   634,   635,   636,   637,
+     638,   639,   640,   641,   642,   646,   716,   719,   729,   730,
+     731,   732,   733,   734,   735,   736,   737,   738,   739,   740,
+     741,   742,   746,   750,   756,   762,   776,   777,   783,   787,
+     793,   796,   799,   803,   809,   813,   817,   820,   823,   828,
+     831,   839,   845,   846,   850,   851,   855,   888,   891,   896,
+     904,   908,   913,   917,   925,   928,   934,   939,   991,   992,
+     993,   994,   995,   996,  1000,  1001,  1002,  1003,  1004,  1005,
+    1006,  1007,  1008,  1009,  1010,  1011,  1012,  1013,  1014,  1015,
+    1019,  1030,  1035,  1045,  1046,  1047,  1048,  1049,  1050,  1051,
+    1052,  1053,  1054,  1055,  1056,  1057,  1058,  1059,  1060,  1061,
+    1062,  1063,  1064,  1065,  1066,  1067,  1068,  1069,  1070,  1071,
+    1072,  1073,  1074,  1075,  1076,  1077,  1078,  1079,  1080,  1081,
+    1082,  1083,  1087,  1091,  1094,  1097,  1098,  1099,  1100,  1101,
+    1102,  1105,  1106,  1107,  1108,  1109,  1110,  1111,  1121,  1131,
+    1165,  1166,  1170,  1171,  1175,  1183,  1186,  1193,  1194,  1198,
+    1199,  1203,  1209,  1210,  1214,  1215,  1219,  1224,  1227,  1231,
+    1237,  1246,  1247,  1248,  1252,  1255,  1260,  1265,  1272,  1282,
+    1285,  1292,  1321,  1324,  1333,  1345,  1357,  1371,  1372,  1376,
+    1415,  1481,  1488,  1497,  1498,  1499,  1500,  1501,  1502,  1503,
+    1504,  1505,  1506,  1507,  1508,  1509,  1510,  1511,  1512,  1513,
+    1514,  1515,  1516,  1517,  1518,  1519,  1520,  1524,  1535,  1539,
+    1549,  1550,  1551,  1552,  1566,  1572,  1576,  1581,  1586,  1591,
+    1596,  1603,  1608,  1613,  1619,  1624,  1628,  1633,  1642,  1646,
+    1651,  1660,  1664,  1669,  1678,  1687,  1688,  1689,  1690,  1694,
+    1701,  1710,  1715,  1722,  1727,  1736,  1739,  1753,  1762,  1763,
+    1767,  1772,  1779,  1784,  1795,  1800,  1807,  1819,  1820,  1824
 };
 #endif
 
@@ -729,32 +726,33 @@ static const yytype_uint16 yyrline[] =
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "$end", "error", "$undefined", "LEXER_ERROR", "DAS_STRUCT", "DAS_LET",
-  "DAS_DEF", "DAS_WHILE", "DAS_IF", "DAS_ELSE", "DAS_FOR", "DAS_CATCH",
-  "DAS_TRUE", "DAS_FALSE", "DAS_NEWT", "DAS_TYPEINFO", "DAS_TYPE",
-  "DAS_IN", "DAS_ELIF", "DAS_ARRAY", "DAS_RETURN", "DAS_NULL", "DAS_BREAK",
-  "DAS_TRY", "DAS_OPTIONS", "DAS_TABLE", "DAS_EXPECT", "DAS_CONST",
-  "DAS_REQUIRE", "DAS_OPERATOR", "DAS_ENUM", "DAS_FINALLY", "DAS_DELETE",
-  "DAS_DEREF", "DAS_SCOPE", "DAS_TYPEDEF", "DAS_WITH", "DAS_CAST",
-  "DAS_OVERRIDE", "DAS_UPCAST", "DAS_ITERATOR", "DAS_VAR", "DAS_ADDR",
-  "DAS_CONTINUE", "DAS_WHERE", "DAS_PASS", "DAS_REINTERPRET", "DAS_TBOOL",
-  "DAS_TVOID", "DAS_TSTRING", "DAS_TAUTO", "DAS_TINT", "DAS_TINT2",
-  "DAS_TINT3", "DAS_TINT4", "DAS_TUINT", "DAS_TUINT2", "DAS_TUINT3",
-  "DAS_TUINT4", "DAS_TFLOAT", "DAS_TFLOAT2", "DAS_TFLOAT3", "DAS_TFLOAT4",
-  "DAS_TRANGE", "DAS_TURANGE", "DAS_TBLOCK", "DAS_TINT64", "DAS_TUINT64",
-  "DAS_TDOUBLE", "DAS_TFUNCTION", "DAS_TLAMBDA", "DAS_TINT8", "DAS_TUINT8",
-  "DAS_TINT16", "DAS_TUINT16", "DAS_TTUPLE", "ADDEQU", "SUBEQU", "DIVEQU",
-  "MULEQU", "MODEQU", "ANDEQU", "OREQU", "XOREQU", "SHL", "SHR", "ADDADD",
-  "SUBSUB", "LEEQU", "SHLEQU", "SHREQU", "GREQU", "EQUEQU", "NOTEQU",
-  "RARROW", "LARROW", "QQ", "QDOT", "LPIPE", "LBPIPE", "RPIPE", "CLONEEQU",
-  "ROTL", "ROTR", "ROTLEQU", "ROTREQU", "MAPTO", "BRABRAB", "BRACBRB",
-  "CBRCBRB", "INTEGER", "LONG_INTEGER", "UNSIGNED_INTEGER",
-  "UNSIGNED_LONG_INTEGER", "FLOAT", "DOUBLE", "NAME", "BEGIN_STRING",
-  "STRING_CHARACTER", "END_STRING", "BEGIN_STRING_EXPR", "END_STRING_EXPR",
-  "','", "'='", "'?'", "':'", "'|'", "'^'", "'&'", "'<'", "'>'", "'-'",
-  "'+'", "'*'", "'/'", "'%'", "'@'", "UNARY_MINUS", "UNARY_PLUS", "'~'",
-  "'!'", "PRE_INC", "PRE_DEC", "POST_INC", "POST_DEC", "'.'", "'['", "']'",
-  "'('", "')'", "COLCOL", "';'", "'{'", "'}'", "'$'", "$accept", "program",
+  "$end", "error", "$undefined", "\"lexer error\"", "\"struct\"",
+  "\"let\"", "\"def\"", "\"while\"", "\"if\"", "\"else\"", "\"for\"",
+  "\"catch\"", "\"true\"", "\"false\"", "\"new\"", "\"typeinfo\"",
+  "\"type\"", "\"in\"", "\"elif\"", "\"array\"", "\"return\"", "\"null\"",
+  "\"break\"", "\"try\"", "\"options\"", "\"table\"", "\"expect\"",
+  "\"const\"", "\"require\"", "\"operator\"", "\"enum\"", "\"finally\"",
+  "\"delete\"", "\"deref\"", "\"scope\"", "\"typedef\"", "\"with\"",
+  "\"cast\"", "\"override\"", "\"upcast\"", "\"iterator\"", "\"var\"",
+  "\"addr\"", "\"continue\"", "\"where\"", "\"pass\"", "\"reinterpret\"",
+  "\"bool\"", "\"void\"", "\"string\"", "\"auto\"", "\"int\"", "\"int2\"",
+  "\"int3\"", "\"int4\"", "\"uint\"", "\"uint2\"", "\"uint3\"",
+  "\"uint4\"", "\"float\"", "\"float2\"", "\"float3\"", "\"float4\"",
+  "\"range\"", "\"urange\"", "\"block\"", "\"int64\"", "\"uint64\"",
+  "\"double\"", "\"function\"", "\"lambda\"", "\"int8\"", "\"uint8\"",
+  "\"int16\"", "\"uint16\"", "\"tuple\"", "\"+=\"", "\"-=\"", "\"/=\"",
+  "\"*=\"", "\"%=\"", "\"&=\"", "\"|=\"", "\"^=\"", "\"<<\"", "\">>\"",
+  "\"++\"", "\"--\"", "\"<=\"", "\"<<=\"", "\">>=\"", "\">=\"", "\"==\"",
+  "\"!=\"", "\"->\"", "\"<-\"", "\"??\"", "\"?.\"", "\"<|\"", "LBPIPE",
+  "\"|>\"", "\":=\"", "\"<<<\"", "\">>>\"", "\"<<<=\"", "\">>>=\"",
+  "\"=>\"", "\"[[\"", "\"[{\"", "\"{{\"", "\"integer\"",
+  "\"long integer\"", "\"unsigned integer\"", "\"unsigned long integer\"",
+  "FLOAT", "DOUBLE", "\"name\"", "\"start of the string\"",
+  "STRING_CHARACTER", "\"end of the string\"", "\"{\"", "\"}\"", "','",
+  "'='", "'?'", "':'", "'|'", "'^'", "'&'", "'<'", "'>'", "'-'", "'+'",
+  "'*'", "'/'", "'%'", "'@'", "UNARY_MINUS", "UNARY_PLUS", "'~'", "'!'",
+  "PRE_INC", "PRE_DEC", "POST_INC", "POST_DEC", "'.'", "'['", "']'", "'('",
+  "')'", "COLCOL", "';'", "'{'", "'}'", "'$'", "$accept", "program",
   "character_sequence", "string_constant", "string_builder_body",
   "string_builder", "options_declaration", "require_declaration",
   "require_list", "require_module_name", "require_module",
@@ -2020,22 +2018,22 @@ static const yytype_uint8 yyr2[] =
 
 #define YYRECOVERING()  (!!yyerrstatus)
 
-#define YYBACKUP(Token, Value)                                    \
-  do                                                              \
-    if (yychar == YYEMPTY)                                        \
-      {                                                           \
-        yychar = (Token);                                         \
-        yylval = (Value);                                         \
-        YYPOPSTACK (yylen);                                       \
-        yystate = *yyssp;                                         \
-        goto yybackup;                                            \
-      }                                                           \
-    else                                                          \
-      {                                                           \
-        yyerror (YY_("syntax error: cannot back up")); \
-        YYERROR;                                                  \
-      }                                                           \
-  while (0)
+#define YYBACKUP(Token, Value)                                  \
+do                                                              \
+  if (yychar == YYEMPTY)                                        \
+    {                                                           \
+      yychar = (Token);                                         \
+      yylval = (Value);                                         \
+      YYPOPSTACK (yylen);                                       \
+      yystate = *yyssp;                                         \
+      goto yybackup;                                            \
+    }                                                           \
+  else                                                          \
+    {                                                           \
+      yyerror (YY_("syntax error: cannot back up")); \
+      YYERROR;                                                  \
+    }                                                           \
+while (0)
 
 /* Error token number */
 #define YYTERROR        1
@@ -2218,7 +2216,7 @@ yy_reduce_print (yytype_int16 *yyssp, YYSTYPE *yyvsp, YYLTYPE *yylsp, int yyrule
       YYFPRINTF (stderr, "   $%d = ", yyi + 1);
       yy_symbol_print (stderr,
                        yystos[yyssp[yyi + 1 - yynrhs]],
-                       &yyvsp[(yyi + 1) - (yynrhs)]
+                       &(yyvsp[(yyi + 1) - (yynrhs)])
                        , &(yylsp[(yyi + 1) - (yynrhs)])                       );
       YYFPRINTF (stderr, "\n");
     }
@@ -2322,10 +2320,7 @@ yytnamerr (char *yyres, const char *yystr)
           case '\\':
             if (*++yyp != '\\')
               goto do_not_strip_quotes;
-            else
-              goto append;
-
-          append:
+            /* Fall through.  */
           default:
             if (yyres)
               yyres[yyn] = *yyp;
@@ -2421,10 +2416,10 @@ yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
                 yyarg[yycount++] = yytname[yyx];
                 {
                   YYSIZE_T yysize1 = yysize + yytnamerr (YY_NULLPTR, yytname[yyx]);
-                  if (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM)
-                    yysize = yysize1;
-                  else
+                  if (! (yysize <= yysize1
+                         && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
                     return 2;
+                  yysize = yysize1;
                 }
               }
         }
@@ -2448,10 +2443,9 @@ yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
 
   {
     YYSIZE_T yysize1 = yysize + yystrlen (yyformat);
-    if (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM)
-      yysize = yysize1;
-    else
+    if (! (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
       return 2;
+    yysize = yysize1;
   }
 
   if (*yymsg_alloc < yysize)
@@ -2501,425 +2495,426 @@ yydestruct (const char *yymsg, int yytype, YYSTYPE *yyvaluep, YYLTYPE *yylocatio
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
   switch (yytype)
     {
-    case 116: /* NAME  */
-#line 101 "ds_parser.ypp"
+          case 116: /* "name"  */
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2508 "ds_parser.cpp"
+#line 2502 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 157: /* character_sequence  */
-#line 101 "ds_parser.ypp"
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2514 "ds_parser.cpp"
+#line 2508 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 158: /* string_constant  */
-#line 101 "ds_parser.ypp"
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2520 "ds_parser.cpp"
+#line 2514 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 159: /* string_builder_body  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2526 "ds_parser.cpp"
+#line 2520 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 160: /* string_builder  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2532 "ds_parser.cpp"
+#line 2526 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 164: /* require_module_name  */
-#line 101 "ds_parser.ypp"
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2538 "ds_parser.cpp"
+#line 2532 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 169: /* expression_else  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2544 "ds_parser.cpp"
+#line 2538 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 170: /* expression_if_then_else  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2550 "ds_parser.cpp"
+#line 2544 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 171: /* expression_for_loop  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2556 "ds_parser.cpp"
+#line 2550 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 172: /* expression_while_loop  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2562 "ds_parser.cpp"
+#line 2556 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 173: /* expression_with  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2568 "ds_parser.cpp"
+#line 2562 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 174: /* annotation_argument  */
-#line 107 "ds_parser.ypp"
+#line 107 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).aa); }
-#line 2574 "ds_parser.cpp"
+#line 2568 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 175: /* annotation_argument_list  */
-#line 108 "ds_parser.ypp"
+#line 108 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).aaList); }
-#line 2580 "ds_parser.cpp"
+#line 2574 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 176: /* annotation_declaration_name  */
-#line 101 "ds_parser.ypp"
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2586 "ds_parser.cpp"
+#line 2580 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 177: /* annotation_declaration  */
-#line 109 "ds_parser.ypp"
+#line 109 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).fa); }
-#line 2592 "ds_parser.cpp"
+#line 2586 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 178: /* annotation_list  */
-#line 110 "ds_parser.ypp"
+#line 110 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).faList); }
-#line 2598 "ds_parser.cpp"
+#line 2592 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 179: /* optional_annotation_list  */
-#line 110 "ds_parser.ypp"
+#line 110 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).faList); }
-#line 2604 "ds_parser.cpp"
+#line 2598 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 180: /* optional_function_argument_list  */
-#line 104 "ds_parser.ypp"
+#line 104 "ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2610 "ds_parser.cpp"
+#line 2604 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 181: /* optional_function_type  */
-#line 105 "ds_parser.ypp"
+#line 105 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2616 "ds_parser.cpp"
+#line 2610 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 182: /* function_name  */
-#line 101 "ds_parser.ypp"
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2622 "ds_parser.cpp"
+#line 2616 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 184: /* expression_block  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2628 "ds_parser.cpp"
+#line 2622 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 185: /* expression_any  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2634 "ds_parser.cpp"
+#line 2628 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 186: /* expressions  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2640 "ds_parser.cpp"
+#line 2634 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 187: /* expr_pipe  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2646 "ds_parser.cpp"
+#line 2640 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 188: /* name_in_namespace  */
-#line 101 "ds_parser.ypp"
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2652 "ds_parser.cpp"
+#line 2646 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 189: /* expression_delete  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2658 "ds_parser.cpp"
+#line 2652 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 190: /* expr_new  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2664 "ds_parser.cpp"
+#line 2658 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 191: /* expression_break  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2670 "ds_parser.cpp"
+#line 2664 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 192: /* expression_continue  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2676 "ds_parser.cpp"
+#line 2670 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 193: /* expression_return  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2682 "ds_parser.cpp"
+#line 2676 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 194: /* expression_try_catch  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2688 "ds_parser.cpp"
+#line 2682 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 197: /* expression_let  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2694 "ds_parser.cpp"
+#line 2688 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 198: /* expr_cast  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2700 "ds_parser.cpp"
+#line 2694 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 199: /* expr_type_info  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2706 "ds_parser.cpp"
+#line 2700 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 200: /* expr_list  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2712 "ds_parser.cpp"
+#line 2706 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 201: /* expr_block  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2718 "ds_parser.cpp"
+#line 2712 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 202: /* expr_numeric_const  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2724 "ds_parser.cpp"
+#line 2718 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 203: /* expr_assign  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2730 "ds_parser.cpp"
+#line 2724 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 204: /* expr_named_call  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2736 "ds_parser.cpp"
+#line 2730 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 205: /* expr_method_call  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2742 "ds_parser.cpp"
+#line 2736 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 206: /* expr  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2748 "ds_parser.cpp"
+#line 2742 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 207: /* optional_field_annotation  */
-#line 108 "ds_parser.ypp"
+#line 108 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).aaList); }
-#line 2754 "ds_parser.cpp"
+#line 2748 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 209: /* structure_variable_declaration  */
-#line 103 "ds_parser.ypp"
+#line 103 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2760 "ds_parser.cpp"
+#line 2754 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 210: /* struct_variable_declaration_list  */
-#line 104 "ds_parser.ypp"
+#line 104 "ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2766 "ds_parser.cpp"
+#line 2760 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 211: /* function_argument_declaration  */
-#line 103 "ds_parser.ypp"
+#line 103 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2772 "ds_parser.cpp"
+#line 2766 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 212: /* function_argument_list  */
-#line 104 "ds_parser.ypp"
+#line 104 "ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2778 "ds_parser.cpp"
+#line 2772 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 213: /* tuple_type  */
-#line 103 "ds_parser.ypp"
+#line 103 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2784 "ds_parser.cpp"
+#line 2778 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 214: /* tuple_type_list  */
-#line 104 "ds_parser.ypp"
+#line 104 "ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2790 "ds_parser.cpp"
+#line 2784 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 216: /* variable_declaration  */
-#line 103 "ds_parser.ypp"
+#line 103 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2796 "ds_parser.cpp"
+#line 2790 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 218: /* let_variable_declaration  */
-#line 103 "ds_parser.ypp"
+#line 103 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pVarDecl); }
-#line 2802 "ds_parser.cpp"
+#line 2796 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 219: /* global_variable_declaration_list  */
-#line 104 "ds_parser.ypp"
+#line 104 "ds_parser.ypp" /* yacc.c:1254  */
       { deleteVariableDeclarationList(((*yyvaluep).pVarDeclList)); }
-#line 2808 "ds_parser.cpp"
+#line 2802 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 221: /* enum_list  */
-#line 112 "ds_parser.ypp"
+#line 112 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pEnum); }
-#line 2814 "ds_parser.cpp"
+#line 2808 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 224: /* optional_structure_parent  */
-#line 101 "ds_parser.ypp"
+#line 101 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).s); }
-#line 2820 "ds_parser.cpp"
+#line 2814 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 227: /* variable_name_list  */
-#line 102 "ds_parser.ypp"
+#line 102 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pNameList); }
-#line 2826 "ds_parser.cpp"
+#line 2820 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 229: /* structure_type_declaration  */
-#line 105 "ds_parser.ypp"
+#line 105 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2832 "ds_parser.cpp"
+#line 2826 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 230: /* auto_type_declaration  */
-#line 105 "ds_parser.ypp"
+#line 105 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2838 "ds_parser.cpp"
+#line 2832 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 231: /* type_declaration  */
-#line 105 "ds_parser.ypp"
+#line 105 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pTypeDecl); }
-#line 2844 "ds_parser.cpp"
+#line 2838 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 232: /* make_decl  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2850 "ds_parser.cpp"
+#line 2844 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 233: /* make_struct_fields  */
-#line 111 "ds_parser.ypp"
+#line 111 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pMakeStruct); }
-#line 2856 "ds_parser.cpp"
+#line 2850 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 234: /* make_struct_dim  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2862 "ds_parser.cpp"
+#line 2856 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 235: /* make_struct_decl  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2868 "ds_parser.cpp"
+#line 2862 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 236: /* make_tuple  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2874 "ds_parser.cpp"
+#line 2868 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 237: /* make_map_tuple  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2880 "ds_parser.cpp"
+#line 2874 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 238: /* make_any_tuple  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2886 "ds_parser.cpp"
+#line 2880 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 239: /* make_dim  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2892 "ds_parser.cpp"
+#line 2886 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 240: /* make_dim_decl  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2898 "ds_parser.cpp"
+#line 2892 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 241: /* make_table  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2904 "ds_parser.cpp"
+#line 2898 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 242: /* make_table_decl  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2910 "ds_parser.cpp"
+#line 2904 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 243: /* array_comprehension_where  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2916 "ds_parser.cpp"
+#line 2910 "ds_parser.cpp" /* yacc.c:1254  */
         break;
 
     case 244: /* array_comprehension  */
-#line 106 "ds_parser.ypp"
+#line 106 "ds_parser.ypp" /* yacc.c:1254  */
       { delete ((*yyvaluep).pExpression); }
-#line 2922 "ds_parser.cpp"
+#line 2916 "ds_parser.cpp" /* yacc.c:1254  */
         break;
+
 
       default:
         break;
@@ -3020,33 +3015,23 @@ yyparse (void)
   yylsp[0] = yylloc;
   goto yysetstate;
 
-
 /*------------------------------------------------------------.
-| yynewstate -- push a new state, which is found in yystate.  |
+| yynewstate -- Push a new state, which is found in yystate.  |
 `------------------------------------------------------------*/
-yynewstate:
+ yynewstate:
   /* In all cases, when you get here, the value and location stacks
      have just been pushed.  So pushing a state here evens the stacks.  */
   yyssp++;
 
-
-/*--------------------------------------------------------------------.
-| yynewstate -- set current state (the top of the stack) to yystate.  |
-`--------------------------------------------------------------------*/
-yysetstate:
-  YYDPRINTF ((stderr, "Entering state %d\n", yystate));
-  YY_ASSERT (0 <= yystate && yystate < YYNSTATES);
+ yysetstate:
   *yyssp = (yytype_int16) yystate;
 
   if (yyss + yystacksize - 1 <= yyssp)
-#if !defined yyoverflow && !defined YYSTACK_RELOCATE
-    goto yyexhaustedlab;
-#else
     {
       /* Get the current used size of the three stacks, in elements.  */
       YYSIZE_T yysize = (YYSIZE_T) (yyssp - yyss + 1);
 
-# if defined yyoverflow
+#ifdef yyoverflow
       {
         /* Give user a chance to reallocate the stack.  Use copies of
            these so that the &'s don't force the real ones into
@@ -3068,7 +3053,10 @@ yysetstate:
         yyvs = yyvs1;
         yyls = yyls1;
       }
-# else /* defined YYSTACK_RELOCATE */
+#else /* no yyoverflow */
+# ifndef YYSTACK_RELOCATE
+      goto yyexhaustedlab;
+# else
       /* Extend the stack our own way.  */
       if (YYMAXDEPTH <= yystacksize)
         goto yyexhaustedlab;
@@ -3085,11 +3073,12 @@ yysetstate:
         YYSTACK_RELOCATE (yyss_alloc, yyss);
         YYSTACK_RELOCATE (yyvs_alloc, yyvs);
         YYSTACK_RELOCATE (yyls_alloc, yyls);
-# undef YYSTACK_RELOCATE
+#  undef YYSTACK_RELOCATE
         if (yyss1 != yyssa)
           YYSTACK_FREE (yyss1);
       }
 # endif
+#endif /* no yyoverflow */
 
       yyssp = yyss + yysize - 1;
       yyvsp = yyvs + yysize - 1;
@@ -3101,18 +3090,19 @@ yysetstate:
       if (yyss + yystacksize - 1 <= yyssp)
         YYABORT;
     }
-#endif /* !defined yyoverflow && !defined YYSTACK_RELOCATE */
+
+  YYDPRINTF ((stderr, "Entering state %d\n", yystate));
 
   if (yystate == YYFINAL)
     YYACCEPT;
 
   goto yybackup;
 
-
 /*-----------.
 | yybackup.  |
 `-----------*/
 yybackup:
+
   /* Do appropriate processing given the current state.  Read a
      lookahead token if we need one and don't already have one.  */
 
@@ -3185,7 +3175,7 @@ yydefault:
 
 
 /*-----------------------------.
-| yyreduce -- do a reduction.  |
+| yyreduce -- Do a reduction.  |
 `-----------------------------*/
 yyreduce:
   /* yyn is the number of a rule to reduce with.  */
@@ -3207,35 +3197,35 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 11:
-#line 281 "ds_parser.ypp"
+        case 11:
+#line 360 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string(); *(yyval.s) += (yyvsp[0].ch); }
-#line 3214 "ds_parser.cpp"
+#line 3204 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 12:
-#line 282 "ds_parser.ypp"
+#line 361 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = (yyvsp[-1].s); *(yyvsp[-1].s) += (yyvsp[0].ch); }
-#line 3220 "ds_parser.cpp"
+#line 3210 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 13:
-#line 286 "ds_parser.ypp"
+#line 365 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = (yyvsp[-1].s); }
-#line 3226 "ds_parser.cpp"
+#line 3216 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 14:
-#line 290 "ds_parser.ypp"
+#line 369 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprStringBuilder();
 		(yyval.pExpression)->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
     }
-#line 3235 "ds_parser.cpp"
+#line 3225 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 15:
-#line 294 "ds_parser.ypp"
+#line 373 "ds_parser.ypp" /* yacc.c:1660  */
     {
         bool err;
         auto esconst = unescapeString(*(yyvsp[0].s),&err);
@@ -3245,21 +3235,21 @@ yyreduce:
         static_cast<ExprStringBuilder *>((yyvsp[-1].pExpression))->elements.push_back(sc);
         (yyval.pExpression) = (yyvsp[-1].pExpression);
     }
-#line 3249 "ds_parser.cpp"
+#line 3239 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 16:
-#line 303 "ds_parser.ypp"
+#line 382 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto se = ExpressionPtr((yyvsp[-1].pExpression));
         static_cast<ExprStringBuilder *>((yyvsp[-3].pExpression))->elements.push_back(se);
         (yyval.pExpression) = (yyvsp[-3].pExpression);
     }
-#line 3259 "ds_parser.cpp"
+#line 3249 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 17:
-#line 311 "ds_parser.ypp"
+#line 390 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto strb = static_cast<ExprStringBuilder *>((yyvsp[-1].pExpression));
         if ( strb->elements.size()==0 ) {
@@ -3273,11 +3263,11 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[-1].pExpression);
         }
     }
-#line 3277 "ds_parser.cpp"
+#line 3267 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 18:
-#line 327 "ds_parser.ypp"
+#line 406 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		if ( g_Program->options.size() ) {
 			g_Program->options.insert ( g_Program->options.begin(),
@@ -3296,30 +3286,30 @@ yyreduce:
 		}
 		delete (yyvsp[0].aaList);
 	}
-#line 3300 "ds_parser.cpp"
+#line 3290 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 22:
-#line 357 "ds_parser.ypp"
+#line 436 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.s) = (yyvsp[0].s);
     }
-#line 3308 "ds_parser.cpp"
+#line 3298 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 23:
-#line 360 "ds_parser.ypp"
+#line 439 "ds_parser.ypp" /* yacc.c:1660  */
     {
         *(yyvsp[-2].s) += ".";
         *(yyvsp[-2].s) += *(yyvsp[0].s);
         delete (yyvsp[0].s);
         (yyval.s) = (yyvsp[-2].s);
     }
-#line 3319 "ds_parser.cpp"
+#line 3309 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 24:
-#line 369 "ds_parser.ypp"
+#line 448 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto modN = getModuleName(*(yyvsp[0].s));
         if ( !g_Program->addModule(modN) ) {
@@ -3328,57 +3318,57 @@ yyreduce:
         }
         delete (yyvsp[0].s);
     }
-#line 3332 "ds_parser.cpp"
+#line 3322 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 28:
-#line 389 "ds_parser.ypp"
+#line 468 "ds_parser.ypp" /* yacc.c:1660  */
     {
         g_Program->expectErrors[CompilationError((yyvsp[0].i))] ++;
     }
-#line 3340 "ds_parser.cpp"
+#line 3330 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 29:
-#line 392 "ds_parser.ypp"
+#line 471 "ds_parser.ypp" /* yacc.c:1660  */
     {
         g_Program->expectErrors[CompilationError((yyvsp[-2].i))] += (yyvsp[0].i);
     }
-#line 3348 "ds_parser.cpp"
+#line 3338 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 30:
-#line 398 "ds_parser.ypp"
+#line 477 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = nullptr; }
-#line 3354 "ds_parser.cpp"
+#line 3344 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 31:
-#line 399 "ds_parser.ypp"
+#line 478 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3360 "ds_parser.cpp"
+#line 3350 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 32:
-#line 400 "ds_parser.ypp"
+#line 479 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprIfThenElse(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),
             ExpressionPtr((yyvsp[-1].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 3369 "ds_parser.cpp"
+#line 3359 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 33:
-#line 407 "ds_parser.ypp"
+#line 486 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprIfThenElse(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),
             ExpressionPtr((yyvsp[-1].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 3378 "ds_parser.cpp"
+#line 3368 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 34:
-#line 414 "ds_parser.ypp"
+#line 493 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pFor = new ExprFor(tokAt((yylsp[-5])));
         pFor->iterators = *(yyvsp[-4].pNameList);
@@ -3388,11 +3378,11 @@ yyreduce:
         ((ExprBlock *)(yyvsp[0].pExpression))->inTheLoop = true;
         (yyval.pExpression) = pFor;
     }
-#line 3392 "ds_parser.cpp"
+#line 3382 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 35:
-#line 426 "ds_parser.ypp"
+#line 505 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pWhile = new ExprWhile(tokAt((yylsp[-2])));
         pWhile->cond = ExpressionPtr((yyvsp[-1].pExpression));
@@ -3400,90 +3390,90 @@ yyreduce:
         ((ExprBlock *)(yyvsp[0].pExpression))->inTheLoop = true;
         (yyval.pExpression) = pWhile;
     }
-#line 3404 "ds_parser.cpp"
+#line 3394 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 36:
-#line 436 "ds_parser.ypp"
+#line 515 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pWith = new ExprWith(tokAt((yylsp[-2])));
         pWith->with = ExpressionPtr((yyvsp[-1].pExpression));
         pWith->body = ExpressionPtr((yyvsp[0].pExpression));
         (yyval.pExpression) = pWith;
     }
-#line 3415 "ds_parser.cpp"
+#line 3405 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 37:
-#line 445 "ds_parser.ypp"
+#line 524 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
-#line 3421 "ds_parser.cpp"
+#line 3411 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 38:
-#line 446 "ds_parser.ypp"
+#line 525 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s)); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
-#line 3427 "ds_parser.cpp"
+#line 3417 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 39:
-#line 447 "ds_parser.ypp"
+#line 526 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),(yyvsp[0].i)); delete (yyvsp[-2].s); }
-#line 3433 "ds_parser.cpp"
+#line 3423 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 40:
-#line 448 "ds_parser.ypp"
+#line 527 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),float((yyvsp[0].fd))); delete (yyvsp[-2].s); }
-#line 3439 "ds_parser.cpp"
+#line 3429 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 41:
-#line 449 "ds_parser.ypp"
+#line 528 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),true); delete (yyvsp[-2].s); }
-#line 3445 "ds_parser.cpp"
+#line 3435 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 42:
-#line 450 "ds_parser.ypp"
+#line 529 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),false); delete (yyvsp[-2].s); }
-#line 3451 "ds_parser.cpp"
+#line 3441 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 43:
-#line 454 "ds_parser.ypp"
+#line 533 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.aaList) = new AnnotationArgumentList();
         (yyval.aaList)->push_back(*(yyvsp[0].aa));
         delete (yyvsp[0].aa);
     }
-#line 3461 "ds_parser.cpp"
+#line 3451 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 44:
-#line 459 "ds_parser.ypp"
+#line 538 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.aaList) = (yyvsp[-2].aaList);
             (yyval.aaList)->push_back(*(yyvsp[0].aa));
             delete (yyvsp[0].aa);
     }
-#line 3471 "ds_parser.cpp"
+#line 3461 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 45:
-#line 467 "ds_parser.ypp"
+#line 546 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = (yyvsp[0].s); }
-#line 3477 "ds_parser.cpp"
+#line 3467 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 46:
-#line 468 "ds_parser.ypp"
+#line 547 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("require"); }
-#line 3483 "ds_parser.cpp"
+#line 3473 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 47:
-#line 472 "ds_parser.ypp"
+#line 551 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.fa) = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*(yyvsp[0].s),tokAt((yylsp[0]))) ) {
@@ -3491,11 +3481,11 @@ yyreduce:
         }
         delete (yyvsp[0].s);
     }
-#line 3495 "ds_parser.cpp"
+#line 3485 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 48:
-#line 479 "ds_parser.ypp"
+#line 558 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.fa) = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*(yyvsp[-3].s),tokAt((yylsp[-3]))) ) {
@@ -3505,302 +3495,302 @@ yyreduce:
         delete (yyvsp[-1].aaList);
         delete (yyvsp[-3].s);
     }
-#line 3509 "ds_parser.cpp"
+#line 3499 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 49:
-#line 491 "ds_parser.ypp"
+#line 570 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.faList) = new AnnotationList();
             (yyval.faList)->push_back(AnnotationDeclarationPtr((yyvsp[0].fa)));
     }
-#line 3518 "ds_parser.cpp"
+#line 3508 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 50:
-#line 495 "ds_parser.ypp"
+#line 574 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.faList) = (yyvsp[-2].faList);
         (yyval.faList)->push_back(AnnotationDeclarationPtr((yyvsp[0].fa)));
     }
-#line 3527 "ds_parser.cpp"
+#line 3517 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 51:
-#line 502 "ds_parser.ypp"
+#line 581 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.faList) = nullptr; }
-#line 3533 "ds_parser.cpp"
+#line 3523 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 52:
-#line 503 "ds_parser.ypp"
+#line 582 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.faList) = (yyvsp[-1].faList); }
-#line 3539 "ds_parser.cpp"
+#line 3529 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 53:
-#line 507 "ds_parser.ypp"
+#line 586 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDeclList) = nullptr; }
-#line 3545 "ds_parser.cpp"
+#line 3535 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 54:
-#line 508 "ds_parser.ypp"
+#line 587 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDeclList) = nullptr; }
-#line 3551 "ds_parser.cpp"
+#line 3541 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 55:
-#line 509 "ds_parser.ypp"
+#line 588 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDeclList) = (yyvsp[-1].pVarDeclList); }
-#line 3557 "ds_parser.cpp"
+#line 3547 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 56:
-#line 513 "ds_parser.ypp"
+#line 592 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
         (yyval.pTypeDecl)->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
     }
-#line 3566 "ds_parser.cpp"
+#line 3556 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 57:
-#line 517 "ds_parser.ypp"
+#line 596 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = (yyvsp[0].pTypeDecl);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 3575 "ds_parser.cpp"
+#line 3565 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 58:
-#line 524 "ds_parser.ypp"
+#line 603 "ds_parser.ypp" /* yacc.c:1660  */
     { 
 		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
 		(yyval.s) = (yyvsp[0].s); 
 	}
-#line 3584 "ds_parser.cpp"
+#line 3574 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 59:
-#line 528 "ds_parser.ypp"
+#line 607 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("!"); }
-#line 3590 "ds_parser.cpp"
+#line 3580 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 60:
-#line 529 "ds_parser.ypp"
+#line 608 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("~"); }
-#line 3596 "ds_parser.cpp"
+#line 3586 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 61:
-#line 530 "ds_parser.ypp"
+#line 609 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("+="); }
-#line 3602 "ds_parser.cpp"
+#line 3592 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 62:
-#line 531 "ds_parser.ypp"
+#line 610 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("-="); }
-#line 3608 "ds_parser.cpp"
+#line 3598 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 63:
-#line 532 "ds_parser.ypp"
+#line 611 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("*="); }
-#line 3614 "ds_parser.cpp"
+#line 3604 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 64:
-#line 533 "ds_parser.ypp"
+#line 612 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("/="); }
-#line 3620 "ds_parser.cpp"
+#line 3610 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 65:
-#line 534 "ds_parser.ypp"
+#line 613 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("%="); }
-#line 3626 "ds_parser.cpp"
+#line 3616 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 66:
-#line 535 "ds_parser.ypp"
+#line 614 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("&="); }
-#line 3632 "ds_parser.cpp"
+#line 3622 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 67:
-#line 536 "ds_parser.ypp"
+#line 615 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("|="); }
-#line 3638 "ds_parser.cpp"
+#line 3628 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 68:
-#line 537 "ds_parser.ypp"
+#line 616 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("^="); }
-#line 3644 "ds_parser.cpp"
+#line 3634 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 69:
-#line 538 "ds_parser.ypp"
+#line 617 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("+"); }
-#line 3650 "ds_parser.cpp"
+#line 3640 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 70:
-#line 539 "ds_parser.ypp"
+#line 618 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("-"); }
-#line 3656 "ds_parser.cpp"
+#line 3646 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 71:
-#line 540 "ds_parser.ypp"
+#line 619 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("*"); }
-#line 3662 "ds_parser.cpp"
+#line 3652 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 72:
-#line 541 "ds_parser.ypp"
+#line 620 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("/"); }
-#line 3668 "ds_parser.cpp"
+#line 3658 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 73:
-#line 542 "ds_parser.ypp"
+#line 621 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("%"); }
-#line 3674 "ds_parser.cpp"
+#line 3664 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 74:
-#line 543 "ds_parser.ypp"
+#line 622 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("<"); }
-#line 3680 "ds_parser.cpp"
+#line 3670 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 75:
-#line 544 "ds_parser.ypp"
+#line 623 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string(">"); }
-#line 3686 "ds_parser.cpp"
+#line 3676 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 76:
-#line 545 "ds_parser.ypp"
+#line 624 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("=="); }
-#line 3692 "ds_parser.cpp"
+#line 3682 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 77:
-#line 546 "ds_parser.ypp"
+#line 625 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("!="); }
-#line 3698 "ds_parser.cpp"
+#line 3688 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 78:
-#line 547 "ds_parser.ypp"
+#line 626 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("<="); }
-#line 3704 "ds_parser.cpp"
+#line 3694 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 79:
-#line 548 "ds_parser.ypp"
+#line 627 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string(">="); }
-#line 3710 "ds_parser.cpp"
+#line 3700 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 80:
-#line 549 "ds_parser.ypp"
+#line 628 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("&"); }
-#line 3716 "ds_parser.cpp"
+#line 3706 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 81:
-#line 550 "ds_parser.ypp"
+#line 629 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("|"); }
-#line 3722 "ds_parser.cpp"
+#line 3712 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 82:
-#line 551 "ds_parser.ypp"
+#line 630 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("^"); }
-#line 3728 "ds_parser.cpp"
+#line 3718 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 83:
-#line 552 "ds_parser.ypp"
+#line 631 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("++"); }
-#line 3734 "ds_parser.cpp"
+#line 3724 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 84:
-#line 553 "ds_parser.ypp"
+#line 632 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("--"); }
-#line 3740 "ds_parser.cpp"
+#line 3730 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 85:
-#line 554 "ds_parser.ypp"
+#line 633 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("+++"); }
-#line 3746 "ds_parser.cpp"
+#line 3736 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 86:
-#line 555 "ds_parser.ypp"
+#line 634 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("---"); }
-#line 3752 "ds_parser.cpp"
+#line 3742 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 87:
-#line 556 "ds_parser.ypp"
+#line 635 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("<<"); }
-#line 3758 "ds_parser.cpp"
+#line 3748 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 88:
-#line 557 "ds_parser.ypp"
+#line 636 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string(">>"); }
-#line 3764 "ds_parser.cpp"
+#line 3754 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 89:
-#line 558 "ds_parser.ypp"
+#line 637 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("<<="); }
-#line 3770 "ds_parser.cpp"
+#line 3760 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 90:
-#line 559 "ds_parser.ypp"
+#line 638 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string(">>="); }
-#line 3776 "ds_parser.cpp"
+#line 3766 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 91:
-#line 560 "ds_parser.ypp"
+#line 639 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("<<<"); }
-#line 3782 "ds_parser.cpp"
+#line 3772 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 92:
-#line 561 "ds_parser.ypp"
+#line 640 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string(">>>"); }
-#line 3788 "ds_parser.cpp"
+#line 3778 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 93:
-#line 562 "ds_parser.ypp"
+#line 641 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string("<<<="); }
-#line 3794 "ds_parser.cpp"
+#line 3784 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 94:
-#line 563 "ds_parser.ypp"
+#line 642 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = new string(">>>="); }
-#line 3800 "ds_parser.cpp"
+#line 3790 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 95:
-#line 568 "ds_parser.ypp"
+#line 647 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pFunction = make_shared<Function>();
         pFunction->at = tokAt((yylsp[-4]));
@@ -3867,19 +3857,19 @@ yyreduce:
         }
         delete (yyvsp[-3].s);
     }
-#line 3871 "ds_parser.cpp"
+#line 3861 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 96:
-#line 637 "ds_parser.ypp"
+#line 716 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = (yyvsp[-1].pExpression);
     }
-#line 3879 "ds_parser.cpp"
+#line 3869 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 97:
-#line 640 "ds_parser.ypp"
+#line 719 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pB = (ExprBlock *) (yyvsp[-5].pExpression);
         auto pF = (ExprBlock *) (yyvsp[-1].pExpression);
@@ -3887,123 +3877,123 @@ yyreduce:
         (yyval.pExpression) = (yyvsp[-5].pExpression);
         delete (yyvsp[-1].pExpression);
     }
-#line 3891 "ds_parser.cpp"
+#line 3881 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 98:
-#line 650 "ds_parser.ypp"
+#line 729 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = nullptr; }
-#line 3897 "ds_parser.cpp"
+#line 3887 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 99:
-#line 651 "ds_parser.ypp"
+#line 730 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3903 "ds_parser.cpp"
+#line 3893 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 100:
-#line 652 "ds_parser.ypp"
+#line 731 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3909 "ds_parser.cpp"
+#line 3899 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 101:
-#line 653 "ds_parser.ypp"
+#line 732 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3915 "ds_parser.cpp"
+#line 3905 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 102:
-#line 654 "ds_parser.ypp"
+#line 733 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3921 "ds_parser.cpp"
+#line 3911 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 103:
-#line 655 "ds_parser.ypp"
+#line 734 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3927 "ds_parser.cpp"
+#line 3917 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 104:
-#line 656 "ds_parser.ypp"
+#line 735 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3933 "ds_parser.cpp"
+#line 3923 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 105:
-#line 657 "ds_parser.ypp"
+#line 736 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3939 "ds_parser.cpp"
+#line 3929 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 106:
-#line 658 "ds_parser.ypp"
+#line 737 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3945 "ds_parser.cpp"
+#line 3935 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 107:
-#line 659 "ds_parser.ypp"
+#line 738 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 3951 "ds_parser.cpp"
+#line 3941 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 108:
-#line 660 "ds_parser.ypp"
+#line 739 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3957 "ds_parser.cpp"
+#line 3947 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 109:
-#line 661 "ds_parser.ypp"
+#line 740 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3963 "ds_parser.cpp"
+#line 3953 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 110:
-#line 662 "ds_parser.ypp"
+#line 741 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 3969 "ds_parser.cpp"
+#line 3959 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 111:
-#line 663 "ds_parser.ypp"
+#line 742 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = nullptr; }
-#line 3975 "ds_parser.cpp"
+#line 3965 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 112:
-#line 667 "ds_parser.ypp"
+#line 746 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprBlock();
 		(yyval.pExpression)->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
     }
-#line 3984 "ds_parser.cpp"
+#line 3974 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 113:
-#line 671 "ds_parser.ypp"
+#line 750 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = (yyvsp[-1].pExpression);
         if ( (yyvsp[0].pExpression) ) {
             static_cast<ExprBlock*>((yyvsp[-1].pExpression))->list.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         }
     }
-#line 3995 "ds_parser.cpp"
+#line 3985 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 114:
-#line 677 "ds_parser.ypp"
+#line 756 "ds_parser.ypp" /* yacc.c:1660  */
     {
         delete (yyvsp[-1].pExpression); (yyval.pExpression) = nullptr; YYABORT;
     }
-#line 4003 "ds_parser.cpp"
+#line 3993 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 115:
-#line 683 "ds_parser.ypp"
+#line 762 "ds_parser.ypp" /* yacc.c:1660  */
     {
         Expression * pipeCall = (yyvsp[-2].pExpression)->tail();
         if ( pipeCall->rtti_isCallLikeExpr() ) {
@@ -4015,163 +4005,163 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[-2].pExpression);
         }
     }
-#line 4019 "ds_parser.cpp"
+#line 4009 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 116:
-#line 697 "ds_parser.ypp"
+#line 776 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = (yyvsp[0].s); }
-#line 4025 "ds_parser.cpp"
+#line 4015 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 117:
-#line 698 "ds_parser.ypp"
+#line 777 "ds_parser.ypp" /* yacc.c:1660  */
     {
             *(yyvsp[-2].s) += "::";
             *(yyvsp[-2].s) += *(yyvsp[0].s);
             delete (yyvsp[0].s);
             (yyval.s) = (yyvsp[-2].s);
         }
-#line 4036 "ds_parser.cpp"
+#line 4026 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 118:
-#line 704 "ds_parser.ypp"
+#line 783 "ds_parser.ypp" /* yacc.c:1660  */
     { *(yyvsp[0].s) = "::" + *(yyvsp[0].s); (yyval.s) = (yyvsp[0].s); }
-#line 4042 "ds_parser.cpp"
+#line 4032 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 119:
-#line 708 "ds_parser.ypp"
+#line 787 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprDelete(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 4050 "ds_parser.cpp"
+#line 4040 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 120:
-#line 714 "ds_parser.ypp"
+#line 793 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprNew(tokAt((yylsp[-1])),TypeDeclPtr((yyvsp[0].pTypeDecl)),false);
     }
-#line 4058 "ds_parser.cpp"
+#line 4048 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 121:
-#line 717 "ds_parser.ypp"
+#line 796 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprNew(tokAt((yylsp[-3])),TypeDeclPtr((yyvsp[-2].pTypeDecl)),true);
     }
-#line 4066 "ds_parser.cpp"
+#line 4056 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 122:
-#line 720 "ds_parser.ypp"
+#line 799 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pNew = new ExprNew(tokAt((yylsp[-4])),TypeDeclPtr((yyvsp[-3].pTypeDecl)),true);
         (yyval.pExpression) = parseFunctionArguments(pNew,(yyvsp[-1].pExpression));
     }
-#line 4075 "ds_parser.cpp"
+#line 4065 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 123:
-#line 724 "ds_parser.ypp"
+#line 803 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprAscend(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 4083 "ds_parser.cpp"
+#line 4073 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 124:
-#line 730 "ds_parser.ypp"
+#line 809 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprBreak(tokAt((yylsp[0]))); }
-#line 4089 "ds_parser.cpp"
+#line 4079 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 125:
-#line 734 "ds_parser.ypp"
+#line 813 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprContinue(tokAt((yylsp[0]))); }
-#line 4095 "ds_parser.cpp"
+#line 4085 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 126:
-#line 738 "ds_parser.ypp"
+#line 817 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprReturn(tokAt((yylsp[-1])),nullptr);
     }
-#line 4103 "ds_parser.cpp"
+#line 4093 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 127:
-#line 741 "ds_parser.ypp"
+#line 820 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprReturn(tokAt((yylsp[-2])),ExpressionPtr((yyvsp[-1].pExpression)));
     }
-#line 4111 "ds_parser.cpp"
+#line 4101 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 128:
-#line 744 "ds_parser.ypp"
+#line 823 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pRet = new ExprReturn(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-1].pExpression)));
         pRet->moveSemantics = true;
         (yyval.pExpression) = pRet;
     }
-#line 4121 "ds_parser.cpp"
+#line 4111 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 129:
-#line 749 "ds_parser.ypp"
+#line 828 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprReturn(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 4129 "ds_parser.cpp"
+#line 4119 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 130:
-#line 752 "ds_parser.ypp"
+#line 831 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pRet = new ExprReturn(tokAt((yylsp[-2])),ExpressionPtr((yyvsp[0].pExpression)));
         pRet->moveSemantics = true;
         (yyval.pExpression) = pRet;
     }
-#line 4139 "ds_parser.cpp"
+#line 4129 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 131:
-#line 760 "ds_parser.ypp"
+#line 839 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprTryCatch(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 4147 "ds_parser.cpp"
+#line 4137 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 132:
-#line 766 "ds_parser.ypp"
+#line 845 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = false; }
-#line 4153 "ds_parser.cpp"
+#line 4143 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 133:
-#line 767 "ds_parser.ypp"
+#line 846 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = true; }
-#line 4159 "ds_parser.cpp"
+#line 4149 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 134:
-#line 771 "ds_parser.ypp"
+#line 850 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = true; }
-#line 4165 "ds_parser.cpp"
+#line 4155 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 135:
-#line 772 "ds_parser.ypp"
+#line 851 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = false; }
-#line 4171 "ds_parser.cpp"
+#line 4161 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 136:
-#line 776 "ds_parser.ypp"
+#line 855 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pLet = new ExprLet();
         pLet->inScope = (yyvsp[-1].b);
@@ -4202,103 +4192,103 @@ yyreduce:
         delete (yyvsp[0].pVarDecl);
         (yyval.pExpression) = pLet;
     }
-#line 4206 "ds_parser.cpp"
+#line 4196 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 137:
-#line 809 "ds_parser.ypp"
+#line 888 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprCast(tokAt((yylsp[-4])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-2].pTypeDecl)));
     }
-#line 4214 "ds_parser.cpp"
+#line 4204 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 138:
-#line 812 "ds_parser.ypp"
+#line 891 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pCast = new ExprCast(tokAt((yylsp[-4])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-2].pTypeDecl)));
         pCast->upcast = true;
         (yyval.pExpression) = pCast;
     }
-#line 4224 "ds_parser.cpp"
+#line 4214 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 139:
-#line 817 "ds_parser.ypp"
+#line 896 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pCast = new ExprCast(tokAt((yylsp[-4])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-2].pTypeDecl)));
         pCast->reinterpret = true;
         (yyval.pExpression) = pCast;
     }
-#line 4234 "ds_parser.cpp"
+#line 4224 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 140:
-#line 825 "ds_parser.ypp"
+#line 904 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = new ExprTypeInfo(tokAt((yylsp[-4])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[-1].pExpression)));
             delete (yyvsp[-2].s);
     }
-#line 4243 "ds_parser.cpp"
+#line 4233 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 141:
-#line 829 "ds_parser.ypp"
+#line 908 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = new ExprTypeInfo(tokAt((yylsp[-7])),*(yyvsp[-5].s),ExpressionPtr((yyvsp[-1].pExpression)),*(yyvsp[-3].s));
             delete (yyvsp[-5].s);
             delete (yyvsp[-3].s);
     }
-#line 4253 "ds_parser.cpp"
+#line 4243 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 142:
-#line 834 "ds_parser.ypp"
+#line 913 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = new ExprTypeInfo(tokAt((yylsp[-5])),*(yyvsp[-3].s),TypeDeclPtr((yyvsp[-1].pTypeDecl)));
             delete (yyvsp[-3].s);
     }
-#line 4262 "ds_parser.cpp"
+#line 4252 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 143:
-#line 838 "ds_parser.ypp"
+#line 917 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = new ExprTypeInfo(tokAt((yylsp[-8])),*(yyvsp[-6].s),TypeDeclPtr((yyvsp[-1].pTypeDecl)),*(yyvsp[-4].s));
             delete (yyvsp[-6].s);
             delete (yyvsp[-4].s);
     }
-#line 4272 "ds_parser.cpp"
+#line 4262 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 144:
-#line 846 "ds_parser.ypp"
+#line 925 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = (yyvsp[0].pExpression);
     }
-#line 4280 "ds_parser.cpp"
+#line 4270 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 145:
-#line 849 "ds_parser.ypp"
+#line 928 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = new ExprSequence(tokAt((yylsp[-2])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
     }
-#line 4288 "ds_parser.cpp"
+#line 4278 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 146:
-#line 855 "ds_parser.ypp"
+#line 934 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ExprBlock * closure = (ExprBlock *) (yyvsp[0].pExpression);
         (yyval.pExpression) = new ExprMakeBlock(tokAt((yylsp[0])),ExpressionPtr((yyvsp[0].pExpression)));
         closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
     }
-#line 4298 "ds_parser.cpp"
+#line 4288 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 147:
-#line 861 "ds_parser.ypp"
+#line 940 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = new ExprMakeBlock(tokAt((yylsp[0])),ExpressionPtr((yyvsp[0].pExpression)));
         ExprBlock * closure = (ExprBlock *) (yyvsp[0].pExpression);
@@ -4347,143 +4337,143 @@ yyreduce:
             delete (yyvsp[-3].faList);
         }
     }
-#line 4351 "ds_parser.cpp"
+#line 4341 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 148:
-#line 912 "ds_parser.ypp"
+#line 991 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstInt(tokAt((yylsp[0])),(int32_t)(yyvsp[0].i)); }
-#line 4357 "ds_parser.cpp"
+#line 4347 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 149:
-#line 913 "ds_parser.ypp"
+#line 992 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstUInt(tokAt((yylsp[0])),(uint32_t)(yyvsp[0].ui)); }
-#line 4363 "ds_parser.cpp"
+#line 4353 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 150:
-#line 914 "ds_parser.ypp"
+#line 993 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstInt64(tokAt((yylsp[0])),(int64_t)(yyvsp[0].i64)); }
-#line 4369 "ds_parser.cpp"
+#line 4359 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 151:
-#line 915 "ds_parser.ypp"
+#line 994 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstUInt64(tokAt((yylsp[0])),(uint64_t)(yyvsp[0].ui64)); }
-#line 4375 "ds_parser.cpp"
+#line 4365 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 152:
-#line 916 "ds_parser.ypp"
+#line 995 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstFloat(tokAt((yylsp[0])),(float)(yyvsp[0].fd)); }
-#line 4381 "ds_parser.cpp"
+#line 4371 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 153:
-#line 917 "ds_parser.ypp"
+#line 996 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstDouble(tokAt((yylsp[0])),(double)(yyvsp[0].d)); }
-#line 4387 "ds_parser.cpp"
+#line 4377 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 154:
-#line 921 "ds_parser.ypp"
+#line 1000 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4393 "ds_parser.cpp"
+#line 4383 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 155:
-#line 922 "ds_parser.ypp"
+#line 1001 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprCopy(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4399 "ds_parser.cpp"
+#line 4389 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 156:
-#line 923 "ds_parser.ypp"
+#line 1002 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprMove(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4405 "ds_parser.cpp"
+#line 4395 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 157:
-#line 924 "ds_parser.ypp"
+#line 1003 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprClone(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4411 "ds_parser.cpp"
+#line 4401 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 158:
-#line 925 "ds_parser.ypp"
+#line 1004 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"&=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4417 "ds_parser.cpp"
+#line 4407 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 159:
-#line 926 "ds_parser.ypp"
+#line 1005 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"|=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4423 "ds_parser.cpp"
+#line 4413 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 160:
-#line 927 "ds_parser.ypp"
+#line 1006 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"^=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4429 "ds_parser.cpp"
+#line 4419 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 161:
-#line 928 "ds_parser.ypp"
+#line 1007 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"+=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4435 "ds_parser.cpp"
+#line 4425 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 162:
-#line 929 "ds_parser.ypp"
+#line 1008 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"-=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4441 "ds_parser.cpp"
+#line 4431 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 163:
-#line 930 "ds_parser.ypp"
+#line 1009 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"*=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4447 "ds_parser.cpp"
+#line 4437 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 164:
-#line 931 "ds_parser.ypp"
+#line 1010 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"/=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4453 "ds_parser.cpp"
+#line 4443 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 165:
-#line 932 "ds_parser.ypp"
+#line 1011 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"%=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4459 "ds_parser.cpp"
+#line 4449 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 166:
-#line 933 "ds_parser.ypp"
+#line 1012 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4465 "ds_parser.cpp"
+#line 4455 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 167:
-#line 934 "ds_parser.ypp"
+#line 1013 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">>=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4471 "ds_parser.cpp"
+#line 4461 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 168:
-#line 935 "ds_parser.ypp"
+#line 1014 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<<<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4477 "ds_parser.cpp"
+#line 4467 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 169:
-#line 936 "ds_parser.ypp"
+#line 1015 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">>>=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4483 "ds_parser.cpp"
+#line 4473 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 170:
-#line 940 "ds_parser.ypp"
+#line 1019 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto nc = new ExprNamedCall(tokAt((yylsp[-5])),*(yyvsp[-5].s));
         nc->arguments = *(yyvsp[-2].pMakeStruct);
@@ -4491,21 +4481,21 @@ yyreduce:
         delete (yyvsp[-5].s);
         (yyval.pExpression) = nc;
     }
-#line 4495 "ds_parser.cpp"
+#line 4485 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 171:
-#line 951 "ds_parser.ypp"
+#line 1030 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pInvoke = makeInvokeMethod(tokAt((yylsp[-3])), (yyvsp[-4].pExpression), *(yyvsp[-2].s));
         delete (yyvsp[-2].s);
         (yyval.pExpression) = pInvoke;
     }
-#line 4505 "ds_parser.cpp"
+#line 4495 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 172:
-#line 956 "ds_parser.ypp"
+#line 1035 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pInvoke = makeInvokeMethod(tokAt((yylsp[-4])), (yyvsp[-5].pExpression), *(yyvsp[-3].s));
         auto callArgs = sequenceToList((yyvsp[-1].pExpression));
@@ -4513,347 +4503,347 @@ yyreduce:
         delete (yyvsp[-3].s);
         (yyval.pExpression) = pInvoke;
     }
-#line 4517 "ds_parser.cpp"
+#line 4507 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 173:
-#line 966 "ds_parser.ypp"
+#line 1045 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstPtr(tokAt((yylsp[0])),nullptr); }
-#line 4523 "ds_parser.cpp"
+#line 4513 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 174:
-#line 967 "ds_parser.ypp"
+#line 1046 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprVar(tokAt((yylsp[0])),*(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4529 "ds_parser.cpp"
+#line 4519 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 175:
-#line 968 "ds_parser.ypp"
+#line 1047 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4535 "ds_parser.cpp"
+#line 4525 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 176:
-#line 969 "ds_parser.ypp"
+#line 1048 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4541 "ds_parser.cpp"
+#line 4531 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 177:
-#line 970 "ds_parser.ypp"
+#line 1049 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4547 "ds_parser.cpp"
+#line 4537 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 178:
-#line 971 "ds_parser.ypp"
+#line 1050 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstBool(tokAt((yylsp[0])),true); }
-#line 4553 "ds_parser.cpp"
+#line 4543 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 179:
-#line 972 "ds_parser.ypp"
+#line 1051 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprConstBool(tokAt((yylsp[0])),false); }
-#line 4559 "ds_parser.cpp"
+#line 4549 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 180:
-#line 973 "ds_parser.ypp"
+#line 1052 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"!",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4565 "ds_parser.cpp"
+#line 4555 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 181:
-#line 974 "ds_parser.ypp"
+#line 1053 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"~",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4571 "ds_parser.cpp"
+#line 4561 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 182:
-#line 975 "ds_parser.ypp"
+#line 1054 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"+",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4577 "ds_parser.cpp"
+#line 4567 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 183:
-#line 976 "ds_parser.ypp"
+#line 1055 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"-",ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4583 "ds_parser.cpp"
+#line 4573 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 184:
-#line 977 "ds_parser.ypp"
+#line 1056 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4589 "ds_parser.cpp"
+#line 4579 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 185:
-#line 978 "ds_parser.ypp"
+#line 1057 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">>", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4595 "ds_parser.cpp"
+#line 4585 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 186:
-#line 979 "ds_parser.ypp"
+#line 1058 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<<<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4601 "ds_parser.cpp"
+#line 4591 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 187:
-#line 980 "ds_parser.ypp"
+#line 1059 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">>>", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4607 "ds_parser.cpp"
+#line 4597 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 188:
-#line 981 "ds_parser.ypp"
+#line 1060 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"+", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4613 "ds_parser.cpp"
+#line 4603 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 189:
-#line 982 "ds_parser.ypp"
+#line 1061 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"-", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4619 "ds_parser.cpp"
+#line 4609 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 190:
-#line 983 "ds_parser.ypp"
+#line 1062 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"*", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4625 "ds_parser.cpp"
+#line 4615 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 191:
-#line 984 "ds_parser.ypp"
+#line 1063 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"/", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4631 "ds_parser.cpp"
+#line 4621 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 192:
-#line 985 "ds_parser.ypp"
+#line 1064 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"%", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4637 "ds_parser.cpp"
+#line 4627 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 193:
-#line 986 "ds_parser.ypp"
+#line 1065 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4643 "ds_parser.cpp"
+#line 4633 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 194:
-#line 987 "ds_parser.ypp"
+#line 1066 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4649 "ds_parser.cpp"
+#line 4639 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 195:
-#line 988 "ds_parser.ypp"
+#line 1067 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"==", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4655 "ds_parser.cpp"
+#line 4645 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 196:
-#line 989 "ds_parser.ypp"
+#line 1068 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"!=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4661 "ds_parser.cpp"
+#line 4651 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 197:
-#line 990 "ds_parser.ypp"
+#line 1069 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4667 "ds_parser.cpp"
+#line 4657 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 198:
-#line 991 "ds_parser.ypp"
+#line 1070 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),">=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4673 "ds_parser.cpp"
+#line 4663 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 199:
-#line 992 "ds_parser.ypp"
+#line 1071 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"&", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4679 "ds_parser.cpp"
+#line 4669 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 200:
-#line 993 "ds_parser.ypp"
+#line 1072 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"|", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4685 "ds_parser.cpp"
+#line 4675 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 201:
-#line 994 "ds_parser.ypp"
+#line 1073 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp2(tokAt((yylsp[-1])),"^", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4691 "ds_parser.cpp"
+#line 4681 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 202:
-#line 995 "ds_parser.ypp"
+#line 1074 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"++", ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4697 "ds_parser.cpp"
+#line 4687 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 203:
-#line 996 "ds_parser.ypp"
+#line 1075 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[-1])),"--", ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4703 "ds_parser.cpp"
+#line 4693 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 204:
-#line 997 "ds_parser.ypp"
+#line 1076 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[0])),"+++", ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4709 "ds_parser.cpp"
+#line 4699 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 205:
-#line 998 "ds_parser.ypp"
+#line 1077 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprOp1(tokAt((yylsp[0])),"---", ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4715 "ds_parser.cpp"
+#line 4705 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 206:
-#line 999 "ds_parser.ypp"
+#line 1078 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[-1].pExpression); }
-#line 4721 "ds_parser.cpp"
+#line 4711 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 207:
-#line 1000 "ds_parser.ypp"
+#line 1079 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprAt(tokAt((yylsp[-2])), ExpressionPtr((yyvsp[-3].pExpression)), ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4727 "ds_parser.cpp"
+#line 4717 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 208:
-#line 1001 "ds_parser.ypp"
+#line 1080 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprField(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4733 "ds_parser.cpp"
+#line 4723 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 209:
-#line 1002 "ds_parser.ypp"
+#line 1081 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprSafeField(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4739 "ds_parser.cpp"
+#line 4729 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 210:
-#line 1003 "ds_parser.ypp"
+#line 1082 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprAddr(tokAt((yylsp[-1])),*(yyvsp[0].s)); delete (yyvsp[0].s); }
-#line 4745 "ds_parser.cpp"
+#line 4735 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 211:
-#line 1004 "ds_parser.ypp"
+#line 1083 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = g_Program->makeCall(tokAt((yylsp[-2])),*(yyvsp[-2].s));
             delete (yyvsp[-2].s);
         }
-#line 4754 "ds_parser.cpp"
+#line 4744 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 212:
-#line 1008 "ds_parser.ypp"
+#line 1087 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = parseFunctionArguments(g_Program->makeCall(tokAt((yylsp[-3])),*(yyvsp[-3].s)),(yyvsp[-1].pExpression));
             delete (yyvsp[-3].s);
         }
-#line 4763 "ds_parser.cpp"
+#line 4753 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 213:
-#line 1012 "ds_parser.ypp"
+#line 1091 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = g_Program->makeCall(tokAt((yylsp[-2])),das_to_string((yyvsp[-2].type)));
     }
-#line 4771 "ds_parser.cpp"
+#line 4761 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 214:
-#line 1015 "ds_parser.ypp"
+#line 1094 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = parseFunctionArguments(g_Program->makeCall(tokAt((yylsp[-3])),das_to_string((yyvsp[-3].type))),(yyvsp[-1].pExpression));
         }
-#line 4779 "ds_parser.cpp"
+#line 4769 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 215:
-#line 1018 "ds_parser.ypp"
+#line 1097 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprPtr2Ref(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4785 "ds_parser.cpp"
+#line 4775 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 216:
-#line 1019 "ds_parser.ypp"
+#line 1098 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprRef2Ptr(tokAt((yylsp[-3])),ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4791 "ds_parser.cpp"
+#line 4781 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 217:
-#line 1020 "ds_parser.ypp"
+#line 1099 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprMakeLambda(tokAt((yylsp[-2]))); }
-#line 4797 "ds_parser.cpp"
+#line 4787 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 218:
-#line 1021 "ds_parser.ypp"
+#line 1100 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprMakeLambda(tokAt((yylsp[-3])), ExpressionPtr((yyvsp[-1].pExpression))); }
-#line 4803 "ds_parser.cpp"
+#line 4793 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 219:
-#line 1022 "ds_parser.ypp"
+#line 1101 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = new ExprNullCoalescing(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
-#line 4809 "ds_parser.cpp"
+#line 4799 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 220:
-#line 1023 "ds_parser.ypp"
+#line 1102 "ds_parser.ypp" /* yacc.c:1660  */
     {
             (yyval.pExpression) = new ExprOp3(tokAt((yylsp[-3])),"?",ExpressionPtr((yyvsp[-4].pExpression)),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
         }
-#line 4817 "ds_parser.cpp"
+#line 4807 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 221:
-#line 1026 "ds_parser.ypp"
+#line 1105 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4823 "ds_parser.cpp"
+#line 4813 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 222:
-#line 1027 "ds_parser.ypp"
+#line 1106 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4829 "ds_parser.cpp"
+#line 4819 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 223:
-#line 1028 "ds_parser.ypp"
+#line 1107 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4835 "ds_parser.cpp"
+#line 4825 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 224:
-#line 1029 "ds_parser.ypp"
+#line 1108 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4841 "ds_parser.cpp"
+#line 4831 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 225:
-#line 1030 "ds_parser.ypp"
+#line 1109 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4847 "ds_parser.cpp"
+#line 4837 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 226:
-#line 1031 "ds_parser.ypp"
+#line 1110 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 4853 "ds_parser.cpp"
+#line 4843 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 227:
-#line 1032 "ds_parser.ypp"
+#line 1111 "ds_parser.ypp" /* yacc.c:1660  */
     {
         if ( (yyvsp[-2].pExpression)->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) (yyvsp[-2].pExpression);
@@ -4864,11 +4854,11 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[-2].pExpression);
         }
     }
-#line 4868 "ds_parser.cpp"
+#line 4858 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 228:
-#line 1042 "ds_parser.ypp"
+#line 1121 "ds_parser.ypp" /* yacc.c:1660  */
     {
         if ( (yyvsp[0].pExpression)->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) (yyvsp[0].pExpression);
@@ -4879,11 +4869,11 @@ yyreduce:
             (yyval.pExpression) = (yyvsp[0].pExpression);
         }
     }
-#line 4883 "ds_parser.cpp"
+#line 4873 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 229:
-#line 1052 "ds_parser.ypp"
+#line 1131 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		ExprConstEnumeration * resEnum = nullptr;
         auto enums = g_Program->findEnum(*(yyvsp[-1].s));
@@ -4915,213 +4905,213 @@ yyreduce:
         delete (yyvsp[-1].s);
         delete (yyvsp[0].s);
     }
-#line 4919 "ds_parser.cpp"
+#line 4909 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 230:
-#line 1086 "ds_parser.ypp"
+#line 1165 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aaList) = nullptr; }
-#line 4925 "ds_parser.cpp"
+#line 4915 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 231:
-#line 1087 "ds_parser.ypp"
+#line 1166 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.aaList) = (yyvsp[-1].aaList); }
-#line 4931 "ds_parser.cpp"
+#line 4921 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 232:
-#line 1091 "ds_parser.ypp"
+#line 1170 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = false; }
-#line 4937 "ds_parser.cpp"
+#line 4927 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 233:
-#line 1092 "ds_parser.ypp"
+#line 1171 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = true; }
-#line 4943 "ds_parser.cpp"
+#line 4933 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 234:
-#line 1096 "ds_parser.ypp"
+#line 1175 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[0].pVarDecl)->override = (yyvsp[-1].b);
         (yyvsp[0].pVarDecl)->annotation = (yyvsp[-2].aaList);
         (yyval.pVarDecl) = (yyvsp[0].pVarDecl);
     }
-#line 4953 "ds_parser.cpp"
+#line 4943 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 235:
-#line 1104 "ds_parser.ypp"
+#line 1183 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDeclList) = new vector<VariableDeclaration*>();
     }
-#line 4961 "ds_parser.cpp"
+#line 4951 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 236:
-#line 1107 "ds_parser.ypp"
+#line 1186 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDeclList) = (yyvsp[-2].pVarDeclList);
         (yyvsp[-2].pVarDeclList)->push_back((yyvsp[-1].pVarDecl));
     }
-#line 4970 "ds_parser.cpp"
+#line 4960 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 237:
-#line 1114 "ds_parser.ypp"
+#line 1193 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDecl) = (yyvsp[0].pVarDecl); (yyvsp[0].pVarDecl)->pTypeDecl->constant = true; }
-#line 4976 "ds_parser.cpp"
+#line 4966 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 238:
-#line 1115 "ds_parser.ypp"
+#line 1194 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDecl) = (yyvsp[0].pVarDecl); (yyvsp[0].pVarDecl)->pTypeDecl->removeConstant = true; }
-#line 4982 "ds_parser.cpp"
+#line 4972 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 239:
-#line 1119 "ds_parser.ypp"
+#line 1198 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDeclList) = new vector<VariableDeclaration*>(); (yyval.pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 4988 "ds_parser.cpp"
+#line 4978 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 240:
-#line 1120 "ds_parser.ypp"
+#line 1199 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDeclList) = (yyvsp[-2].pVarDeclList); (yyvsp[-2].pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 4994 "ds_parser.cpp"
+#line 4984 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 241:
-#line 1124 "ds_parser.ypp"
+#line 1203 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[0])),nullptr,(yyvsp[0].pTypeDecl),nullptr);
     }
-#line 5002 "ds_parser.cpp"
+#line 4992 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 242:
-#line 1130 "ds_parser.ypp"
+#line 1209 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDeclList) = new vector<VariableDeclaration*>(); (yyval.pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 5008 "ds_parser.cpp"
+#line 4998 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 243:
-#line 1131 "ds_parser.ypp"
+#line 1210 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pVarDeclList) = (yyvsp[-2].pVarDeclList); (yyvsp[-2].pVarDeclList)->push_back((yyvsp[0].pVarDecl)); }
-#line 5014 "ds_parser.cpp"
+#line 5004 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 244:
-#line 1135 "ds_parser.ypp"
+#line 1214 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = false; }
-#line 5020 "ds_parser.cpp"
+#line 5010 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 245:
-#line 1136 "ds_parser.ypp"
+#line 1215 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.b) = true; }
-#line 5026 "ds_parser.cpp"
+#line 5016 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 246:
-#line 1140 "ds_parser.ypp"
+#line 1219 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto autoT = new TypeDecl(Type::autoinfer);
         autoT->at = tokAt((yylsp[0]));
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[0])),(yyvsp[0].pNameList),autoT,nullptr);
     }
-#line 5036 "ds_parser.cpp"
+#line 5026 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 247:
-#line 1145 "ds_parser.ypp"
+#line 1224 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-2])),(yyvsp[-2].pNameList),(yyvsp[0].pTypeDecl),nullptr);
     }
-#line 5044 "ds_parser.cpp"
+#line 5034 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 248:
-#line 1148 "ds_parser.ypp"
+#line 1227 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-4])),(yyvsp[-4].pNameList),(yyvsp[-2].pTypeDecl),(yyvsp[0].pExpression));
         (yyval.pVarDecl)->init_via_move = (yyvsp[-1].b);
     }
-#line 5053 "ds_parser.cpp"
+#line 5043 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 249:
-#line 1152 "ds_parser.ypp"
+#line 1231 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt((yylsp[-2]));
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-2])),(yyvsp[-2].pNameList),typeDecl,(yyvsp[0].pExpression));
         (yyval.pVarDecl)->init_via_move = (yyvsp[-1].b);
     }
-#line 5064 "ds_parser.cpp"
+#line 5054 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 250:
-#line 1158 "ds_parser.ypp"
+#line 1237 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt((yylsp[-2]));
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-2])),(yyvsp[-2].pNameList),typeDecl,(yyvsp[0].pExpression));
         (yyval.pVarDecl)->init_via_move = (yyvsp[-1].b);
     }
-#line 5075 "ds_parser.cpp"
+#line 5065 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 251:
-#line 1167 "ds_parser.ypp"
+#line 1246 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.i) = CorM_COPY; }
-#line 5081 "ds_parser.cpp"
+#line 5071 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 252:
-#line 1168 "ds_parser.ypp"
+#line 1247 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.i) = CorM_MOVE; }
-#line 5087 "ds_parser.cpp"
+#line 5077 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 253:
-#line 1169 "ds_parser.ypp"
+#line 1248 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.i) = CorM_CLONE; }
-#line 5093 "ds_parser.cpp"
+#line 5083 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 254:
-#line 1173 "ds_parser.ypp"
+#line 1252 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-3])),(yyvsp[-3].pNameList),(yyvsp[-1].pTypeDecl),nullptr);
     }
-#line 5101 "ds_parser.cpp"
+#line 5091 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 255:
-#line 1176 "ds_parser.ypp"
+#line 1255 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-5])),(yyvsp[-5].pNameList),(yyvsp[-3].pTypeDecl),(yyvsp[-1].pExpression));
         (yyval.pVarDecl)->init_via_move  = ((yyvsp[-2].i) & CorM_MOVE) !=0;
         (yyval.pVarDecl)->init_via_clone = ((yyvsp[-2].i) & CorM_CLONE) !=0;
     }
-#line 5111 "ds_parser.cpp"
+#line 5101 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 256:
-#line 1181 "ds_parser.ypp"
+#line 1260 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDecl) = new VariableDeclaration(tokAt((yylsp[-4])),(yyvsp[-4].pNameList),(yyvsp[-2].pTypeDecl),(yyvsp[0].pExpression));
         (yyval.pVarDecl)->init_via_move  = ((yyvsp[-1].i) & CorM_MOVE) !=0;
         (yyval.pVarDecl)->init_via_clone = ((yyvsp[-1].i) & CorM_CLONE) !=0;
     }
-#line 5121 "ds_parser.cpp"
+#line 5111 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 257:
-#line 1186 "ds_parser.ypp"
+#line 1265 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt((yylsp[-3]));
@@ -5129,11 +5119,11 @@ yyreduce:
         (yyval.pVarDecl)->init_via_move  = ((yyvsp[-2].i) & CorM_MOVE) !=0;
         (yyval.pVarDecl)->init_via_clone = ((yyvsp[-2].i) & CorM_CLONE) !=0;
     }
-#line 5133 "ds_parser.cpp"
+#line 5123 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 258:
-#line 1193 "ds_parser.ypp"
+#line 1272 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt((yylsp[-2]));
@@ -5141,28 +5131,28 @@ yyreduce:
         (yyval.pVarDecl)->init_via_move  = ((yyvsp[-1].i) & CorM_MOVE) !=0;
         (yyval.pVarDecl)->init_via_clone = ((yyvsp[-1].i) & CorM_CLONE) !=0;
     }
-#line 5145 "ds_parser.cpp"
+#line 5135 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 259:
-#line 1203 "ds_parser.ypp"
+#line 1282 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDeclList) = new vector<VariableDeclaration*>();
     }
-#line 5153 "ds_parser.cpp"
+#line 5143 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 260:
-#line 1206 "ds_parser.ypp"
+#line 1285 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pVarDeclList) = (yyvsp[-1].pVarDeclList);
         (yyvsp[-1].pVarDeclList)->push_back((yyvsp[0].pVarDecl));
     }
-#line 5162 "ds_parser.cpp"
+#line 5152 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 261:
-#line 1213 "ds_parser.ypp"
+#line 1292 "ds_parser.ypp" /* yacc.c:1660  */
     {
         for ( auto pDecl : *(yyvsp[-1].pVarDeclList) ) {
             if ( pDecl->pTypeDecl ) {
@@ -5189,19 +5179,19 @@ yyreduce:
         }
         deleteVariableDeclarationList((yyvsp[-1].pVarDeclList));
     }
-#line 5193 "ds_parser.cpp"
+#line 5183 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 262:
-#line 1242 "ds_parser.ypp"
+#line 1321 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pEnum) = new Enumeration();
     }
-#line 5201 "ds_parser.cpp"
+#line 5191 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 263:
-#line 1245 "ds_parser.ypp"
+#line 1324 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
         if ( !(yyvsp[-2].pEnum)->add(*(yyvsp[-1].s)) ) {
@@ -5211,11 +5201,11 @@ yyreduce:
         delete (yyvsp[-1].s);
         (yyval.pEnum) = (yyvsp[-2].pEnum);
     }
-#line 5215 "ds_parser.cpp"
+#line 5205 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 264:
-#line 1254 "ds_parser.ypp"
+#line 1333 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
         if ( !(yyvsp[-4].pEnum)->add(*(yyvsp[-3].s),(yyvsp[-1].i)) ) {
@@ -5225,11 +5215,11 @@ yyreduce:
         delete (yyvsp[-3].s);
         (yyval.pEnum) = (yyvsp[-4].pEnum);
     }
-#line 5229 "ds_parser.cpp"
+#line 5219 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 265:
-#line 1266 "ds_parser.ypp"
+#line 1345 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[-2].s),tokAt((yylsp[-2])));
         (yyvsp[0].pTypeDecl)->alias = *(yyvsp[-2].s);
@@ -5239,11 +5229,11 @@ yyreduce:
         }
         delete (yyvsp[-2].s);
     }
-#line 5243 "ds_parser.cpp"
+#line 5233 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 266:
-#line 1278 "ds_parser.ypp"
+#line 1357 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
         auto pEnum = EnumerationPtr((yyvsp[-1].pEnum));
@@ -5255,23 +5245,23 @@ yyreduce:
         }
 		delete (yyvsp[-3].s);
     }
-#line 5259 "ds_parser.cpp"
+#line 5249 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 267:
-#line 1292 "ds_parser.ypp"
+#line 1371 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = nullptr; }
-#line 5265 "ds_parser.cpp"
+#line 5255 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 268:
-#line 1293 "ds_parser.ypp"
+#line 1372 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.s) = (yyvsp[0].s); }
-#line 5271 "ds_parser.cpp"
+#line 5261 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 269:
-#line 1297 "ds_parser.ypp"
+#line 1376 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
         StructurePtr pStruct;
@@ -5308,11 +5298,11 @@ yyreduce:
         }
         delete (yyvsp[-1].s);
     }
-#line 5312 "ds_parser.cpp"
+#line 5302 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 270:
-#line 1336 "ds_parser.ypp"
+#line 1415 "ds_parser.ypp" /* yacc.c:1660  */
     {
         if ( (yyvsp[-3].pStructure) ) {
             auto pStruct = (yyvsp[-3].pStructure)->shared_from_this();
@@ -5376,11 +5366,11 @@ yyreduce:
         }
         deleteVariableDeclarationList((yyvsp[-1].pVarDeclList));
     }
-#line 5380 "ds_parser.cpp"
+#line 5370 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 271:
-#line 1402 "ds_parser.ypp"
+#line 1481 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
         auto pSL = new vector<string>();
@@ -5388,166 +5378,166 @@ yyreduce:
         (yyval.pNameList) = pSL;
         delete (yyvsp[0].s);
     }
-#line 5392 "ds_parser.cpp"
+#line 5382 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 272:
-#line 1409 "ds_parser.ypp"
+#line 1488 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
         (yyvsp[-2].pNameList)->push_back(*(yyvsp[0].s));
         (yyval.pNameList) = (yyvsp[-2].pNameList);
         delete (yyvsp[0].s);
     }
-#line 5403 "ds_parser.cpp"
+#line 5393 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 273:
-#line 1418 "ds_parser.ypp"
+#line 1497 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tBool; }
-#line 5409 "ds_parser.cpp"
+#line 5399 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 274:
-#line 1419 "ds_parser.ypp"
+#line 1498 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tString; }
-#line 5415 "ds_parser.cpp"
+#line 5405 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 275:
-#line 1420 "ds_parser.ypp"
+#line 1499 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tInt; }
-#line 5421 "ds_parser.cpp"
+#line 5411 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 276:
-#line 1421 "ds_parser.ypp"
+#line 1500 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tInt8; }
-#line 5427 "ds_parser.cpp"
+#line 5417 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 277:
-#line 1422 "ds_parser.ypp"
+#line 1501 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tInt16; }
-#line 5433 "ds_parser.cpp"
+#line 5423 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 278:
-#line 1423 "ds_parser.ypp"
+#line 1502 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tInt64; }
-#line 5439 "ds_parser.cpp"
+#line 5429 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 279:
-#line 1424 "ds_parser.ypp"
+#line 1503 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tInt2; }
-#line 5445 "ds_parser.cpp"
+#line 5435 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 280:
-#line 1425 "ds_parser.ypp"
+#line 1504 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tInt3; }
-#line 5451 "ds_parser.cpp"
+#line 5441 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 281:
-#line 1426 "ds_parser.ypp"
+#line 1505 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tInt4; }
-#line 5457 "ds_parser.cpp"
+#line 5447 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 282:
-#line 1427 "ds_parser.ypp"
+#line 1506 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tUInt; }
-#line 5463 "ds_parser.cpp"
+#line 5453 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 283:
-#line 1428 "ds_parser.ypp"
+#line 1507 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tUInt8; }
-#line 5469 "ds_parser.cpp"
+#line 5459 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 284:
-#line 1429 "ds_parser.ypp"
+#line 1508 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tUInt16; }
-#line 5475 "ds_parser.cpp"
+#line 5465 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 285:
-#line 1430 "ds_parser.ypp"
+#line 1509 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tUInt64; }
-#line 5481 "ds_parser.cpp"
+#line 5471 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 286:
-#line 1431 "ds_parser.ypp"
+#line 1510 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tUInt2; }
-#line 5487 "ds_parser.cpp"
+#line 5477 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 287:
-#line 1432 "ds_parser.ypp"
+#line 1511 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tUInt3; }
-#line 5493 "ds_parser.cpp"
+#line 5483 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 288:
-#line 1433 "ds_parser.ypp"
+#line 1512 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tUInt4; }
-#line 5499 "ds_parser.cpp"
+#line 5489 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 289:
-#line 1434 "ds_parser.ypp"
+#line 1513 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tFloat; }
-#line 5505 "ds_parser.cpp"
+#line 5495 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 290:
-#line 1435 "ds_parser.ypp"
+#line 1514 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tFloat2; }
-#line 5511 "ds_parser.cpp"
+#line 5501 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 291:
-#line 1436 "ds_parser.ypp"
+#line 1515 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tFloat3; }
-#line 5517 "ds_parser.cpp"
+#line 5507 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 292:
-#line 1437 "ds_parser.ypp"
+#line 1516 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tFloat4; }
-#line 5523 "ds_parser.cpp"
+#line 5513 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 293:
-#line 1438 "ds_parser.ypp"
+#line 1517 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tVoid; }
-#line 5529 "ds_parser.cpp"
+#line 5519 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 294:
-#line 1439 "ds_parser.ypp"
+#line 1518 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tRange; }
-#line 5535 "ds_parser.cpp"
+#line 5525 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 295:
-#line 1440 "ds_parser.ypp"
+#line 1519 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tURange; }
-#line 5541 "ds_parser.cpp"
+#line 5531 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 296:
-#line 1441 "ds_parser.ypp"
+#line 1520 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.type) = Type::tDouble; }
-#line 5547 "ds_parser.cpp"
+#line 5537 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 297:
-#line 1445 "ds_parser.ypp"
+#line 1524 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = g_Program->makeTypeDeclaration(tokAt((yylsp[0])),*(yyvsp[0].s));
         if ( !(yyval.pTypeDecl) ) {
@@ -5556,20 +5546,20 @@ yyreduce:
         }
         delete (yyvsp[0].s);
     }
-#line 5560 "ds_parser.cpp"
+#line 5550 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 298:
-#line 1456 "ds_parser.ypp"
+#line 1535 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 5569 "ds_parser.cpp"
+#line 5559 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 299:
-#line 1460 "ds_parser.ypp"
+#line 1539 "ds_parser.ypp" /* yacc.c:1660  */
     {
 		das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
         (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
@@ -5577,29 +5567,29 @@ yyreduce:
         (yyval.pTypeDecl)->alias = *(yyvsp[-1].s);
         delete (yyvsp[-1].s);
     }
-#line 5581 "ds_parser.cpp"
+#line 5571 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 300:
-#line 1470 "ds_parser.ypp"
+#line 1549 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pTypeDecl) = new TypeDecl((yyvsp[0].type)); (yyval.pTypeDecl)->at = tokAt((yylsp[0])); }
-#line 5587 "ds_parser.cpp"
+#line 5577 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 301:
-#line 1471 "ds_parser.ypp"
+#line 1550 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pTypeDecl) = (yyvsp[0].pTypeDecl); }
-#line 5593 "ds_parser.cpp"
+#line 5583 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 302:
-#line 1472 "ds_parser.ypp"
+#line 1551 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pTypeDecl) = (yyvsp[0].pTypeDecl); }
-#line 5599 "ds_parser.cpp"
+#line 5589 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 303:
-#line 1473 "ds_parser.ypp"
+#line 1552 "ds_parser.ypp" /* yacc.c:1660  */
     {
         int32_t dI = TypeDecl::dimConst;
         if ( (yyvsp[-1].pExpression)->rtti_isConstant() ) {                // note: this shortcut is here so we don't get extra infer pass on every array
@@ -5614,71 +5604,71 @@ yyreduce:
         (yyvsp[-3].pTypeDecl)->removeDim = false;
         (yyval.pTypeDecl) = (yyvsp[-3].pTypeDecl);
     }
-#line 5618 "ds_parser.cpp"
+#line 5608 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 304:
-#line 1487 "ds_parser.ypp"
+#line 1566 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[-2].pTypeDecl)->dim.push_back(TypeDecl::dimAuto);
         (yyvsp[-2].pTypeDecl)->dimExpr.push_back(nullptr);
         (yyvsp[-2].pTypeDecl)->removeDim = false;
         (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
     }
-#line 5629 "ds_parser.cpp"
+#line 5619 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 305:
-#line 1493 "ds_parser.ypp"
+#line 1572 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[-3].pTypeDecl)->removeDim = true;
         (yyval.pTypeDecl) = (yyvsp[-3].pTypeDecl);
     }
-#line 5638 "ds_parser.cpp"
+#line 5628 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 306:
-#line 1497 "ds_parser.ypp"
+#line 1576 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[-1].pTypeDecl)->constant = true;
         (yyvsp[-1].pTypeDecl)->removeConstant = false;
         (yyval.pTypeDecl) = (yyvsp[-1].pTypeDecl);
     }
-#line 5648 "ds_parser.cpp"
+#line 5638 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 307:
-#line 1502 "ds_parser.ypp"
+#line 1581 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[-2].pTypeDecl)->constant = false;
         (yyvsp[-2].pTypeDecl)->removeConstant = true;
         (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
     }
-#line 5658 "ds_parser.cpp"
+#line 5648 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 308:
-#line 1507 "ds_parser.ypp"
+#line 1586 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[-1].pTypeDecl)->ref = true;
         (yyvsp[-1].pTypeDecl)->removeRef = false;
         (yyval.pTypeDecl) = (yyvsp[-1].pTypeDecl);
     }
-#line 5668 "ds_parser.cpp"
+#line 5658 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 309:
-#line 1512 "ds_parser.ypp"
+#line 1591 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[-2].pTypeDecl)->ref = false;
         (yyvsp[-2].pTypeDecl)->removeRef = true;
         (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
     }
-#line 5678 "ds_parser.cpp"
+#line 5668 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 310:
-#line 1517 "ds_parser.ypp"
+#line 1596 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyvsp[-3].pTypeDecl)->constant = false;
         (yyvsp[-3].pTypeDecl)->removeConstant = true;
@@ -5686,71 +5676,71 @@ yyreduce:
         (yyvsp[-3].pTypeDecl)->removeRef = true;
         (yyval.pTypeDecl) = (yyvsp[-3].pTypeDecl);
     }
-#line 5690 "ds_parser.cpp"
+#line 5680 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 311:
-#line 1524 "ds_parser.ypp"
+#line 1603 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-1]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5700 "ds_parser.cpp"
+#line 5690 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 312:
-#line 1529 "ds_parser.ypp"
+#line 1608 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tArray);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5710 "ds_parser.cpp"
+#line 5700 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 313:
-#line 1534 "ds_parser.ypp"
+#line 1613 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tTable);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-5]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
         (yyval.pTypeDecl)->secondType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5721 "ds_parser.cpp"
+#line 5711 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 314:
-#line 1540 "ds_parser.ypp"
+#line 1619 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tIterator);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5731 "ds_parser.cpp"
+#line 5721 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 315:
-#line 1545 "ds_parser.ypp"
+#line 1624 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 5740 "ds_parser.cpp"
+#line 5730 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 316:
-#line 1549 "ds_parser.ypp"
+#line 1628 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5750 "ds_parser.cpp"
+#line 5740 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 317:
-#line 1554 "ds_parser.ypp"
+#line 1633 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-4]));
@@ -5760,30 +5750,30 @@ yyreduce:
             deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
         }
     }
-#line 5764 "ds_parser.cpp"
+#line 5754 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 318:
-#line 1563 "ds_parser.ypp"
+#line 1642 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 5773 "ds_parser.cpp"
+#line 5763 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 319:
-#line 1567 "ds_parser.ypp"
+#line 1646 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5783 "ds_parser.cpp"
+#line 5773 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 320:
-#line 1572 "ds_parser.ypp"
+#line 1651 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-4]));
@@ -5793,30 +5783,30 @@ yyreduce:
             deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
         }
     }
-#line 5797 "ds_parser.cpp"
+#line 5787 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 321:
-#line 1581 "ds_parser.ypp"
+#line 1660 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda);
         (yyval.pTypeDecl)->at = tokAt((yylsp[0]));
     }
-#line 5806 "ds_parser.cpp"
+#line 5796 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 322:
-#line 1585 "ds_parser.ypp"
+#line 1664 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
-#line 5816 "ds_parser.cpp"
+#line 5806 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 323:
-#line 1590 "ds_parser.ypp"
+#line 1669 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-4]));
@@ -5826,46 +5816,46 @@ yyreduce:
             deleteVariableDeclarationList((yyvsp[-2].pVarDeclList));
         }
     }
-#line 5830 "ds_parser.cpp"
+#line 5820 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 324:
-#line 1599 "ds_parser.ypp"
+#line 1678 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tTuple);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         varDeclToTypeDecl((yyval.pTypeDecl), (yyvsp[-1].pVarDeclList));
         deleteVariableDeclarationList((yyvsp[-1].pVarDeclList));
     }
-#line 5841 "ds_parser.cpp"
+#line 5831 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 325:
-#line 1608 "ds_parser.ypp"
+#line 1687 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5847 "ds_parser.cpp"
+#line 5837 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 326:
-#line 1609 "ds_parser.ypp"
+#line 1688 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5853 "ds_parser.cpp"
+#line 5843 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 327:
-#line 1610 "ds_parser.ypp"
+#line 1689 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5859 "ds_parser.cpp"
+#line 5849 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 328:
-#line 1611 "ds_parser.ypp"
+#line 1690 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5865 "ds_parser.cpp"
+#line 5855 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 329:
-#line 1615 "ds_parser.ypp"
+#line 1694 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto mfd = make_shared<MakeFieldDecl>(tokAt((yylsp[-2])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b));
         delete (yyvsp[-2].s);
@@ -5873,70 +5863,70 @@ yyreduce:
         msd->push_back(mfd);
         (yyval.pMakeStruct) = msd;
     }
-#line 5877 "ds_parser.cpp"
+#line 5867 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 330:
-#line 1622 "ds_parser.ypp"
+#line 1701 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto mfd = make_shared<MakeFieldDecl>(tokAt((yylsp[-2])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b));
         delete (yyvsp[-2].s);
         ((MakeStruct *)(yyvsp[-4].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-4].pMakeStruct);
     }
-#line 5888 "ds_parser.cpp"
+#line 5878 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 331:
-#line 1631 "ds_parser.ypp"
+#line 1710 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto msd = new ExprMakeStructure();
         msd->structs.push_back(MakeStructPtr((yyvsp[0].pMakeStruct)));
         (yyval.pExpression) = msd;
     }
-#line 5898 "ds_parser.cpp"
+#line 5888 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 332:
-#line 1636 "ds_parser.ypp"
+#line 1715 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ((ExprMakeStructure *) (yyvsp[-2].pExpression))->structs.push_back(MakeStructPtr((yyvsp[0].pMakeStruct)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5907 "ds_parser.cpp"
+#line 5897 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 333:
-#line 1643 "ds_parser.ypp"
+#line 1722 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ((ExprMakeStructure *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-4]));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5917 "ds_parser.cpp"
+#line 5907 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 334:
-#line 1648 "ds_parser.ypp"
+#line 1727 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ((ExprMakeStructure *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
         ((ExprMakeStructure *)(yyvsp[-2].pExpression))->useInitializer = true;
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-6]));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5928 "ds_parser.cpp"
+#line 5918 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 335:
-#line 1657 "ds_parser.ypp"
+#line 1736 "ds_parser.ypp" /* yacc.c:1660  */
     {
         (yyval.pExpression) = (yyvsp[0].pExpression);
     }
-#line 5936 "ds_parser.cpp"
+#line 5926 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 336:
-#line 1660 "ds_parser.ypp"
+#line 1739 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ExprMakeTuple * mt;
         if ( (yyvsp[-2].pExpression)->rtti_isMakeTuple() ) {
@@ -5948,63 +5938,63 @@ yyreduce:
         mt->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = mt;
     }
-#line 5952 "ds_parser.cpp"
+#line 5942 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 337:
-#line 1674 "ds_parser.ypp"
+#line 1753 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ExprMakeTuple * mt = new ExprMakeTuple(tokAt((yylsp[-1])));
         mt->values.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
         mt->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = mt;
     }
-#line 5963 "ds_parser.cpp"
+#line 5953 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 338:
-#line 1683 "ds_parser.ypp"
+#line 1762 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5969 "ds_parser.cpp"
+#line 5959 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 339:
-#line 1684 "ds_parser.ypp"
+#line 1763 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 5975 "ds_parser.cpp"
+#line 5965 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 340:
-#line 1688 "ds_parser.ypp"
+#line 1767 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = mka;
     }
-#line 5985 "ds_parser.cpp"
+#line 5975 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 341:
-#line 1693 "ds_parser.ypp"
+#line 1772 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 5994 "ds_parser.cpp"
+#line 5984 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 342:
-#line 1700 "ds_parser.ypp"
+#line 1779 "ds_parser.ypp" /* yacc.c:1660  */
     {
        ((ExprMakeArray *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
        (yyvsp[-2].pExpression)->at = tokAt((yylsp[-4]));
        (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 6004 "ds_parser.cpp"
+#line 5994 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 343:
-#line 1705 "ds_parser.ypp"
+#line 1784 "ds_parser.ypp" /* yacc.c:1660  */
     {
        ((ExprMakeArray *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
        (yyvsp[-2].pExpression)->at = tokAt((yylsp[-4]));
@@ -6013,30 +6003,30 @@ yyreduce:
        tam->arguments.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
        (yyval.pExpression) = tam;
     }
-#line 6017 "ds_parser.cpp"
+#line 6007 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 344:
-#line 1716 "ds_parser.ypp"
+#line 1795 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = mka;
     }
-#line 6027 "ds_parser.cpp"
+#line 6017 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 345:
-#line 1721 "ds_parser.ypp"
+#line 1800 "ds_parser.ypp" /* yacc.c:1660  */
     {
         ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
-#line 6036 "ds_parser.cpp"
+#line 6026 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 346:
-#line 1728 "ds_parser.ypp"
+#line 1807 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto mkt = make_shared<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
@@ -6046,23 +6036,23 @@ yyreduce:
         ttm->arguments.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
         (yyval.pExpression) = ttm;
     }
-#line 6050 "ds_parser.cpp"
+#line 6040 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 347:
-#line 1740 "ds_parser.ypp"
+#line 1819 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = nullptr; }
-#line 6056 "ds_parser.cpp"
+#line 6046 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 348:
-#line 1741 "ds_parser.ypp"
+#line 1820 "ds_parser.ypp" /* yacc.c:1660  */
     { (yyval.pExpression) = (yyvsp[0].pExpression); }
-#line 6062 "ds_parser.cpp"
+#line 6052 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
   case 349:
-#line 1745 "ds_parser.ypp"
+#line 1824 "ds_parser.ypp" /* yacc.c:1660  */
     {
         auto pFor = make_shared<ExprFor>(tokAt((yylsp[-8])));
         pFor->iterators = *(yyvsp[-7].pNameList);
@@ -6076,12 +6066,11 @@ yyreduce:
         }
         (yyval.pExpression) = pAC;
     }
-#line 6080 "ds_parser.cpp"
+#line 6070 "ds_parser.cpp" /* yacc.c:1660  */
     break;
 
 
-#line 6084 "ds_parser.cpp"
-
+#line 6074 "ds_parser.cpp" /* yacc.c:1660  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -6196,10 +6185,12 @@ yyerrlab:
 | yyerrorlab -- error raised explicitly by YYERROR.  |
 `---------------------------------------------------*/
 yyerrorlab:
-  /* Pacify compilers when the user code never invokes YYERROR and the
-     label yyerrorlab therefore never appears in user code.  */
-  if (0)
-    YYERROR;
+
+  /* Pacify compilers like GCC when the user code never invokes
+     YYERROR and the label yyerrorlab therefore never appears in user
+     code.  */
+  if (/*CONSTCOND*/ 0)
+     goto yyerrorlab;
 
   /* Do not reclaim the symbols of the rule whose action triggered
      this YYERROR.  */
@@ -6266,14 +6257,12 @@ yyacceptlab:
   yyresult = 0;
   goto yyreturn;
 
-
 /*-----------------------------------.
 | yyabortlab -- YYABORT comes here.  |
 `-----------------------------------*/
 yyabortlab:
   yyresult = 1;
   goto yyreturn;
-
 
 #if !defined yyoverflow || YYERROR_VERBOSE
 /*-------------------------------------------------.
@@ -6285,10 +6274,6 @@ yyexhaustedlab:
   /* Fall through.  */
 #endif
 
-
-/*-----------------------------------------------------.
-| yyreturn -- parsing is finished, return the result.  |
-`-----------------------------------------------------*/
 yyreturn:
   if (yychar != YYEMPTY)
     {
@@ -6318,7 +6303,7 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 1760 "ds_parser.ypp"
+#line 1839 "ds_parser.ypp" /* yacc.c:1903  */
 
 
 void das_checkName(const string & name, const LineInfo &at) {
