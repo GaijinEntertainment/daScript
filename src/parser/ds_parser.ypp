@@ -1139,6 +1139,7 @@ copy_or_move
 variable_declaration        /* this one can have uninitialized variable which has no type */
     :   variable_name_list[list] {
         auto autoT = new TypeDecl(Type::autoinfer);
+        autoT->at = tokAt(@list);
         $$ = new VariableDeclaration(tokAt(@list),$list,autoT,nullptr);
     }
     |   variable_name_list[list] ':' type_declaration[typeDecl]  {
@@ -1150,11 +1151,13 @@ variable_declaration        /* this one can have uninitialized variable which ha
     }
     |   variable_name_list[list] copy_or_move[com] expr[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(@list);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
         $$->init_via_move = $com;
     }
     |   variable_name_list[list] copy_or_move[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(@list);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
         $$->init_via_move = $com;
     }
@@ -1182,12 +1185,14 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
     }
     |   variable_name_list[list] copy_or_move_or_clone[com] expr[init] ';' {
         auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(@list);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
     |   variable_name_list[list] copy_or_move_or_clone[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(@list);
         $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
@@ -1441,6 +1446,7 @@ structure_type_declaration
         $$ = g_Program->makeTypeDeclaration(tokAt(@name),*$name);
         if ( !$$ ) {
             $$ = new TypeDecl(Type::tVoid);
+            $$->at = tokAt(@name);
         }
         delete $name;
     }
@@ -1517,6 +1523,7 @@ type_declaration
     }
     |   type_declaration[typeDecl] '?' {
         $$ = new TypeDecl(Type::tPointer);
+        $$->at = tokAt(@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
     |   DAS_ARRAY[loc] '<' type_declaration[typeDecl] '>' {

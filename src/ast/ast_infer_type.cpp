@@ -75,24 +75,29 @@ namespace das {
 
         void verifyType ( const TypeDeclPtr & decl ) const {
             if ( decl->dim.size() && decl->ref ) {
-                error("can't declare an array of references",decl->at,CompilationError::invalid_type);
+                error("can't declare an array of references, " + decl->describe(),
+                      decl->at,CompilationError::invalid_type);
             }
             for ( auto di : decl->dim ) {
                 if ( di<=0 ) {
-                    error("array dimension can't be 0 or less",decl->at,CompilationError::invalid_array_dimension);
+                    error("array dimension can't be 0 or less, " + decl->describe(),
+                          decl->at,CompilationError::invalid_array_dimension);
                 }
             }
             if ( decl->baseType==Type::tVoid ) {
                 if ( decl->dim.size() ) {
-                    error("can't declare an array of void",decl->at,CompilationError::invalid_type);
+                    error("can't declare an array of void, " + decl->describe(),
+                          decl->at,CompilationError::invalid_type);
                 }
                 if ( decl->ref ) {
-                    error("can't declare a void reference",decl->at,CompilationError::invalid_type);
+                    error("can't declare a void reference, " + decl->describe(),
+                          decl->at,CompilationError::invalid_type);
                 }
             } else if ( decl->baseType==Type::tPointer ) {
                 if ( auto ptrType = decl->firstType ) {
                     if ( ptrType->ref ) {
-                        error("can't declare a pointer to a reference",ptrType->at,CompilationError::invalid_type);
+                        error("can't declare a pointer to a reference, " + decl->describe(),
+                              ptrType->at,CompilationError::invalid_type);
                     }
                     verifyType(ptrType);
                 }
@@ -102,56 +107,79 @@ namespace das {
                 }
             } else if ( decl->baseType==Type::tArray ) {
                 if ( auto arrayType = decl->firstType ) {
+                    if ( arrayType->isAlias() || arrayType->isAuto() ) {
+                        error("array type is not fully resolved, " + arrayType->describe(),
+                              arrayType->at,CompilationError::invalid_array_type);
+                    }
                     if ( arrayType->ref ) {
-                        error("can't declare an array of references",arrayType->at,CompilationError::invalid_array_type);
+                        error("can't declare an array of references, " + arrayType->describe(),
+                              arrayType->at,CompilationError::invalid_array_type);
                     }
                     if ( arrayType->baseType==Type::tVoid) {
-                        error("can't declare a void array",arrayType->at,CompilationError::invalid_array_type);
+                        error("can't declare a void array, " + arrayType->describe(),
+                              arrayType->at,CompilationError::invalid_array_type);
                     }
                     if ( !arrayType->isLocal() ) {
-                        error("array type has to be 'local'", arrayType->at,CompilationError::invalid_type);
+                        error("array type has to be 'local', " + arrayType->describe(),
+                              arrayType->at,CompilationError::invalid_type);
                     }
                     verifyType(arrayType);
                 }
             } else if ( decl->baseType==Type::tTable ) {
                 if ( auto keyType = decl->firstType ) {
+                    if ( keyType->isAlias() || keyType->isAuto() ) {
+                        error("table key is not fully resolved, " + keyType->describe(),
+                              keyType->at,CompilationError::invalid_array_type);
+                    }
                     if ( keyType->ref ) {
-                        error("table key can't be declared as a reference",keyType->at,CompilationError::invalid_table_type);
+                        error("table key can't be declared as a reference, " + keyType->describe(),
+                              keyType->at,CompilationError::invalid_table_type);
                     }
                     if ( !keyType->isWorkhorseType() ) {
-                        error("table key has to be declare as a basic 'hashable' type",keyType->at,CompilationError::invalid_table_type);
+                        error("table key has to be declare as a basic 'hashable' type, " + keyType->describe(),
+                              keyType->at,CompilationError::invalid_table_type);
                     }
                     verifyType(keyType);
                 }
                 if ( auto valueType = decl->secondType ) {
+                    if ( valueType->isAlias() || valueType->isAuto() ) {
+                        error("table value is not fully resolved, " + valueType->describe(),
+                              valueType->at,CompilationError::invalid_array_type);
+                    }
                     if ( valueType->ref ) {
-                        error("table value can't be declared as a reference",valueType->at,CompilationError::invalid_table_type);
+                        error("table value can't be declared as a reference, " + valueType->describe(),
+                              valueType->at,CompilationError::invalid_table_type);
                     }
                     if ( !valueType->isLocal() ) {
-                        error("table value has to be 'local'", valueType->at,CompilationError::invalid_type);
+                        error("table value has to be 'local', " + valueType->describe(),
+                              valueType->at,CompilationError::invalid_type);
                     }
                     verifyType(valueType);
                 }
             } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
                 if ( auto resultType = decl->firstType ) {
                     if ( !resultType->isReturnType() ) {
-                        error("not a valid return type",resultType->at,CompilationError::invalid_return_type);
+                        error("not a valid return type, " + resultType->describe(),
+                              resultType->at,CompilationError::invalid_return_type);
                     }
                     verifyType(resultType);
                 }
                 for ( auto & argType : decl->argTypes ) {
                     if ( argType->ref && argType->isRefType() ) {
-                        error("can't pass a boxed type by a reference", argType->at,CompilationError::invalid_argument_type);
+                        error("can't pass a boxed type by a reference, " + argType->describe(),
+                              argType->at,CompilationError::invalid_argument_type);
                     }
                     verifyType(argType);
                 }
             } else if ( decl->baseType==Type::tTuple ) {
                 for ( auto & argType : decl->argTypes ) {
                     if ( argType->ref ) {
-                        error("tuple element can't be ref", argType->at,CompilationError::invalid_type);
+                        error("tuple element can't be ref, " + argType->describe(),
+                              argType->at,CompilationError::invalid_type);
                     }
                     if ( !argType->isLocal() ) {
-                        error("tuple element has to be 'local'", argType->at,CompilationError::invalid_type);
+                        error("tuple element has to be 'local', " + argType->describe(),
+                              argType->at,CompilationError::invalid_type);
                     }
                     verifyType(argType);
                 }

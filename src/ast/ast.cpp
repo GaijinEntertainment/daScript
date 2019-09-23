@@ -1686,6 +1686,7 @@ namespace das {
         } else if ( aliases.size() ) {
             if ( aliases.size()==1 ) {
                 auto pTD = new TypeDecl(*aliases.back());
+                pTD->at = at;
                 return pTD;
             } else {
                 string candidates = describeCandidates(aliases);
@@ -1695,6 +1696,7 @@ namespace das {
         } else {
             auto tt = new TypeDecl(Type::alias);
             tt->alias = name;
+            tt->at = at;
             return tt;
         }
     }

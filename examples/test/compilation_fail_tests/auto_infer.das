@@ -1,4 +1,4 @@
-expect 31101, 31102:9, 30304:2, 30102:2, 30106
+expect 31101, 31102:9, 30304:2, 30105:1, 30102:2, 30106
 
 let
     a:auto                      // 31101, can't infer, need initializer
@@ -33,3 +33,4 @@ def test3
     let tab : table<string;int>
     let tabI : table<auto;float> = tab  // 31102: local variable initialization type can't be infered
                                         // 30106: Table key has to be basic 'hashable' type
+                                        // 30105: table key is not fully resolved, auto
