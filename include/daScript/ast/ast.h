@@ -564,6 +564,12 @@ namespace das
             return module_##ClassName; \
         }
 
+    class ModuleDas : public Module {
+    public:
+        ModuleDas(const string & n = "") : Module(n) {}
+        virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::cpp; }
+    };
+
     class ModuleLibrary {
         friend class Module;
         friend class Program;

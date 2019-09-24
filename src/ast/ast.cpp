@@ -1637,7 +1637,7 @@ namespace das {
     }
 
     Program::Program() {
-        thisModule = make_unique<Module>();
+        thisModule = make_unique<ModuleDas>();
         library.addBuiltInModule();
         library.addModule(thisModule.get());
     }
