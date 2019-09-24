@@ -1,5 +1,5 @@
 // options log=true
-// options logCpp=true
+// options log_cpp=true
 // options log_nodes = true
 
 require testProfile

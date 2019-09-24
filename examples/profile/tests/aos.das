@@ -1,4 +1,14 @@
+// options log_cpp=true
+
 require testProfile
+
+[sideeffects]
+def perks_disabler_unset_es(var game_effect_dot_allowedMods:ObjectArray;var allowedMods:ObjectArray)
+	for perk in game_effect_dot_allowedMods
+		for i in range(0,allowedMods.length)
+			if allowedMods[i] == perk
+				return true
+	return false
 
 struct NObject
     position, velocity : float3
@@ -77,6 +87,8 @@ def verifyObj(total:int;objects:NObject[10000])
 
 [export]
 def test(var objects:ObjectArray)
+	// this is here for compilation testing purposes
+	perks_disabler_unset_es(objects,objects)
     // verifyObj
     init(nobjects)
     testSim(nobjects)
@@ -135,3 +147,4 @@ def test(var objects:ObjectArray)
     print("ratio interop-10000/c++: {manyT/cT}\n");
     print("ratio interop-10000-ks/c++: {manyKsT/cT}\n")
     return true
+

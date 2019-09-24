@@ -39,6 +39,9 @@ namespace das
         __forceinline bool operator == ( const vec2<TT> & vec ) const {
             return x==vec.x && y==vec.y;
         }
+        __forceinline bool operator != ( const vec2<TT> & vec ) const {
+            return x!=vec.x || y!=vec.y;
+        }
         __forceinline vec2() = default;
         __forceinline vec2(const vec2 &) = default;
         __forceinline vec2(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)) {}
@@ -57,6 +60,9 @@ namespace das
         }
         __forceinline bool operator == ( const vec3<TT> & vec ) const {
             return x==vec.x && y==vec.y && z==vec.z;
+        }
+        __forceinline bool operator != ( const vec3<TT> & vec ) const {
+            return x!=vec.x || y!=vec.y || z!=vec.z;
         }
         __forceinline vec3() = default;
         __forceinline vec3(const vec3 &) = default;
@@ -77,6 +83,9 @@ namespace das
         }
         __forceinline bool operator == ( const vec4<TT> & vec ) const {
             return x==vec.x && y==vec.y && z==vec.z && w==vec.w;
+        }
+        __forceinline bool operator != ( const vec4<TT> & vec ) const {
+            return x!=vec.x || y!=vec.y || z!=vec.z || w!=vec.w;
         }
         __forceinline vec4() = default;
         __forceinline vec4(const vec4 &) = default;

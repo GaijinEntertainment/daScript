@@ -1125,6 +1125,25 @@ namespace das {
                 return "/* NotAPolicy */";
             }
         }
+        bool isRefPolicyOp(ExprOp2 * that) {
+            return
+                // math
+                   (that->op == "+=")
+                || (that->op == "-=")
+                || (that->op == "*=")
+                || (that->op == "/=")
+                || (that->op == "%=")
+                // bin
+                || (that->op == "&=")
+                || (that->op == "|=")
+                || (that->op == "^=")
+                // rotational
+                || (that->op == "<<=")
+                || (that->op == ">>=")
+                || (that->op == "<<<=")
+                || (that->op == ">>>=")
+                ;
+        }
         virtual void preVisit ( ExprOp2 * that ) override {
             Visitor::preVisit(that);
             if ( !noBracket(that) ) ss << "(";
@@ -1141,10 +1160,14 @@ namespace das {
                 }
                 outPolicy(pt);
                 ss << "::" << opPolicyName(that) << "(";
-                if ( that->left->type->ref ) {
+                if ( isRefPolicyOp(that) ) {
                     ss << "(char *)&(";
                 } else if ( policyArgNeedCast(pt, that->left->type) ) {
-                    ss << "cast<" << describeCppType(that->left->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::from(";
+                    if (that->left->type->isRefType()) {
+                        ss << "cast<" << describeCppType(that->left->type, CpptSubstitureRef::no, CpptSkipRef::yes, CpptSkipConst::yes) << "*>::from(&(";
+                    } else {
+                        ss << "cast<" << describeCppType(that->left->type, CpptSubstitureRef::no, CpptSkipRef::yes, CpptSkipConst::yes) << ">::from(";
+                    }
                 }
             }
         }
@@ -1155,14 +1178,22 @@ namespace das {
                 CallFunc_preVisitCallArg(that, that->right.get(), true);
             } else if ( isOpPolicy(that) ) {
                 auto pt = opPolicyBase(that);
-                if ( that->left->type->ref ) {
+                if ( isRefPolicyOp(that) ) {
                     ss << ")";
                 } else if ( policyArgNeedCast(pt, that->left->type) ) {
-                    ss << ")";
+                    if (that->left->type->isRefType()) {
+                        ss << "))";
+                    } else {
+                        ss << ")";
+                    }
                 }
                 ss << ",";
                 if ( policyArgNeedCast(pt, that->right->type) ) {
-                    ss << "cast<" << describeCppType(that->right->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::from(";
+                    if (that->right->type->isRefType()) {
+                        ss << "cast<" << describeCppType(that->right->type, CpptSubstitureRef::no, CpptSkipRef::yes, CpptSkipConst::yes) << " *>::from(&(";
+                    } else {
+                        ss << "cast<" << describeCppType(that->right->type, CpptSubstitureRef::no, CpptSkipRef::yes, CpptSkipConst::yes) << ">::from(";
+                    }
                 }
             } else {
                 ss << " " << that->op << " ";
@@ -1175,7 +1206,13 @@ namespace das {
                 that->arguments.clear();
             } else if ( isOpPolicy(that) ) {
                 auto pt = opPolicyBase(that);
-                if ( policyArgNeedCast(pt, that->right->type) )ss << ")";
+                if (policyArgNeedCast(pt, that->right->type)) {
+                    if (that->right->type->isRefType()) {
+                        ss << "))";
+                    } else {
+                        ss << ")";
+                    }
+                }
                 ss << ",*__context__)";
                 if ( policyResultNeedCast(pt, that->type) ) {
                     ss << ")";

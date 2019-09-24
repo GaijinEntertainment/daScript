@@ -1,13 +1,50 @@
 #pragma once
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/sim_policy.h"
+#include "daScript/simulate/aot.h"
 
 struct Object {
     das::float3   pos;  
     das::float3   vel;  
+
+    __forceinline bool operator == (const Object & that) const {
+        return pos == that.pos && vel == that.vel;
+    }
+    __forceinline bool operator != (const Object & that) const {
+        return pos != that.pos || vel != that.vel;
+    }
+
 };
 
 typedef das::vector<Object> ObjectArray;
+
+namespace das {
+    template<>
+    struct SimPolicy<Object>
+    {
+        static __forceinline const Object &to ( vec4f a ) { return *(const Object *)v_extract_ptr(v_cast_vec4i(a)); }
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) { return to(a) == to(b); }
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) { return to(a) != to(b); }
+    };
+
+    template <>
+    struct das_index<ObjectArray> {
+        static __forceinline Object & at ( ObjectArray & value, int32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline const Object & at ( const ObjectArray & value, int32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline Object & at ( ObjectArray & value, uint32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline const Object & at ( const ObjectArray & value, uint32_t index, Context * ) {
+            return value[index];
+        }
+    };
+}
+
 
 int AddOne(int a);
 

@@ -3,6 +3,7 @@
 #include "test_profile.h"
 
 #include "daScript/daScript.h"
+#include "daScript/ast/ast_policy_types.h"
 
 #define FAST_PATH_ANNOTATION    1
 #define FUNC_TO_QUERY           1
@@ -60,6 +61,10 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 
 MAKE_TYPE_FACTORY(Object, Object)
 MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
+
+IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ, Object);
+IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu, Object);
+
 
 __noinline int AddOne(int a) {
     return a+1;
@@ -744,6 +749,7 @@ public:
         addAnnotation(make_shared<EsFunctionAnnotation>());
         // register types
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>(lib));
+        addFunctionBasic<Object>(*this, lib);
         addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib));
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
