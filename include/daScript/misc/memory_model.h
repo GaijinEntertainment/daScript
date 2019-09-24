@@ -94,7 +94,6 @@ namespace das {
     };
 
     struct MemoryModel {
-        enum { initial_page_count = 16 };
         MemoryModel() = delete;
         MemoryModel(const MemoryModel &) = delete;
         MemoryModel & operator = (const MemoryModel &) = delete;
@@ -102,6 +101,7 @@ namespace das {
         virtual ~MemoryModel ();
         virtual void reset();
         virtual void setInitialSize ( uint32_t size );
+        virtual uint32_t growPages(uint32_t pages) const { return pages * 2; }
         void sweep();
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
@@ -118,10 +118,12 @@ namespace das {
         uint32_t maxBytesAllocated() const { return maxAllocated; }
         uint32_t pagesAllocated() const;
         uint32_t pagesTotal() const;
+        uint64_t totalAlignedMemoryAllocated() const;
         uint32_t                alignMask;
         uint32_t                pageSize;
         uint32_t                totalAllocated;
         uint32_t                maxAllocated;
+        uint32_t                initial_page_count = 16;
         vector<Book>            shelf;
         map<char *,uint32_t>    bigStuff;
     };

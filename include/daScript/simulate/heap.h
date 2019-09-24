@@ -237,6 +237,12 @@ namespace das {
 
     class DebugInfoAllocator : public NodeAllocator {
     public:
+        DebugInfoAllocator() {
+            prefixWithHeader = false;
+            initial_page_count = 1;
+            pageSize = 1024;
+        }
+        virtual uint32_t growPages(uint32_t pages) const override { return pages; }
         map<uint32_t,TypeInfo *>    lookup;
     };
 }

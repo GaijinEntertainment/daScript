@@ -69,7 +69,7 @@ namespace das {
                     return ptr;
                 }
             }
-            uint32_t npc = shelf.empty() ? initial_page_count : (shelf.back().totalPages * 2);
+            uint32_t npc = shelf.empty() ? initial_page_count : growPages(shelf.back().totalPages);
             shelf.emplace_back(pageSize, npc);
             return shelf.back().allocate(size);
         }
@@ -146,6 +146,17 @@ namespace das {
             }
         }
         return total;
+    }
+
+    uint64_t MemoryModel::totalAlignedMemoryAllocated() const {
+        uint64_t mem = 0;
+        for (const auto & book : shelf) {
+            mem += book.totalSize;
+        }
+        for (const auto & it : bigStuff) {
+            mem += it.second;
+        }
+        return mem;
     }
 
     void MemoryModel::sweep() {

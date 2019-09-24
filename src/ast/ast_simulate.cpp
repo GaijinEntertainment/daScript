@@ -1971,12 +1971,21 @@ namespace das
         // run init script and restart
         context.runInitScript();
         context.restart();
-        if (options.getOption("log_mem")) {
-            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated() << " pages\n";
-            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->pagesAllocated() << " pages\n";
-            logs << "debug         " << context.debugInfo->bytesAllocated() << "\n";
-            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.pagesAllocated() << " pages\n";
-            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.pagesAllocated() << " pages\n";
+        if (options.getOption("log_mem",false)) {
+            logs << "globals       " << context.globalsSize << "\n";
+            logs << "stack         " << context.stack.size() << "\n";
+            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated() 
+                << " pages (" << context.code->totalAlignedMemoryAllocated() << ")\n";
+            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->pagesAllocated() 
+                << " pages (" << context.constStringHeap->totalAlignedMemoryAllocated() << ")\n";
+            logs << "debug         " << context.debugInfo->bytesAllocated() << " (" << 
+                context.debugInfo->totalAlignedMemoryAllocated() << ")\n";
+            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.pagesAllocated() 
+                << " pages (" << context.heap.totalAlignedMemoryAllocated() << ")\n";
+            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.pagesAllocated() 
+                << " pages(" << context.stringHeap.totalAlignedMemoryAllocated() << ")\n";
+            logs << "shared        " << context.getSharedMemorySize() << "\n";
+            logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
         // log CPP
         if (options.getOption("log_cpp")) {

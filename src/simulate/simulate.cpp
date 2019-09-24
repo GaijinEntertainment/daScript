@@ -457,6 +457,23 @@ namespace das
         }
     }
 
+    uint64_t Context::getSharedMemorySize() const {
+        uint64_t mem = 0;
+        mem += code->totalAlignedMemoryAllocated();
+        mem += constStringHeap->totalAlignedMemoryAllocated();
+        mem += debugInfo->totalAlignedMemoryAllocated();
+        return mem;
+    }
+
+    uint64_t Context::getUniqueMemorySize() const {
+        uint64_t mem = 0;
+        mem += globalsSize;
+        mem += stack.size();
+        mem += heap.totalAlignedMemoryAllocated();
+        mem += stringHeap.totalAlignedMemoryAllocated();
+        return mem;
+    }
+
     struct SimNodeRelocator : SimVisitor {
         shared_ptr<NodeAllocator>   newCode;
         Context * context = nullptr;

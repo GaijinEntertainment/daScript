@@ -416,6 +416,10 @@ namespace das
 
         void relocateCode();
         void collectStringHeap();
+
+        uint64_t getSharedMemorySize() const;
+        uint64_t getUniqueMemorySize() const;
+
     public:
         uint64_t *                      annotationData = nullptr;
         StringAllocator                 stringHeap;
