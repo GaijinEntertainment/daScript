@@ -38,7 +38,7 @@ namespace das {
     }
 
     template <typename TT, typename QQ>
-    __forceinline void das_copy ( TT & a, QQ b ) {
+    __forceinline void das_copy ( TT & a, const QQ b ) {
         a = (TT) b;
     }
 
@@ -417,11 +417,11 @@ namespace das {
     template <int tupleSize, typename ...TA>
     struct TTuple : Tuple {
         TTuple() = default;
-        TTuple(TTuple & arr) { moveT(arr); }
+        TTuple(const TTuple & arr) { moveT(arr); }
         TTuple(TTuple && arr ) { moveT(arr); }
-        TTuple & operator = ( TTuple & arr ) { moveT(arr); return *this; }
+        TTuple & operator = ( const TTuple & arr ) { moveT(arr); return *this; }
         TTuple & operator = ( TTuple && arr ) { moveT(arr); return *this; }
-        __forceinline void moveT ( Tuple & arr ) {
+        __forceinline void moveT ( const Tuple & arr ) {
             memcpy ( data, &arr, tupleSize );
         }
         char data[tupleSize];
