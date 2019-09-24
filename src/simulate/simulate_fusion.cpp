@@ -92,6 +92,7 @@ namespace das {
     void createFusionEngine() {
         if ( !g_fusionEngine ) {
             g_fusionEngine = make_unique<FusionEngine>();
+#if DAS_FUSION
             // misc (note, misc before everything)
             createFusionEngine_misc_copy_reference();
             // op1
@@ -112,6 +113,7 @@ namespace das {
             createFusionEngine_at();
             createFusionEngine_at_array();
             createFusionEngine_tableindex();
+#endif
         }
     }
 

@@ -5,6 +5,9 @@
 #endif
 
 #include "daScript/simulate/simulate_fusion.h"
+
+#if DAS_FUSION
+
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
@@ -26,5 +29,8 @@ namespace das {
         REGISTER_OP2_NUMERIC(Mul);
     }
 }
+
+#endif
+
 
 

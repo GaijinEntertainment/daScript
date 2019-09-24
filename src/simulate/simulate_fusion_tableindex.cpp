@@ -4,8 +4,11 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/simulate_fusion.h"
+
+#if DAS_FUSION
+
+#include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_visit_op.h"
@@ -76,3 +79,6 @@ namespace das {
         REGISTER_SETOP(TableIndex,Ptr,StringPtr); 
     }
 }
+
+#endif
+

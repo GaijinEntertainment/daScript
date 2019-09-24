@@ -4,8 +4,11 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/misc/copy_bytes.h"
 #include "daScript/simulate/simulate_fusion.h"
+
+#if DAS_FUSION
+
+#include "daScript/misc/copy_bytes.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
@@ -147,3 +150,6 @@ namespace das {
         (*g_fusionEngine)["CopyRefValue"].push_back(make_shared<FusionPoint_MiscCopyRefValue>());
     }
 }
+
+#endif
+

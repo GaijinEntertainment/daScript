@@ -4,8 +4,11 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/simulate_fusion.h"
+
+#if DAS_FUSION
+
+#include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/simulate_visit_op.h"
@@ -141,3 +144,6 @@ namespace das {
         (*g_fusionEngine)["ArrayAt"].push_back(make_shared<FusionPoint_Set_ArrayAt_StringPtr>());
     }
 }
+
+#endif
+

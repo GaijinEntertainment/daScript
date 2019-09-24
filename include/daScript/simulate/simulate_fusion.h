@@ -3,6 +3,10 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/simulate_nodes.h"
 
+#ifndef DAS_FUSION
+    #define DAS_FUSION  1
+#endif
+
 namespace das {
 
     typedef char * StringPtr;
@@ -78,6 +82,7 @@ namespace das {
     void resetFusionEngine();
     void createFusionEngine();
 
+#if DAS_FUSION
     // fusion engine subsections
     // misc (note, misc before everything)
     void createFusionEngine_misc_copy_reference();
@@ -99,4 +104,5 @@ namespace das {
     void createFusionEngine_at();
     void createFusionEngine_at_array();
     void createFusionEngine_tableindex();
+#endif
 }
