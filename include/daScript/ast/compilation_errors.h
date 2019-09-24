@@ -118,6 +118,8 @@ namespace das
     ,   assert_with_side_effects                =   40201       // assert(i++)
     ,   only_fast_aot_no_cpp_name               =   40202       // blah() of the function without cppName
     ,   aot_side_effects                        =   40203       // eval(a++,b++,a+b)
+    ,   no_global_heap                          =   40204       // let a = {{ }}
+    ,   no_global_variables                     =   40205       // var a = ...
 
     ,   too_many_infer_passes                   =   41000
 

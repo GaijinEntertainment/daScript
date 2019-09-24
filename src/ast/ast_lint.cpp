@@ -41,10 +41,14 @@ namespace das {
     class LintVisitor : public Visitor {
         bool checkOnlyFastAot;
         bool checkAotSideEffects;
+        bool checkNoGlobalHeap;
+        bool checkNoGlobalVariables;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
-            checkOnlyFastAot = program->options.getOption("onlyFastAot", false);
-            checkAotSideEffects = program->options.getOption("aotOrderSideEffects", false);
+            checkOnlyFastAot = program->options.getOption("only_fast_aot", false);
+            checkAotSideEffects = program->options.getOption("aot_order_side_effects", false);
+            checkNoGlobalHeap = program->options.getOption("no_global_heap", false);
+            checkNoGlobalVariables = program->options.getOption("no_global_variables", false);
         }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             program->error(err,at,cerr);
@@ -60,7 +64,22 @@ namespace das {
                 }
             }
         }
-        virtual void preVisit ( ExprCall * expr ) {
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
+            if ( checkNoGlobalHeap ) {
+                if ( !init->type->isNoHeapType() ) {
+                    program->error("variable " + var->name + " uses heap, which is disabled via option no_global_heap",
+                        var->at, CompilationError::no_global_heap );
+                }
+            }
+            if ( checkNoGlobalVariables ) {
+                if ( !var->type->isConst() ) {
+                    program->error("variable " + var->name + " is not a constant, which is disabled via option no_global_variables",
+                        var->at, CompilationError::no_global_variables );
+                }
+            }
+            return Visitor::visitGlobalLetInit(var, init);
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
@@ -75,11 +94,11 @@ namespace das {
                 }
             }
         }
-        virtual void preVisit ( ExprOp1 * expr ) {
+        virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
         }
-        virtual void preVisit ( ExprOp2 * expr ) {
+        virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
@@ -89,7 +108,7 @@ namespace das {
                 }
             }
         }
-        virtual void preVisit ( ExprOp3 * expr ) {
+        virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
@@ -99,7 +118,7 @@ namespace das {
                 }
             }
         }
-        virtual void preVisit ( ExprCopy * expr ) {
+        virtual void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
             // @E1 = E2, E2 side effects are before E1 side effects
@@ -112,7 +131,7 @@ namespace das {
             }
             */
         }
-        virtual void preVisit ( ExprMove * expr ) {
+        virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
@@ -122,7 +141,7 @@ namespace das {
                 }
             }
         }
-        virtual void preVisit ( ExprClone * expr ) {
+        virtual void preVisit ( ExprClone * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
@@ -132,7 +151,7 @@ namespace das {
                 }
             }
         }
-        virtual void preVisit ( ExprAssert * expr ) {
+        virtual void preVisit ( ExprAssert * expr ) override {
             Visitor::preVisit(expr);
             if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
                 error("assert expressions can't have side-effects (use verify instead)", expr->at,

@@ -4,6 +4,12 @@
 
 namespace das {
 
+    void Book::reset() {
+        totalSize = totalFree = pageSize * totalPages;
+        freePageIndex = 0;
+        memset ( pages, 0, sizeof(Page)*totalPages );
+    }
+
     void Book::moveBook ( Book & b ) {
         pageSize = b.pageSize;
         totalPages = b.totalPages;
@@ -108,6 +114,27 @@ namespace das {
         memcpy ( nptr, ptr, size );
         free(ptr, size);
         return nptr;
+    }
+
+    void MemoryModel::reset() {
+        bigStuff.clear();
+        if ( shelf.size()!=1 ) {
+            uint32_t pages = pagesTotal();
+            if ( pages ) {
+                shelf.clear();
+                shelf.emplace_back(pageSize, pages);
+            }
+        } else {
+            shelf[0].reset();
+        }
+    }
+
+    uint32_t MemoryModel::pagesTotal() const {
+        uint32_t total = 0;
+        for ( const auto & book : shelf ) {
+            total += book.totalPages;
+        }
+        return total;
     }
 
     uint32_t MemoryModel::pagesAllocated() const {

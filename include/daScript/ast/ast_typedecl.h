@@ -80,6 +80,7 @@ namespace das {
         bool canDelete() const;
         bool isPod() const;
         bool isRawPod() const;
+        bool isNoHeapType() const;
         bool isWorkhorseType() const; // we can return this, or pass this
         bool isPolicyType() const;
         bool isVecPolicyType() const;

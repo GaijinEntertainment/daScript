@@ -425,6 +425,25 @@ namespace das
         return true;
     }
 
+        bool TypeDecl::isNoHeapType() const {
+            if ( baseType==Type::tArray || baseType==Type::tTable
+                    || baseType==Type::tBlock || baseType==Type::tLambda )
+                return false;
+            if ( baseType==Type::tStructure && structType )
+                return structType->isNoHeapType();
+            if ( baseType==Type::tHandle )
+                return annotation->isPod();
+            if ( baseType==Type::tTuple ) {
+                for ( auto & arg : argTypes ) {
+                    if ( !arg->isNoHeapType() ) {
+                        return false;
+                    }
+                }
+            }
+            if ( baseType==Type::tPointer ) return false;   // pointer can point to heap
+            return true;
+        }
+
     bool TypeDecl::isPod() const {
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString
                 || baseType==Type::tBlock || baseType==Type::tLambda )

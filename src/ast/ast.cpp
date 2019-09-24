@@ -161,6 +161,14 @@ namespace das {
         return canAot(recAot);
     }
 
+    bool Structure::isNoHeapType() const {
+        for ( const auto & fd : fields ) {
+            if ( !fd.type->isNoHeapType() )
+                return false;
+        }
+        return true;
+    }
+
     bool Structure::isPod() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->isPod() )

@@ -129,6 +129,7 @@ namespace das
         bool canClone() const;
         bool canAot() const;
         bool canAot( set<Structure *> & recAot ) const;
+        bool isNoHeapType() const;
         bool isPod() const;
         bool isRawPod() const;
         bool isLocal() const;

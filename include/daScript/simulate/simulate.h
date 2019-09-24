@@ -174,6 +174,13 @@ namespace das
             stack.reset();
         }
 
+        __forceinline void restartHeaps() {
+            DAS_ASSERTF(stack.empty(),"can't reset heaps context during the simulation");
+            DAS_ASSERTF(insideContext==0,"can't reset heaps in locked context");
+            heap.reset();
+            stringHeap.reset();
+        }
+
         __forceinline uint32_t tryRestartAndLock() {
             if (insideContext == 0) {
                 restart();

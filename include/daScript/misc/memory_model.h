@@ -42,6 +42,7 @@ namespace das {
             pages = new Page[totalPages];
         }
         ~Book();
+        void reset();
         __forceinline bool isOwnPtr ( char * ptr ) const {
             return (ptr>=data) && (ptr<(data + totalSize));
         }
@@ -99,6 +100,7 @@ namespace das {
         MemoryModel & operator = (const MemoryModel &) = delete;
         MemoryModel ( uint32_t ps );
         virtual ~MemoryModel ();
+        virtual void reset();
         virtual void setInitialSize ( uint32_t size );
         void sweep();
         char * allocate ( uint32_t size );
@@ -115,6 +117,7 @@ namespace das {
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }
         uint32_t pagesAllocated() const;
+        uint32_t pagesTotal() const;
         uint32_t                alignMask;
         uint32_t                pageSize;
         uint32_t                totalAllocated;
