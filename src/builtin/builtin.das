@@ -7,7 +7,7 @@ def resize(var Arr:array<auto(numT)>;newSize:int)
 def reserve(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_reserve(Arr,newSize,typeinfo(sizeof type numT))
 
-def push(var Arr:array<auto(numT)>;value:numT;at:int=-1)
+def push(var Arr:array<auto(numT)>;value:numT const;at:int=-1)
     Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] = value
 
 def emplace(var Arr:array<auto(numT)>;value:numT;at:int=-1)
