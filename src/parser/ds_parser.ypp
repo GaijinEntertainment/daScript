@@ -213,7 +213,7 @@
 %token  QQ                  "??"
 %token  QDOT                "?."
 %token  LPIPE               "<|"
-%token  LBPIPE              "<|"
+%token  LBPIPE              " <|"
 %token  RPIPE               "|>"
 %token  CLONEEQU            ":="
 %token  ROTL                "<<<"
@@ -226,12 +226,12 @@
 %token	BRACBRB		        "[{"    /* [{ */
 %token	CBRCBRB		        "{{"    /* {{ */
 
-%token<i>       INTEGER                 "integer"
-%token<i64>     LONG_INTEGER            "long integer"
-%token<ui>      UNSIGNED_INTEGER        "unsigned integer"
-%token<ui64>    UNSIGNED_LONG_INTEGER   "unsigned long integer"
-%token<fd>      FLOAT                   "float"
-%token<d>       DOUBLE                  "double"
+%token<i>       INTEGER                 "integer constant"
+%token<i64>     LONG_INTEGER            "long integer constant"
+%token<ui>      UNSIGNED_INTEGER        "unsigned integer constant"
+%token<ui64>    UNSIGNED_LONG_INTEGER   "unsigned long integer constant"
+%token<fd>      FLOAT                   "floating point constant"
+%token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
 
 /* %printer { fprintf (yyo, "%i", $$); } <i> */
