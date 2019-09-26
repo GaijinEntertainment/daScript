@@ -340,15 +340,50 @@ namespace das {
             return resT;
         }
 
+        bool isVisibleDirectly ( Module * objModule, Module * inWhichModule ) const {
+            if ( objModule==inWhichModule ) return true;    // module can always see itself
+            return inWhichModule->requireModule.find(objModule) != inWhichModule->requireModule.end();
+        }
+
+        Module * getSearchModule(string & moduleName) const {
+            if ( moduleName=="_" ) {
+                moduleName = "*";
+                return program->thisModule.get();
+            } else if ( moduleName=="__" ) {
+                moduleName = "";
+                return program->thisModule.get();
+            } else if ( func ) {
+                if ( func->fromGeneric ) {
+                    if ( moduleName.empty() ) {     // ::foo in generic means generic::goo, not this::foo
+                        moduleName = func->fromGeneric->module->name;
+                    }
+                    return func->fromGeneric->module;
+                } else {
+                    return func->module;
+                }
+            } else {
+                return program->thisModule.get();
+            }
+        }
+
+        Module * getFunctionVisModule( Function * fn ) const {
+            return fn->fromGeneric ? fn->fromGeneric->module : fn->module;
+        }
+
         vector<FunctionPtr> findFuncAddr ( const string & name ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    for ( auto & pFn : goodFunctions ) {
+                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                            result.push_back(pFn);
+                        }
+                    }
                 }
                 return true;
             },moduleName);
@@ -359,6 +394,7 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
@@ -374,6 +410,7 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
@@ -390,6 +427,7 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
@@ -405,6 +443,7 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
@@ -579,13 +618,16 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
-                            result.push_back(pFn);
+                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                            if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
+                                result.push_back(pFn);
+                            }
                         }
                     }
                 }
@@ -598,13 +640,16 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
-                            result.push_back(pFn);
+                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                            if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
+                                result.push_back(pFn);
+                            }
                         }
                     }
                 }
@@ -617,13 +662,16 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
-                            result.push_back(pFn);
+                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                            if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
+                                result.push_back(pFn);
+                            }
                         }
                     }
                 }
@@ -636,13 +684,16 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
+            auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
-                            result.push_back(pFn);
+                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                            if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
+                                result.push_back(pFn);
+                            }
                         }
                     }
                 }
@@ -651,7 +702,8 @@ namespace das {
             return result;
         }
 
-        void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
+        void reportFunctionNotFound( const string & name, const string & extra,
+                                    const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
             const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             TextWriter ss;
@@ -661,6 +713,9 @@ namespace das {
             } else if ( candidateFunctions.size()==1 ) {
                 ss << "\ncandidate functoin:\n";
             }
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            auto inWhichModule = getSearchModule(moduleName);
             for ( auto & missFn : candidateFunctions ) {
                 ss << "\t";
                 if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
@@ -669,11 +724,21 @@ namespace das {
                 if ( reportDetails ) {
                     ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                 }
+                auto visM = getFunctionVisModule(missFn.get());
+                if ( !isVisibleDirectly(visM, inWhichModule) ) {
+                    ss << "\t\tmodule " << visM->name << " is not visible directly from ";
+                    if ( inWhichModule->name.empty()) {
+                        ss << "the current module\n";
+                    } else {
+                        ss << inWhichModule->name << "\n";
+                    }
+                }
             }
             error(ss.str(), at, cerror);
         }
 
-        void reportFunctionNotFound( const string & extra, const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
+        void reportFunctionNotFound( const string & , const string & extra,
+                                    const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
                                     const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks, bool reportDetails ,
                                     CompilationError cerror = CompilationError::function_not_found) {
             TextWriter ss;
@@ -2066,15 +2131,17 @@ namespace das {
             string moduleName, varName;
             splitTypeName(name, moduleName, varName);
             vector<VariablePtr> result;
+            auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 if ( auto var = mod->findVariable(varName) ) {
-                    result.push_back(var);
+                    if ( isVisibleDirectly(var->module, inWhichModule) ) {
+                        result.push_back(var);
+                    }
                 }
                 return true;
             },moduleName);
             return result;
         }
-
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
             expr->variable = nullptr;
@@ -2324,7 +2391,7 @@ namespace das {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
             if ( hasClone(expr->left->type, expr->right->type) ) {
-                auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
+                auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
                 cloneFn->arguments.push_back(expr->left->clone());
                 cloneFn->arguments.push_back(expr->right->clone());
                 return ExpressionPtr(cloneFn);
@@ -2349,7 +2416,7 @@ namespace das {
                     return make_shared<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
                 } else if ( cloneType->isGoodArrayType() || cloneType->isGoodTableType() ) {
                     reportGenericInfer();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
@@ -2360,7 +2427,7 @@ namespace das {
                         auto clf = makeClone(stt);
                         extraFunctions.push_back(clf);
                     }
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone");
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
@@ -2853,7 +2920,7 @@ namespace das {
             auto can1 = findCandidates(expr->name, expr->arguments);
             auto can2 = findGenericCandidates(expr->name, expr->arguments);
             can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
+            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
         }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
@@ -2897,7 +2964,7 @@ namespace das {
             auto can1 = findCandidates(expr->name, types);
             auto can2 = findGenericCandidates(expr->name, types);
             can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(msg + expr->describe(), expr->at, can1, types, true, true, reportDetails, cerror);
+            reportFunctionNotFound(expr->name, msg + expr->describe(), expr->at, can1, types, true, true, reportDetails, cerror);
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
@@ -2948,7 +3015,7 @@ namespace das {
                     } else {
                         auto realFn = program->findFunction(clone->getMangledName());
                         vector<FunctionPtr> candidates = { realFn };
-                        reportFunctionNotFound("no matching generic function " + expr->describe(),
+                        reportFunctionNotFound(clone->name, "no matching generic function " + expr->describe(),
                                                expr->at, candidates, types, true, true, true);
                     }
                 } else {

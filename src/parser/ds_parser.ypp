@@ -447,7 +447,9 @@ require_module_name
 require_module
     :   require_module_name[name] {
         auto modN = getModuleName(*$name);
-        if ( !g_Program->addModule(modN) ) {
+        if ( auto mod = g_Program->addModule(modN) ) {
+            g_Program->thisModule->requireModule.insert(mod);
+        } else {
             das_yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }

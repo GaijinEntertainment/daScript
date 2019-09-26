@@ -1578,16 +1578,16 @@ namespace das {
         failToCompile = true;
     }
 
-    bool Program::addModule ( const string & name ) {
-        if ( !library.findModule(name) ) {
+    Module * Program::addModule ( const string & name ) {
+        if ( auto lm = library.findModule(name) ) {
+            return lm;
+        } else {
             if ( auto pm = Module::require(name) ) {
                 library.addModule(pm);
-                return true;
+                return pm;
             } else {
-                return false;
+                return nullptr;
             }
-        } else {
-            return true;
         }
     }
 

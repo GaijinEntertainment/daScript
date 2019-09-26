@@ -91,6 +91,11 @@ namespace das {
             modules = this;
             builtIn = true;
         }
+        if ( n != "$" ) {
+            requireModule.insert(require("$"));
+        } else {
+            requireModule.insert(this);
+        }
     }
 
     Module::~Module() {

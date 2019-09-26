@@ -544,6 +544,7 @@ namespace das
         map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
         mutable map<string, ExprCallFactory>    callThis;
         map<uint32_t, uint64_t>                 annotationData;
+        set<Module *>                           requireModule;      // visibility modules
         string  name;
         bool    builtIn = false;
     private:
@@ -645,7 +646,7 @@ namespace das
         bool addFunction ( const FunctionPtr & fn );
         FunctionPtr findFunction(const string & mangledName) const;
         bool addGeneric ( const FunctionPtr & fn );
-        bool addModule ( const string & name );
+        Module * addModule ( const string & name );
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs);
         void lint();
