@@ -44,7 +44,7 @@ namespace das {
                 src +=2;
                 wb = true;
                 continue;
-            } else if ( wb && src[0]=='r' ) {
+            } else if ( wb && ((src+8)<src_end) && src[0]=='r') {   // need space for 'require '
                 if ( memcmp(src, "require", 7)==0 ) {
                     src += 7;
                     if ( isspace(src[0]) ) {
@@ -56,7 +56,7 @@ namespace das {
                         }
                         if ( src[0]=='_' || isalpha(src[0]) || src[0] ) {
                             string mod;
-                            while ( src < src_end && (isalnum(src[0]) || src[0]=='_' || src[0]=='.') ) {
+                            while ( src < src_end && (isalnum(src[0]) || src[0]=='_' || src[0]=='.' || src[0]=='/') ) {
                                 mod += *src ++;
                             }
                             req.push_back(mod);
@@ -81,18 +81,24 @@ namespace das {
     }
 
     string getModuleName ( const string & nameWithDots ) {
-        auto idx = nameWithDots.find_last_of('.');
+        auto idx = nameWithDots.find_last_of("./");
         if ( idx==string::npos ) return nameWithDots;
         return nameWithDots.substr(idx+1);
     }
 
     string getModuleFileName ( const string & nameWithDots ) {
         auto fname = nameWithDots;
+        // TODO: should we?
         replace ( fname.begin(), fname.end(), '.', '/' );
         return fname;
     }
 
-    bool getPrerequisits ( const string & fileName, const FileAccessPtr & access, vector<string> & req, vector<string> & missing, ModuleGroup & libGroup) {
+    bool getPrerequisits ( const string & fileName,
+                          const FileAccessPtr & access,
+                          vector<string> & req,
+                          vector<string> & missing,
+                          set<string> & dependencies,
+                          ModuleGroup & libGroup) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
             for ( auto & mod : ownReq ) {
@@ -100,10 +106,16 @@ namespace das {
                 auto module = Module::require(modName);
                 if ( !module ) {
                     if ( find(req.begin(), req.end(), mod)==req.end() ) {
+                        if ( dependencies.find(mod) != dependencies.end() ) {
+                            // circular dependency
+                            missing.push_back(mod);
+                            return false;
+                        }
+                        dependencies.insert(mod);
                         // module file name
                         string modFName = getModuleFileName(mod);
                         string modFn = access->getIncludeFileName(fileName, modFName) + ".das";
-                        if ( !getPrerequisits(modFn, access, req, missing, libGroup) ) {
+                        if ( !getPrerequisits(modFn, access, req, missing, dependencies, libGroup) ) {
                             return false;
                         }
                         req.push_back(mod);
@@ -194,7 +206,8 @@ namespace das {
 
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll ) {
         vector<string> req, missing;
-        if ( getPrerequisits(fileName, access, req, missing, libGroup) ) {
+        set<string> dependencies;
+        if ( getPrerequisits(fileName, access, req, missing, dependencies, libGroup) ) {
             for ( auto & mod : req ) {
                 auto modName = getModuleName(mod);
                 if ( !libGroup.findModule(modName) ) {
@@ -204,7 +217,9 @@ namespace das {
                     if ( program->failed() ) {
                         return program;
                     }
-                    program->thisModule->name = modName;
+                    if ( program->thisModule->name.empty() ) {
+                        program->thisModule->name = modName;
+                    }
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {
                         if ( !pm->name.empty() && pm->name!="$" ) {
@@ -221,7 +236,8 @@ namespace das {
             auto program = make_shared<Program>();
             program->thisModuleGroup = &libGroup;
             for ( auto & mis : missing ) {
-                program->error("missing prerequisit " + mis, LineInfo());
+                program->error("missing prerequisit " + mis + ", or circular dependency",
+                               LineInfo(), CompilationError:: module_not_found);
             }
             return program;
         }

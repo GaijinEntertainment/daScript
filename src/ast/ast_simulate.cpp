@@ -1972,7 +1972,7 @@ namespace das
         context.runInitScript();
         context.restart();
         if (options.getOption("log_mem",false)) {
-            logs << "globals       " << context.globalsSize << "\n";
+            logs << "globals       " << context.getGlobalSize() << "\n";
             logs << "stack         " << context.stack.size() << "\n";
             logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated() 
                 << " pages (" << context.code->totalAlignedMemoryAllocated() << ")\n";

@@ -151,6 +151,10 @@ namespace das
         Context & operator = (const Context &) = delete;
         virtual ~Context();
 
+        uint32_t getGlobalSize() const {
+            return globalsSize;
+        }
+
         uint64_t getInitSemanticHash();
 
         __forceinline void * getVariable ( int index ) const {

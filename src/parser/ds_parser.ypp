@@ -157,6 +157,7 @@
 %token  DAS_WHERE           "where"
 %token  DAS_PASS            "pass"
 %token  DAS_REINTERPRET     "reinterpret"
+%token  DAS_MODULE          "module"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -346,6 +347,7 @@
 
 program
     :
+    |   program module_declaration
     |   program structure_declaration
     |   program enum_declaration
     |   program global_let
@@ -355,6 +357,18 @@ program
 	|	program options_declaration
     |   program alias_declaration
     |   program ';'
+    ;
+
+module_declaration
+    :   DAS_MODULE  NAME[name] ';' {
+        if ( g_Program->thisModule->name.empty() ) {
+            g_Program->thisModule->name = *$name;
+        } else if ( g_Program->thisModule->name != *$name ){
+            das_yyerror("this module already has a name, and its " + g_Program->thisModule->name,tokAt(@name),
+                CompilationError::module_already_has_a_name);
+        }
+        delete $name;
+    }
     ;
 
 character_sequence
@@ -439,6 +453,12 @@ require_module_name
     }
     |   require_module_name[req] '.' NAME[name] {
         *$req += ".";
+        *$req += *$name;
+        delete $name;
+        $$ = $req;
+    }
+    |   require_module_name[req] '/' NAME[name] {
+        *$req += "/";
         *$req += *$name;
         delete $name;
         $$ = $req;

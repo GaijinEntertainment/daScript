@@ -85,6 +85,7 @@ namespace das
     ,   return_or_break_in_finally              =   30802       //  if a {} finally { return blah; }
 
     ,   module_not_found                        =   30901       //  require wtf
+    ,   module_already_has_a_name               =   30902       //  module a; module aa
 
     ,   cant_new_handle                         =   31001       //  new Handle
     ,   bad_delete                              =   31002       //  delete ;

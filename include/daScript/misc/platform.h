@@ -79,14 +79,16 @@ inline void *das_aligned_alloc16(uint32_t size) {
 #if defined(_MSC_VER)
     return _aligned_malloc(size, 16);
 #else
-    return (char *)(new vec4f[(size+15)/16]); 
+    void * mem = nullptr;
+    posix_memalign(&mem, 16, size);
+    return mem;
 #endif
 }
 inline void das_aligned_free16(void *ptr) {
 #if defined(_MSC_VER)
     _aligned_free(ptr);
 #else
-    return delete[] (vec4f*)ptr; 
+    free(ptr);
 #endif
 }
 #endif
