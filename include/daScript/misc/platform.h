@@ -75,8 +75,20 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 
 #ifndef DAS_ALIGNED_ALLOC
 #define DAS_ALIGNED_ALLOC 1
-inline void *das_aligned_alloc16(uint32_t size) {return (char *)(new vec4f[(size+15)/16]); }
-inline void das_aligned_free16(void *ptr) {return delete[] (vec4f*)ptr; }
+inline void *das_aligned_alloc16(uint32_t size) {
+#if defined(_MSC_VER)
+    return _aligned_malloc(size, 16);
+#else
+    return (char *)(new vec4f[(size+15)/16]); 
+#endif
+}
+inline void das_aligned_free16(void *ptr) {
+#if defined(_MSC_VER)
+    _aligned_free(ptr);
+#else
+    return delete[] (vec4f*)ptr; 
+#endif
+}
 #endif
 
 #ifndef DAS_FATAL_LOG

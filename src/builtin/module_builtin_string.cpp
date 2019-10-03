@@ -68,7 +68,7 @@ namespace das
         if (!strLen)
             return nullptr;
         const char *start = strip_l(str);
-        return start-str < strLen ? context->stringHeap.allocateString(start, strLen-uint32_t(start-str)) : nullptr;
+        return uint32_t(start-str) < strLen ? context->stringHeap.allocateString(start, strLen-uint32_t(start-str)) : nullptr;
     }
 
     char* builtin_string_strip_right ( const char *str, Context * context ) {
