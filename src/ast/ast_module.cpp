@@ -349,49 +349,53 @@ namespace das {
         return it!=modules.end() ? *it : nullptr;
     }
 
-    vector<TypeDeclPtr> ModuleLibrary::findAlias ( const string & name ) const {
+    vector<TypeDeclPtr> ModuleLibrary::findAlias ( const string & name, Module * inWhichModule ) const {
         vector<TypeDeclPtr> ptr;
         string moduleName, aliasName;
         splitTypeName(name, moduleName, aliasName);
         foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findAlias(aliasName) )
-                ptr.push_back(pp);
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                if ( auto pp = pm->findAlias(aliasName) )
+                    ptr.push_back(pp);
             return true;
         }, moduleName);
         return ptr;
     }
 
-    vector<AnnotationPtr> ModuleLibrary::findAnnotation ( const string & name ) const {
+    vector<AnnotationPtr> ModuleLibrary::findAnnotation ( const string & name, Module * inWhichModule ) const {
         vector<AnnotationPtr> ptr;
         string moduleName, annName;
         splitTypeName(name, moduleName, annName);
         foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findAnnotation(annName) )
-                ptr.push_back(pp);
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                if ( auto pp = pm->findAnnotation(annName) )
+                    ptr.push_back(pp);
             return true;
         }, moduleName);
         return ptr;
     }
 
-    vector<StructurePtr> ModuleLibrary::findStructure ( const string & name ) const {
+    vector<StructurePtr> ModuleLibrary::findStructure ( const string & name, Module * inWhichModule ) const {
         vector<StructurePtr> ptr;
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
         foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findStructure(funcName) )
-                ptr.push_back(pp);
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                if ( auto pp = pm->findStructure(funcName) )
+                    ptr.push_back(pp);
             return true;
         }, moduleName);
         return ptr;
     }
 
-    vector<EnumerationPtr> ModuleLibrary::findEnum ( const string & name ) const {
+    vector<EnumerationPtr> ModuleLibrary::findEnum ( const string & name, Module * inWhichModule ) const {
         vector<EnumerationPtr> ptr;
         string moduleName, enumName;
         splitTypeName(name, moduleName, enumName);
         foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findEnum(enumName) )
-                ptr.push_back(pp);
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                if ( auto pp = pm->findEnum(enumName) )
+                    ptr.push_back(pp);
             return true;
         }, moduleName);
         return ptr;
@@ -399,7 +403,7 @@ namespace das {
 
     TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tStructure);
-        auto structs = findStructure(name);
+        auto structs = findStructure(name,nullptr);
         if ( structs.size()==1 ) {
             t->structType = structs.back().get();
         } else {
@@ -412,7 +416,7 @@ namespace das {
 
     TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tHandle);
-        auto handles = findAnnotation(name);
+        auto handles = findAnnotation(name,nullptr);
         if ( handles.size()==1 ) {
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                 t->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
@@ -431,7 +435,7 @@ namespace das {
 
     TypeDeclPtr ModuleLibrary::makeEnumType ( const string & name ) const {
         auto t = make_shared<TypeDecl>(Type::tEnumeration);
-        auto enums = findEnum(name);
+        auto enums = findEnum(name,nullptr);
         if ( enums.size()==1 ) {
             t->enumType = enums.back();
         } else {
@@ -464,6 +468,11 @@ namespace das {
         }
         userData[data->name] = ModuleGroupUserDataPtr(data);
         return true;
+    }
+
+    bool Module::isVisibleDirectly ( Module * objModule ) const {
+        if ( objModule==this ) return true;
+        return requireModule.find(objModule) != requireModule.end();
     }
 }
 

@@ -513,6 +513,7 @@ namespace das
         AnnotationPtr findAnnotation ( const string & name ) const;
         EnumerationPtr findEnum ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
+        bool isVisibleDirectly ( Module * objModule ) const;
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static void Shutdown();
@@ -579,10 +580,10 @@ namespace das
         void addBuiltInModule ();
         void addModule ( Module * module );
         void foreach ( function<bool (Module * module)> && func, const string & name ) const;
-        vector<TypeDeclPtr> findAlias ( const string & name ) const;
-        vector<AnnotationPtr> findAnnotation ( const string & name ) const;
-        vector<EnumerationPtr> findEnum ( const string & name ) const;
-        vector<StructurePtr> findStructure ( const string & name ) const;
+        vector<TypeDeclPtr> findAlias ( const string & name, Module * inWhichModule ) const;
+        vector<AnnotationPtr> findAnnotation ( const string & name, Module * inWhichModule ) const;
+        vector<EnumerationPtr> findEnum ( const string & name, Module * inWhichModule ) const;
+        vector<StructurePtr> findStructure ( const string & name, Module * inWhichModule ) const;
         Module * findModule ( const string & name ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
@@ -633,8 +634,6 @@ namespace das
     public:
         Program();
         friend TextWriter& operator<< (TextWriter& stream, const Program & program);
-        VariablePtr findVariable ( const string & name ) const;
-        vector<TypeDeclPtr> findAlias ( const string & name ) const;
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<EnumerationPtr> findEnum ( const string & name ) const;

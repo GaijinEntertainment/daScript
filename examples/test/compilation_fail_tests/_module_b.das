@@ -35,4 +35,7 @@ def from_b_get_own_fun_5()
 
 [export]
 def test
+    static_assert(int(enumInA one)==1)
+    static_assert(typeinfo(sizeof type structInA)==4)
+    static_assert(typeinfo(sizeof type aliasInA)==4)
     return true

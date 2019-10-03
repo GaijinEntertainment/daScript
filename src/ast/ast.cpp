@@ -1553,24 +1553,16 @@ namespace das {
 
     // program
 
-    vector<TypeDeclPtr> Program::findAlias ( const string & name ) const {
-        return library.findAlias(name);
-    }
-
     vector<EnumerationPtr> Program::findEnum ( const string & name ) const {
-        return library.findEnum(name);
+        return library.findEnum(name,thisModule.get());
     }
 
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
-        return library.findAnnotation(name);
+        return library.findAnnotation(name,thisModule.get());
     }
 
     vector<StructurePtr> Program::findStructure ( const string & name ) const {
-        return library.findStructure(name);
-    }
-
-    VariablePtr Program::findVariable ( const string & name ) const {
-        return thisModule->findVariable(name);
+        return library.findStructure(name,thisModule.get());
     }
 
     void Program::error ( const string & str, const LineInfo & at, CompilationError cerr ) {
@@ -1643,10 +1635,10 @@ namespace das {
     }
 
     TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
-        auto structs = findStructure(name);
-        auto handles = findAnnotation(name);
-        auto enums = findEnum(name);
-        auto aliases = findAlias(name);
+        auto structs = library.findStructure(name,thisModule.get());
+        auto handles = library.findAnnotation(name,thisModule.get());
+        auto enums = library.findEnum(name,thisModule.get());
+        auto aliases = library.findAlias(name,thisModule.get());
         if ( ((structs.size()!=0)+(handles.size()!=0)+(enums.size()!=0)+(aliases.size()!=0)) > 1 ) {
             string candidates = describeCandidates(structs);
             candidates += describeCandidates(handles, false);

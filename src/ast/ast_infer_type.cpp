@@ -340,11 +340,6 @@ namespace das {
             return resT;
         }
 
-        bool isVisibleDirectly ( Module * objModule, Module * inWhichModule ) const {
-            if ( objModule==inWhichModule ) return true;    // module can always see itself
-            return inWhichModule->requireModule.find(objModule) != inWhichModule->requireModule.end();
-        }
-
         Module * getSearchModule(string & moduleName) const {
             if ( moduleName=="_" ) {
                 moduleName = "*";
@@ -380,7 +375,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
                             result.push_back(pFn);
                         }
                     }
@@ -624,7 +619,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
                             if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
                                 result.push_back(pFn);
                             }
@@ -646,7 +641,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                        if (  inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get()) ) ) {
                             if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                 result.push_back(pFn);
                             }
@@ -668,7 +663,7 @@ namespace das {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
                             if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
                                 result.push_back(pFn);
                             }
@@ -690,7 +685,7 @@ namespace das {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isVisibleDirectly(getFunctionVisModule(pFn.get()), inWhichModule) ) {
+                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
                             if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                                 result.push_back(pFn);
                             }
@@ -725,7 +720,7 @@ namespace das {
                     ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                 }
                 auto visM = getFunctionVisModule(missFn.get());
-                if ( !isVisibleDirectly(visM, inWhichModule) ) {
+                if ( !inWhichModule->isVisibleDirectly(visM) ) {
                     ss << "\t\tmodule " << visM->name << " is not visible directly from ";
                     if ( inWhichModule->name.empty()) {
                         ss << "the current module\n";
@@ -2134,7 +2129,7 @@ namespace das {
             auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 if ( auto var = mod->findVariable(varName) ) {
-                    if ( isVisibleDirectly(var->module, inWhichModule) ) {
+                    if ( inWhichModule->isVisibleDirectly(var->module) ) {
                         result.push_back(var);
                     }
                 }

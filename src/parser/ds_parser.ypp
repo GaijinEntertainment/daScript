@@ -354,6 +354,7 @@ program
     |   program require_declaration
 	|	program options_declaration
     |   program alias_declaration
+    |   program ';'
     ;
 
 character_sequence

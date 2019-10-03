@@ -224,7 +224,7 @@ int main() {
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_FIO);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/test_require_comment.das",true);
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/module_vis_fail.das",true);
     Module::Shutdown();
     return 0;
 #endif
