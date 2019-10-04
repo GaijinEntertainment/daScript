@@ -31,7 +31,7 @@ bool compile ( const string & fn, const string & cppFn ) {
             }
             return false;
         } else {
-            Context ctx;
+            Context ctx(program->policies.stack);
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
@@ -41,7 +41,7 @@ bool compile ( const string & fn, const string & cppFn ) {
             }
             // AOT time
             TextWriter tw;
-            bool noAot = program->options.getOption("no_aot",false);
+            bool noAot = program->options.getBoolOption("no_aot",false);
             // header
             tw << "#include \"daScript/misc/platform.h\"\n\n";
 

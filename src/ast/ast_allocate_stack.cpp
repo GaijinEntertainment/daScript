@@ -71,8 +71,8 @@ namespace das {
     public:
         AllocateStack( const ProgramPtr & prog, TextWriter & ls ) : logs(ls) {
             program = prog;
-            log = prog->options.getOption("log_stack");
-            optimize = prog->options.getOption("optimize");
+            log = prog->options.getBoolOption("log_stack");
+            optimize = prog->options.getBoolOption("optimize");
             if( log ) {
                 logs << "\nSTACK INFORMATION:\n";
             }
@@ -529,7 +529,7 @@ namespace das {
         // allocate used variables and functions indices
         totalVariables = 0;
         totalFunctions = 0;
-        auto log = options.getOption("log_stack");
+        auto log = options.getBoolOption("log_stack");
         if ( log ) {
             logs << "INIT STACK SIZE:\t" << globalInitStackSize << "\n";
             logs << "FUNCTION TABLE:\n";

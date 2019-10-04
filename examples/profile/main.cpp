@@ -16,10 +16,26 @@ MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
 
 TextPrinter tout;
 
+struct SharedStackGuard {
+    SharedStackGuard() = delete;
+    SharedStackGuard(const SharedStackGuard &) = delete;
+    SharedStackGuard & operator = (const SharedStackGuard &) = delete;
+    __forceinline SharedStackGuard(Context & c, StackAllocator & stack) : ctx(c) {
+        ctx.stack.acquire(stack);
+    }
+    __forceinline ~SharedStackGuard() {
+        ctx.stack.release();
+    }
+    Context & ctx;
+};
+
 bool unit_test ( const string & fn, bool useAOT ) {
+    // make sure there is no stack
+    CodeOfPolicies policies;
+    policies.stack = 0;
     auto access = make_shared<FsFileAccess>();
     ModuleGroup dummyGroup;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {
             tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -28,7 +44,7 @@ bool unit_test ( const string & fn, bool useAOT ) {
             return false;
         } else {
             // tout << *program << "\n";
-            Context ctx;
+            Context ctx(program->policies.stack);
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
@@ -44,7 +60,8 @@ bool unit_test ( const string & fn, bool useAOT ) {
             }
             // run the test
             if ( auto fnTest = ctx.findFunction("test") ) {
-                ctx.restart();
+                StackAllocator sharedStack(8*1024);
+                SharedStackGuard guard(ctx, sharedStack);
                 bool result;
                 if ( verifyCall<bool>(fnTest->debugInfo, dummyGroup) ) {
                     result = cast<bool>::to(ctx.eval(fnTest, nullptr));

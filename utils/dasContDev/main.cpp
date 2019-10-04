@@ -51,7 +51,7 @@ bool compile_and_run ( const char * fn ) {
             }
             return false;
         } else {
-            Context ctx;
+            Context ctx(program->policies.stack);
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {

@@ -84,7 +84,7 @@ bool unit_test ( const string & fn, bool useAot ) {
             }
             return false;
         } else {
-            Context ctx;
+            Context ctx(program->policies.stack);
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
@@ -138,7 +138,7 @@ bool exception_test ( const string & fn, bool useAot ) {
             }
             return false;
         } else {
-            Context ctx;
+            Context ctx(program->policies.stack);
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {

@@ -146,7 +146,7 @@ namespace das
         friend struct SimNode_TryCatch;
         friend class Program;
     public:
-        Context();
+        Context(uint32_t stackSize = 16*1024);
         Context(const Context &);
         Context & operator = (const Context &) = delete;
         virtual ~Context();

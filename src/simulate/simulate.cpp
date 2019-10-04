@@ -413,13 +413,13 @@ namespace das
 
     // Context
 
-    Context::Context() : stack(16*1024) {
+    Context::Context(uint32_t stackSize) : stack(stackSize) {
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<StringAllocator>();
         debugInfo = make_shared<DebugInfoAllocator>();
     }
 
-    Context::Context(const Context & ctx) : stack(16*1024) {
+    Context::Context(const Context & ctx) : stack(ctx.stack.size()) {
         code = ctx.code;
         constStringHeap = ctx.constStringHeap;
         debugInfo = ctx.debugInfo;

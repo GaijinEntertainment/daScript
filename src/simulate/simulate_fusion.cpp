@@ -162,7 +162,7 @@ namespace das {
 
     void Program::fusion ( Context & context, TextWriter & logs ) {
         // log all functions
-        if ( options.getOption("fusion",true) ) {
+        if ( options.getBoolOption("fusion",true) ) {
             bool anyFusion = true;
             while ( anyFusion) {
                 anyFusion = false;

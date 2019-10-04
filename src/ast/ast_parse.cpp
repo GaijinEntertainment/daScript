@@ -140,10 +140,16 @@ namespace das {
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll ) {
+    ProgramPtr parseDaScript ( const string & fileName,
+                              const FileAccessPtr & access,
+                              TextWriter & logs,
+                              ModuleGroup & libGroup,
+                              bool exportAll,
+                              CodeOfPolicies policies ) {
         auto time0 = ref_time_ticks();
         int err;
         auto program = g_Program = make_shared<Program>();
+        g_Program->policies = policies;
         g_Access = access;
         program->thisModuleGroup = &libGroup;
         libGroup.foreach([&](Module * pm){
@@ -173,7 +179,7 @@ namespace das {
             program->inferTypes(logs);
             if ( !program->failed() ) {
                 program->lint();
-                if (program->options.getOption("optimize", true)) {
+                if (program->options.getBoolOption("optimize", true)) {
                     program->optimize(logs);
                 } else {
                     program->buildAccessFlags(logs);
@@ -188,15 +194,15 @@ namespace das {
                     program->finalizeAnnotations();
             }
             if (!program->failed()) {
-                if (program->options.getOption("log")) {
+                if (program->options.getBoolOption("log")) {
                     logs << *program;
                 }
-                if (program->options.getOption("plot")) {
+                if (program->options.getBoolOption("plot")) {
                     logs << "\n" << program->dotGraph() << "\n";
                 }
             }
             sort(program->errors.begin(), program->errors.end());
-            if ( program->options.getOption("log_compile_time",false) ) {
+            if ( program->options.getBoolOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << "\n";
             }
@@ -204,7 +210,12 @@ namespace das {
         }
     }
 
-    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll ) {
+    ProgramPtr compileDaScript ( const string & fileName,
+                                const FileAccessPtr & access,
+                                TextWriter & logs,
+                                ModuleGroup & libGroup,
+                                bool exportAll,
+                                CodeOfPolicies policies ) {
         vector<string> req, missing;
         set<string> dependencies;
         if ( getPrerequisits(fileName, access, req, missing, dependencies, libGroup) ) {
@@ -213,7 +224,7 @@ namespace das {
                 if ( !libGroup.findModule(modName) ) {
                     string modFName = getModuleFileName(mod);
                     string modFn = access->getIncludeFileName(fileName, modFName) + ".das";
-                    auto program = parseDaScript(modFn, access, logs, libGroup, true);
+                    auto program = parseDaScript(modFn, access, logs, libGroup, true, policies);
                     if ( program->failed() ) {
                         return program;
                     }
@@ -231,9 +242,10 @@ namespace das {
                     }, "*");
                 }
             }
-            return parseDaScript(fileName, access, logs, libGroup, exportAll);
+            return parseDaScript(fileName, access, logs, libGroup, exportAll, policies);
         } else {
             auto program = make_shared<Program>();
+            program->policies = policies;
             program->thisModuleGroup = &libGroup;
             for ( auto & mis : missing ) {
                 program->error("missing prerequisit " + mis + ", or circular dependency",

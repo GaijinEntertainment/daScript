@@ -1839,7 +1839,7 @@ namespace das
         }
         auto tab = buildLookup(htab, context.tabMnMask, context.tabMnRot);
         context.tabMnSize = uint32_t(tab.size());
-        if ( options.getOption("logMNHash",false) ) {
+        if ( options.getBoolOption("logMNHash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
                 << "tabMnLookup:" << context.tabMnSize << "\n"
@@ -1862,7 +1862,7 @@ namespace das
             context.tabAdSize = uint32_t(tab.size());
             context.tabAdLookup = (uint64_t *) context.code->allocate(context.tabAdSize * sizeof(uint64_t));
             memcpy ( context.tabAdLookup, tab.data(), context.tabAdSize * sizeof(uint64_t));
-            if ( options.getOption("logAdHash",false) ) {
+            if ( options.getBoolOption("logAdHash",false) ) {
                 logs
                 << "tabAdLookup:" << context.tabAdSize << "\n"
                 << "tabAdMask:" << context.tabAdMask << "\n"
@@ -1877,14 +1877,14 @@ namespace das
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
         }
-        if ( auto optHeap = options.find("heap",Type::tInt) ) {
-            context.heap.setInitialSize( uint32_t(optHeap->iValue) );
+        if ( auto optHeap = options.getIntOption("heap",policies.heap) ) {
+            context.heap.setInitialSize( uint32_t(optHeap) );
         }
-        if ( auto optStringHeap = options.find("string_heap",Type::tInt) ) {
-            context.stringHeap.setInitialSize( uint32_t(optStringHeap->iValue) );
+        if ( auto optStringHeap = options.getIntOption("string_heap",policies.string_heap) ) {
+            context.stringHeap.setInitialSize( uint32_t(optStringHeap) );
         }
         DebugInfoHelper helper(context.debugInfo);
-        helper.rtti = options.getOption("rtti",false);
+        helper.rtti = options.getBoolOption("rtti",policies.rtti);
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;
@@ -1952,7 +1952,7 @@ namespace das
         DAS_ASSERTF(context.code->pagesAllocated()<=1, "code must come in one page");
         DAS_ASSERTF(context.constStringHeap->pagesAllocated()<=1, "strings must come in one page");
         // log all functions
-        if ( options.getOption("log_nodes",false) ) {
+        if ( options.getBoolOption("log_nodes",false) ) {
             for ( int i=0; i!=context.totalVariables; ++i ) {
                 auto & pv = context.globalVariables[i];
                 if ( pv.init ) {
@@ -1969,9 +1969,16 @@ namespace das
             }
         }
         // run init script and restart
-        context.runInitScript();
+        if ( context.stack.size() ) {
+            context.runInitScript();
+        } else {
+            StackAllocator stack(16*1024);
+            context.stack.acquire(stack);
+            context.runInitScript();
+            context.stack.release();
+        }
         context.restart();
-        if (options.getOption("log_mem",false)) {
+        if (options.getBoolOption("log_mem",false)) {
             logs << "globals       " << context.getGlobalSize() << "\n";
             logs << "stack         " << context.stack.size() << "\n";
             logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated() 
@@ -1988,7 +1995,7 @@ namespace das
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
         // log CPP
-        if (options.getOption("log_cpp")) {
+        if (options.getBoolOption("log_cpp")) {
             aotCpp(context,logs);
             registerAotCpp(logs,context);
         }
@@ -1996,7 +2003,7 @@ namespace das
     }
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
-        bool logIt = options.getOption("log_aot",false);
+        bool logIt = options.getBoolOption("log_aot",false);
 
         // make list of functions
         vector<Function *> fnn; fnn.reserve(totalFunctions);

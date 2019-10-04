@@ -28,9 +28,14 @@ namespace das {
         return it==end() ? nullptr : &*it;
     }
 
-    bool AnnotationArgumentList::getOption(const string & name, bool def) const {
+    bool AnnotationArgumentList::getBoolOption(const string & name, bool def) const {
         auto arg = find(name, Type::tBool);
         return arg ? arg->bValue : def;
+    }
+
+    int32_t AnnotationArgumentList::getIntOption(const string & name, int32_t def) const {
+        auto arg = find(name, Type::tInt);
+        return arg ? arg->iValue : def;
     }
 
     // MODULE

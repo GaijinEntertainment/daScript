@@ -717,7 +717,7 @@ namespace das {
     class CppAot : public Visitor {
     public:
         CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl ) : program(prog), collector(cl) {
-            helper.rtti = program->options.getOption("rtti",false);
+            helper.rtti = program->options.getBoolOption("rtti",false);
         }
         string str() const {
             return "\n" + helper.str() + sti.str()  + stg.str() + ss.str();

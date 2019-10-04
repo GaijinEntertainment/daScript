@@ -57,7 +57,8 @@ namespace das
 
     struct AnnotationArgumentList : AnnotationArguments {
         const AnnotationArgument * find ( const string & name, Type type ) const;
-        bool getOption(const string & name, bool def = false) const;
+        bool getBoolOption(const string & name, bool def = false) const;
+        int32_t getIntOption(const string & name, int32_t def = false) const;
     };
 
     struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {
@@ -630,6 +631,20 @@ namespace das
         map<string,EnumInfo *>          emn2e;
     };
 
+    struct CodeOfPolicies {
+    // memory
+        uint32_t    stack = 16*1024;                    // 0 for unique stack
+        uint32_t    heap = 0;                           // initial heap size
+        uint32_t    string_heap = 0;                    // initial string heap size
+    // rtti
+        bool rtti = false;                              // create extended RTTI
+    // language
+        bool no_global_variables = false;
+        bool no_global_heap = false;
+        bool only_fast_aot = false;
+        bool aot_order_side_effects = false;
+    };
+
     class Program : public enable_shared_from_this<Program> {
     public:
         Program();
@@ -707,6 +722,8 @@ namespace das
         map<CompilationError,int>   expectErrors;
     public:
         AnnotationArgumentList      options;
+    public:
+        CodeOfPolicies              policies;
     };
 
     // module parsing routines
@@ -714,10 +731,10 @@ namespace das
     string getModuleFileName ( const string & nameWithDots );
 
     // this one works for single module only
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false );
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, CodeOfPolicies policies = CodeOfPolicies() );
 
     // this one collectes dependencies and compiles with modules
-    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false );
+    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, CodeOfPolicies policies = CodeOfPolicies() );
 
 
     // note: this has sifnificant performance implications

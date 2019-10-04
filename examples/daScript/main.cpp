@@ -16,7 +16,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
         } else {
             if ( outputProgramCode )
                 tout << *program << "\n";
-            Context ctx;
+            Context ctx(program->policies.stack);
             program->simulate(ctx, tout);
             if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
                 ctx.restart();

@@ -214,7 +214,7 @@ namespace das {
         visit(vis);
         vis.markUsedFunctions(library, forceAll);
         vis.markVarsUsed(library, forceAll);
-        if ( options.getOption("removeUnusedSymbols",true) ) {
+        if ( options.getBoolOption("removeUnusedSymbols",true) ) {
             vis.RemoveUnusedSymbols(*thisModule);
         }
     }

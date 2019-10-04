@@ -68,7 +68,7 @@ struct CheckRange : StructureAnnotation {
         const AnnotationArgumentList & args, string & ) override {
         // this is here for the 'example' purposes 
         // lets add a sample 'dummy' field
-        if (args.getOption("dummy",false) && !st->findField("dummy")) {
+        if (args.getBoolOption("dummy",false) && !st->findField("dummy")) {
             st->fields.emplace_back("dummy", make_shared<TypeDecl>(Type::tInt), 
                 nullptr /*init*/, AnnotationArgumentList(), false /*move_to_init*/, LineInfo());
         }
@@ -77,7 +77,7 @@ struct CheckRange : StructureAnnotation {
     virtual bool look ( const StructurePtr & st, ModuleGroup &,
                         const AnnotationArgumentList & args, string & err ) override {
         bool ok = true;
-        if (!args.getOption("disable", false)) {
+        if (!args.getBoolOption("disable", false)) {
             for (auto & fd : st->fields) {
                 if (fd.type->isSimpleType(Type::tInt) && fd.annotation.size()) {
                     int32_t val = 0;

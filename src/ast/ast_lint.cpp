@@ -45,10 +45,10 @@ namespace das {
         bool checkNoGlobalVariables;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
-            checkOnlyFastAot = program->options.getOption("only_fast_aot", false);
-            checkAotSideEffects = program->options.getOption("aot_order_side_effects", false);
-            checkNoGlobalHeap = program->options.getOption("no_global_heap", false);
-            checkNoGlobalVariables = program->options.getOption("no_global_variables", false);
+            checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
+            checkAotSideEffects = program->options.getBoolOption("aot_order_side_effects", program->policies.aot_order_side_effects);
+            checkNoGlobalHeap = program->options.getBoolOption("no_global_heap", program->policies.no_global_heap);
+            checkNoGlobalVariables = program->options.getBoolOption("no_global_variables", program->policies.no_global_variables);
         }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             program->error(err,at,cerr);
@@ -163,7 +163,7 @@ namespace das {
     };
 
     void Program::lint() {
-        if (!options.getOption("lint", true)) {
+        if (!options.getBoolOption("lint", true)) {
             return;
         }
         TextWriter logs;

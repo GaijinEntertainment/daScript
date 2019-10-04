@@ -540,7 +540,7 @@ namespace das {
 
     string Program::dotGraph() {
         GraphPrinter graph;
-        graph.plot_read_write = options.getOption("plot_read_write", false);
+        graph.plot_read_write = options.getBoolOption("plot_read_write", false);
         visit(graph);
         return graph.str();
     }
