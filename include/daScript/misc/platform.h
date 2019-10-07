@@ -73,26 +73,6 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 
 #include "daScript/misc/hal.h"
 
-#ifndef DAS_ALIGNED_ALLOC
-#define DAS_ALIGNED_ALLOC 1
-inline void *das_aligned_alloc16(uint32_t size) {
-#if defined(_MSC_VER)
-    return _aligned_malloc(size, 16);
-#else
-    void * mem = nullptr;
-    posix_memalign(&mem, 16, size);
-    return mem;
-#endif
-}
-inline void das_aligned_free16(void *ptr) {
-#if defined(_MSC_VER)
-    _aligned_free(ptr);
-#else
-    free(ptr);
-#endif
-}
-#endif
-
 #ifndef DAS_FATAL_LOG
 #define DAS_FATAL_LOG   printf
 #endif
@@ -125,3 +105,25 @@ inline void das_aligned_free16(void *ptr) {
     #endif
 #endif
 
+#ifndef DAS_ALIGNED_ALLOC
+#define DAS_ALIGNED_ALLOC 1
+inline void *das_aligned_alloc16(uint32_t size) {
+#if defined(_MSC_VER)
+    return _aligned_malloc(size, 16);
+#else
+    void * mem = nullptr;
+    if (posix_memalign(&mem, 16, size)) {
+        DAS_ASSERTF(0, "posix_memalign returned nullptr");
+        return nullptr;
+    }
+    return mem;
+#endif
+}
+inline void das_aligned_free16(void *ptr) {
+#if defined(_MSC_VER)
+    _aligned_free(ptr);
+#else
+    free(ptr);
+#endif
+}
+#endif
