@@ -137,6 +137,9 @@ namespace das
         auto TT = make_shared<TypeDecl>(*initT);
         TT->at = autoT->at;
         TT->alias = autoT->alias;
+        TT->removeRef = false;
+        TT->removeConstant = false;
+        TT->removeDim = false;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
             TT->firstType = inferGenericType(autoT->firstType, initT->firstType);
@@ -587,7 +590,7 @@ namespace das
     }
 
     bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters, bool topLevel ) const {
-        if ( topLevel && !isRef() ) {
+        if ( topLevel && !isRef() && !isPointer() ) {
             constMatters = false;
         }
         if ( baseType!=decl.baseType ) {
@@ -625,7 +628,7 @@ namespace das
             }
         }
         if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,true,true,true) ) {
                 return false;
             }
             if ( firstType || argTypes.size() ) {    // if not any block or any function
@@ -635,7 +638,7 @@ namespace das
                 for ( size_t i=0; i != argTypes.size(); ++i ) {
                     const auto & arg = argTypes[i];
                     const auto & declArg = decl.argTypes[i];
-                    if ( !arg->isSameType(*declArg) ) {
+                    if ( !arg->isSameType(*declArg,true,true,true) ) {
                         return false;
                     }
                 }

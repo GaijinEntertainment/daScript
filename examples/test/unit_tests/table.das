@@ -1,5 +1,24 @@
+[unsafe]
+def test_find
+    let const_tab <- {{ "one"=>1; "two"=>2 }}
+    find(const_tab,"one") <| $(num:int?)
+        assert(deref(num)==1)
+    assert(deref(find(const_tab,"one"))==1)
+    var tab <- {{ "one"=>1; "two"=>2 }}
+    find(tab,"one") <| $(num:int?)
+        assert(deref(num)==1)
+    find_for_edit(tab,"one") <| $(var num:int?)
+        assert(deref(num)==1)
+        deref(num) = 3
+    assert(deref(find(tab,"one"))==3)
+    deref(find_for_edit(tab,"one"))=1
+    assert(deref(find_for_edit(tab,"one"))==1)
+	return true
+
 [export,unsafe]
 def test : bool
+    test_find()
+
     var tab:table<string;int>
     var i,del:int
     let total:int=32
@@ -28,7 +47,7 @@ def test : bool
     // debug(tab)
     i = 0
     while i < total
-        find(tab,string(i)) <| $(var pValue:int?)
+        find(tab,string(i)) <| $(pValue:int?)
             if pValue!=null
                 assert(deref(pValue)==i)
             else
@@ -45,7 +64,7 @@ def test : bool
         var j,k:int=0
         i = 0
         while i < total
-            find(tab,string(i)) <| $(var pVal:int?)
+            find(tab,string(i)) <| $(pVal:int?)
                 j+= pVal ?? 0
             if i%7!=0
                 k +=i
@@ -57,7 +76,7 @@ def test : bool
         var j,k,zero:int=0
         i = 0
         while i < total
-            find(tab,string(i)) <| $(var pVal:int?)
+            find(tab,string(i)) <| $(pVal:int?)
                 j += pVal ?? zero
             if i%7!=0
                 k +=i
@@ -118,7 +137,7 @@ def test : bool
     assert(tab_string[""] == -2)
     erase(tab_string, "")
     assert(!key_exists(tab_string, ""))
-    
+
     return true
 
 

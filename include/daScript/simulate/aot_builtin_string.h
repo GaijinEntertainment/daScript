@@ -27,7 +27,7 @@ namespace das {
     int fast_to_int ( const char *str );
     char * to_das_string(const string & str, Context * ctx);
     void set_das_string(string & str, const char * bs);
-    void peek_das_string(const string & str, const TBlock<void,char *> & block, Context * context);
+    void peek_das_string(const string & str, const TBlock<void,const char *> & block, Context * context);
     char * string_repeat ( const char * str, int count, Context * context );
 
     __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }

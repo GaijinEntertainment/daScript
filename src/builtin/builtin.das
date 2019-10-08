@@ -21,14 +21,24 @@ def length(a:auto[]):int
 
 // table
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
+    __builtin_table_lock(Tab)
+    var val = __builtin_table_find(Tab,at)
+    invoke(blk,val)
+    __builtin_table_unlock(Tab)
+
+[unsafe_operation,unsafe]
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT const?
+    return reinterpret<valT const?>(__builtin_table_find(Tab,at))
+
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
 [unsafe_operation]
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT?
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT):valT?
     return __builtin_table_find(Tab,at)
 
 def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool

@@ -2917,12 +2917,31 @@ namespace das {
             can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
         }
+        virtual void reportExcess ( ExprNamedCall * expr, const string & msg, vector<FunctionPtr> can1, vector<FunctionPtr> can2,
+                                    CompilationError cerror = CompilationError::function_not_found) {
+            can1.insert(can1.end(), can2.begin(), can2.end());
+            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, false, cerror);
+        }
+        virtual void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
+                                    const string & msg, bool reportDetails,
+                                    CompilationError cerror = CompilationError::function_not_found) {
+            auto can1 = findCandidates(expr->name, types);
+            auto can2 = findGenericCandidates(expr->name, types);
+            can1.insert(can1.end(), can2.begin(), can2.end());
+            reportFunctionNotFound(expr->name, msg + expr->describe(), expr->at, can1, types, true, true, reportDetails, cerror);
+        }
+        virtual void reportExcess ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
+                                   const string & msg, vector<FunctionPtr> can1, vector<FunctionPtr> can2,
+                                    CompilationError cerror = CompilationError::function_not_found) {
+            can1.insert(can1.end(), can2.begin(), can2.end());
+            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true, false, cerror);
+        }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             auto functions = findMatchingFunctions(expr->name, expr->arguments, true);
             auto generics = findMatchingGenerics(expr->name, expr->arguments);
             if ( generics.size()>1 || functions.size()>1 ) {
-                reportMissing(expr, "too many matching functions or generics ", false);
+                reportExcess(expr, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
                     reportGenericInfer();
@@ -2935,7 +2954,7 @@ namespace das {
                 if ( generics.size()==1 ) {
                     auto gen = generics.back();
                     if ( fun->fromGeneric != gen.get() ) {
-                        reportMissing(expr, "too many matching functions or generics ", false);
+                        reportExcess(expr, "too many matching functions or generics ", functions, generics);
                         return Visitor::visit(expr);
                     }
                 }
@@ -2952,14 +2971,6 @@ namespace das {
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             return Visitor::visitCallArg(call, arg, last);
-        }
-        virtual void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
-                                    const string & msg, bool reportDetails,
-                                    CompilationError cerror = CompilationError::function_not_found) {
-            auto can1 = findCandidates(expr->name, types);
-            auto can2 = findGenericCandidates(expr->name, types);
-            can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(expr->name, msg + expr->describe(), expr->at, can1, types, true, true, reportDetails, cerror);
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
@@ -2981,7 +2992,7 @@ namespace das {
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
             if ( functions.size()>1 || generics.size()>1 ) {
-                reportMissing(expr, types, "too many matching functions or generics ", false);
+                reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
@@ -3029,7 +3040,7 @@ namespace das {
                 if ( generics.size()==1 ) {
                     auto gen = generics.back();
                     if ( funcC->fromGeneric != gen.get() ) {
-                        reportMissing(expr, types, "too many matching functions or generics ", false);
+                        reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
                         return nullptr;
                     }
                 }
