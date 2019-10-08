@@ -986,6 +986,10 @@ namespace das {
                     CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
                 error("this global variable can't init (move) from a constant value", var->at, CompilationError::cant_move);
+            } else if ( !(var->init_via_move || var->init_via_clone) && !var->init->type->canCopy() ) {
+                error("this global variable can't be copied", var->at, CompilationError::cant_copy);
+            } else if ( var->init_via_move && !var->init->type->canMove() ) {
+                error("this global variable can't be moved", var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
                 error("this global variable init can't be cloned", var->at, CompilationError::cant_copy);
             } else {

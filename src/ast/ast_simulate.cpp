@@ -1455,7 +1455,7 @@ namespace das
 
     SimNode * ExprReturn::simulate (Context & context) const {
         // return string is its own thing
-        if (subexpr && subexpr->rtti_isConstant()) {
+        if (subexpr && subexpr->type && subexpr->rtti_isConstant()) {
             if (subexpr->type->isSimpleType(Type::tString)) {
                 auto cVal = static_pointer_cast<ExprConstString>(subexpr);
                 char * str = context.constStringHeap->allocateString(cVal->text);
