@@ -202,6 +202,9 @@ namespace das
             }
         } else if ( baseType==Type::tStructure ) {
             if ( structType ) {
+                if (structType->module && !structType->module->name.empty()) {
+                    stream << structType->module->name << "::";
+                }
                 stream << structType->name;
             } else {
                 stream << "unspecified structure";
@@ -214,6 +217,9 @@ namespace das
             }
         } else if ( baseType==Type::tEnumeration ) {
             if ( enumType ) {
+                if (enumType->module && !enumType->module->name.empty()) {
+                    stream << enumType->module->name << "::";
+                }
                 stream << enumType->describe();
             } else {
                 stream << "unspecified enumeration";
@@ -853,6 +859,32 @@ namespace das
 
     bool TypeDecl::isEnum() const {
         return (baseType==Type::tEnumeration) && (dim.size()==0);
+    }
+
+    void TypeDecl::collectAliasList(vector<string> & aliases) const {
+        // auto is auto.... or auto....?
+        if ( baseType==Type::alias ) {
+            aliases.push_back(alias);
+        } else  if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                firstType->collectAliasList(aliases);
+        } else  if ( baseType==Type::tIterator ) {
+            if ( firstType )
+                firstType->collectAliasList(aliases);
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType )
+                firstType->collectAliasList(aliases);
+        } else if ( baseType==Type::tTable ) {
+            if ( firstType )
+                firstType->collectAliasList(aliases);
+            if ( secondType )
+                secondType->collectAliasList(aliases);
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
+            if ( firstType )
+                firstType->collectAliasList(aliases);
+            for ( auto & arg : argTypes )
+                arg->collectAliasList(aliases);
+        } 
     }
 
     bool TypeDecl::isAlias() const {

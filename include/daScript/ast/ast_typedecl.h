@@ -91,6 +91,7 @@ namespace das {
         bool isConst() const;
         bool isFoldable() const;
         bool isAlias() const;
+        void collectAliasList(vector<string> & aliases) const;
         bool isAuto() const;
         bool isVectorType() const;
         bool isLocal() const;

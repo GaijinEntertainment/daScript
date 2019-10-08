@@ -566,7 +566,8 @@ namespace das {
                         break;
                     }
                     if ( !fnArg->init ) {
-                        ss << "\t\twhile looking for argument " << arg->name << ", can't skip function argument " << fnArg->name << " because it has no default value\n";
+                        ss << "\t\twhile looking for argument " << arg->name 
+                            << ", can't skip function argument " << fnArg->name << " because it has no default value\n";
                         return ss.str();
                     }
                     fnArgIndex ++;
@@ -574,6 +575,9 @@ namespace das {
                 if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, arg->value->type,inferAuto,inferBlock)) {
                     ss << "\t\tinvalid argument " << arg->name << ", expecting ("
                         << pFn->arguments[fnArgIndex]->type->describe() << ") passing (" << arg->value->type->describe() << ")\n";
+                    if (arg->value->type->isAlias()) {
+                        ss << "\t\tdon't know what " << arg->value->type->describe() << " is\n";
+                    } 
                     return ss.str();
                 }
                 fnArgIndex ++;
@@ -598,6 +602,9 @@ namespace das {
                 if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
                     ss << "\t\tinvalid argument " << arg->name << ", expecting ("
                         << arg->type->describe() << ") passing (" << passType->describe() << ")\n";
+                    if ( passType->isAlias() ) {
+                        ss << "\t\tdon't know what " << passType->describe() << " is\n";
+                    }
                 }
             }
             for ( ; ai!= pFn->arguments.size(); ++ai ) {
@@ -706,7 +713,7 @@ namespace das {
             if ( candidateFunctions.size() > 1 ) {
                 ss << "\ncandidates:\n";
             } else if ( candidateFunctions.size()==1 ) {
-                ss << "\ncandidate functoin:\n";
+                ss << "\ncandidate function:\n";
             }
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -741,7 +748,7 @@ namespace das {
             if ( candidateFunctions.size() > 1 ) {
                 ss << "\ncandidates:\n";
             } else if ( candidateFunctions.size()==1 ) {
-                ss << "\ncandidate functoin:\n";
+                ss << "\ncandidate function:\n";
             }
             for ( auto & missFn : candidateFunctions ) {
                 ss << "\t";
@@ -1752,6 +1759,7 @@ namespace das {
         }
         virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
+            if ( arg->type && arg->type->isAlias() ) call->argumentsFailedToInfer = true;
             return Visitor::visitNewArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
@@ -2838,9 +2846,9 @@ namespace das {
                 error("this local variable can only be move-initialized, use <- for that", var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
-                error("can't init (move) from a constant value", expr->at, CompilationError::cant_move);
+                error("can't init (move) from a constant value", var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
-                error("this type can't be cloned", expr->at, CompilationError::cant_copy);
+                error("this type can't be cloned", var->at, CompilationError::cant_copy);
             } else {
                 if ( var->init_via_clone ) {
                     reportGenericInfer();
@@ -2880,6 +2888,7 @@ namespace das {
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
+            if ( arg->type && arg->type->isAlias() ) call->argumentsFailedToInfer = true;
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
     // ExprNamedCall
@@ -2914,7 +2923,19 @@ namespace das {
             call->argumentsFailedToInfer = false;
         }
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) override {
-            if ( !arg->value->type ) call->argumentsFailedToInfer = true;
+            if (!arg->value->type) {
+                call->argumentsFailedToInfer = true;
+                error("function argument " + arg->name + "is not resolved yet", call->at, CompilationError::invalid_argument_type);
+            } else if (arg->value->type && arg->value->type->isAlias()) {
+                call->argumentsFailedToInfer = true;
+                vector<string> aliases;
+                arg->value->type->collectAliasList(aliases);
+                TextWriter ss;
+                for (auto & aa : aliases) {
+                    ss << "\n\tunknown type " << aa;
+                }
+                error("don't know what " + arg->name + " = " + arg->value->type->describe() + " is" + ss.str(), call->at, CompilationError::invalid_argument_type);
+            }
             return Visitor::visitNamedCallArg(call, arg, last);
         }
         virtual void reportMissing ( ExprNamedCall * expr, const string & msg, bool reportDetails,
@@ -2976,7 +2997,19 @@ namespace das {
             call->argumentsFailedToInfer = false;
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {
-            if ( !arg->type ) call->argumentsFailedToInfer = true;
+            if (!arg->type) {
+                call->argumentsFailedToInfer = true;
+                error("function argument is not resolved yet", call->at, CompilationError::invalid_argument_type);
+            } else if (arg->type && arg->type->isAlias()) {
+                call->argumentsFailedToInfer = true;
+                vector<string> aliases;
+                arg->type->collectAliasList(aliases);
+                TextWriter ss;
+                for (auto & aa : aliases) {
+                    ss << "\n\tunknown type " << aa;
+                }
+                error("don't know what " + arg->type->describe() + " is" + ss.str(), call->at, CompilationError::invalid_argument_type);
+            }
             return Visitor::visitCallArg(call, arg, last);
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
@@ -2986,7 +3019,7 @@ namespace das {
             for ( auto & ar : expr->arguments ) {
                 if ( !ar->type ) {
                     return nullptr;
-                }
+                } 
                 // if its an auto or an alias
                 // we only allow it, if its a block
                 if ( ar->type->baseType!=Type::tBlock ) {
@@ -3089,6 +3122,7 @@ namespace das {
             return nullptr;
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr).get();
             if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
                 error("unsafe call " + expr->name + " requires [unsafe]", expr->at, CompilationError::unsafe);
