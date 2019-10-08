@@ -768,7 +768,7 @@ namespace das {
         }
         virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
             if ( !lastField ) ss << ",";
-            return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+            return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
             ss << "]]";

@@ -908,6 +908,9 @@ namespace das {
                     } else if ( !decl.init->type->canCopy() && !decl.init->type->canMove() ) {
                         error("this field can't be initialized at all", decl.at,
                               CompilationError::invalid_initialization_type);
+                    } else if (decl.moveSemantic && decl.init->type->isConst()) {
+                        error("can't move from a constant value\n\t" + decl.init->type->describe(), 
+                            decl.init->at, CompilationError::cant_move);
                     }
                 } else if ( !decl.type->isAuto() ){
                     if ( decl.init->rtti_isCast() ) {
@@ -3141,6 +3144,9 @@ namespace das {
                     if( !field->type->canCopy() && !decl->moveSemantic ) {
                         error("this field can't be copied, use <- instead",
                               decl->at, CompilationError::invalid_type );
+                    } else if (decl->moveSemantic && decl->value->type->isConst()) {
+                        error("can't move from a constant value\n\t" + decl->value->type->describe(), 
+                            decl->value->at, CompilationError::cant_move);
                     }
                 } else {
                     error("field not found, " + decl->name, decl->at, CompilationError::cant_get_field);
@@ -3202,6 +3208,16 @@ namespace das {
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             Visitor::preVisit(expr);
             expr->makeType.reset();
+        }
+        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
+            if (!init->type) {
+                return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+            }
+            if (!init->type->canCopy() && init->type->canMove() && init->type->isConst()) {
+                error("can't move from a constant value\n\t" + init->type->describe(), 
+                    init->at, CompilationError::cant_move);
+            } 
+            return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
             for ( auto & val : expr->values ) {
@@ -3308,7 +3324,10 @@ namespace das {
                 error("can't initialize array element, " + to_string(index) + " expecting ("
                       +expr->recordType->describe()+"), passing ("+init->type->describe()+")",
                         init->at, CompilationError::invalid_type );
-            }
+            } else if ( !expr->recordType->canCopy() && expr->recordType->canMove() && init->type->isConst() ) {
+                error("can't move from a constant value\n\t" + init->type->describe(), 
+                    init->at, CompilationError::cant_move);
+            } 
             return Visitor::visitMakeArrayIndex(expr,index,init,last);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {

@@ -1900,7 +1900,7 @@ namespace das {
             ss << string(tab,'\t') << "das_zero(" << mktName(expr) << ");\n";
         }
         virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
-            Visitor::preVisitMakeArrayIndex(expr, index, init, lastField);
+            Visitor::preVisitMakeTupleIndex(expr, index, init, lastField);
             ss << string(tab,'\t') << "das_get_tuple_field<"
                 << describeCppType(expr->makeType->argTypes[index])
                 << ","
@@ -1909,7 +1909,7 @@ namespace das {
         }
         virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
             ss << ";\n";
-            return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+            return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
             ss << string(tab,'\t') << "return " << mktName(expr)<< ";\n";
