@@ -1,20 +1,15 @@
-options log=true
+options log_infer_passes=true
 
-struct Foo
-	bar : table<string; int>
+struct A
+	i : int
+
+let
+	a = {{ "a" => [[A i = 1]]; "b" => [[A i = 2]]}}
 
 [export]
-def test
-	let a <- {{ "one" => 1; "two" => 2 }}
-	let b <- {{ "a" => a }}
-	print("a={a} b={b}\n")
-
-	let aa <- {{ "one" => 1; "two" => 2 }}
-	let bb <- [[ Foo bar <- aa ]]
-	print("aa={aa} bb={bb}\n")
-
-	let aaa <- {{ "one" => 1; "two" => 2 }}
-	let bbb <- [[ table<string;int>[1] aaa ]]
-	print("aaa={aaa} bbb={bbb}\n")
-	
-	return true
+def test(ch : string)
+	var res : string
+	find(a, "ttt")  <| $(templ: A?)
+		if templ == null
+			return
+	return <- res
