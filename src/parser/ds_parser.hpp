@@ -232,7 +232,8 @@ extern int das_yydebug;
     PRE_DEC = 381,
     POST_INC = 382,
     POST_DEC = 383,
-    COLCOL = 384
+    DEREF = 384,
+    COLCOL = 385
   };
 #endif
 
@@ -266,7 +267,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 270 "ds_parser.hpp" /* yacc.c:1912  */
+#line 271 "ds_parser.hpp" /* yacc.c:1912  */
 };
 
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

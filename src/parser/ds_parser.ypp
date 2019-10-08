@@ -340,7 +340,7 @@
 %left       QQ
 %right      '@' UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       LPIPE RPIPE LBPIPE
-%left       POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT
+%left       POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT DEREF
 %nonassoc   COLCOL
 
 %%
@@ -1117,8 +1117,9 @@ expr
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
             $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
         }
+    |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
-	|   DAS_ADDR[loc] '(' expr[subexpr] ')'       { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
+	|   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
     |   DAS_TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
