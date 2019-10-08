@@ -757,6 +757,7 @@ namespace das {
 
     TypeDeclPtr ExprBlock::makeBlockType () const {
         auto eT = make_shared<TypeDecl>(Type::tBlock);
+        eT->constant = true;
         if ( type ) {
             eT->firstType = make_shared<TypeDecl>(*type);
         }

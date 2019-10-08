@@ -179,6 +179,7 @@ namespace das {
         auto pStruct = make_shared<Structure>(lsn);
         auto btd = block->makeBlockType();
         btd->baseType = Type::tFunction;
+        btd->constant = false;
         auto thisArg = make_shared<TypeDecl>(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
