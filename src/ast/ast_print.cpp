@@ -210,6 +210,7 @@ namespace das {
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
+            if ( !arg->type->isConst() ) ss << "var ";
             if ( printVarAccess && !arg->access_ref ) ss << "$";
             if ( printVarAccess && !arg->access_pass ) ss << "%";
             ss << arg->name << ":" << arg->type->describe();
