@@ -1,10 +1,6 @@
-options log_infer_passes=true
+// options log_infer_passes=true
 
-struct A
-	i : int
-
-let
-    a = {{ "a" => [[A i = 1]]; "b" => [[A i = 2]]}}
+require bbb
 
 [sideeffects]
 def testFn(ch : string)

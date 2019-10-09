@@ -541,6 +541,17 @@ namespace das {
             return true;
         }
 
+        string reportAliasError( const TypeDeclPtr & type ) const {
+            vector<string> aliases;
+            type->collectAliasList(aliases);
+            TextWriter ss;
+            ss << "don't know what " << type->describe() << " is";
+            for (auto & aa : aliases) {
+                ss << "; unknown type " << aa;
+            }
+            return ss.str();
+        }
+
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
             if ( pFn->arguments.size() < arguments.size() ) {
                 return "\t\ttoo many arguments\n";
@@ -576,7 +587,7 @@ namespace das {
                     ss << "\t\tinvalid argument " << arg->name << ", expecting ("
                         << pFn->arguments[fnArgIndex]->type->describe() << ") passing (" << arg->value->type->describe() << ")\n";
                     if (arg->value->type->isAlias()) {
-                        ss << "\t\tdon't know what " << arg->value->type->describe() << " is\n";
+                        ss << "\t\t" << reportAliasError(arg->value->type) << "\n";
                     } 
                     return ss.str();
                 }
@@ -603,7 +614,7 @@ namespace das {
                     ss << "\t\tinvalid argument " << arg->name << ", expecting ("
                         << arg->type->describe() << ") passing (" << passType->describe() << ")\n";
                     if ( passType->isAlias() ) {
-                        ss << "\t\tdon't know what " << passType->describe() << " is\n";
+                        ss << "\t\t" << reportAliasError(passType) << "\n";
                     }
                 }
             }
@@ -1323,6 +1334,14 @@ namespace das {
     // ExprMakeBlock
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
+            // can only infer block type, if all argument types are infered
+            for ( auto & arg : block->arguments ) {
+                if ( arg->type->isAlias() ) {
+                    error(reportAliasError(arg->type), arg->at, CompilationError::invalid_argument_type);
+                    return Visitor::visit(expr);
+                }
+            }
+
             expr->type = block->makeBlockType();
             return Visitor::visit(expr);
         }
@@ -2925,16 +2944,8 @@ namespace das {
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) override {
             if (!arg->value->type) {
                 call->argumentsFailedToInfer = true;
-                error("function argument " + arg->name + "is not resolved yet", call->at, CompilationError::invalid_argument_type);
             } else if (arg->value->type && arg->value->type->isAlias()) {
                 call->argumentsFailedToInfer = true;
-                vector<string> aliases;
-                arg->value->type->collectAliasList(aliases);
-                TextWriter ss;
-                for (auto & aa : aliases) {
-                    ss << "\n\tunknown type " << aa;
-                }
-                error("don't know what " + arg->name + " = " + arg->value->type->describe() + " is" + ss.str(), call->at, CompilationError::invalid_argument_type);
             }
             return Visitor::visitNamedCallArg(call, arg, last);
         }
@@ -2999,16 +3010,8 @@ namespace das {
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {
             if (!arg->type) {
                 call->argumentsFailedToInfer = true;
-                error("function argument is not resolved yet", call->at, CompilationError::invalid_argument_type);
             } else if (arg->type && arg->type->isAlias()) {
                 call->argumentsFailedToInfer = true;
-                vector<string> aliases;
-                arg->type->collectAliasList(aliases);
-                TextWriter ss;
-                for (auto & aa : aliases) {
-                    ss << "\n\tunknown type " << aa;
-                }
-                error("don't know what " + arg->type->describe() + " is" + ss.str(), call->at, CompilationError::invalid_argument_type);
             }
             return Visitor::visitCallArg(call, arg, last);
         }
