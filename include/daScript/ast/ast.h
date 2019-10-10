@@ -144,7 +144,8 @@ namespace das
         LineInfo                    at;
         Module *                    module = nullptr;
         bool                        genCtor = false;
-        bool                        cppAlignment = false;
+        bool                        cppLayout = false;
+        bool                        cppLayoutPod = true;
         Structure *                 parent = nullptr;
         AnnotationList              annotations;
     };

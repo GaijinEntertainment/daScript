@@ -130,10 +130,11 @@ namespace das
     };
 
     struct CppAlignmentAnnotation : StructureAnnotation {
-        CppAlignmentAnnotation() : StructureAnnotation("cpp_alignment") {}
+        CppAlignmentAnnotation() : StructureAnnotation("cpp_layout") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
-            ps->cppAlignment = true;
+                           const AnnotationArgumentList & args, string & ) override {
+            ps->cppLayout = true;
+            ps->cppLayoutPod = args.getBoolOption("pod", true);
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,

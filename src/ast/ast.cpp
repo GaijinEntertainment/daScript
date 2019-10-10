@@ -104,7 +104,8 @@ namespace das {
         cs->at = at;
         cs->module = module;
         cs->genCtor = genCtor;
-        cs->cppAlignment = cppAlignment;
+        cs->cppLayout = cppLayout;
+        cs->cppLayoutPod = cppLayoutPod;
         cs->annotations = annotations;
         return cs;
     }
@@ -188,15 +189,17 @@ namespace das {
 
     int Structure::getSizeOf() const {
         int size = 0;
-        const Structure * cppAlignmentParent = nullptr;
+        const Structure * cppLayoutParent = nullptr;
         for ( const auto & fd : fields ) {
             int fieldAlignemnt = fd.type->getAlignOf();
             int fa = fieldAlignemnt - 1;
-            if ( cppAlignment ) {
+            if ( cppLayout ) {
                 auto fp = findFieldParent(fd.name);
-                if ( fp!=cppAlignmentParent ) {
-                    size = cppAlignmentParent ? cppAlignmentParent->getSizeOf() : 0;
-                    cppAlignmentParent = fp;
+                if ( fp!=cppLayoutParent ) {
+                    if (DAS_NON_POD_PADDING || cppLayoutPod) {
+                        size = cppLayoutParent ? cppLayoutParent->getSizeOf() : 0;
+                    }
+                    cppLayoutParent = fp;
                 }
             }
             int al = fa - 1;

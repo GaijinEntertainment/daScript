@@ -44,8 +44,9 @@ namespace das {
         vector<ExprWith *>      with;
         vector<size_t>          varStack;
         size_t                  fieldOffset = 0;
-        bool                    cppAlignment = false;
-        const Structure *       cppAlignmentParent = nullptr;
+        bool                    cppLayout = false;
+        bool                    cppLayoutPod = false;
+        const Structure *       cppLayoutParent = nullptr;
         bool                    needRestart = false;
         uint32_t                newLambdaIndex = 1;
         bool                    enableInferTimeFolding;
@@ -863,8 +864,9 @@ namespace das {
             Visitor::preVisit(that);
             fieldOffset = 0;
             auto tp = make_shared<TypeDecl>(that->shared_from_this());
-            cppAlignment = that->cppAlignment;
-            cppAlignmentParent = nullptr;
+            cppLayout = that->cppLayout;
+            cppLayoutPod = that->cppLayoutPod;
+            cppLayoutParent = nullptr;
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
@@ -948,11 +950,13 @@ namespace das {
             if ( isFullySealedType(decl.type) ) {
                 int fieldAlignemnt = decl.type->getAlignOf();
                 int fa = fieldAlignemnt - 1;
-                if ( cppAlignment ) {
+                if ( cppLayout ) {
                     auto fp = st->findFieldParent(decl.name);
-                    if ( fp!=cppAlignmentParent ) {
-                        fieldOffset = cppAlignmentParent ? cppAlignmentParent->getSizeOf() : 0;
-                        cppAlignmentParent = fp;
+                    if ( fp!=cppLayoutParent ) {
+                        if (DAS_NON_POD_PADDING || cppLayoutPod) {
+                            fieldOffset = cppLayoutParent ? cppLayoutParent->getSizeOf() : 0;
+                        }
+                        cppLayoutParent = fp;
                     }
                 }
                 fieldOffset = (fieldOffset + fa) & ~fa;
