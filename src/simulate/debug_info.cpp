@@ -153,18 +153,6 @@ namespace das
         return al;
     }
 
-    int getStructSize ( StructInfo * info ) {
-        int size = 0;
-        for ( uint32_t i=0; i!=info->count; ++i ) {
-            int al = getTypeAlign(info->fields[i]) - 1;
-            size = (size + al) & ~al;
-            size += getTypeSize(info->fields[i]);
-        }
-        int al = getStructAlign(info) - 1;
-        size = (size + al) & ~al;
-        return size;
-    }
-
     int getTupleAlign ( TypeInfo * info ) {
         int al = 0;
         for ( uint32_t i=0; i!=info->argCount; ++i ) {
@@ -189,7 +177,7 @@ namespace das
         if ( info->type==Type::tHandle ) {
             return int(Module::resolveAnnotation(info)->getSizeOf());
         } else if ( info->type==Type::tStructure ) {
-            return getStructSize(info->structType);
+            return info->structType->size;
         } else if ( info->type==Type::tTuple ) {
             return getTupleSize(info);
         } else {

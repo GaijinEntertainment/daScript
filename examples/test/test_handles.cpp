@@ -303,6 +303,21 @@ int *getPtr() {return &g_st;}
 
 das::uint2 get_screen_dimensions() {return das::uint2{1280, 720};}
 
+struct CppS1 {
+    virtual ~CppS1() {}
+    // int64_t * a;
+    int64_t b;
+    int32_t c;
+};
+
+struct CppS2 : CppS1 {
+    int32_t d;
+};
+
+int CppS1Size() { return int(sizeof(CppS1)); }
+int CppS2Size() { return int(sizeof(CppS2)); }
+int CppS2DOffset() { return int(offsetof(CppS2, d)); }
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -326,6 +341,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::none);
     addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::modifyArgument);
     addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr", SideEffects::modifyExternal);
+    // register Cpp alignment functions
+    addExtern<DAS_BIND_FUN(CppS1Size)>(*this, lib, "CppS1Size", SideEffects::none);
+    addExtern<DAS_BIND_FUN(CppS2Size)>(*this, lib, "CppS2Size", SideEffects::none);
+    addExtern<DAS_BIND_FUN(CppS2DOffset)>(*this, lib, "CppS2DOffset", SideEffects::none);
 }
 
 ModuleAotType Module_UnitTest::aotRequire ( TextWriter & tw ) const {

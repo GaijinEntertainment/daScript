@@ -124,6 +124,7 @@ namespace das
         StructurePtr clone() const;
         bool isCompatibleCast ( const Structure & castS ) const;
         const FieldDeclaration * findField ( const string & name ) const;
+        const Structure * findFieldParent ( const string & name ) const;
         int getSizeOf() const;
         int getAlignOf() const;
         bool canCopy() const;
@@ -143,6 +144,7 @@ namespace das
         LineInfo                    at;
         Module *                    module = nullptr;
         bool                        genCtor = false;
+        bool                        cppAlignment = false;
         Structure *                 parent = nullptr;
         AnnotationList              annotations;
     };

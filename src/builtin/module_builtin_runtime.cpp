@@ -129,6 +129,19 @@ namespace das
         };
     };
 
+    struct CppAlignmentAnnotation : StructureAnnotation {
+        CppAlignmentAnnotation() : StructureAnnotation("cpp_alignment") {}
+        virtual bool touch(const StructurePtr & ps, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            ps->cppAlignment = true;
+            return true;
+        }
+        virtual bool look ( const StructurePtr &, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+    };
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -258,6 +271,7 @@ namespace das
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
+        addAnnotation(make_shared<CppAlignmentAnnotation>());
         addAnnotation(make_shared<GenericFunctionAnnotation>());
         addAnnotation(make_shared<ExportFunctionAnnotation>());
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());

@@ -44,6 +44,8 @@ namespace das {
         vector<ExprWith *>      with;
         vector<size_t>          varStack;
         size_t                  fieldOffset = 0;
+        bool                    cppAlignment = false;
+        const Structure *       cppAlignmentParent = nullptr;
         bool                    needRestart = false;
         uint32_t                newLambdaIndex = 1;
         bool                    enableInferTimeFolding;
@@ -860,6 +862,9 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             fieldOffset = 0;
+            auto tp = make_shared<TypeDecl>(that->shared_from_this());
+            cppAlignment = that->cppAlignment;
+            cppAlignmentParent = nullptr;
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
@@ -941,7 +946,15 @@ namespace das {
                 }
             }
             if ( isFullySealedType(decl.type) ) {
-                auto fa = decl.type->getAlignOf() - 1;
+                int fieldAlignemnt = decl.type->getAlignOf();
+                int fa = fieldAlignemnt - 1;
+                if ( cppAlignment ) {
+                    auto fp = st->findFieldParent(decl.name);
+                    if ( fp!=cppAlignmentParent ) {
+                        fieldOffset = cppAlignmentParent ? cppAlignmentParent->getSizeOf() : 0;
+                        cppAlignmentParent = fp;
+                    }
+                }
                 fieldOffset = (fieldOffset + fa) & ~fa;
                 decl.offset = int(fieldOffset);
                 fieldOffset += decl.type->getSizeOf();
@@ -1584,6 +1597,22 @@ namespace das {
                     } else {
                         error("typeinfo(has_field<" + expr->subtrait
                               + "> ...) is only defined for structures and handled types, "
+                                + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
+                    }
+                } else if ( expr->trait=="offsetof" ) {
+                    if ( expr->typeexpr->isStructure() ) {
+                        auto decl = expr->typeexpr->structType->findField(expr->subtrait);
+                        if ( isFullySealedType(expr->typeexpr) ) {
+                            reportGenericInfer();
+                            return make_shared<ExprConstInt>(expr->at, decl->offset);
+                        } else {
+                            error("typeinfo(offsetof<" + expr->subtrait
+                                  + "> ...) of undefined type, "
+                                    + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
+                        }
+                    } else {
+                        error("typeinfo(offsetof<" + expr->subtrait
+                              + "> ...) is only defined for structures, "
                                 + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
                     }
                 } else {

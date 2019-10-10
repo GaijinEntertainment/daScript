@@ -104,6 +104,7 @@ namespace das {
         cs->at = at;
         cs->module = module;
         cs->genCtor = genCtor;
+        cs->cppAlignment = cppAlignment;
         cs->annotations = annotations;
         return cs;
     }
@@ -187,8 +188,18 @@ namespace das {
 
     int Structure::getSizeOf() const {
         int size = 0;
+        const Structure * cppAlignmentParent = nullptr;
         for ( const auto & fd : fields ) {
-            int al = fd.type->getAlignOf() - 1;
+            int fieldAlignemnt = fd.type->getAlignOf();
+            int fa = fieldAlignemnt - 1;
+            if ( cppAlignment ) {
+                auto fp = findFieldParent(fd.name);
+                if ( fp!=cppAlignmentParent ) {
+                    size = cppAlignmentParent ? cppAlignmentParent->getSizeOf() : 0;
+                    cppAlignmentParent = fp;
+                }
+            }
+            int al = fa - 1;
             size = (size + al) & ~al;
             size += fd.type->getSizeOf();
         }
@@ -210,6 +221,18 @@ namespace das {
             if ( fd.name==na ) {
                 return &fd;
             }
+        }
+        return nullptr;
+    }
+
+    const Structure * Structure::findFieldParent ( const string & na ) const {
+        if ( parent ) {
+            if ( auto pf = parent->findField(na) ) {
+                return parent;
+            }
+        }
+        if ( findField(na) ) {
+            return this;
         }
         return nullptr;
     }
