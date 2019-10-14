@@ -455,6 +455,7 @@ namespace das
                 bool    noAot : 1;
                 bool    aotHybrid : 1;
                 bool    aotTemplate : 1;
+                bool    isGenerated : 1;        // generated via clone or otherwise
             };
             uint32_t flags = 0;
         };

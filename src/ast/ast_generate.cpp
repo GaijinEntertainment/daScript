@@ -101,6 +101,7 @@ namespace das {
     // return [[t()]]
     FunctionPtr makeConstructor ( Structure * str ) {
         auto fn = make_shared<Function>();
+        fn->isGenerated = true;
         fn->name = str->name;
         fn->at = str->at;
         fn->result = make_shared<TypeDecl>(str->shared_from_this());
@@ -132,6 +133,7 @@ namespace das {
         varB->at = str->at;
         auto fn = make_shared<Function>();
         fn->name = "clone";
+        fn->isGenerated = true;
         fn->at = str->at;
         fn->result = make_shared<TypeDecl>();
         fn->arguments.push_back(varA);
@@ -152,6 +154,7 @@ namespace das {
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block, const StructurePtr & ls ) {
         auto lfn = lambdaName + "__def";
         auto pFunc = make_shared<Function>();
+        pFunc->isGenerated = true;
         pFunc->at = block->at;
         pFunc->name = lfn;
         auto fb = make_shared<ExprBlock>();

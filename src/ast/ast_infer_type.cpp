@@ -782,12 +782,36 @@ namespace das {
             return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
         }
 
-        bool hasClone ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
+        vector<FunctionPtr> getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
             vector<TypeDeclPtr> argDummy;
             argDummy.push_back(make_shared<TypeDecl>(*left));
             argDummy.push_back(make_shared<TypeDecl>(*right));
-            auto fnlist = findMatchingFunctions("clone", argDummy);
-            return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
+            return findMatchingFunctions("clone", argDummy);
+        }
+
+        bool verifyCloneFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
+            int genCount = 0;
+            int customCount = 0;
+            for ( auto & fn : fnList ) {
+                if ( !fn->isGenerated ) {
+                    customCount ++;
+                } else {
+                    genCount ++;
+                }
+            }
+            if ( customCount && genCount ) {
+                string candidates = program->describeCandidates(fnList);
+                error("both generated and custom clone functions exist for " + fnList[0]->describe(), at,
+                      CompilationError::function_not_found);
+                return false;
+            } else if ( customCount>1 ) {
+                string candidates = program->describeCandidates(fnList);
+                error("too many custom clone functions exist for " + fnList[0]->describe(), at,
+                      CompilationError::function_not_found);
+                return false;
+            } else {
+                return true;
+            }
         }
 
         ExprWith * hasMatchingWith ( const string & fieldName ) const {
@@ -1190,7 +1214,7 @@ namespace das {
                 error("function not found " + expr->target, expr->at,
                       CompilationError::function_not_found);
             } else {
-                 string candidates = program->describeCandidates(fns);
+                string candidates = program->describeCandidates(fns);
                 error("function not found " + expr->target + "\n" + candidates, expr->at,
                       CompilationError::function_not_found);
             }
@@ -2452,11 +2476,18 @@ namespace das {
         virtual ExpressionPtr visit ( ExprClone * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
-            if ( hasClone(expr->left->type, expr->right->type) ) {
-                auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
-                cloneFn->arguments.push_back(expr->left->clone());
-                cloneFn->arguments.push_back(expr->right->clone());
-                return ExpressionPtr(cloneFn);
+            auto fnList = getCloneFunc(expr->left->type, expr->right->type);
+            if ( fnList.size() ) {
+                if ( verifyCloneFunc(fnList, expr->at) ) {
+                    auto fn = fnList[0];
+                    string cloneName = (fn->module->name.empty() ? "_" : fn->module->name) + "::clone";
+                    auto cloneFn = make_shared<ExprCall>(expr->at, cloneName);
+                    cloneFn->arguments.push_back(expr->left->clone());
+                    cloneFn->arguments.push_back(expr->right->clone());
+                    return ExpressionPtr(cloneFn);
+                } else {
+                    return Visitor::visit(expr);
+                }
             }
             // infer
             if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
@@ -2485,14 +2516,19 @@ namespace das {
                 } else if ( cloneType->isStructure() ) {
                     reportGenericInfer();
                     auto stt = cloneType->structType;
-                    if ( !hasClone(cloneType,cloneType) ) {
-                        auto clf = makeClone(stt);
-                        extraFunctions.push_back(clf);
+                    auto fnList = getCloneFunc(cloneType,cloneType);
+                    if ( verifyCloneFunc(fnList, expr->at) ) {
+                        if ( fnList.size()==0 ) {
+                            auto clf = makeClone(stt);
+                            extraFunctions.push_back(clf);
+                        }
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                        cloneFn->arguments.push_back(expr->left->clone());
+                        cloneFn->arguments.push_back(expr->right->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
                     }
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
-                    cloneFn->arguments.push_back(expr->left->clone());
-                    cloneFn->arguments.push_back(expr->right->clone());
-                    return ExpressionPtr(cloneFn);
                 } else if ( cloneType->dim.size() ) {
                     reportGenericInfer();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "clone_dim");

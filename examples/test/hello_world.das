@@ -1,31 +1,19 @@
 // options log_infer_passes=true
 
-require UnitTest
+options log=true
 
-struct S1
-    a : int64 = 1l
-    b : int64 = 2l
-    c : int = 3
-
-struct S2 : S1
-    d : int = 4
-
-[cpp_layout (pod=false)]
-struct CppS1
-    vtable : void?
-    b : int64 = 2l
-    c : int = 3
-
-[cpp_layout (pod=false)]
-struct CppS2 : CppS1
-    d : int = 4
+require aaa
+require ccc
+require bbb
 
 [export]
 def test()
-	assert(typeinfo(sizeof type S1)==24)
-    assert(typeinfo(sizeof type S2)==24)
-    assert(typeinfo(offsetof<d> type S2)==20)
-	assert(typeinfo(sizeof type CppS1)==CppS1Size())
-    assert(typeinfo(sizeof type CppS2)==CppS2Size())
-    assert(typeinfo(offsetof<d> type CppS2)==CppS2DOffset())
+    var a : A
+    var b : A
+    a := b
+
+    var aa : array<A>
+    var bb : array<A>
+    aa := bb
+
     return true
