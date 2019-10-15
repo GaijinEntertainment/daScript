@@ -379,7 +379,9 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            result.push_back(pFn);
+                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                                result.push_back(pFn);
+                            }
                         }
                     }
                 }
@@ -641,8 +643,10 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
-                                result.push_back(pFn);
+                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                                if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
+                                    result.push_back(pFn);
+                                }
                             }
                         }
                     }
@@ -663,8 +667,10 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if (  inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get()) ) ) {
-                            if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
-                                result.push_back(pFn);
+                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                                if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
+                                    result.push_back(pFn);
+                                }
                             }
                         }
                     }
@@ -685,8 +691,10 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
-                                result.push_back(pFn);
+                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                                if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
+                                    result.push_back(pFn);
+                                }
                             }
                         }
                     }
@@ -707,8 +715,10 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
-                                result.push_back(pFn);
+                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                                if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
+                                    result.push_back(pFn);
+                                }
                             }
                         }
                     }
@@ -748,6 +758,13 @@ namespace das {
                     } else {
                         ss << inWhichModule->name << "\n";
                     }
+                }
+                if ( missFn->privateFunction && missFn->module!=program->thisModule.get() ) {
+                    ss << "\t\tfunction is private";
+                    if ( !missFn->module->name.empty() ) {
+                        ss << " to module " << missFn->module->name;
+                    }
+                    ss << "\n";
                 }
             }
             error(ss.str(), at, cerror);
@@ -793,7 +810,7 @@ namespace das {
             int genCount = 0;
             int customCount = 0;
             for ( auto & fn : fnList ) {
-                if ( !fn->isGenerated ) {
+                if ( !fn->generated ) {
                     customCount ++;
                 } else {
                     genCount ++;
@@ -2520,6 +2537,7 @@ namespace das {
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeClone(stt);
+                            clf->privateFunction = program->policies.private_clones;
                             extraFunctions.push_back(clf);
                         }
                         auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
@@ -3110,6 +3128,7 @@ namespace das {
                     auto oneGeneric = generics.back();
                     auto clone = oneGeneric->clone();
                     clone->fromGeneric = oneGeneric.get();
+                    clone->privateFunction = program->policies.private_generics;
                     if (func) {
                         clone->inferStack.emplace_back(expr->at, func);
                         clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());

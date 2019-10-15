@@ -455,7 +455,9 @@ namespace das
                 bool    noAot : 1;
                 bool    aotHybrid : 1;
                 bool    aotTemplate : 1;
-                bool    isGenerated : 1;        // generated via clone or otherwise
+                bool    generated : 1;
+                bool    privateFunction : 1;
+                
             };
             uint32_t flags = 0;
         };
@@ -647,6 +649,8 @@ namespace das
         bool no_global_heap = false;
         bool only_fast_aot = false;
         bool aot_order_side_effects = false;
+        bool private_generics = true;
+        bool private_clones = true;
     };
 
     class Program : public enable_shared_from_this<Program> {

@@ -1,3 +1,5 @@
+// options log_infer_passes=true
+
 require aaa
 
 [export]

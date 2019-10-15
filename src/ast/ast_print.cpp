@@ -199,6 +199,7 @@ namespace das {
             }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
+            if ( fn->privateFunction ) { ss << "[private]\n"; }
             ss << "def " << fn->name;
             if ( fn->arguments.size() ) ss << " ( ";
         }

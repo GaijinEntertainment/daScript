@@ -16,4 +16,6 @@ def test()
     var bb : array<A>
     aa := bb
 
+    // boo()
+
     return true

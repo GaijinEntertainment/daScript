@@ -31,6 +31,14 @@ namespace das
         }
     };
 
+    struct PrivateFunctionAnnotation : MarkFunctionAnnotation {
+        PrivateFunctionAnnotation() : MarkFunctionAnnotation("private") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->privateFunction = true;
+            return true;
+        };
+    };
+
     struct GenericFunctionAnnotation : MarkFunctionAnnotation {
         GenericFunctionAnnotation() : MarkFunctionAnnotation("generic") { }
         virtual bool isGeneric() const override {
@@ -274,6 +282,7 @@ namespace das
         addAnnotation(make_shared<CommentAnnotation>());
         addAnnotation(make_shared<CppAlignmentAnnotation>());
         addAnnotation(make_shared<GenericFunctionAnnotation>());
+        addAnnotation(make_shared<PrivateFunctionAnnotation>());
         addAnnotation(make_shared<ExportFunctionAnnotation>());
         addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
         addAnnotation(make_shared<RunAtCompileTimeFunctionAnnotation>());
