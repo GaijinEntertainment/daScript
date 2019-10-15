@@ -1,6 +1,6 @@
 // options log_infer_passes=true
 
-require aaa
+require aaa public
 
 [export]
 def dummy(var a,b:A)

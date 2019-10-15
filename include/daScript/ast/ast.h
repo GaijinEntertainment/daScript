@@ -527,6 +527,7 @@ namespace das
         static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
         void verifyAotReady();
+        void addDependency ( Module * mod, bool pub );
     public:
         template <typename TT, typename ...TARG>
         __forceinline void addCall ( const string & fnName, TARG ...args ) {
@@ -552,7 +553,7 @@ namespace das
         map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
         mutable map<string, ExprCallFactory>    callThis;
         map<uint32_t, uint64_t>                 annotationData;
-        set<Module *>                           requireModule;      // visibility modules
+        map<Module *,bool>                      requireModule;      // visibility modules
         string  name;
         bool    builtIn = false;
     private:

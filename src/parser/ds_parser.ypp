@@ -158,6 +158,7 @@
 %token  DAS_PASS            "pass"
 %token  DAS_REINTERPRET     "reinterpret"
 %token  DAS_MODULE          "module"
+%token  DAS_PUBLIC          "public"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -276,6 +277,7 @@
 %type <b>               let_scope
 %type <b>               optional_override
 %type <b>               kwd_let
+%type <b>               is_public_module
 
 %type <i>               copy_or_move_or_clone
 
@@ -439,12 +441,7 @@ options_declaration
 	;
 
 require_declaration
-    :   DAS_REQUIRE require_list
-    ;
-
-require_list
-    :   require_module
-    |   require_list ',' require_module
+    :   DAS_REQUIRE require_module
     ;
 
 require_module_name
@@ -466,16 +463,21 @@ require_module_name
     ;
 
 require_module
-    :   require_module_name[name] {
+    :   require_module_name[name]  is_public_module[pub] {
         auto modN = getModuleName(*$name);
         if ( auto mod = g_Program->addModule(modN) ) {
-            g_Program->thisModule->requireModule.insert(mod);
+            g_Program->thisModule->addDependency(mod, $pub);
         } else {
             das_yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }
         delete $name;
     }
+    ;
+
+is_public_module
+    :               { $$ = false; }
+    |   DAS_PUBLIC  { $$ = true; }
     ;
 
 expect_declaration

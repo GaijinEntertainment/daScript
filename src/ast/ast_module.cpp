@@ -42,6 +42,15 @@ namespace das {
 
     Module * Module::modules = nullptr;
 
+    void Module::addDependency ( Module * mod, bool pub ) {
+        requireModule[mod] |= pub;
+        for ( auto it : mod->requireModule ) {
+            if ( it.second ) {
+                addDependency(it.first, false);
+            }
+        }
+    }
+
     TypeAnnotation * Module::resolveAnnotation ( TypeInfo * info ) {
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
@@ -97,9 +106,9 @@ namespace das {
             builtIn = true;
         }
         if ( n != "$" ) {
-            requireModule.insert(require("$"));
+            requireModule[require("$")] = false;
         } else {
-            requireModule.insert(this);
+            requireModule[this] = false;
         }
     }
 
