@@ -2533,7 +2533,7 @@ namespace das {
                 } else if ( cloneType->isStructure() ) {
                     reportGenericInfer();
                     auto stt = cloneType->structType;
-                    auto fnList = getCloneFunc(cloneType,cloneType);
+                    fnList = getCloneFunc(cloneType,cloneType);
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeClone(stt);
