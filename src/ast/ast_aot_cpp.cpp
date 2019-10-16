@@ -765,13 +765,22 @@ namespace das {
         }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
-            ss << "\nstruct " << that->name << " {\n";
+            ss << "\nstruct " << that->name;
+            if (that->cppLayout && that->parent) {
+                ss << " : " << that->parent->name;
+            }
+            ss << " {\n";
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
+            auto from = that->findFieldParent(decl.name);
+            if ( that->cppLayout && from!=that ) {
+                ss << "\t/* skipping " << decl.name << ", from " << from->name << " */";
+                return;
+            }
             ss << "\t" << describeCppType(decl.type) << " " << decl.name << ";";
             if ( decl.parentType ) {
-                ss << " /* from " << that->parent->name << " */";
+                ss << " /* from " << from->name << " */";
             }
         }
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {

@@ -192,7 +192,7 @@ namespace das {
         const Structure * cppLayoutParent = nullptr;
         for ( const auto & fd : fields ) {
             int fieldAlignemnt = fd.type->getAlignOf();
-            int fa = fieldAlignemnt - 1;
+            int al = fieldAlignemnt - 1;
             if ( cppLayout ) {
                 auto fp = findFieldParent(fd.name);
                 if ( fp!=cppLayoutParent ) {
@@ -202,7 +202,6 @@ namespace das {
                     cppLayoutParent = fp;
                 }
             }
-            int al = fa - 1;
             size = (size + al) & ~al;
             size += fd.type->getSizeOf();
         }
