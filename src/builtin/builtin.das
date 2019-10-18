@@ -109,6 +109,9 @@ def each ( a : auto(TT)[] ) : iterator<TT&>
 def each ( a : array<auto(TT)> ) : iterator<TT&>
     return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
 
+def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT delete &>
+    return _builtin_make_lambda_iterator(lam)
+
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>

@@ -277,6 +277,40 @@ namespace das
         return (Iterator *) iter;
     }
 
+    struct LambdaIterator : Iterator {
+        LambdaIterator ( Context & context, const Lambda & ll ) : lambda(ll) {
+            int32_t * fnIndex = (int32_t *) lambda.capture;
+            if (!fnIndex) context.throw_error("invoke null lambda");
+            simFunc = context.getFunction(*fnIndex-1);
+            if (!simFunc) context.throw_error("invoke null function");
+        }
+        __forceinline bool InvokeLambda ( Context & context, char * ptr ) {
+            vec4f argValues[4] = {
+                cast<Lambda>::from(lambda),
+                cast<char *>::from(ptr)
+            };
+            auto res = context.call(simFunc, argValues, 0);
+            return cast<bool>::to(res);
+        }
+        virtual bool first ( Context & context, char * ptr ) override {
+            return InvokeLambda(context, ptr);
+        }
+        virtual bool next  ( Context & context, char * ptr ) override {
+            return InvokeLambda(context, ptr);
+        }
+        virtual void close ( Context &, char * ) override {
+            // TODO: release lambda?
+        }
+        Lambda          lambda;
+        SimFunction *   simFunc = nullptr;
+    };
+
+    Iterator * builtin_make_lambda_iterator ( const Lambda lambda, Context * context ) {
+        char * iter = context->heap.allocate(sizeof(LambdaIterator));
+        new (iter) LambdaIterator(*context, lambda);
+        return (Iterator *) iter;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
@@ -304,6 +338,8 @@ namespace das
             SideEffects::modifyExternal, "builtin_make_range_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
             SideEffects::modifyExternal, "builtin_make_nil_iterator");
+        addExtern<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
+            SideEffects::modifyExternal, "builtin_make_lambda_iterator");
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
