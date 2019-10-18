@@ -765,6 +765,9 @@ namespace das {
         }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
+            if ( that->cppLayout ) {
+                ss << "\n#if 0 // skipping structure " << that->name << " declaration due to CPP layout";
+            }
             ss << "\nstruct " << that->name;
             if (that->cppLayout && that->parent) {
                 ss << " : " << that->parent->name;
@@ -793,6 +796,9 @@ namespace das {
             for ( auto & tf : that->fields ) {
                 ss << "static_assert(offsetof(" << that->name << "," << tf.name << ")=="
                     << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
+            }
+            if ( that->cppLayout ) {
+                ss << "#endif // end of skipping structure " << that->name << " declaration due to CPP layout\n";
             }
             return Visitor::visit(that);
         }

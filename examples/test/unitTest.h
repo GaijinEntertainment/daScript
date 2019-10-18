@@ -39,3 +39,19 @@ int *getPtr();
 void testFields ( das::Context * ctx );
 void test_das_string(const das::Block & block, das::Context * context);
 vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
+
+struct CppS1 {
+    virtual ~CppS1() {}
+    // int64_t * a;
+    int64_t b;
+    int32_t c;
+};
+
+struct CppS2 : CppS1 {
+    int32_t d;
+};
+
+__forceinline int CppS1Size() { return int(sizeof(CppS1)); }
+__forceinline int CppS2Size() { return int(sizeof(CppS2)); }
+__forceinline int CppS2DOffset() { return int(offsetof(CppS2, d)); }
+
