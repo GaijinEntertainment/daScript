@@ -110,6 +110,7 @@ def each ( a : array<auto(TT)> ) : iterator<TT&>
     return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
 
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT delete &>
+	static_assert(typeinfo(is_ref type argT),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     return _builtin_make_lambda_iterator(lam)
 
 [unsafe]
