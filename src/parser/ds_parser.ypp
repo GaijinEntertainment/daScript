@@ -159,6 +159,8 @@
 %token  DAS_REINTERPRET     "reinterpret"
 %token  DAS_MODULE          "module"
 %token  DAS_PUBLIC          "public"
+%token  DAS_LABEL           "label"
+%token  DAS_GOTO            "goto"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -286,6 +288,8 @@
 %type <pExpression>     expr
 %type <pExpression>     expr_assign
 %type <pExpression>     expr_list
+%type <pExpression>     expression_label
+%type <pExpression>     expression_goto
 %type <pExpression>     expression_let
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
@@ -495,6 +499,18 @@ expect_error
     }
     | INTEGER[err] ':' INTEGER[count] {
         g_Program->expectErrors[CompilationError($err)] += $count;
+    }
+    ;
+
+expression_label
+    : DAS_LABEL[loc] INTEGER[labname] ':' {
+        $$ = new ExprLabel(tokAt(@loc),$labname);
+    }
+    ;
+
+expression_goto
+    : DAS_GOTO[loc] DAS_LABEL INTEGER[labname]  {
+        $$ = new ExprGoto(tokAt(@loc),$labname);
     }
     ;
 
@@ -764,6 +780,8 @@ expression_any
     |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
+    |   expression_label[subexpr] ';'       { $$ = $subexpr; }
+    |   expression_goto[subexpr] ';'        { $$ = $subexpr; }
     |   DAS_PASS ';'                        { $$ = nullptr; }
     ;
 

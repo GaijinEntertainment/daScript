@@ -659,6 +659,18 @@ namespace das
         return block;
     }
 
+    // label
+
+    SimNode * ExprLabel::simulate (Context & context) const {
+        return nullptr;
+    }
+
+    // goto
+
+    SimNode * ExprGoto::simulate (Context & context) const {
+        return nullptr;
+    }
+
     // r2v
 
     SimNode * ExprRef2Value::GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {

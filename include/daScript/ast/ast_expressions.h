@@ -4,6 +4,26 @@
 
 namespace das
 {
+    struct ExprLabel : Expression {
+        ExprLabel () = default;
+        ExprLabel ( const LineInfo & a, int32_t s ) : Expression(a), label(s) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isLabel() const override { return true; }
+        int32_t  label = -1;
+    };
+
+    struct ExprGoto : Expression {
+        ExprGoto () = default;
+        ExprGoto ( const LineInfo & a, int32_t s ) : Expression(a), label(s) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isGoto() const override { return true; }
+        int32_t  label = -1;
+    };
+
     struct ExprRef2Value : Expression {
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -104,6 +124,7 @@ namespace das
         TypeDeclPtr             returnType;
         vector<VariablePtr>     arguments;
         uint32_t                stackTop = 0;
+        int32_t                 maxLabelIndex = -1;
         AnnotationList          annotations;
         uint64_t                annotationData = 0;         // to be filled with annotation
         uint32_t                annotationDataSid = 0;      // to be filled with annotation

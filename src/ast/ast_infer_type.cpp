@@ -43,6 +43,7 @@ namespace das {
         vector<ExprBlock *>     scopes;
         vector<ExprWith *>      with;
         vector<size_t>          varStack;
+        map<int32_t,int32_t>    labels;
         size_t                  fieldOffset = 0;
         bool                    cppLayout = false;
         bool                    cppLayoutPod = false;
@@ -1180,6 +1181,7 @@ namespace das {
             DAS_ASSERT(blocks.size()==0);
             DAS_ASSERT(local.size()==0);
             DAS_ASSERT(with.size()==0);
+            labels.clear();
             func.reset();
             return Visitor::visit(that);
         }
@@ -1198,14 +1200,47 @@ namespace das {
             }
             return Visitor::visit(c);
         }
+    // ExprGoto
+        Expression * findLabel ( int32_t label ) const {
+            for ( auto it = scopes.rbegin(); it!=scopes.rend(); ++it ) {
+                auto blk = *it;
+                for ( const auto & ex : blk->list ) {
+                    if ( ex->rtti_isLabel() ) {
+                        auto lab = static_pointer_cast<ExprLabel>(ex);
+                        if ( lab->label == label ) {
+                            return lab.get();
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
+        virtual ExpressionPtr visit ( ExprGoto * expr ) override {
+            if ( !findLabel(expr->label) ) {
+                error("can't find label " + to_string(expr->label), expr->at,
+                      CompilationError::invalid_label);
+            }
+            return Visitor::visit(expr);
+        }
+    // ExprLabel
+        virtual void preVisit ( ExprLabel * expr ) override {
+            Visitor::preVisit(expr);
+            auto total = ++labels[expr->label];
+            if ( total != 1 ) {
+                error("duplicate label " + to_string(expr->label), expr->at,
+                      CompilationError::invalid_label);
+            }
+        }
     // ExprRef2Value
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // infer
             if ( !expr->subexpr->type->isRef() ) {
-                error("can only dereference a reference", expr->at);
+                error("can only dereference a reference", expr->at,
+                      CompilationError::invalid_type);
             } else if ( !expr->subexpr->type->isSimpleType() && !expr->subexpr->type->isPointer() && !expr->subexpr->type->isEnum() ) {
-                error("can only dereference a simple type, not a " + expr->subexpr->type->describe(), expr->at);
+                error("can only dereference a simple type, not a " + expr->subexpr->type->describe(), expr->at,
+                      CompilationError::invalid_type);
             } else {
                 expr->type = make_shared<TypeDecl>(*expr->subexpr->type);
                 expr->type->ref = false;

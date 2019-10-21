@@ -1,25 +1,14 @@
-struct Foo
-    value:int
+options log=true
 
 [export]
 def test()
-    // regular
-    var count = 0
-    let lam = lambda() <| $(var a:int &) : bool
-        if count < 10
-            a = count++
-            return true
-        else
-            return false
-    for x,tx in each(lam),range(0,10)
-        assert(x==tx)
-    // structure
-    let lamF = lambda() <| $(var a:Foo) : bool
-        if count < 10
-            a.value = count++
-            return true
-        else
-            return false
-    for y,ty in each(lamF),range(0,10)
-        assert(y.value==ty)
+    var i = 0
+    label 0:
+    label 1:
+    print("i={i}\n")
+    i ++
+    if i < 10
+        goto label 1
+        print("unreachable\n")
+    label 2:
     return true

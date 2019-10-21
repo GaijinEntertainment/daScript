@@ -231,6 +231,8 @@
 <normal>"try"                                           das_need_oxford_comma = false; return DAS_TRY;
 <normal>"recover"                                       das_need_oxford_comma = false; return DAS_CATCH;
 <normal>"typedef"                                       das_need_oxford_comma = false; return DAS_TYPEDEF;
+<normal>"label"                                         return DAS_LABEL;
+<normal>"goto"                                          return DAS_GOTO;
 <normal>"module"                                        return DAS_MODULE;
 <normal>"public"                                        return DAS_PUBLIC;
 <normal>"options"                                       return DAS_OPTIONS;

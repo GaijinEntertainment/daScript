@@ -86,10 +86,19 @@ namespace das {
 
     class BlockFolding : public OptVisitor {
     protected:
+        set<int32_t> labels;
+    protected:
         void collect ( vector<ExpressionPtr> & list, vector<ExpressionPtr> & blockList ) {
             for ( auto & expr : blockList ) {
                 if ( !expr ) continue;
-                if ( expr->rtti_isBreak() || expr->rtti_isReturn() || expr->rtti_isContinue() ) {
+                if ( expr->rtti_isLabel() ) {
+                    auto lexpr = static_pointer_cast<ExprLabel>(expr);
+                    if ( labels.find(lexpr->label)!=labels.end() ) {
+                        list.push_back(expr);
+                    }
+                    continue;
+                }
+                if ( expr->rtti_isBreak() || expr->rtti_isReturn() || expr->rtti_isContinue() || expr->rtti_isGoto() ) {
                     list.push_back(expr);
                     break;
                 }
@@ -111,6 +120,10 @@ namespace das {
             }
         }
     protected:
+        virtual void preVisit ( ExprGoto * expr ) override {
+            Visitor::preVisit(expr);
+            labels.insert(expr->label);
+        }
     // ExprBlock
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             vector<ExpressionPtr> list;
@@ -137,6 +150,7 @@ namespace das {
         }
     // function
         virtual FunctionPtr visit ( Function * func ) override {
+            labels.clear();
             if ( func->body && func->result->isVoid() ) {   // remove trailing return on the void function
                 if ( func->body->rtti_isBlock() ) {
                     auto block = static_pointer_cast<ExprBlock>(func->body);

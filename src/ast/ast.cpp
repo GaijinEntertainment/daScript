@@ -450,6 +450,34 @@ namespace das {
         }
     }
 
+    // Label
+
+    ExpressionPtr ExprLabel::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprLabel::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprLabel>(expr);
+        Expression::clone(cexpr);
+        cexpr->label = label;
+        return cexpr;
+    }
+
+    // Goto
+
+    ExpressionPtr ExprGoto::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprGoto::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprGoto>(expr);
+        Expression::clone(cexpr);
+        cexpr->label = label;
+        return cexpr;
+    }
+
     // ExprRef2Value
 
     ExpressionPtr ExprRef2Value::visit(Visitor & vis) {

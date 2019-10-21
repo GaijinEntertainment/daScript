@@ -332,6 +332,8 @@ namespace das
         virtual bool rtti_isFor() const { return false; }
         virtual bool rtti_isWhile() const { return false; }
         virtual bool rtti_isAddr() const { return false; }
+        virtual bool rtti_isLabel() const { return false; }
+        virtual bool rtti_isGoto() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;

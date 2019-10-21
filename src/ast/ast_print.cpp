@@ -298,6 +298,16 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
+    // label
+        virtual void preVisit ( ExprLabel * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "label " << expr->label << ":";
+        }
+    // goto
+        virtual void preVisit ( ExprGoto * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "goto label " << expr->label;
+        }
     // let
         virtual void preVisit ( ExprLet * let ) override {
             Visitor::preVisit(let);

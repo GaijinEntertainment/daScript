@@ -83,6 +83,7 @@ namespace das {
         uint32_t                stackTop = 0;
         vector<uint32_t>        stackTopStack;
         vector<ExprBlock *>     blocks;
+        vector<ExprBlock *>     scopes;
         bool                    log = false;
         bool                    optimize = false;
         TextWriter &            logs;
@@ -219,6 +220,12 @@ namespace das {
                 }
             }
         }
+    // ExprLabel
+        virtual void preVisit ( ExprLabel * expr ) override {
+            Visitor::preVisit(expr);
+            auto sc = scopes.back();
+            sc->maxLabelIndex = max ( sc->maxLabelIndex, expr->label );
+        }
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
@@ -226,6 +233,7 @@ namespace das {
             if ( block->isClosure ) {
                 blocks.push_back(block);
             }
+            scopes.push_back(block);
             if ( block->arguments.size() || block->copyOnReturn || block->moveOnReturn ) {
                 auto sz = uint32_t(sizeof(BlockArguments));
                 block->stackTop = allocateStack(sz);
@@ -239,6 +247,7 @@ namespace das {
             if ( inStruct ) {
                 return Visitor::visit(block);
             }
+            scopes.pop_back();
             if ( block->isClosure ) {
                 blocks.pop_back();
             }

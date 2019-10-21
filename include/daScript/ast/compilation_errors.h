@@ -43,6 +43,7 @@ namespace das
     ,   invalid_array_dimension                 =   30117       //  int blah[non-const]
     ,   invalid_iteration_source                =   30118       //  for x in 10
     ,   invalid_loop                            =   30119       //  for x, y in a etc
+    ,   invalid_label                           =   30120       //  label not found etc
 
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)
