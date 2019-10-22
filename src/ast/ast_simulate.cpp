@@ -662,13 +662,14 @@ namespace das
     // label
 
     SimNode * ExprLabel::simulate (Context & context) const {
+        context.thisProgram->error("internal compilation error, calling 'simulate' on label", at);
         return nullptr;
     }
 
     // goto
 
     SimNode * ExprGoto::simulate (Context & context) const {
-        return nullptr;
+        return context.code->makeNode<SimNode_GotoLabel>(at,label);
     }
 
     // r2v
@@ -1056,13 +1057,22 @@ namespace das
         }
     }
     
-    vector<SimNode *> ExprBlock::collectExpressions ( Context & context, const vector<ExpressionPtr> & lis ) const {
+    vector<SimNode *> ExprBlock::collectExpressions ( Context & context,
+                                                     const vector<ExpressionPtr> & lis,
+                                                     map<int32_t,uint32_t> * ofsmap ) const {
         vector<SimNode *> simlist;
         for ( auto & node : lis ) {
             if ( node->rtti_isLet()) {
-                shared_ptr<ExprLet> pLet = static_pointer_cast<ExprLet>(node);
+                auto pLet = static_pointer_cast<ExprLet>(node);
                 auto letInit = ExprLet::simulateInit(context, pLet.get());
                 simlist.insert(simlist.end(), letInit.begin(), letInit.end());
+                continue;
+            }
+            if ( node->rtti_isLabel() ) {
+                if ( ofsmap ) {
+                    auto lnode = static_pointer_cast<ExprLabel>(node);
+                    (*ofsmap)[lnode->label] = uint32_t(simlist.size());
+                }
                 continue;
             }
             if ( auto simE = node->simulate(context) ) {
@@ -1083,17 +1093,33 @@ namespace das
     }
 
     void ExprBlock::simulateBlock ( Context & context, SimNode_Block * block ) const {
-        vector<SimNode *> simlist = collectExpressions(context, list);
+        map<int32_t,uint32_t> ofsmap;
+        vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
         block->total = int(simlist.size());
         if ( block->total ) {
             block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
             for ( uint32_t i = 0; i != block->total; ++i )
                 block->list[i] = simlist[i];
         }
+        simulateLabels(context, block, ofsmap);
+    }
+
+    void ExprBlock::simulateLabels ( Context & context, SimNode_Block * block, const map<int32_t,uint32_t> & ofsmap ) const {
+        if ( maxLabelIndex!=-1 ) {
+            block->totalLabels = maxLabelIndex + 1;
+            block->labels = (uint32_t *) context.code->allocate(block->totalLabels * sizeof(uint32_t));
+            for ( uint32_t i=0; i!=block->totalLabels; ++i ) {
+                block->labels[i] = -1U;
+            }
+            for ( auto & it : ofsmap ) {
+                block->labels[it.first] = it.second;
+            }
+        }
     }
 
     SimNode * ExprBlock::simulate (Context & context) const {
-        vector<SimNode *> simlist = collectExpressions(context, list);
+        map<int32_t,uint32_t> ofsmap;
+        vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
         // TODO: what if list size is 0?
         if ( simlist.size()!=1 || isClosure || finalList.size() ) {
             SimNode_Block * block;
@@ -1102,7 +1128,12 @@ namespace das
                 bool C0 = !needResult && simlist.size()==1 && finalList.size()==0;
                 block = context.code->makeNode<SimNode_ClosureBlock>(at, needResult, C0, annotationData);
             } else {
-                block = context.code->makeNode<SimNode_Block>(at);
+                if ( maxLabelIndex!=-1 ) {
+                    block = context.code->makeNode<SimNode_BlockWithLabels>(at);
+                    simulateLabels(context, block, ofsmap);
+                } else {
+                    block = context.code->makeNode<SimNode_Block>(at);
+                }
             }
             block->annotationDataSid = annotationDataSid;
             block->total = int(simlist.size());

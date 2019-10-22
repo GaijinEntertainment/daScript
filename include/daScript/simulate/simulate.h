@@ -99,16 +99,30 @@ namespace das
         stopForBreak        = 1 << 0
     ,   stopForReturn       = 1 << 1
     ,   stopForContinue     = 1 << 2
+    ,   jumpToLabel         = 1 << 3
     };
 
-#define DAS_PROCESS_LOOP_FLAGS(howtostop) \
+#define DAS_PROCESS_LOOP_FLAGS(howtocontinue) \
     { if (context.stopFlags) { \
         if (context.stopFlags & EvalFlags::stopForContinue) { \
             context.stopFlags &= ~EvalFlags::stopForContinue; \
-            howtostop; \
-        } else { \
-            goto loopend; \
+            howtocontinue; \
+        } else if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<totalLabels) { \
+            if ((body=list+labels[context.gotoLabel])>=list) { \
+                context.stopFlags &= ~EvalFlags::jumpToLabel; \
+                goto loopbegin; \
+            } \
         } \
+        goto loopend; \
+    } }
+
+#define DAS_PROCESS_LOOP1_FLAGS(howtocontinue) \
+    { if (context.stopFlags) { \
+        if (context.stopFlags & EvalFlags::stopForContinue) { \
+            context.stopFlags &= ~EvalFlags::stopForContinue; \
+            howtocontinue; \
+        } \
+        goto loopend; \
     } }
 
 #if DAS_ENABLE_EXCEPTIONS
@@ -467,6 +481,7 @@ namespace das
         class DebugInfoHelper * thisHelper = nullptr;
     public:
         uint32_t stopFlags = 0;
+        uint32_t gotoLabel = 0;
         vec4f result;
     };
 
@@ -580,11 +595,20 @@ namespace das
         SimNode_Block ( const LineInfo & at ) : SimNode_Final(at) {}
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitBlock ( SimVisitor & vis );
+        void visitLabels ( SimVisitor & vis );
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         SimNode ** list = nullptr;
         uint32_t total = 0;
         uint32_t annotationDataSid = 0;
+        uint32_t *  labels = nullptr;
+        uint32_t    totalLabels = 0;
+    };
+
+    struct SimNode_BlockWithLabels : SimNode_Block {
+        SimNode_BlockWithLabels ( const LineInfo & at ) : SimNode_Block(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_ForBase : SimNode_Block {

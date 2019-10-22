@@ -241,20 +241,29 @@ namespace das
             memcpy ( newList, that->list, total*sizeof(SimNode *));
             that->list = newList;
         }
+        if ( totalLabels ) {
+            uint32_t * newLabels = (uint32_t *) code->allocate(totalLabels * sizeof(uint32_t));
+            memcpy ( newLabels, that->labels, totalLabels*sizeof(uint32_t));
+            that->labels = newLabels;
+        }
         return that;
     }
 
     vec4f SimNode_Block::eval ( Context & context ) {
-        for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
-            list[i++]->eval(context);
+        SimNode ** __restrict tail = list + total;
+        for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            (*body)->eval(context);
+            if ( context.stopFlags ) break;
         }
         evalFinal(context);
         return v_zero();
     }
 
     vec4f SimNode_ClosureBlock::eval ( Context & context ) {
-        for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
-            list[i++]->eval(context);
+        SimNode ** __restrict tail = list + total;
+        for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            (*body)->eval(context);
+            if ( context.stopFlags ) break;
         }
         evalFinal(context);
         if ( context.stopFlags & EvalFlags::stopForReturn ) {
@@ -264,6 +273,29 @@ namespace das
             if ( needResult ) context.throw_error_at(debugInfo,"end of block without return");
             return v_zero();
         }
+    }
+
+// SimNode_BlockWithLabels
+
+    vec4f SimNode_BlockWithLabels::eval ( Context & context ) {
+        SimNode ** __restrict tail = list + total;
+        SimNode ** __restrict body = list;
+    loopbegin:;
+        for (; body!=tail; ++body) {
+            (*body)->eval(context);
+            { if ( context.stopFlags ) {
+                if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<totalLabels) {
+                    if ((body=list+labels[context.gotoLabel])>=list) {
+                        context.stopFlags &= ~EvalFlags::jumpToLabel;
+                        goto loopbegin;
+                    }
+                }
+                goto loopend;
+            } }
+        }
+    loopend:;
+        evalFinal(context);
+        return v_zero();
     }
 
     // SimNode_Let
@@ -280,7 +312,9 @@ namespace das
     vec4f SimNode_While::eval ( Context & context ) {
         SimNode ** __restrict tail = list + total;
         while ( cond->evalBool(context) && !context.stopFlags ) {
-            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            SimNode ** __restrict body = list;
+        loopbegin:;
+            for (; body!=tail; ++body) {
                 (*body)->eval(context);
                 DAS_PROCESS_LOOP_FLAGS(break);
             }

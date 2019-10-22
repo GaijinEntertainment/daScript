@@ -98,10 +98,12 @@ namespace das {
                     }
                     continue;
                 }
-                if ( expr->rtti_isBreak() || expr->rtti_isReturn() || expr->rtti_isContinue() || expr->rtti_isGoto() ) {
+                if ( expr->rtti_isBreak() || expr->rtti_isReturn() || expr->rtti_isContinue() ) {
                     list.push_back(expr);
                     break;
                 }
+                // TODO:
+                //  rtti_isGoto - until next label
                 if ( expr->rtti_isBlock() ) {
                     auto pBlock = static_pointer_cast<ExprBlock>(expr);
                     if ( !pBlock->isClosure && !pBlock->finalList.size() ) {

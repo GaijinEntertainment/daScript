@@ -13,6 +13,7 @@
 #define V_CALL()            visitCall(vis);
 #define V_FINAL()           visitFinal(vis);
 #define V_BLOCK()           visitBlock(vis);
+#define V_LABELS()          visitLabels(vis);
 
 
 

@@ -37,7 +37,9 @@ namespace das
         SimNode ** __restrict tail = list + total;
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
-            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            SimNode ** __restrict body = list;
+        loopbegin:;
+            for (; body!=tail; ++body) {
                 (*body)->eval(context);
                 DAS_PROCESS_LOOP_FLAGS(break);
             }
@@ -74,7 +76,7 @@ namespace das
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
             pbody->eval(context);
-            DAS_PROCESS_LOOP_FLAGS(continue);
+            DAS_PROCESS_LOOP1_FLAGS(continue);
         }
     loopend:;
         evalFinal(context);

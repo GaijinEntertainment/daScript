@@ -393,6 +393,13 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GotoLabel::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GotoLabel);
+        V_ARG(label);
+        V_END();
+    }
+
     SimNode * SimNode_Break::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(Break);
@@ -506,9 +513,31 @@ namespace das {
         vis.sub(list, total, "block");
     }
 
+    void SimNode_Block::visitLabels ( SimVisitor & vis ) {
+        if ( labels ) {
+            V_ARG(totalLabels);
+            for ( uint32_t i=0; i!=totalLabels; ++i ) {
+                if ( labels[i]!=-1U ) {
+                    char name[32];
+                    snprintf(name, 32, "label_%i", i);
+                    vis.arg(labels[i], name);
+                }
+            }
+        }
+    }
+
     SimNode * SimNode_Block::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(Block);
+        V_BLOCK();
+        V_FINAL();
+        V_END();
+    }
+
+    SimNode * SimNode_BlockWithLabels::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(BlockWithLabels);
+        V_LABELS();
         V_BLOCK();
         V_FINAL();
         V_END();

@@ -2055,7 +2055,7 @@ namespace das {
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);
             if ( block->getFinallyEvalFlags() ) {
-                error("finally section can't have break or return", block->at,
+                error("finally section can't have break, return, or goto", block->at,
                       CompilationError::return_or_break_in_finally );
             }
         }

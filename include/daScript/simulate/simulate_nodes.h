@@ -1206,6 +1206,18 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override;
     };
 
+    // GOTO LABEL
+    struct SimNode_GotoLabel : SimNode {
+        SimNode_GotoLabel ( const LineInfo & at, uint32_t lab ) : SimNode(at), label(lab) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            context.stopFlags |= EvalFlags::jumpToLabel;
+            context.gotoLabel = label;
+            return v_zero();
+        }
+        uint32_t label = -1;
+    };
+
     // BREAK
     struct SimNode_Break : SimNode {
         SimNode_Break ( const LineInfo & at ) : SimNode(at) {}
@@ -1824,7 +1836,9 @@ SIM_NODE_AT_VECTOR(Float, float)
                 for ( int t=0; t!=totalCount; ++t ){
                     *pi[t] = ph[t];
                 }
-                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -1878,7 +1892,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             if ( context.stopFlags || !needLoop) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
                 *pi = ph;
-                for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
