@@ -1649,6 +1649,13 @@ type_declaration
         $$->at = tokAt(@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
+    |   type_declaration[typeDecl] QQ {
+        $$ = new TypeDecl(Type::tPointer);
+        $$->at = tokAt(@typeDecl);
+        $$->firstType = make_shared<TypeDecl>(Type::tPointer);
+		$$->firstType->at = tokAt(@typeDecl);
+		$$->firstType->firstType = TypeDeclPtr($typeDecl);
+    }
     |   DAS_ARRAY[loc] '<' type_declaration[typeDecl] '>' {
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
