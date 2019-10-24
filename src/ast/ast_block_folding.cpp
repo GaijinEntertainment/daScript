@@ -89,21 +89,27 @@ namespace das {
         set<int32_t> labels;
     protected:
         void collect ( vector<ExpressionPtr> & list, vector<ExpressionPtr> & blockList ) {
+            bool skipTilLabel = false;
             for ( auto & expr : blockList ) {
                 if ( !expr ) continue;
                 if ( expr->rtti_isLabel() ) {
                     auto lexpr = static_pointer_cast<ExprLabel>(expr);
                     if ( labels.find(lexpr->label)!=labels.end() ) {
                         list.push_back(expr);
+                        skipTilLabel = false;
                     }
                     continue;
+                }
+                if ( skipTilLabel ) continue;
+                if ( expr->rtti_isGoto() ) {
+                    list.push_back(expr);
+                    skipTilLabel = true;
+                    break;
                 }
                 if ( expr->rtti_isBreak() || expr->rtti_isReturn() || expr->rtti_isContinue() ) {
                     list.push_back(expr);
                     break;
                 }
-                // TODO:
-                //  rtti_isGoto - until next label
                 if ( expr->rtti_isBlock() ) {
                     auto pBlock = static_pointer_cast<ExprBlock>(expr);
                     if ( !pBlock->isClosure && !pBlock->finalList.size() ) {
