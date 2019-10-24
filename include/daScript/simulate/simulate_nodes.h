@@ -1215,7 +1215,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             context.gotoLabel = label;
             return v_zero();
         }
-        uint32_t label = -1;
+        uint32_t label = -1u;
     };
 
     // GOTO LABEL

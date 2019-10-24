@@ -733,7 +733,6 @@ namespace das {
         BlockVariableCollector &    collector;
         set<string>                 aotPrefix;
         vector<ExprBlock *>         scopes;
-        Function *                  func;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -874,7 +873,6 @@ namespace das {
         }
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
-            func = fn;
             ss << "\ninline ";
             describeLocalCppType(ss,fn->result,CpptSubstitureRef::no);
             ss << " " << aotFuncName(fn) << " ( Context * __context__";
@@ -914,7 +912,6 @@ namespace das {
             } else {
                 ss << "\n";
             }
-            func = nullptr;
             return Visitor::visit(fn);
         }
     // block
