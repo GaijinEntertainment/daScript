@@ -234,6 +234,7 @@ namespace das {
                 blocks.push_back(block);
             }
             scopes.push_back(block);
+            block->maxLabelIndex = -1;
             if ( block->arguments.size() || block->copyOnReturn || block->moveOnReturn ) {
                 auto sz = uint32_t(sizeof(BlockArguments));
                 block->stackTop = allocateStack(sz);

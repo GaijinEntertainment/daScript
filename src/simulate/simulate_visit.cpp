@@ -400,6 +400,13 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_Goto::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Goto);
+        V_SUB(subexpr);
+        V_END();
+    }
+
     SimNode * SimNode_Break::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(Break);

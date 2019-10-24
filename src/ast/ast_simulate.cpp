@@ -669,7 +669,11 @@ namespace das
     // goto
 
     SimNode * ExprGoto::simulate (Context & context) const {
-        return context.code->makeNode<SimNode_GotoLabel>(at,label);
+        if ( subexpr ) {
+            return context.code->makeNode<SimNode_Goto>(at, subexpr->simulate(context));
+        } else {
+            return context.code->makeNode<SimNode_GotoLabel>(at,label);
+        }
     }
 
     // r2v

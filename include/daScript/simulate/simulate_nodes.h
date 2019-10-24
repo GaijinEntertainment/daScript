@@ -1218,6 +1218,18 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t label = -1;
     };
 
+    // GOTO LABEL
+    struct SimNode_Goto : SimNode {
+        SimNode_Goto ( const LineInfo & at, SimNode * lab ) : SimNode(at), subexpr(lab) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            context.gotoLabel = subexpr->evalInt(context);
+            context.stopFlags |= EvalFlags::jumpToLabel;
+            return v_zero();
+        }
+        SimNode * subexpr = nullptr;
+    };
+
     // BREAK
     struct SimNode_Break : SimNode {
         SimNode_Break ( const LineInfo & at ) : SimNode(at) {}

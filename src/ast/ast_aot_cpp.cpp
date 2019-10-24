@@ -732,6 +732,8 @@ namespace das {
         ProgramPtr                  program;
         BlockVariableCollector &    collector;
         set<string>                 aotPrefix;
+        vector<ExprBlock *>         scopes;
+        Function *                  func;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -872,6 +874,7 @@ namespace das {
         }
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
+            func = fn;
             ss << "\ninline ";
             describeLocalCppType(ss,fn->result,CpptSubstitureRef::no);
             ss << " " << aotFuncName(fn) << " ( Context * __context__";
@@ -911,6 +914,7 @@ namespace das {
             } else {
                 ss << "\n";
             }
+            func = nullptr;
             return Visitor::visit(fn);
         }
     // block
@@ -928,6 +932,7 @@ namespace das {
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
+            scopes.push_back(block);
             block->finallyBeforeBody = true;
             block->finallyDisabled = block->inTheLoop;
             ss << "{\n";
@@ -968,6 +973,7 @@ namespace das {
             ss << string(tab,'\t') << "}";
             block->finallyBeforeBody = false;
             block->finallyDisabled = false;
+            scopes.pop_back();
             return Visitor::visit(block);
         }
         string finallyName ( ExprBlock * block ) const {
@@ -1044,7 +1050,28 @@ namespace das {
     // goto
         virtual void preVisit ( ExprGoto * that ) override {
             Visitor::preVisit(that);
-            ss << "goto label_" << that->label;
+            if ( !that->subexpr ) {
+                ss << "goto label_" << that->label;
+            } else {
+                ss << "switch (";
+            }
+        }
+        virtual ExpressionPtr visit(ExprGoto *that) override {
+            if ( that->subexpr ) {
+                ss << ") {\n";
+                for ( auto it = scopes.rbegin(); it!=scopes.rend(); ++it ) {
+                    auto blk = *it;
+                    for ( const auto & ex : blk->list ) {
+                        if ( ex->rtti_isLabel() ) {
+                            auto lab = static_pointer_cast<ExprLabel>(ex);
+                            ss << string(tab,'\t') << "case " << lab->label <<": goto label_" << lab->label << ";\n";
+                        }
+                    }
+                }
+                ss << string(tab,'\t') << "default: __context__->throw_error(\"invalid label\");\n";
+                ss << string(tab,'\t') << "}";
+            }
+            return Visitor::visit(that);
         }
     // copy
         virtual void preVisit ( ExprCopy * that ) override {

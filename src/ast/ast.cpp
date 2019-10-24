@@ -468,6 +468,9 @@ namespace das {
 
     ExpressionPtr ExprGoto::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( subexpr ) {
+            subexpr = subexpr->visit(vis);
+        }
         return vis.visit(this);
     }
 
@@ -475,6 +478,7 @@ namespace das {
         auto cexpr = clonePtr<ExprGoto>(expr);
         Expression::clone(cexpr);
         cexpr->label = label;
+        cexpr->subexpr = subexpr->clone();
         return cexpr;
     }
 
@@ -893,6 +897,7 @@ namespace das {
             cexpr->arguments.push_back(arg->clone());
         }
         cexpr->annotations = annotations;
+        cexpr->maxLabelIndex = maxLabelIndex;
         return cexpr;
     }
 

@@ -17,12 +17,14 @@ namespace das
     struct ExprGoto : Expression {
         ExprGoto () = default;
         ExprGoto ( const LineInfo & a, int32_t s ) : Expression(a), label(s) {}
+        ExprGoto ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isGoto() const override { return true; }
         virtual uint32_t getEvalFlags() const override { return EvalFlags::jumpToLabel; }
         int32_t  label = -1;
+        ExpressionPtr   subexpr;
     };
 
     struct ExprRef2Value : Expression {

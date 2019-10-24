@@ -1216,7 +1216,23 @@ namespace das {
             return nullptr;
         }
         virtual ExpressionPtr visit ( ExprGoto * expr ) override {
-            if ( !findLabel(expr->label) ) {
+            if ( expr->subexpr ) {
+                if ( !expr->subexpr->type ) return Visitor::visit(expr);
+                expr->subexpr = Expression::autoDereference(expr->subexpr);
+                if ( !expr->subexpr->type->isSimpleType(Type::tInt) ) {
+                    error("label type has to be int, not " + expr->subexpr->type->describe(), expr->at,
+                          CompilationError::invalid_label);
+                } else {
+                    if ( enableInferTimeFolding ) {
+                        if ( auto se = getConstExpr(expr->subexpr.get()) ) {
+                            auto le = static_pointer_cast<ExprConstInt>(se);
+                            expr->label = le->getValue();
+                            expr->subexpr = nullptr;
+                        }
+                    }
+                }
+            }
+            if ( !expr->subexpr && !findLabel(expr->label) ) {
                 error("can't find label " + to_string(expr->label), expr->at,
                       CompilationError::invalid_label);
             }

@@ -512,6 +512,9 @@ expression_goto
     : DAS_GOTO[loc] DAS_LABEL INTEGER[labname]  {
         $$ = new ExprGoto(tokAt(@loc),$labname);
     }
+    | DAS_GOTO[loc] expr[lab]  {
+        $$ = new ExprGoto(tokAt(@loc),ExpressionPtr($lab));
+    }
     ;
 
 expression_else

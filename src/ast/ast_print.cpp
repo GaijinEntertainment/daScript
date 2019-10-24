@@ -306,7 +306,9 @@ namespace das {
     // goto
         virtual void preVisit ( ExprGoto * expr ) override {
             Visitor::preVisit(expr);
-            ss << "goto label " << expr->label;
+            ss << "goto ";
+            if ( !expr->subexpr )
+                ss << "label " << expr->label;
         }
     // let
         virtual void preVisit ( ExprLet * let ) override {
