@@ -3406,12 +3406,39 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             }
-            expr->makeType = make_shared<TypeDecl>(Type::tTuple);
-            for ( auto & val : expr->values ) {
-                auto valT = make_shared<TypeDecl>(*val->type);
-                valT->ref = false;
-                valT->constant = false;
-                expr->makeType->argTypes.push_back(valT);
+            if ( expr->recordType ) {
+                if ( !expr->recordType->isTuple() ) {
+                    error("internal error. ExprMakeTuple with non-tuple record type", expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
+                size_t argCount = expr->values.size();
+                if ( expr->recordType->argTypes.size() != argCount ) {
+                    error("expecting " + to_string(argCount) + " arguments", expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
+                auto mkt = make_shared<TypeDecl>(Type::tTuple);
+                for ( size_t ai=0; ai!=argCount; ++ai ) {
+                    const auto & val = expr->values[ai];
+                    const auto & argT = expr->recordType->argTypes[ai];
+                    if ( !argT->isSameType(*val->type,false,false) ) {
+                        error("invalid argument _" + to_string(ai) + ". expecting " +
+                                argT->describe() + ", not " + val->type->describe(),
+                              expr->at, CompilationError::invalid_type);
+                    }
+                    auto valT = make_shared<TypeDecl>(*argT);
+                    valT->ref = false;
+                    valT->constant = false;
+                    mkt->argTypes.push_back(valT);
+                }
+                expr->makeType = mkt;
+            } else {
+                expr->makeType = make_shared<TypeDecl>(Type::tTuple);
+                for ( auto & val : expr->values ) {
+                    auto valT = make_shared<TypeDecl>(*val->type);
+                    valT->ref = false;
+                    valT->constant = false;
+                    expr->makeType->argTypes.push_back(valT);
+                }
             }
             expr->type = make_shared<TypeDecl>(*expr->makeType);
             verifyType(expr->type);
@@ -3529,7 +3556,13 @@ namespace das {
             } else {
                 DAS_ASSERT(expr->values.size()==1);
                 reportGenericInfer();
-                return expr->values[0];
+                auto resExpr = expr->values[0];
+                if ( resExpr->rtti_isMakeTuple() ) {
+                    auto mkt = static_pointer_cast<ExprMakeTuple>(resExpr);
+                    mkt->recordType = make_shared<TypeDecl>(*expr->recordType);
+                    mkt->makeType.reset();
+                }
+                return resExpr;
             }
             expr->type = resT;
             verifyType(expr->type);
