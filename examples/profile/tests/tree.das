@@ -1,5 +1,7 @@
 //this is port from https://github.com/frol/completely-unscientific-benchmarks
 //almost direct kotlin implementation
+options heap = 2000000
+
 require random
 
 struct Node
@@ -103,5 +105,7 @@ def main
 def test
     profile(10, "tree")  <|
         main()
-	print("{int(heap_bytes_allocated())}\n")
+	// print("total = {int(heap_bytes_allocated())}\n")
+    // print("depth = {heap_depth()}\n")
+    verify(heap_depth()==1)
     return true
