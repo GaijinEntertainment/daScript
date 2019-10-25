@@ -20,7 +20,7 @@ namespace das {
             V_BEGIN();
             string name = op;
             name += getSimSourceName(subexpr.type);
-            if (baseType != Type::none) {
+            if ( baseType != Type::none && baseType != Type::anyArgument ) {
                 vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
             } else {
                 vis.op(name.c_str());
@@ -29,13 +29,13 @@ namespace das {
             V_ARG(offset);
             V_END();
         }
-        uint32_t  offset;
+        uint32_t  offset = 0xbad0c0de;
     };
 
     /* PtrFdr Any */
 
-#undef IMPLEMENT_OP1_SET_SETUP_NODE
-#define IMPLEMENT_OP1_SET_SETUP_NODE(result,node) \
+#undef IMPLEMENT_OP1_SETUP_NODE
+#define IMPLEMENT_OP1_SETUP_NODE(result,node) \
     auto rn = (SimNode_Op1PtrFdr *)result; \
     auto sn = (SimNode_PtrFieldDeref *)node; \
     rn->offset = sn->offset; \
@@ -44,8 +44,7 @@ namespace das {
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
-        DAS_PTR_NODE; \
-        __forceinline char * compute(Context & context) { \
+        INLINE char * compute(Context & context) { \
             if ( auto prv = subexpr.compute##COMPUTE(context) ) { \
                 return prv + offset; \
             } else { \
@@ -53,6 +52,7 @@ namespace das {
                 return nullptr; \
             } \
         } \
+        DAS_PTR_NODE; \
     };
 
 #define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_PtrFieldDeref*>(node))->subexpr)
@@ -61,12 +61,6 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op1_perm.h"
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,PtrFieldDeref,,vec4f)
-
-#undef REGISTER_OP1_FUSION_POINT
-#define REGISTER_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    (*g_fusionEngine)[#OPNAME].push_back(make_shared<Op1FusionPoint_##OPNAME##_##CTYPE>());
-
-#include "daScript/simulate/simulate_fusion_op1_reg.h"
 
     void createFusionEngine_ptrfdr()
     {
