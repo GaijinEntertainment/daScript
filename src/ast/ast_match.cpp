@@ -24,9 +24,18 @@ namespace das {
     }
 
     bool isZeroConst ( const ExpressionPtr & expr ) {
-        return isFloatConst(expr, 0.0f) || isIntOrUIntConst(expr, 0);
+        return isFloatConst(expr, 0.0f) || isIntOrUIntConst(expr, 0) || isPtrZero(expr);
     }
 
+    bool isPtrZero ( const ExpressionPtr & expr ) {
+        if ( !expr->rtti_isConstant() ) return false;
+        auto ce = static_pointer_cast<ExprConst>(expr);
+        switch ( ce->baseType ) {
+            case Type::tPointer:
+                                    return cast<void *>::to(ce->value) == nullptr;
+            default:                return false;
+        }
+    }
     bool isFloatConst ( const ExpressionPtr & expr, float value ) {
         if ( !expr->rtti_isConstant() ) return false;
         auto ce = static_pointer_cast<ExprConst>(expr);

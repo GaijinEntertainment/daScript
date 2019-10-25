@@ -1,3 +1,4 @@
+options heap = 2000000
 options log_nodes=true
 
 //this is port from https://github.com/frol/completely-unscientific-benchmarks

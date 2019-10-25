@@ -12,4 +12,5 @@ namespace das {
     bool isIntConst ( const ExpressionPtr & expr, int64_t value );
     bool isUIntConst ( const ExpressionPtr & expr, uint64_t value );
     bool isIntOrUIntConst ( const ExpressionPtr & expr, int64_t value );
+    bool isPtrZero ( const ExpressionPtr & expr );
 }
