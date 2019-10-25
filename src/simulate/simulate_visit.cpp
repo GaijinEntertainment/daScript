@@ -310,7 +310,7 @@ namespace das {
 
     SimNode * SimNode_ReturnNothing::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP(ReturnConst);
+        V_OP(ReturnNothing);
         V_END();
     }
 
