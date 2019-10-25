@@ -1,6 +1,6 @@
 //this is port from https://github.com/frol/completely-unscientific-benchmarks
 //almost direct kotlin implementation
-options heap = 2000000
+options heap = 200000//not required hint to increase initial heap footprint. <1% of performance. 200kb is enough
 
 require random
 
@@ -25,20 +25,21 @@ def merge(var lower, greater: Node?): Node?
         greater.left = merge(lower, greater.left)
         return greater
 
-typedef Pair = tuple< Node?; Node? >
+struct Pair
+    first,second: Node?
 
 def splitBinary(var orig: Node?; value: int): Pair
     if orig == null
-    	return [[ Pair null, null ]]
+    	return [[ Pair first=null, second=null ]]
     
     if orig.x < value
         let splitPair = splitBinary(orig.right, value)
-        orig.right = splitPair._0
-        return [[ Pair orig, splitPair._1 ]]
+        orig.right = splitPair.first
+        return [[ Pair first=orig, second=splitPair.second ]]
     else
         let splitPair = splitBinary(orig.left, value)
-        orig.left = splitPair._1
-        return [[ Pair splitPair._0, orig ]]
+        orig.left = splitPair.second
+        return [[ Pair first=splitPair.first, second=orig ]]
 
 def merge(var lower,equal,greater: Node?): Node?
     return merge(merge(lower, equal), greater)
@@ -48,8 +49,8 @@ struct SplitResult
 
 def split(var orig: Node?; value: int): SplitResult
     var lower_eg:Pair = splitBinary(orig, value)
-    var equal_greater:Pair = splitBinary(lower_eg._1, value + 1)
-    return [[ SplitResult lower = lower_eg._0, equal = equal_greater._0, greater = equal_greater._1 ]]
+    var equal_greater:Pair = splitBinary(lower_eg.second, value + 1)
+    return [[ SplitResult lower = lower_eg.first, equal = equal_greater.first, greater = equal_greater.second ]]
 
 def hasValue(var mRoot:Node? &; x: int): bool
     var splited = split(mRoot, x)
@@ -98,7 +99,7 @@ def main
             tree |> erase_raw(cur)
         elif a == 2
             res += (tree |> hasValue(cur)) ? 1 : 0
-	// destroy(tree)
+	destroy(tree)
     //print("{res}")
 
 [export]
