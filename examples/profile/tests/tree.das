@@ -1,5 +1,3 @@
-options log_nodes=true
-
 //this is port from https://github.com/frol/completely-unscientific-benchmarks
 //almost direct kotlin implementation
 require random
@@ -98,6 +96,7 @@ def main
             tree |> erase_raw(cur)
         elif a == 2
             res += (tree |> hasValue(cur)) ? 1 : 0
+	// destroy(tree)
     //print("{res}")
 
 [export]
