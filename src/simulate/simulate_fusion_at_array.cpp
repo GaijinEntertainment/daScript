@@ -65,6 +65,9 @@ namespace das {
     rn->stride = sn->stride; \
     rn->offset = sn->offset; 
 
+#define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_ArrayAt *>(node))->l)
+#define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_ArrayAt *>(node))->r)
+
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 

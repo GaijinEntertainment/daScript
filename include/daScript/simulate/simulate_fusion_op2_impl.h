@@ -91,7 +91,6 @@
             IMPLEMENT_OP2_SETUP_NODE(result,node); \
         } \
         virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override { \
-            auto cnode = static_cast<SimNode_Set<CTYPE> *>(node); \
-            return fuseOp2(info, node, cnode->l, cnode->r, context); \
+            return fuseOp2(info, node, FUSION_OP2_SUBEXPR_LEFT(CTYPE,node), FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node), context); \
         } \
     };

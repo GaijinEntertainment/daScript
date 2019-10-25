@@ -30,7 +30,7 @@ namespace das {
     SimNode * SimNode_PtrFieldDerefR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(PtrFieldDerefR2V);
-        subexpr.visit(vis);
+        V_SUB(subexpr);
         V_ARG(offset);
         V_END();
     }

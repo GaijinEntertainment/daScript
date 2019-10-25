@@ -66,6 +66,9 @@ namespace das {
     rn->offset = sn->offset; \
     rn->range = sn->range;
 
+#define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_At *>(node))->value)
+#define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_At *>(node))->index)
+
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 

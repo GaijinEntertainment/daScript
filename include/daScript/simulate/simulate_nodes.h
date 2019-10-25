@@ -274,15 +274,14 @@ namespace das {
     };
 
     // PTR FIELD .
-    struct SimNode_PtrFieldDeref : SimNode_SourceBase {
+    struct SimNode_PtrFieldDeref : SimNode {
         DAS_PTR_NODE;
         SimNode_PtrFieldDeref(const LineInfo & at, SimNode * rv, uint32_t of)
-            : SimNode_SourceBase(at),offset(of) {
-            subexpr.setSimNode(rv);
+            : SimNode(at),subexpr(rv),offset(of) {
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            auto prv = subexpr.computeAnyPtr(context);
+            auto prv = subexpr->evalPtr(context);
             if ( prv ) {
                 return prv + offset;
             } else {
@@ -290,6 +289,7 @@ namespace das {
                 return nullptr;
             }
         }
+        SimNode *   subexpr;
         uint32_t    offset;
     };
 
@@ -299,24 +299,15 @@ namespace das {
             : SimNode_PtrFieldDeref(at, rv, of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval(Context & context) override {
-            auto prv = subexpr.computeAnyPtr(context);
-            if ( prv ) {
-                TT * pR = (TT *)(prv + offset);
-                return cast<TT>::from(*pR);
-            } else {
-                context.throw_error_at(debugInfo,"dereferencing null pointer");
-                return v_zero();
-            }
+            TT * pR = (TT *)compute(context);
+            return cast<TT>::from(*pR);
         }
-        virtual char * evalPtr(Context & context) override {
-            auto prv = subexpr.computeAnyPtr(context);
-            if ( prv ) {
-                return *(char **)(prv + offset);
-            } else {
-                context.throw_error_at(debugInfo,"dereferencing null pointer");
-                return nullptr;
-            }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
         }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
     };
 
     // FIELD ?.

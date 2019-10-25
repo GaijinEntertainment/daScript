@@ -23,8 +23,9 @@
 #define MATCH_ANY_OP1_NODE(CTYPE,NODENAME,COMPUTE) \
     else if ( is(info,node_x,NODENAME) ) { return context->code->makeNode<SimNode_Op1##COMPUTE>(); }
 
-// extra node settings
 #define IMPLEMENT_OP1_SETUP_NODE(result,node)
+
+#define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_Op1*>(node))->x)
 
 #include "daScript/simulate/simulate_fusion_op1_impl.h"
 #include "daScript/simulate/simulate_fusion_op1_set_impl.h"

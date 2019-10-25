@@ -157,11 +157,6 @@ namespace das {
         virtual SimNode * visit ( SimNode * node ) override {
             auto & ni = info[node];
             auto & nv = (*g_fusionEngine)[fuseName(ni.name, ni.typeName)];
-
-            if (ni.name == "PtrFieldDeref") {
-                printf("here\n");
-            }
-
             for ( const auto & fe : nv ) {
                 auto newNode = fe->fuse(info, node, context);
                 if ( newNode != node ) {

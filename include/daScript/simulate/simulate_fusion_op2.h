@@ -25,8 +25,10 @@
         } \
     }; 
 
-// extra node settings
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node)
+
+#define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_Set<CTYPE> *>(node))->l)
+#define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_Set<CTYPE> *>(node))->r)
 
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
@@ -64,7 +66,6 @@
         DAS_NODE(TYPE,CTYPE); \
     }; 
 
-// extra node settings
 #define IMPLEMENT_OP2_SETUP_NODE(result,node)
 
 #include "daScript/simulate/simulate_fusion_op2_impl.h"

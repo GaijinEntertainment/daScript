@@ -68,6 +68,9 @@ namespace das {
     rn->valueTypeSize = sn->valueTypeSize; \
     rn->offset = sn->offset; 
 
+#define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_Table *>(node))->tabExpr)
+#define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_Table *>(node))->keyExpr)
+
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 

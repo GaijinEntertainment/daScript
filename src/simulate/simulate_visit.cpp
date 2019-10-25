@@ -126,7 +126,7 @@ namespace das {
     SimNode * SimNode_PtrFieldDeref::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(PtrFieldDeref);
-        subexpr.visit(vis);
+        V_SUB(subexpr);
         V_ARG(offset);
         V_END();
     }
