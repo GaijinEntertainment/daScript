@@ -75,7 +75,7 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_SETOP_NUMERIC(TableIndex);
-    IMPLEMENT_ANY_SETOP(__forceinline,TableIndex,Ptr,StringPtr); \
+    IMPLEMENT_ANY_SETOP(__forceinline,TableIndex,Ptr,StringPtr,StringPtr); \
 
     void createFusionEngine_tableindex() {
         REGISTER_SETOP_NUMERIC(TableIndex);

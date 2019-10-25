@@ -1,8 +1,8 @@
-#define IMPLEMENT_SET_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE) \
+#define IMPLEMENT_SET_OP1_FUSION_POINT(INLINE,OPNAME,TYPE,CTYPE,RCTYPE) \
     struct Op1FusionPoint_##OPNAME##_##CTYPE : FusionPointOp1 { \
         Op1FusionPoint_##OPNAME##_##CTYPE ( ) {} \
-        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,Local); \
-        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,Argument); \
+        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,Local); \
+        IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,Argument); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_x, Context * context) override { \
             if ( false ) {} \
             MATCH_ANY_OP1_NODE(CTYPE,"GetLocal",Local) \

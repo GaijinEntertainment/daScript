@@ -2,7 +2,7 @@
 #define FUSION_OP_PTR_RVALUE(CTYPE,expr)   ((CTYPE *)((expr)))
 #define FUSION_OP_EVAL_CAST(expr)          (*(expr))
 
-#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
             INLINE auto compute ( Context & context ) { \
                 auto lv =  FUSION_OP_PTR_VALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
@@ -11,7 +11,7 @@
             DAS_NODE(TYPE,CTYPE); \
         };
 
-#define IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
+#define IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
             INLINE auto compute ( Context & context ) { \
                 auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,subexpr.compute##COMPUTE(context)); \

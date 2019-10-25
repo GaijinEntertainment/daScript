@@ -29,7 +29,7 @@ namespace das {
             V_ARG(offset);
             V_END();
         }
-        uint32_t  offset = 0xbad0c0de;
+        uint32_t  offset;
     };
 
     /* PtrFdr Any */
@@ -41,30 +41,72 @@ namespace das {
     rn->offset = sn->offset; \
     rn->baseType = Type::none;
 
+#undef FUSION_OP1_SUBEXPR
+#define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_PtrFieldDeref*>(node))->subexpr)
+
 #undef IMPLEMENT_ANY_OP1_NODE
-#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
         INLINE char * compute(Context & context) { \
-            if ( auto prv = (char **) subexpr.compute##COMPUTE(context) ) { \
-                return (*prv) + offset; \
-            } else { \
-                context.throw_error_at(debugInfo,"dereferencing null pointer"); \
-                return nullptr; \
-            } \
+            auto prv = (char **) subexpr.compute##COMPUTE(context); \
+            if ( !prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
+            return (*prv) + offset; \
         } \
         DAS_PTR_NODE; \
     };
 
-#undef FUSION_OP1_SUBEXPR
-#define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_PtrFieldDeref*>(node))->subexpr)
+#include "daScript/simulate/simulate_fusion_op1_impl.h"
+#include "daScript/simulate/simulate_fusion_op1_perm.h"
+
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,PtrFieldDeref,,vec4f,vec4f)
+
+/* PtrFieldDeref<Scalar> */
+
+#undef IMPLEMENT_OP1_SETUP_NODE
+#define IMPLEMENT_OP1_SETUP_NODE(result,node) \
+    auto rn = (SimNode_Op1PtrFdr *)result; \
+    auto sn = (SimNode_PtrFieldDeref *)node; \
+    rn->offset = sn->offset;
+
+#undef IMPLEMENT_ANY_OP1_NODE
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
+        INLINE auto compute(Context & context) { \
+            auto prv = (char **) subexpr.compute##COMPUTE(context); \
+            if ( !prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
+            return *((RCTYPE *)((*prv) + offset)); \
+        } \
+        DAS_NODE(TYPE,RCTYPE); \
+    };
 
 #include "daScript/simulate/simulate_fusion_op1_impl.h"
 #include "daScript/simulate/simulate_fusion_op1_perm.h"
 
-    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,PtrFieldDeref,,vec4f)
+    IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(PtrFieldDerefR2V);
+
+/* PtrFieldDeref<Vec> */
+
+#undef IMPLEMENT_ANY_OP1_NODE
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
+        virtual vec4f eval ( Context & context ) override { \
+            auto prv = (char **) subexpr.compute##COMPUTE(context); \
+            if ( !prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
+            return v_ldu((const float *) *prv); \
+        } \
+    };
+
+#include "daScript/simulate/simulate_fusion_op1_impl.h"
+#include "daScript/simulate/simulate_fusion_op1_perm.h"
+
+    IMPLEMENT_OP1_NUMERIC_VEC(PtrFieldDerefR2V);
+
+#include "daScript/simulate/simulate_fusion_op1_reg.h"
 
     void createFusionEngine_ptrfdr()
     {
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(PtrFieldDerefR2V);
+        REGISTER_OP1_NUMERIC_VEC(PtrFieldDerefR2V);
         (*g_fusionEngine)["PtrFieldDeref"].push_back(make_shared<Op1FusionPoint_PtrFieldDeref_vec4f>());
     }
 }

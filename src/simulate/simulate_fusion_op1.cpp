@@ -20,7 +20,7 @@ namespace das {
     // binary
     IMPLEMENT_OP1_INTEGER_FUSION_POINT(BinNot);
     // boolean
-    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,BoolNot,Bool,bool);
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,BoolNot,Bool,bool,bool);
     // inc and dec
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(Inc);
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(Dec);

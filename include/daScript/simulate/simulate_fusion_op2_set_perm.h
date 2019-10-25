@@ -5,23 +5,23 @@
     (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_shared<FusionPoint_Set_##OPNAME##_##CTYPE>());
 
 #define IMPLEMENT_SETOP_INTEGER(OPNAME) \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Int,int32_t); \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,UInt,uint32_t); \
-    IMPLEMENT_ANY_SETOP(_msc_inline_bug,OPNAME,Int64,int64_t); \
-    IMPLEMENT_ANY_SETOP(_msc_inline_bug,OPNAME,UInt64,uint64_t);
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Int,int32_t,int32_t); \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,UInt,uint32_t,uint32_t); \
+    IMPLEMENT_ANY_SETOP(_msc_inline_bug,OPNAME,Int64,int64_t,int64_t); \
+    IMPLEMENT_ANY_SETOP(_msc_inline_bug,OPNAME,UInt64,uint64_t,uint64_t);
 
 #define IMPLEMENT_SETOP_NUMERIC(OPNAME) \
     IMPLEMENT_SETOP_INTEGER(OPNAME); \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Float,float); \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Double,double);
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Float,float,float); \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Double,double,double);
 
 #define IMPLEMENT_SETOP_SCALAR(OPNAME) \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Bool,bool); \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Bool,bool,bool); \
     IMPLEMENT_SETOP_NUMERIC(OPNAME);
 
 #define IMPLEMENT_SETOP_WORKHORSE(OPNAME) \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Ptr,StringPtr); \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Ptr,VoidPtr); \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Ptr,StringPtr,StringPtr); \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Ptr,VoidPtr,StringPtr); \
     IMPLEMENT_SETOP_SCALAR(OPNAME);
 
 #define REGISTER_SETOP_INTEGER(OPNAME) \
@@ -45,7 +45,7 @@
     REGISTER_SETOP_SCALAR(OPNAME);
 
 #define IMPLEMENT_SETOP_VEC(OPNAME,CTYPE) \
-    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,,CTYPE)
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,,CTYPE,CTYPE)
 
 #define IMPLEMENT_SETOP_INTEGER_VEC(OPNAME) \
     IMPLEMENT_SETOP_VEC(OPNAME,int2 ); \

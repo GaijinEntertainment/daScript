@@ -139,7 +139,7 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
-    IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt, Ptr, StringPtr);
+    IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt, Ptr, StringPtr, StringPtr);
 
     void createFusionEngine_at_array() {
         REGISTER_SETOP_SCALAR(ArrayAtR2V);
