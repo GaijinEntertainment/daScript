@@ -138,6 +138,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
+    NEED_MODULE(Module_Random);
 #if 0
     const char * TEST_NAME = TEST_PATH "examples/profile/tests/annotation.das";
     tout << "\nINTERPRETED:\n";

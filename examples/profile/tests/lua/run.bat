@@ -8,6 +8,7 @@ luajit2_1_0beta3\luajit.exe -joff profile_try_catch.lua
 luajit2_1_0beta3\luajit.exe -joff exp.lua 
 luajit2_1_0beta3\luajit.exe -joff nbodies.lua
 luajit2_1_0beta3\luajit.exe -joff sha1.lua
+luajit2_1_0beta3\luajit.exe -joff tree.lua
 
 echo "LuaJIT, JIT"
 luajit2_1_0beta3\luajit.exe fibI.lua
