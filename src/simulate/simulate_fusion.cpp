@@ -39,6 +39,17 @@ namespace das {
         V_END();
     }
 
+    SimNode * FusionPointOp1::fuseOp1(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_x, Context * context) {
+        SimNode_Op1Fusion * result = (SimNode_Op1Fusion *) match(info,node,node_x,context);
+        if (result) {
+            set(result, node);
+            result->subexpr = static_cast<SimNode_SourceBase *>(node_x)->subexpr;
+            return result;
+        } else {
+            return node;
+        }
+    }
+
     SimNode * FusionPointOp2::fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) {
         anyLeft = anyRight = false;
         SimNode_Op2Fusion * result = (SimNode_Op2Fusion *) match(info,node,node_l,node_r,context);
@@ -98,6 +109,7 @@ namespace das {
             // op1
             createFusionEngine_op1();
             createFusionEngine_return();
+            createFusionEngine_ptrfdr();
             // scalar
             createFusionEngine_op2();
             createFusionEngine_op2_set();
@@ -145,6 +157,11 @@ namespace das {
         virtual SimNode * visit ( SimNode * node ) override {
             auto & ni = info[node];
             auto & nv = (*g_fusionEngine)[fuseName(ni.name, ni.typeName)];
+
+            if (ni.name == "PtrFieldDeref") {
+                printf("here\n");
+            }
+
             for ( const auto & fe : nv ) {
                 auto newNode = fe->fuse(info, node, context);
                 if ( newNode != node ) {

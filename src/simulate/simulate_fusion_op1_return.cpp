@@ -36,7 +36,7 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f)
 
 #undef MATCH_ANY_OP1_NODE
 #define MATCH_ANY_OP1_NODE(CTYPE,NODENAME,COMPUTE) \
-    else if ( is(info,tnode->x,NODENAME,(typeName<CTYPE>::name())) ) { result = context->code->makeNode<SimNode_Op1##COMPUTE>(); }
+    else if ( is(info,node_x,NODENAME,(typeName<CTYPE>::name())) ) { return context->code->makeNode<SimNode_Op1##COMPUTE>(); }
 
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \

@@ -283,10 +283,9 @@ namespace das {
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
             auto prv = subexpr.computeAnyPtr(context);
-            if (prv) {
+            if ( prv ) {
                 return prv + offset;
-            }
-            else {
+            } else {
                 context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return nullptr;
             }
@@ -301,21 +300,19 @@ namespace das {
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval(Context & context) override {
             auto prv = subexpr.computeAnyPtr(context);
-            if (prv) {
+            if ( prv ) {
                 TT * pR = (TT *)(prv + offset);
                 return cast<TT>::from(*pR);
-            }
-            else {
+            } else {
                 context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return v_zero();
             }
         }
         virtual char * evalPtr(Context & context) override {
             auto prv = subexpr.computeAnyPtr(context);
-            if (prv) {
+            if ( prv ) {
                 return *(char **)(prv + offset);
-            }
-            else {
+            } else {
                 context.throw_error_at(debugInfo,"dereferencing null pointer");
                 return nullptr;
             }

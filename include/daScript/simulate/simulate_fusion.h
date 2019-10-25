@@ -70,6 +70,12 @@ namespace das {
         SimSource       l, r;
     };
 
+    struct FusionPointOp1 : FusionPoint {
+        virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, Context *) = 0;
+        virtual void set(SimNode_Op1Fusion * result, SimNode * node) = 0;
+        virtual SimNode * fuseOp1(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_x, Context * context);
+    };
+
     struct FusionPointOp2 : FusionPoint {
         FusionPointOp2() {}
         virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, SimNode *, Context *) = 0;
@@ -90,6 +96,7 @@ namespace das {
     // op1
     void createFusionEngine_op1();
     void createFusionEngine_return();
+    void createFusionEngine_ptrfdr();
     // scalar
     void createFusionEngine_op2();
     void createFusionEngine_op2_set();
