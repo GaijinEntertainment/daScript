@@ -14,6 +14,24 @@
 
 namespace das {
 
+/* Return Any */
+
+#undef IMPLEMENT_ANY_OP1_NODE
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
+        virtual vec4f eval ( Context & context ) override { \
+            auto lv =  subexpr.compute##COMPUTE(context); \
+            context.stopFlags |= EvalFlags::stopForReturn; \
+            context.abiResult() = v_ldu((const float *) lv); \
+            return v_zero(); \
+        } \
+    };
+
+#include "daScript/simulate/simulate_fusion_op1_impl.h"
+#include "daScript/simulate/simulate_fusion_op1_perm.h"
+
+IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f)
+
 /* Return Scalar */
 
 #undef MATCH_ANY_OP1_NODE
@@ -60,10 +78,12 @@ namespace das {
 
 #include "daScript/simulate/simulate_fusion_op1_reg.h"
 
-    void createFusionEngine_op1()
+    void createFusionEngine_return()
     {
         REGISTER_OP1_WORKHORSE_FUSION_POINT(Return);
         REGISTER_OP1_NUMERIC_VEC(Return);
+
+        (*g_fusionEngine)["Return"].push_back(make_shared<Op1FusionPoint_Return_vec4f>());
     }
 }
 

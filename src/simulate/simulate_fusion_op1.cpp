@@ -27,7 +27,7 @@ namespace das {
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(IncPost);
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(DecPost);
 
-    void createFusionEngine_return()
+    void createFusionEngine_op1()
     {
         // unary
         REGISTER_OP1_NUMERIC_FUSION_POINT(Unm);

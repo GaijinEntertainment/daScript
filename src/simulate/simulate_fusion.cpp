@@ -15,7 +15,7 @@ namespace das {
         V_BEGIN();
         string name = op;
         name += getSimSourceName(subexpr.type);
-        if (baseType != Type::none) {
+        if ( baseType!=Type::none && baseType!=Type::anyArgument ) {
             vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
         } else {
             vis.op(name.c_str());
@@ -29,7 +29,7 @@ namespace das {
         string name = op;
         name += getSimSourceName(l.type);
         name += getSimSourceName(r.type);
-        if (baseType != Type::none) {
+        if ( baseType!=Type::none && baseType!=Type::anyArgument ) {
             vis.op(name.c_str(), getTypeBaseSize(baseType), das_to_string(baseType));
         } else {
             vis.op(name.c_str());
