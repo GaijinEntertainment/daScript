@@ -45,8 +45,8 @@ namespace das {
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
         INLINE char * compute(Context & context) { \
-            if ( auto prv = subexpr.compute##COMPUTE(context) ) { \
-                return prv + offset; \
+            if ( auto prv = (char **) subexpr.compute##COMPUTE(context) ) { \
+                return (*prv) + offset; \
             } else { \
                 context.throw_error_at(debugInfo,"dereferencing null pointer"); \
                 return nullptr; \
@@ -55,6 +55,7 @@ namespace das {
         DAS_PTR_NODE; \
     };
 
+#undef FUSION_OP1_SUBEXPR
 #define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_PtrFieldDeref*>(node))->subexpr)
 
 #include "daScript/simulate/simulate_fusion_op1_impl.h"
@@ -64,7 +65,7 @@ namespace das {
 
     void createFusionEngine_ptrfdr()
     {
-        // (*g_fusionEngine)["PtrFieldDeref"].push_back(make_shared<Op1FusionPoint_PtrFieldDeref_vec4f>());
+        (*g_fusionEngine)["PtrFieldDeref"].push_back(make_shared<Op1FusionPoint_PtrFieldDeref_vec4f>());
     }
 }
 

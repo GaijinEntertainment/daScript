@@ -140,6 +140,7 @@ SET(SIMULATE_FUSION_SRC
 src/simulate/simulate_fusion.cpp
 src/simulate/simulate_fusion_op1.cpp
 src/simulate/simulate_fusion_op1_return.cpp
+src/simulate/simulate_fusion_ptrfdr.cpp
 src/simulate/simulate_fusion_op2.cpp
 src/simulate/simulate_fusion_op2_set.cpp
 src/simulate/simulate_fusion_op2_bool.cpp

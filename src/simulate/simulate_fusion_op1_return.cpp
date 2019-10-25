@@ -27,6 +27,7 @@ namespace das {
         } \
     };
 
+#undef FUSION_OP1_SUBEXPR
 #define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_Return*>(node))->subexpr)
 
 #include "daScript/simulate/simulate_fusion_op1_impl.h"
