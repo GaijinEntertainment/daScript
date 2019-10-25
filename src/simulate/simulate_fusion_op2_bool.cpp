@@ -24,8 +24,8 @@
 
 namespace das {
 
-    IMPLEMENT_OP2_SCALAR(Equ);
-    IMPLEMENT_OP2_SCALAR(NotEqu);
+    IMPLEMENT_OP2_WORKHORSE(Equ);
+    IMPLEMENT_OP2_WORKHORSE(NotEqu);
     
     IMPLEMENT_OP2_NUMERIC(LessEqu);
     IMPLEMENT_OP2_NUMERIC(GtEqu);
@@ -34,8 +34,8 @@ namespace das {
 
     void createFusionEngine_op2_bool()
     {
-        REGISTER_OP2_SCALAR(Equ);
-        REGISTER_OP2_SCALAR(NotEqu);
+        REGISTER_OP2_WORKHORSE(Equ);
+        REGISTER_OP2_WORKHORSE(NotEqu);
 
         REGISTER_OP2_NUMERIC(LessEqu);
         REGISTER_OP2_NUMERIC(GtEqu);

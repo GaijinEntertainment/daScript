@@ -97,6 +97,7 @@ namespace das {
         IMPLEMENT_OP2_COPYREF_NODE(Local, ThisBlockArgumentRef);
         IMPLEMENT_OP2_COPYREF_NODE(Local, ArgumentRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, AnyPtr);
+        IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, Local);
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, CMResOfs);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, LocalRefOff);
@@ -109,11 +110,12 @@ namespace das {
             uint32_t size = crnode->size;
             if (false) { } 
             // *, *
-            MATCH_OP2_COPYREF("GetLocal","GetLocal",Local, Local)
-            MATCH_OP2_COPYREF("GetLocal","GetThisBlockArgument",Local, ThisBlockArgumentRef)
-            MATCH_OP2_COPYREF("GetLocal","GetArgumentRefOff",Local, ArgumentRefOff)
-            MATCH_OP2_COPYREF("GetLocalRefOff","GetLocal",LocalRefOff, Local)
-            MATCH_OP2_COPYREF("GetLocalRefOff","GetArgumentRefOff",LocalRefOff, ArgumentRefOff)
+            MATCH_OP2_COPYREF("GetLocal","GetLocal",Local,Local)
+            MATCH_OP2_COPYREF("GetLocal","GetThisBlockArgument",Local,ThisBlockArgumentRef)
+            MATCH_OP2_COPYREF("GetLocal","GetArgumentRefOff",Local,ArgumentRefOff)
+            MATCH_OP2_COPYREF("GetLocalRefOff","GetLocal",LocalRefOff,Local)
+            MATCH_OP2_COPYREF("GetLocalRefOff","GetArgumentRefOff",LocalRefOff,ArgumentRefOff)
+            MATCH_OP2_COPYREF("GetCMResOfs","GetLocal",CMResOfs,Local)
             // *, any
             MATCH_OP2_COPYREF_LEFT_ANY("GetLocal",Local)
             MATCH_OP2_COPYREF_LEFT_ANY("GetCMResOfs",CMResOfs)

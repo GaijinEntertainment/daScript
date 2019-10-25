@@ -274,13 +274,15 @@ namespace das {
     };
 
     // PTR FIELD .
-    struct SimNode_PtrFieldDeref : SimNode {
+    struct SimNode_PtrFieldDeref : SimNode_SourceBase {
         DAS_PTR_NODE;
         SimNode_PtrFieldDeref(const LineInfo & at, SimNode * rv, uint32_t of)
-            : SimNode(at), value(rv), offset(of) {}
+            : SimNode_SourceBase(at),offset(of) {
+            subexpr.setSimNode(rv);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
-            auto prv = value->evalPtr(context);
+            auto prv = subexpr.computeAnyPtr(context);
             if (prv) {
                 return prv + offset;
             }
@@ -289,7 +291,6 @@ namespace das {
                 return nullptr;
             }
         }
-        SimNode *   value;
         uint32_t    offset;
     };
 
@@ -299,7 +300,7 @@ namespace das {
             : SimNode_PtrFieldDeref(at, rv, of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval(Context & context) override {
-            auto prv = value->evalPtr(context);
+            auto prv = subexpr.computeAnyPtr(context);
             if (prv) {
                 TT * pR = (TT *)(prv + offset);
                 return cast<TT>::from(*pR);
@@ -310,7 +311,7 @@ namespace das {
             }
         }
         virtual char * evalPtr(Context & context) override {
-            auto prv = value->evalPtr(context);
+            auto prv = subexpr.computeAnyPtr(context);
             if (prv) {
                 return *(char **)(prv + offset);
             }

@@ -233,6 +233,7 @@ int main() {
     NEED_MODULE(Module_UnitTest);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_FIO);
+    NEED_MODULE(Module_Random);
 #if 0 // Debug this one test
     compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/circular_module_dependency.das",true);
     Module::Shutdown();

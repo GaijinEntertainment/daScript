@@ -34,7 +34,7 @@ namespace das {
     template <> struct typeName<range>    { static string name() { return "range"; } };
     template <> struct typeName<urange>   { static string name() { return "urange"; } };
     template <> struct typeName<char *>   { static string name() { return "string"; } };
-    template <> struct typeName<void *>   { static string name() { return "void *"; } };
+    template <> struct typeName<void *>   { static string name() { return "pointer"; } };
     template <> struct typeName<Func>     { static string name() { return "Func"; } };
     template <> struct typeName<Lambda>   { static string name() { return "Lambda"; } };
     template <> struct typeName<Block>    { static string name() { return "Block"; } };

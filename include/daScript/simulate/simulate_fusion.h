@@ -10,6 +10,7 @@
 namespace das {
 
     typedef char * StringPtr;
+    typedef void * VoidPtr;
 
     struct SimNodeInfo {
         string  name;

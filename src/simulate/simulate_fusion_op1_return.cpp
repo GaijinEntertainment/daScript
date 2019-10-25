@@ -34,7 +34,7 @@ namespace das {
 #include "daScript/simulate/simulate_fusion_op1_impl.h"
 #include "daScript/simulate/simulate_fusion_op1_perm.h"
 
-    IMPLEMENT_OP1_SCALAR_FUSION_POINT(Return);
+    IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(Return);
 
 /* Return Vec */
 
@@ -62,7 +62,7 @@ namespace das {
 
     void createFusionEngine_op1()
     {
-        REGISTER_OP1_SCALAR_FUSION_POINT(Return);
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(Return);
         REGISTER_OP1_NUMERIC_VEC(Return);
     }
 }
