@@ -48,8 +48,8 @@ struct SplitResult
     lower,equal,greater:Node?
 
 def split(var orig: Node?; value: int): SplitResult
-    var lower_eg:Pair = splitBinary(orig, value)
-    var equal_greater:Pair = splitBinary(lower_eg.second, value + 1)
+    var lower_eg = splitBinary(orig, value)
+    var equal_greater = splitBinary(lower_eg.second, value + 1)
     return [[ SplitResult lower = lower_eg.first, equal = equal_greater.first, greater = equal_greater.second ]]
 
 def hasValue(var mRoot:Node? &; x: int): bool

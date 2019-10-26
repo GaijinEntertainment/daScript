@@ -1542,8 +1542,11 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Block(at), stackTop(sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
-                list[i++]->eval(context);
+            SimNode ** __restrict tail = list + total;
+            SimNode ** __restrict body = list;
+            for (; body!=tail; ++body) {
+                (*body)->eval(context);
+                if (context.stopFlags) break;
             }
             return context.stack.sp() + stackTop;
         }
@@ -1556,8 +1559,11 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
-            for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
-                list[i++]->eval(context);
+            SimNode ** __restrict tail = list + total;
+            SimNode ** __restrict body = list;
+            for (; body!=tail; ++body) {
+                (*body)->eval(context);
+                if (context.stopFlags) break;
             }
             return context.abiCopyOrMoveResult();
         }
