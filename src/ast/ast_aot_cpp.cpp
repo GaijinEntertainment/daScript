@@ -1877,7 +1877,9 @@ namespace das {
                 ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                     << " " << mksName(expr) << ";\n";
             }
-            ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
+            if ( !expr->initAllFields ) {
+                ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
+            }
 
         }
         virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
@@ -1913,7 +1915,9 @@ namespace das {
                 ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                     << " " << mkaName(expr) << ";\n";
             }
-            ss << string(tab,'\t') << "das_zero(" << mkaName(expr) << ");\n";
+            if ( !expr->initAllFields ) {
+                ss << string(tab,'\t') << "das_zero(" << mkaName(expr) << ");\n";
+            }
         }
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
             Visitor::preVisitMakeArrayIndex(expr, index, init, lastField);
@@ -1946,7 +1950,9 @@ namespace das {
                 ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                     << " " << mktName(expr) << ";\n";
             }
-            ss << string(tab,'\t') << "das_zero(" << mktName(expr) << ");\n";
+            if ( !expr->initAllFields ) {
+                ss << string(tab,'\t') << "das_zero(" << mktName(expr) << ");\n";
+            }
         }
         virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
             Visitor::preVisitMakeTupleIndex(expr, index, init, lastField);

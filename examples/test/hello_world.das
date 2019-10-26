@@ -1,6 +1,25 @@
 options heap = 2000000
 options log_nodes=true
 
+/*
+struct Foo
+    i : int
+    g : int
+
+[sideeffects]
+def Foo1
+    return [[Foo i=1]]
+
+[sideeffects]
+def Foo2
+    return [[Foo i=2,g=3]]
+
+[export]
+def test
+    print("{Foo1()} {Foo2()}\n")
+    return true
+*/
+
 //this is port from https://github.com/frol/completely-unscientific-benchmarks
 //almost direct kotlin implementation
 require random
@@ -107,3 +126,4 @@ def test
         main()
 	print("{int(heap_bytes_allocated())}\n")
     return true
+

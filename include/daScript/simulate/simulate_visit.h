@@ -309,4 +309,13 @@ namespace das {
         V_END();
     }
 
+    template <int size>
+    SimNode * SimNode_InitLocalCMResN<size>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(InitLocalCMResN);
+        V_SP(offset);
+        V_ARG(size);
+        V_END();
+    }
+
 }

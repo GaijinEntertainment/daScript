@@ -845,6 +845,7 @@ namespace das
                 bool    useCMRES : 1;
                 bool    doesNotNeedSp : 1;
                 bool    doesNotNeedInit : 1;
+                bool    initAllFields : 1;
             };
             uint32_t makeFlags = 0;
         };

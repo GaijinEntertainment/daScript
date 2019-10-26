@@ -3371,6 +3371,25 @@ namespace das {
                     expr->useInitializer = false;
                 }
             }
+            // see if we need to init fields
+            if ( expr->makeType->structType ) {
+                expr->initAllFields = true;
+                for ( auto & st : expr->structs ) {
+                    if ( st->size() == expr->makeType->structType->fields.size() ) {
+                        for ( auto & va : *st ) {
+                            if ( va->value->rtti_isMakeLocal() ) {
+                                auto mkl = static_pointer_cast<ExprMakeLocal>(va->value);
+                                expr->initAllFields &= mkl->initAllFields;
+                            }
+                        }
+                    } else {
+                        expr->initAllFields = false;
+                        break;
+                    }
+                }
+            } else {
+                expr->initAllFields = false;
+            }
             // result type
             auto resT = make_shared<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->structs.size());
@@ -3388,6 +3407,7 @@ namespace das {
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             Visitor::preVisit(expr);
             expr->makeType.reset();
+            expr->initAllFields = true;
         }
         virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
             if (!init->type) {
@@ -3396,7 +3416,11 @@ namespace das {
             if (!init->type->canCopy() && init->type->canMove() && init->type->isConst()) {
                 error("can't move from a constant value\n\t" + init->type->describe(), 
                     init->at, CompilationError::cant_move);
-            } 
+            }
+            if ( init->rtti_isMakeLocal() ) {
+                auto initl = static_cast<ExprMakeLocal *>(init);
+                expr->initAllFields &= initl->initAllFields;
+            }
             return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
@@ -3483,6 +3507,7 @@ namespace das {
             }
             expr->recordType = make_shared<TypeDecl>(*expr->makeType);
             expr->recordType->dim.clear();
+            expr->initAllFields = true;
         }
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
@@ -3534,7 +3559,11 @@ namespace das {
             } else if ( !expr->recordType->canCopy() && expr->recordType->canMove() && init->type->isConst() ) {
                 error("can't move from a constant value\n\t" + init->type->describe(), 
                     init->at, CompilationError::cant_move);
-            } 
+            }
+            if ( init->rtti_isMakeLocal() ) {
+                auto initl = static_cast<ExprMakeLocal *>(init);
+                expr->initAllFields &= initl->initAllFields;
+            }
             return Visitor::visitMakeArrayIndex(expr,index,init,last);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
