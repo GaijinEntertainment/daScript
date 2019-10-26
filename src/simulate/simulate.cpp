@@ -903,8 +903,10 @@ namespace das
     void Context::dumpProfileInfo() {
         TextPrinter tout;
 #if DAS_ENABLE_PROFILER
+        uint64_t totalGoo = 0;
         set<FileInfo *> allFiles;
         for ( auto & it : profileData ) {
+            totalGoo += it.second;
             auto info = it.first.fileInfo;
             if ( info && info->source ) {
                 allFiles.insert(info);
@@ -920,25 +922,41 @@ namespace das
             int  line = 0;
             char txt[2];
             txt[1] = 0;
-            for ( int i = 0; i!=fi->sourceLength; ++i ) {
+            int col = 0;
+            for ( uint32_t i = 0; i!=fi->sourceLength; ++i ) {
                 if ( newLine ) {
                     line ++;
+                    col = 0;
                     newLine = false;
                     info.line = line;
-                    char total[16];
+                    char total[20];
                     auto itI = profileData.find(info);
                     if ( itI != profileData.end() ) {
-                        snprintf(total, 12, "%-10lu\t", (unsigned long)(itI->second));
+                        uint64_t samples = uint64_t(itI->second);
+                        snprintf(total, 20, "%-6.2f", samples*100.1/totalGoo);
                         tout << total;
                     } else {
-                        tout << "\t\t\t";
+                        tout << "      ";
                     }
                 }
                 txt[0] = fi->source[i];
-                if ( txt[0]=='\n' ) {
+                if (txt[0] == '\n') {
                     newLine = true;
                 }
-                tout << txt;
+                if (txt[0] == '\t') {
+                    if (col % 4 == 0) {
+                        tout << "    ";
+                        col += 4;
+                    } else {
+                        while (col % 4) {
+                            tout << " ";
+                            col++;
+                        }
+                    }
+                } else {
+                    tout << txt;
+                    col++;
+                }
             }
         }
 
