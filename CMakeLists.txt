@@ -154,6 +154,7 @@ src/simulate/simulate_fusion_at.cpp
 src/simulate/simulate_fusion_at_array.cpp
 src/simulate/simulate_fusion_tableindex.cpp
 src/simulate/simulate_fusion_misc_copy.cpp
+src/simulate/simulate_fusion_call2.cpp
 include/daScript/simulate/simulate_fusion.h
 include/daScript/simulate/simulate_fusion_op1.h
 include/daScript/simulate/simulate_fusion_op1_impl.h
