@@ -66,7 +66,7 @@ def insert(var mRoot:Node? &; x: int)
     	splited.equal = new [[Node x=x, y=random_int(seed)]]
     mRoot = merge(splited.lower, splited.equal, splited.greater)
 
-[unsafe]
+[unsafe, unsafe_deref]
 def destroy(var root:Node?)
     if root != null
 		destroy(root.left)
