@@ -110,6 +110,7 @@ namespace das {
             createFusionEngine_op1();
             createFusionEngine_return();
             createFusionEngine_ptrfdr();
+            createFusionEngine_if();
             // scalar
             createFusionEngine_op2();
             createFusionEngine_op2_set();
