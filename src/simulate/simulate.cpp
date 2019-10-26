@@ -259,6 +259,15 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNode_BlockNF::eval ( Context & context ) {
+        SimNode ** __restrict tail = list + total;
+        for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            (*body)->eval(context);
+            if ( context.stopFlags ) break;
+        }
+        return v_zero();
+    }
+
     vec4f SimNode_ClosureBlock::eval ( Context & context ) {
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {

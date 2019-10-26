@@ -1150,7 +1150,11 @@ namespace das
                     block = context.code->makeNode<SimNode_BlockWithLabels>(at);
                     simulateLabels(context, block, ofsmap);
                 } else {
-                    block = context.code->makeNode<SimNode_Block>(at);
+                    if ( finalList.size()==0 ) {
+                        block = context.code->makeNode<SimNode_BlockNF>(at);
+                    } else {
+                        block = context.code->makeNode<SimNode_Block>(at);
+                    }
                 }
             }
             block->annotationDataSid = annotationDataSid;

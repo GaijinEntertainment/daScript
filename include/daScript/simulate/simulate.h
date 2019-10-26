@@ -605,6 +605,11 @@ namespace das
         uint32_t    totalLabels = 0;
     };
 
+    struct SimNode_BlockNF : SimNode_Block {
+        SimNode_BlockNF ( const LineInfo & at ) : SimNode_Block(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
     struct SimNode_BlockWithLabels : SimNode_Block {
         SimNode_BlockWithLabels ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
