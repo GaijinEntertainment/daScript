@@ -97,6 +97,7 @@ namespace das {
     void createFusionEngine_op1();
     void createFusionEngine_return();
     void createFusionEngine_ptrfdr();
+    void createFusionEngine_if();
     // scalar
     void createFusionEngine_op2();
     void createFusionEngine_op2_set();
