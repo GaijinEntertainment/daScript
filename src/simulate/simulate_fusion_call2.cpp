@@ -17,7 +17,7 @@ namespace das {
     struct SimNode_Op2Call2 : SimNode_Op2Fusion {
         virtual SimNode * visit(SimVisitor & vis) override {
             V_BEGIN();
-            string name = "Call2";
+            string name = cmresEval ? "Call2CMRes" : "Call2";
             name += getSimSourceName(l.type);
             name += getSimSourceName(r.type);
             vis.op(name.c_str());
