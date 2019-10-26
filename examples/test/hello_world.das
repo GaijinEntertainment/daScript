@@ -1,27 +1,7 @@
-options heap = 2000000
-options log_nodes=true
-
-/*
-struct Foo
-    i : int
-    g : int
-
-[sideeffects]
-def Foo1
-    return [[Foo i=1]]
-
-[sideeffects]
-def Foo2
-    return [[Foo i=2,g=3]]
-
-[export]
-def test
-    print("{Foo1()} {Foo2()}\n")
-    return true
-*/
-
 //this is port from https://github.com/frol/completely-unscientific-benchmarks
 //almost direct kotlin implementation
+options heap = 200000//not required hint to increase initial heap footprint. <1% of performance. 200kb is enough
+
 require random
 
 struct Node
@@ -31,13 +11,14 @@ struct Node
 var
     seed:int4 = int4(1,1,1,1)
 
+[unsafe_deref]
 def merge(var lower, greater: Node?): Node?
-    if lower == null 
+    if lower == null
     	return greater
-    
+
     if greater == null
     	return lower
-    
+
     if lower.y < greater.y
         lower.right = merge(lower.right, greater)
         return lower
@@ -45,20 +26,22 @@ def merge(var lower, greater: Node?): Node?
         greater.left = merge(lower, greater.left)
         return greater
 
-typedef Pair = tuple< Node?; Node? >
+struct Pair
+    first,second: Node?
 
+[unsafe_deref]
 def splitBinary(var orig: Node?; value: int): Pair
     if orig == null
-    	return [[ Pair null, null ]]
-    
+    	return [[ Pair first=null, second=null ]]
+
     if orig.x < value
         let splitPair = splitBinary(orig.right, value)
-        orig.right = splitPair._0
-        return [[ Pair orig, splitPair._1 ]]
+        orig.right = splitPair.first
+        return [[ Pair first=orig, second=splitPair.second ]]
     else
         let splitPair = splitBinary(orig.left, value)
-        orig.left = splitPair._1
-        return [[ Pair splitPair._0, orig ]]
+        orig.left = splitPair.second
+        return [[ Pair first=splitPair.first, second=orig ]]
 
 def merge(var lower,equal,greater: Node?): Node?
     return merge(merge(lower, equal), greater)
@@ -67,9 +50,9 @@ struct SplitResult
     lower,equal,greater:Node?
 
 def split(var orig: Node?; value: int): SplitResult
-    var lower_eg:Pair = splitBinary(orig, value)
-    var equal_greater:Pair = splitBinary(lower_eg._1, value + 1)
-    return [[ SplitResult lower = lower_eg._0, equal = equal_greater._0, greater = equal_greater._1 ]]
+    var lower_eg = splitBinary(orig, value)
+    var equal_greater = splitBinary(lower_eg.second, value + 1)
+    return [[ SplitResult lower = lower_eg.first, equal = equal_greater.first, greater = equal_greater.second ]]
 
 def hasValue(var mRoot:Node? &; x: int): bool
     var splited = split(mRoot, x)
@@ -80,9 +63,7 @@ def hasValue(var mRoot:Node? &; x: int): bool
 def insert(var mRoot:Node? &; x: int)
     var splited = split(mRoot, x)
     if splited.equal == null
-    	splited.equal = new Node
-        splited.equal.x = x
-        splited.equal.y = random_int(seed)
+    	splited.equal = new [[Node x=x, y=random_int(seed)]]
     mRoot = merge(splited.lower, splited.equal, splited.greater)
 
 [unsafe]
@@ -118,12 +99,14 @@ def main
             tree |> erase_raw(cur)
         elif a == 2
             res += (tree |> hasValue(cur)) ? 1 : 0
+	destroy(tree)
     //print("{res}")
 
 [export]
 def test
     profile(10, "tree")  <|
         main()
-	print("{int(heap_bytes_allocated())}\n")
+	// print("total = {int(heap_bytes_allocated())}\n")
+    // print("depth = {heap_depth()}\n")
+    verify(heap_depth()==1)
     return true
-

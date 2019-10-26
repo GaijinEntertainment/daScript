@@ -452,6 +452,7 @@ namespace das
                 bool    hasToRunAtCompileTime : 1;
                 bool    unsafe : 1;
                 bool    unsafeOperation : 1;
+                bool    unsafeDeref : 1;
                 bool    hasMakeBlock : 1;
                 bool    aotNeedPrologue : 1;
                 bool    noAot : 1;

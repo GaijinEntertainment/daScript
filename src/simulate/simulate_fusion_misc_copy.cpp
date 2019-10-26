@@ -98,11 +98,13 @@ namespace das {
         IMPLEMENT_OP2_COPYREF_NODE(Local, ArgumentRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, Local);
+        IMPLEMENT_OP2_COPYREF_NODE(CMResOfs, Argument);
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, CMResOfs);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, LocalRefOff);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, Local);
         IMPLEMENT_OP2_COPYREF_NODE(LocalRefOff, ArgumentRefOff);
+        IMPLEMENT_OP2_COPYREF_NODE(ArgumentRefOff, Local);
         IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, ArgumentRef);
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) override {
@@ -116,6 +118,8 @@ namespace das {
             MATCH_OP2_COPYREF("GetLocalRefOff","GetLocal",LocalRefOff,Local)
             MATCH_OP2_COPYREF("GetLocalRefOff","GetArgumentRefOff",LocalRefOff,ArgumentRefOff)
             MATCH_OP2_COPYREF("GetCMResOfs","GetLocal",CMResOfs,Local)
+            MATCH_OP2_COPYREF("GetCMResOfs","GetArgumentRef",CMResOfs,Argument)
+            MATCH_OP2_COPYREF("GetArgumentRefOff","GetLocal",ArgumentRefOff,Local)
             // *, any
             MATCH_OP2_COPYREF_LEFT_ANY("GetLocal",Local)
             MATCH_OP2_COPYREF_LEFT_ANY("GetCMResOfs",CMResOfs)

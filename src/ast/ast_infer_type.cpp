@@ -2190,6 +2190,7 @@ namespace das {
                 expr->field = valT->structType->findField(expr->name);
             } else if ( valT->isPointer() ) {
                 expr->value = Expression::autoDereference(expr->value);
+                expr->unsafeDeref = func ? func->unsafeDeref : false;
                 if ( valT->firstType->isStructure() ) {
                     expr->field = valT->firstType->structType->findField(expr->name);
                 } else if ( valT->firstType->isHandle() ) {

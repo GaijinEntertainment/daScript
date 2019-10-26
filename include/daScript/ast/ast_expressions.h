@@ -189,6 +189,7 @@ namespace das
         string          name;
         const Structure::FieldDeclaration * field = nullptr;
         int             tupleIndex = -1;
+        bool            unsafeDeref = false;
         TypeAnnotationPtr annotation;
         union {
             struct {

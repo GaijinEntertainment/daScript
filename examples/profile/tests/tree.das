@@ -11,6 +11,7 @@ struct Node
 var
     seed:int4 = int4(1,1,1,1)
 
+[unsafe_deref]
 def merge(var lower, greater: Node?): Node?
     if lower == null 
     	return greater
@@ -28,6 +29,7 @@ def merge(var lower, greater: Node?): Node?
 struct Pair
     first,second: Node?
 
+[unsafe_deref]
 def splitBinary(var orig: Node?; value: int): Pair
     if orig == null
     	return [[ Pair first=null, second=null ]]

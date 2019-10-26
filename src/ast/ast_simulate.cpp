@@ -1243,6 +1243,11 @@ namespace das
         }
         DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         if (value->type->isPointer()) {
+            if ( unsafeDeref ) {
+                if ( auto chain = value->trySimulate(context, extraOffset + fieldOffset, r2vType) ) {
+                    return chain;
+                }
+            }
             auto simV = value->simulate(context);
             if ( r2vType!=Type::none ) {
                 return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType, at, simV, fieldOffset + extraOffset);
@@ -1347,6 +1352,12 @@ namespace das
             }
         } else if ( argument ) {
             if ( variable->type->isRef() ) {
+                if ( r2vType!=Type::none ) {
+                    return context.code->makeValueNode<SimNode_GetArgumentRefOffR2V>(r2vType, at, argumentIndex, extraOffset);
+                } else {
+                    return context.code->makeNode<SimNode_GetArgumentRefOff>(at, argumentIndex, extraOffset);
+                }
+            } else if ( variable->type->isPointer() ) {
                 if ( r2vType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetArgumentRefOffR2V>(r2vType, at, argumentIndex, extraOffset);
                 } else {

@@ -957,6 +957,7 @@ namespace das {
         cexpr->value = value->clone();
         cexpr->field = field;
         cexpr->tupleIndex = tupleIndex;
+        cexpr->unsafeDeref = unsafeDeref;
         return cexpr;
     }
 

@@ -39,6 +39,14 @@ namespace das
         };
     };
 
+    struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
+        UnsafeDerefFunctionAnnotation() : MarkFunctionAnnotation("unsafe_deref") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->unsafeDeref = true;
+            return true;
+        };
+    };
+
     struct GenericFunctionAnnotation : MarkFunctionAnnotation {
         GenericFunctionAnnotation() : MarkFunctionAnnotation("generic") { }
         virtual bool isGeneric() const override {
@@ -325,6 +333,7 @@ namespace das
         addAnnotation(make_shared<NoAotFunctionAnnotation>());
         addAnnotation(make_shared<InitFunctionAnnotation>());
         addAnnotation(make_shared<HybridFunctionAnnotation>());
+        addAnnotation(make_shared<UnsafeDerefFunctionAnnotation>());
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first", SideEffects::modifyExternal, "builtin_iterator_first");
         addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",  SideEffects::modifyExternal, "builtin_iterator_next");
