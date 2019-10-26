@@ -1579,13 +1579,13 @@ namespace das
                 if ( subexpr->rtti_isMakeLocal() ) {
                     auto mkl = static_pointer_cast<ExprMakeLocal>(subexpr);
                     if ( mkl->useCMRES ) {
-                        SimNode_Block * block = context.code->makeNode<SimNode_ReturnLocalCMRes>(at);
+                        SimNode_Block * blockT = context.code->makeNode<SimNode_ReturnLocalCMRes>(at);
                         auto simlist = mkl->simulateLocal(context);
-                        block->total = int(simlist.size());
-                        block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
-                        for ( uint32_t i = 0; i != block->total; ++i )
-                            block->list[i] = simlist[i];
-                        return block;
+                        blockT->total = int(simlist.size());
+                        blockT->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*blockT->total);
+                        for ( uint32_t i = 0; i != blockT->total; ++i )
+                            blockT->list[i] = simlist[i];
+                        return blockT;
                     }
                 }
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
