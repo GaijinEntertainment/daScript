@@ -174,6 +174,11 @@ namespace das {
         return res;
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
+
     vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args )
     {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
@@ -193,6 +198,10 @@ namespace das {
         int32_t res = (int32_t) fwrite(buf,1,len,fp);
         return cast<int32_t>::from(res);
     }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     // loads(file,block<data>)
     vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args )

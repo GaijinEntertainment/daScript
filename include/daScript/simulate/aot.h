@@ -814,6 +814,11 @@ namespace das {
         }
     };
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
+
     struct SimNode_AotInteropBase : SimNode_CallBase {
         __forceinline SimNode_AotInteropBase() : SimNode_CallBase(LineInfo()) {}
         virtual vec4f eval ( Context & context ) override {
@@ -822,6 +827,10 @@ namespace das {
         };
         vec4f *     argumentValues;
     };
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     template <int argumentCount>
     struct SimNode_AotInterop : SimNode_AotInteropBase {
@@ -931,6 +940,11 @@ namespace das {
         BlockFn blockFunction;
     };
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
+
     template <>
     struct das_make_block<void> : Block, SimNode_ClosureBlock {
         typedef function < void () > BlockFn;
@@ -948,6 +962,10 @@ namespace das {
         }
         BlockFn blockFunction;
     };
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     template <typename ...argType>
     struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {

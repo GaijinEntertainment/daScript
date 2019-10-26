@@ -174,6 +174,11 @@ namespace das {
         uint32_t    structSize;
     };
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
+
     // New handle, default
     template <typename TT>
     struct SimNode_NewHandle : SimNode {
@@ -185,6 +190,10 @@ namespace das {
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     // Delete handle, default
     template <typename TT>
@@ -1492,6 +1501,11 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t    count;
     };
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
+
     // CONST-VALUE
     struct SimNode_ConstString : SimNode_SourceBase {
         SimNode_ConstString(const LineInfo & at, char * c)
@@ -1570,6 +1584,9 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_NODE
 #undef EVAL_NODE
     };
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     // COPY REFERENCE (int & a = b)
     struct SimNode_CopyReference : SimNode {
