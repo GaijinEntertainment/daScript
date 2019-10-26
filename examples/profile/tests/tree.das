@@ -61,9 +61,7 @@ def hasValue(var mRoot:Node? &; x: int): bool
 def insert(var mRoot:Node? &; x: int)
     var splited = split(mRoot, x)
     if splited.equal == null
-    	splited.equal = new Node
-        splited.equal.x = x
-        splited.equal.y = random_int(seed)
+    	splited.equal = new [[Node x=x, y=random_int(seed)]]
     mRoot = merge(splited.lower, splited.equal, splited.greater)
 
 [unsafe]

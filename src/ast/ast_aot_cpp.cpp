@@ -1792,16 +1792,12 @@ namespace das {
             if ( expr->needTypeInfo ) {
                 info = helper.makeTypeInfo(nullptr, expr->subexpr->type);
             }
-            if ( expr->ascType ) {
-                ss << "das_ascend<" << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ","
-                << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::make(__context__,";
-                if ( info ) {
-                    ss << "&" << helper.typeInfoName(info) << ",";
-                } else {
-                    ss << "nullptr,";
-                }
+            ss << "das_ascend<" << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ","
+            << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::make(__context__,";
+            if ( info ) {
+                ss << "&" << helper.typeInfoName(info) << ",";
             } else {
-                ss << "das_ascend /* untyped */ ";
+                ss << "nullptr,";
             }
         }
         virtual ExpressionPtr visit ( ExprAscend * expr ) override {
