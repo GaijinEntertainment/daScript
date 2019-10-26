@@ -5,7 +5,7 @@
         IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,Local); \
         IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,Argument); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_x, Context * context) override { \
-            if ( false ) {} \
+            if ( !node_x ) { return nullptr; } \
             MATCH_ANY_OP1_NODE(CTYPE,"ConstValue",Const) \
             MATCH_ANY_OP1_NODE(CTYPE,"GetLocalR2V",Local) \
             MATCH_ANY_OP1_NODE(CTYPE,"GetArgument",Argument) \

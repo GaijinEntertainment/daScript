@@ -36,7 +36,7 @@
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
-            /* match set */ if ( false ) {} \
+            /* match op2 */ if ( !node_l || !node_r ) { return nullptr; } \
             MATCH_OP2_SET(OPNAME,"GetCMResOfs","ConstValue",CMResOfs,Const) \
             MATCH_OP2_SET(OPNAME,"GetGlobal","GetLocalR2V",Global,Local) \
             MATCH_OP2_SET(OPNAME,"GetLocal","ConstValue",Local,Const) \
