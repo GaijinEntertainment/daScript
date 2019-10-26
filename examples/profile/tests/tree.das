@@ -68,11 +68,10 @@ def insert(var mRoot:Node? &; x: int)
 
 [unsafe]
 def destroy(var root:Node?)
-    if root == null
-        return
-    destroy(root.left)
-    destroy(root.right)
-    delete root
+    if root != null
+		destroy(root.left)
+		destroy(root.right)
+		delete root
 
 //GC version - relies on GC phase
 def erase(var mRoot:Node? &; x: int)
