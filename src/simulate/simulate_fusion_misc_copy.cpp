@@ -20,6 +20,7 @@ namespace das {
     struct FusionPoint_MiscCopyReference : FusionPointOp2 {
         struct SimNode_CopyReferenceLocAny : SimNode_Op2Fusion {
             virtual vec4f eval ( Context & context ) override {
+                DAS_PROFILE_NODE
                 char  ** pl = (char **)l.computeLocal(context);
                 char * pr   = r.computeAnyPtr(context);
                 *pl = pr;
@@ -48,6 +49,7 @@ namespace das {
     template <int typeSize> \
     struct SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER : SimNode_Op2FusionCopyRef { \
         virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto pr = r.compute##COMPUTER(context); \
             CopyBytes<typeSize>::copy(pl, pr); \
@@ -56,6 +58,7 @@ namespace das {
     }; \
     struct SimNode_CopyRefValue_##COMPUTEL##_##COMPUTER : SimNode_Op2FusionCopyRef { \
         virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto pr = r.compute##COMPUTER(context); \
             memcpy(pl, pr, size); \

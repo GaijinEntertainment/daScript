@@ -29,6 +29,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
             vec4f argValues[2];
             evalArgs(context, argValues);
             auto X = cast<TT>::to(argValues[0]);
@@ -47,6 +48,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
             vec4f argValues[2];
             evalArgs(context, argValues);
             return Policy::setXYZW(cast<TT>::to(argValues[0]),
@@ -68,6 +70,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
             vec4f argValues[3];
             evalArgs(context, argValues);
             return Policy::setXYZW(cast<TT>::to(argValues[0]),
@@ -90,6 +93,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
             vec4f argValues[4];
             evalArgs(context, argValues);
             return Policy::setXYZW(cast<TT>::to(argValues[0]),
@@ -141,6 +145,7 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>
             V_END();
         }
         virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
             vec4f i4 = arguments[0]->eval(context);
             return v_cvt_vec4f(v_cast_vec4i(i4));
         }
@@ -155,6 +160,7 @@ addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>
             V_END();
         }
         virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
             vec4f i4 = arguments[0]->eval(context);
             return v_cvt_vec4f(v_cast_vec4i(i4));   // todo: replace wrong cast
         }

@@ -66,6 +66,7 @@ namespace das
             return visitOp2(vis, "EqFunPtr", sizeof(Func), "Func");
         }
         __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto lv = cast<Func>::to(l->eval(context));
             auto rv = r->evalPtr(context);
             return !rv && lv.index==0;      // they only equal if both null
@@ -79,6 +80,7 @@ namespace das
             return visitOp2(vis, "NEqFunPtr", sizeof(Func), "Func");
         }
         __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto lv = cast<Func>::to(l->eval(context));
             auto rv = r->evalPtr(context);
             return rv || lv.index;
@@ -92,6 +94,7 @@ namespace das
             return visitOp2(vis, "EqLambdaPtr", sizeof(Lambda), "Lambda");
         }
         __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto lv = cast<Lambda>::to(l->eval(context));
             auto rv = r->evalPtr(context);
             return !rv && !lv.capture;      // they only equal if both null
@@ -105,6 +108,7 @@ namespace das
             return visitOp2(vis, "NEqLambdaPtr", sizeof(Lambda), "Lambda");
         }
         __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto lv = cast<Lambda>::to(l->eval(context));
             auto rv = r->evalPtr(context);
             return rv || lv.capture;

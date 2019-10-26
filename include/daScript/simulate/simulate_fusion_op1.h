@@ -5,6 +5,7 @@
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
             INLINE auto compute ( Context & context ) { \
+                DAS_PROFILE_NODE \
                 auto lv =  FUSION_OP_PTR_VALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
                 return SimPolicy<CTYPE>::OPNAME(lv,context); \
             } \
@@ -14,6 +15,7 @@
 #define IMPLEMENT_ANY_OP1_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
             INLINE auto compute ( Context & context ) { \
+                DAS_PROFILE_NODE \
                 auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
                 return SimPolicy<CTYPE>::OPNAME(FUSION_OP_EVAL_CAST(lv),context); \
             } \

@@ -28,7 +28,17 @@ namespace das
     #define DAS_ENABLE_EXCEPTIONS   0
     #endif
 
+    #ifndef DAS_ENABLE_PROFILER
+    #define DAS_ENABLE_PROFILER 0
+    #endif
+
     #define MAX_FOR_ITERATORS   32
+
+    #if DAS_ENABLE_PROFILER
+        #define DAS_PROFILE_NODE    profileNode(context, this);
+    #else
+        #define DAS_PROFILE_NODE
+    #endif
 
     class Context;
     struct SimNode;
@@ -438,6 +448,14 @@ namespace das
         uint64_t getSharedMemorySize() const;
         uint64_t getUniqueMemorySize() const;
 
+
+#if DAS_ENABLE_PROFILER
+        map<LineInfo,uint64_t,cmpLineInfoWithoutColumn>  profileData;
+#endif
+
+        void resetProfiler();
+        void dumpProfileInfo();
+
     public:
         uint64_t *                      annotationData = nullptr;
         StringAllocator                 stringHeap;
@@ -491,6 +509,18 @@ namespace das
         virtual bool next  ( Context & context, char * value ) = 0;
         virtual void close ( Context & context, char * value ) = 0;    // can't throw
     };
+
+#if DAS_ENABLE_PROFILER
+
+__forceinline void profileNode ( Context & context, SimNode * node ) {
+    context.profileData[node->debugInfo] ++;
+}
+
+__forceinline void profileNode ( Context * context, SimNode * node ) {
+    context->profileData[node->debugInfo] ++;
+}
+
+#endif
 
 #define DAS_EVAL_NODE               \
     EVAL_NODE(Ptr,char *);          \

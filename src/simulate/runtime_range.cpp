@@ -22,6 +22,7 @@ namespace das
     }
 
     vec4f SimNode_RangeIterator::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = subexpr->eval(context);
         range r = cast<range>::to(ll);
         char * iter = context.heap.allocate(sizeof(RangeIterator));
@@ -30,6 +31,7 @@ namespace das
     }
 
     vec4f SimNode_ForRange::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
@@ -51,6 +53,7 @@ namespace das
     }
 
     vec4f SimNode_ForRangeNF::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
@@ -68,6 +71,7 @@ namespace das
     }
 
     vec4f SimNode_ForRange1::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
@@ -85,6 +89,7 @@ namespace das
     }
 
     vec4f SimNode_ForRangeNF1::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
         int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);

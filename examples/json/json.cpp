@@ -27,6 +27,7 @@ namespace das {
             V_END();
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv || !(pv->*BOOL_PROP)() ) { return nullptr; }
             return (char *) pv;
@@ -44,6 +45,7 @@ namespace das {
             V_END();
         }
         __forceinline bool compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return false; }
             if ( !pv->IsBool() ) { context.throw_error_at(debugInfo,"JSON not a boolean"); return false; }
@@ -62,6 +64,7 @@ namespace das {
             V_END();
         }
         __forceinline int32_t compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0; }
             if ( !pv->IsInt() ) { context.throw_error_at(debugInfo,"JSON not a int"); return 0; }
@@ -80,6 +83,7 @@ namespace das {
             V_END();
         }
         __forceinline float compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0.0f; }
             if ( !pv->IsFloat() ) { context.throw_error_at(debugInfo,"JSON not a float"); return 0.0f; }
@@ -98,6 +102,7 @@ namespace das {
             V_END();
         }
         __forceinline double compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return 0.0f; }
             if ( !pv->IsDouble() ) { context.throw_error_at(debugInfo,"JSON not a double"); return 0.0f; }
@@ -116,6 +121,7 @@ namespace das {
             V_END();
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) { context.throw_error_at(debugInfo,"JSON dereferencing null pointer"); return nullptr; }
             if ( !pv->IsString() ) { context.throw_error_at(debugInfo,"JSON not a string"); return nullptr; }
@@ -136,6 +142,7 @@ namespace das {
             V_END();
         }
         __forceinline int32_t compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) return 0;
             return pv->Size();
@@ -161,6 +168,7 @@ namespace das {
             V_END();
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
                 if ( !SAFE ) context.throw_error_at(debugInfo,"JSON dereferencing null pointer");
@@ -194,6 +202,7 @@ namespace das {
             V_END();
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
                 context.throw_error_at(debugInfo,"JSON dereferencing null pointer");
@@ -227,6 +236,7 @@ namespace das {
             V_END();
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (JsValue *) subexpr->evalPtr(context);
             if ( !pv ) {
                 context.throw_error_at(debugInfo,"JSON dereferencing null pointer");

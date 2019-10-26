@@ -20,6 +20,7 @@ namespace das {
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
         virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto lv =  subexpr.compute##COMPUTE(context); \
             context.stopFlags |= EvalFlags::stopForReturn; \
             context.abiResult() = v_ldu((const float *) lv); \
@@ -45,6 +46,7 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
         virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto lv =  FUSION_OP_PTR_VALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
             context.stopFlags |= EvalFlags::stopForReturn; \
             context.abiResult() = cast<CTYPE>::from(lv); \
@@ -63,6 +65,7 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
         virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto lv =  subexpr.compute##COMPUTE(context); \
             context.stopFlags |= EvalFlags::stopForReturn; \
             context.abiResult() = v_ldu((const float *) lv); \

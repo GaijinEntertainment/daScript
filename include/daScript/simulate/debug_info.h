@@ -94,6 +94,14 @@ namespace das
         uint32_t    column = 0, line = 0;
     };
 
+    struct cmpLineInfoWithoutColumn {
+        __forceinline bool operator()( const LineInfo & a, const LineInfo & b) const {
+            if ( a.fileInfo && b.fileInfo && a.fileInfo->name != b.fileInfo->name)
+                return a.fileInfo->name < b.fileInfo->name;
+            return a.line<b.line;
+        }
+    };
+
     struct TypeInfo {
         enum {
             flag_ref = 1<<0,

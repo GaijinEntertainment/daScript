@@ -122,6 +122,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
             using Arguments = typename FunctionTrait::arguments;
@@ -132,6 +133,7 @@ namespace das
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                   \
+                DAS_PROFILE_NODE \
                 using FunctionTrait = function_traits<FuncT>;                       \
                 using Result = typename FunctionTrait::return_type;                 \
                 using Arguments = typename FunctionTrait::arguments;                \
@@ -163,6 +165,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             using FunctionTrait = function_traits<FuncT>;
             using Result = typename FunctionTrait::return_type;
             using Arguments = typename FunctionTrait::arguments;
@@ -194,6 +197,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
             auto res = fn(context,this,args);

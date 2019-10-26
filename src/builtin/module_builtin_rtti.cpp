@@ -94,6 +94,7 @@ namespace das {
         SimNode_DebugInfoAtField ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
             : SimNode_At(at, rv, idx, 0, ofs, 0) {}
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto pValue = (ST *) value->evalPtr(context);
             uint32_t idx = cast<uint32_t>::to(index->eval(context));
             if ( idx >= pValue->count ) {

@@ -39,6 +39,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_OpTableIndex { \
         INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
             auto tab = (Table *) l.compute##COMPUTEL(context); \
             auto key = EvalTT<CTYPE>::eval(context,r.subexpr); \
             TableHash<CTYPE> thh(&context,valueTypeSize); \
@@ -52,6 +53,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_OpTableIndex { \
         INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
             auto tab = (Table *) l.compute##COMPUTEL(context); \
             auto key = *((CTYPE *)r.compute##COMPUTER(context)); \
             TableHash<CTYPE> thh(&context,valueTypeSize); \

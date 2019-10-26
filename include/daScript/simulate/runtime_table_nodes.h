@@ -45,6 +45,7 @@ namespace das
             V_END();
         }
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             Table * tab = (Table *) tabExpr->evalPtr(context);
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             TableHash<KeyType> thh(&context,valueTypeSize);
@@ -64,6 +65,7 @@ namespace das
             return visitTable(vis,"TableErase");
         }
         __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
             Table * tab = (Table *) tabExpr->evalPtr(context);
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);
@@ -81,6 +83,7 @@ namespace das
             return visitTable(vis,"TableFind");
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             Table * tab = (Table *)tabExpr->evalPtr(context);
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);
@@ -99,6 +102,7 @@ namespace das
             return visitTable(vis,"KeyExists");
         }
         __forceinline bool compute(Context & context) {
+            DAS_PROFILE_NODE
             Table * tab = (Table *)tabExpr->evalPtr(context);
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);

@@ -275,6 +275,7 @@ namespace das
             SimNode_VectorLength ( const LineInfo & at, SimNode * rv )
                 : SimNode(at), value(rv) {}
             __forceinline int32_t compute ( Context & context ) {
+                DAS_PROFILE_NODE
                 auto pValue = (VectorType *) value->evalPtr(context);
                 return int32_t(pValue->size());
             }
@@ -302,6 +303,7 @@ namespace das
                 V_END();
             }
             __forceinline char * compute ( Context & context ) {
+                DAS_PROFILE_NODE
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
                 if ( idx >= pValue->size() ) {
@@ -398,11 +400,13 @@ namespace das
             SimNode_AtStdVectorR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
                 : ManagedVectorAnnotation<OT,false>::SimNode_AtStdVector(at, rv, idx, ofs) {}
             virtual vec4f eval ( Context & context ) override {
+                DAS_PROFILE_NODE
                 OT * pR = (OT *) ManagedVectorAnnotation<OT,false>::SimNode_AtStdVector::compute(context);
                 return cast<OT>::from(*pR);
             }
 #define EVAL_NODE(TYPE,CTYPE)                                           \
             virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                DAS_PROFILE_NODE \
                 return *(CTYPE *)ManagedVectorAnnotation<OT,false>::SimNode_AtStdVector::compute(context);    \
             }
             DAS_EVAL_NODE

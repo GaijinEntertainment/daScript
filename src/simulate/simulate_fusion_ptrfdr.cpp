@@ -48,6 +48,7 @@ namespace das {
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
         INLINE char * compute(Context & context) { \
+            DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
             if ( !prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
             return (*prv) + offset; \
@@ -72,6 +73,7 @@ namespace das {
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
         INLINE auto compute(Context & context) { \
+            DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
             if ( !prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
             return *((RCTYPE *)((*prv) + offset)); \
@@ -90,6 +92,7 @@ namespace das {
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1PtrFdr { \
         virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
             if ( !prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
             return v_ldu((const float *) *prv); \

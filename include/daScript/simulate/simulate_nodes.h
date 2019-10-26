@@ -179,7 +179,8 @@ namespace das {
     struct SimNode_NewHandle : SimNode {
         DAS_PTR_NODE;
         SimNode_NewHandle ( const LineInfo & a ) : SimNode(a) {}
-        __forceinline char * compute ( Context & ) {
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             return (char *) new TT();
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
@@ -192,6 +193,7 @@ namespace das {
             : SimNode_Delete(a,s,t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto pH = (TT **) subexpr->evalPtr(context);
             for ( uint32_t i=0; i!=total; ++i, pH++ ) {
                 if ( *pH ) {
@@ -247,6 +249,7 @@ namespace das {
             : SimNode(at), value(rv), offset(of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             return value->evalPtr(context) + offset;
         }
         SimNode *   value;
@@ -259,6 +262,7 @@ namespace das {
             : SimNode_FieldDeref(at,rv,of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             TT * pR = (TT *)( prv + offset );
             return cast<TT>::from(*pR);
@@ -266,6 +270,7 @@ namespace das {
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            DAS_PROFILE_NODE \
             auto prv = value->evalPtr(context);                     \
             return * (CTYPE *)( prv + offset );                     \
         }
@@ -281,6 +286,7 @@ namespace das {
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto prv = subexpr->evalPtr(context);
             if ( prv ) {
                 return prv + offset;
@@ -317,6 +323,7 @@ namespace das {
             : SimNode_FieldDeref(at,rv,of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             return prv ? prv + offset : nullptr;
         }
@@ -329,6 +336,7 @@ namespace das {
             : SimNode_FieldDeref(at,rv,of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             char ** prv = (char **) value->evalPtr(context);
             return prv ? *(prv + offset) : nullptr;
         }
@@ -341,6 +349,7 @@ namespace das {
             : SimNode(at), value(rv), index(idx), stride(strd), offset(o), range(rng) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
             auto pValue = value->evalPtr(context);
             uint32_t idx = uint32_t(index->evalInt(context));
             if (idx >= range) context.throw_error_at(debugInfo,"index out of range");
@@ -385,6 +394,7 @@ namespace das {
             V_END();                                                                            \
         }                                                                                       \
         __forceinline CTYPE compute ( Context & context ) {                                     \
+            DAS_PROFILE_NODE \
             auto vec = value->eval(context);                                                    \
             uint32_t idx = uint32_t(index->evalInt(context));                                   \
             if (idx >= range) {                                                                 \
@@ -435,6 +445,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_FastCall ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             auto aa = context.abiArg;
@@ -446,6 +457,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+                DAS_PROFILE_NODE \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 auto aa = context.abiArg;                                                       \
@@ -465,12 +477,14 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Call ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             return context.call(fnPtr, argValues, debugInfo.line);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+                DAS_PROFILE_NODE \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 return cast<CTYPE>::to(context.call(fnPtr, argValues, debugInfo.line));    \
@@ -486,6 +500,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_CallAndCopyOrMove ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+                DAS_PROFILE_NODE
                 auto cmres = cmresEval->evalPtr(context);
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -499,6 +514,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Invoke ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             Block * block = *(Block **)(argValues);
@@ -510,6 +526,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             Block * block = *(Block **)(argValues);                                             \
@@ -530,6 +547,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_CallBase(at) { cmresEval = spCMRES; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -542,6 +560,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);                                           \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
@@ -562,6 +581,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InvokeFn ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
@@ -574,6 +594,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);  \
@@ -594,6 +615,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InvokeLambda ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             int32_t * funIndex = *(int32_t **)(argValues);
@@ -604,6 +626,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             int32_t * funIndex = *(int32_t **)(argValues);                                       \
@@ -623,6 +646,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_CallBase(at) { cmresEval = spEval; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -636,6 +660,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {                                   \
+            DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);                                               \
             vec4f argValues[argCount ? argCount : 1];                                               \
             EvalBlock<argCount>::eval(context, arguments, argValues);                               \
@@ -658,6 +683,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_CallBase(at) { cmresEval = spEval; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -669,6 +695,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);                                           \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
@@ -695,6 +722,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Cast ( const LineInfo & at ) : SimNode_CallBase(at) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f res = arguments[0]->eval(context);
             CastTo value = (CastTo) cast<CastFrom>::to(res);
             return cast<CastTo>::from(value);
@@ -707,6 +735,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_LexicalCast ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f res = arguments[0]->eval(context);
             auto str = to_string ( cast<CastFrom>::to(res) );
             auto cpy = context.stringHeap.allocateString(str);
@@ -738,6 +767,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             return subexpr.computeCMResOfs(context);
         }
     };
@@ -768,6 +798,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             return subexpr.computeBlockCMResOfs(context);
         }
     };
@@ -781,6 +812,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             return subexpr.computeLocal(context);
         }
     };
@@ -811,6 +843,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             return subexpr.computeLocalRefOff(context);
         }
     };
@@ -839,6 +872,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), refValue(rv), evalValue(ev), stackTop(sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
             auto refV = refValue->evalPtr(context);
             auto pR = (char **)(context.stack.sp() + stackTop);
             *pR = refV;
@@ -855,6 +889,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), stackTop(sp), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             memset(context.stack.sp() + stackTop, 0, size);
             return v_zero();
         }
@@ -867,6 +902,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), offset(o), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             memset(context.abiCopyOrMoveResult() + offset, 0, size);
             return v_zero();
         }
@@ -879,6 +915,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             memset(context.abiCopyOrMoveResult() + offset, 0, size);
             return v_zero();
         }
@@ -891,6 +928,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), stackTop(sp), offset(o), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             char * pI = *((char **)(context.stack.sp() + stackTop)) + offset;
             memset(pI, 0, size);
             return v_zero();
@@ -906,6 +944,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeArgument(context);
         }
         virtual vec4f eval ( Context & context ) override {
@@ -932,6 +971,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_GetArgument(at,i) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeArgumentRef(context);
         }
         virtual vec4f eval ( Context & context ) override {
@@ -954,6 +994,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeArgumentRefOff(context);
         }
         uint32_t offset;
@@ -984,6 +1025,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeBlockArgument(context);
         }
         virtual vec4f eval ( Context & context ) override {
@@ -1012,6 +1054,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeBlockArgumentRef(context);
         }
         virtual vec4f eval ( Context & context ) override {
@@ -1034,6 +1077,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeThisBlockArgument(context);
         }
         virtual vec4f eval ( Context & context ) override {
@@ -1062,6 +1106,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeThisBlockArgumentRef(context);
         }
         virtual vec4f eval ( Context & context ) override {
@@ -1085,6 +1130,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
             return subexpr.computeGlobal(context);
         }
     };
@@ -1212,6 +1258,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GotoLabel ( const LineInfo & at, uint32_t lab ) : SimNode(at), label(lab) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             context.stopFlags |= EvalFlags::jumpToLabel;
             context.gotoLabel = label;
             return v_zero();
@@ -1224,6 +1271,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Goto ( const LineInfo & at, SimNode * lab ) : SimNode(at), subexpr(lab) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             context.gotoLabel = subexpr->evalInt(context);
             context.stopFlags |= EvalFlags::jumpToLabel;
             return v_zero();
@@ -1236,6 +1284,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Break ( const LineInfo & at ) : SimNode(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             context.stopFlags |= EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -1246,6 +1295,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Continue ( const LineInfo & at ) : SimNode(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             context.stopFlags |= EvalFlags::stopForContinue;
             return v_zero();
         }
@@ -1258,11 +1308,13 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), subexpr(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             TT * pR = (TT *) subexpr->evalPtr(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE (Context & context) override {     \
+            DAS_PROFILE_NODE \
             auto pR = (CTYPE *)subexpr->evalPtr(context);           \
             return *pR;                                             \
         }
@@ -1278,6 +1330,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), subexpr(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto ptr = subexpr->evalPtr(context);
             if ( !ptr ) {
                 context.throw_error_at(debugInfo,"dereferencing null pointer");
@@ -1294,11 +1347,13 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Ptr2Ref(at,s), value(dv) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             TT * pR = (TT *) subexpr->evalPtr(context);
             return pR ? cast<TT>::from(*pR) : value->eval(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            DAS_PROFILE_NODE \
             auto pR = (CTYPE *) subexpr->evalPtr(context);          \
             return pR ? *pR : value->eval##TYPE(context);           \
         }
@@ -1314,6 +1369,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Ptr2Ref(at,s), value(dv) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto ptr = subexpr->evalPtr(context);
             return ptr ? ptr : value->evalPtr(context);
         }
@@ -1327,6 +1383,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), bytes(b) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
                 memset ( ptr, 0, bytes );
                 return ptr;
@@ -1345,6 +1402,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), subexpr(se), bytes(b), typeInfo(ti) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             if ( char * ptr = (char *) context.heap.allocate(bytes + (typeInfo ? 16 : 0)) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
@@ -1373,6 +1431,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), subexpr(se), bytes(b), stackTop(sp), typeInfo(ti) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             if ( char * ptr = (char *) context.heap.allocate(bytes + (typeInfo ? 16 : 0)) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
@@ -1401,6 +1460,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_CallBase(at), bytes(b) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -1420,6 +1480,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(a), newNode(nn), stackTop(sp), count(c) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             auto nodes = (char **)(context.stack.sp() + stackTop);
             for ( uint32_t i=0; i!=count; ++i ) {
                 nodes[i] = newNode->evalPtr(context);
@@ -1438,8 +1499,14 @@ SIM_NODE_AT_VECTOR(Float, float)
             subexpr.setConstValuePtr(c);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & )      override { return subexpr.value; }
-        virtual char *      evalPtr(Context &)      override { return subexpr.valuePtr; }
+        virtual vec4f       eval ( Context & context )      override {
+            DAS_PROFILE_NODE
+            return subexpr.value;
+        }
+        virtual char *      evalPtr(Context & context )      override {
+            DAS_PROFILE_NODE
+            return subexpr.valuePtr;
+        }
     };
 
     // CONST-VALUE
@@ -1449,25 +1516,55 @@ SIM_NODE_AT_VECTOR(Float, float)
             subexpr.setConstValue(c);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & )      override { return subexpr.value; }
-        virtual char *      evalPtr(Context &)      override { return subexpr.valuePtr; }
-        virtual int32_t     evalInt(Context &)      override { return subexpr.valueI; }
-        virtual uint32_t    evalUInt(Context &)     override { return subexpr.valueU; }
-        virtual int64_t     evalInt64(Context &)    override { return subexpr.valueI64; }
-        virtual uint64_t    evalUInt64(Context &)   override { return subexpr.valueU64; }
-        virtual float       evalFloat(Context &)    override { return subexpr.valueF; }
-        virtual double      evalDouble(Context &)   override { return subexpr.valueLF; }
-        virtual bool        evalBool(Context &)     override { return subexpr.valueB; }
+        virtual vec4f       eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            return subexpr.value;
+        }
+        virtual char *      evalPtr(Context & context ) override {
+            DAS_PROFILE_NODE
+            return subexpr.valuePtr;
+        }
+        virtual int32_t     evalInt(Context & context)      override {
+            DAS_PROFILE_NODE
+            return subexpr.valueI;
+        }
+        virtual uint32_t    evalUInt(Context & context)     override {
+            DAS_PROFILE_NODE
+            return subexpr.valueU;
+        }
+        virtual int64_t     evalInt64(Context & context)    override {
+            DAS_PROFILE_NODE
+            return subexpr.valueI64;
+        }
+        virtual uint64_t    evalUInt64(Context & context)   override {
+            DAS_PROFILE_NODE
+            return subexpr.valueU64;
+        }
+        virtual float       evalFloat(Context & context)    override {
+            DAS_PROFILE_NODE
+            return subexpr.valueF;
+        }
+        virtual double      evalDouble(Context & context)   override {
+            DAS_PROFILE_NODE
+            return subexpr.valueLF;
+        }
+        virtual bool        evalBool(Context & context)     override {
+            DAS_PROFILE_NODE
+            return subexpr.valueB;
+
+        }
     };
 
     struct SimNode_Zero : SimNode_CallBase {
         SimNode_Zero(const LineInfo & at) : SimNode_CallBase(at) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & ) override {
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             return v_zero();
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
-        virtual CTYPE eval##TYPE ( Context & ) override {            \
+        virtual CTYPE eval##TYPE ( Context & context ) override {            \
+            DAS_PROFILE_NODE \
             return 0;                                               \
         }
         DAS_EVAL_NODE
@@ -1480,6 +1577,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), l(ll), r(rr) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             char  ** pl = (char **) l->evalPtr(context);
             char * pr = r->evalPtr(context);
             *pl = pr;
@@ -1495,6 +1593,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), l(ll), r(rr) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             TT * pl = (TT *) l->evalPtr(context);
             *pl = EvalTT<TT>::eval(context, r);
             return v_zero();
@@ -1518,6 +1617,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), l(ll), r(rr) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             TT * pl = (TT *) l->evalPtr(context);
             TT * pr = (TT *) r->evalPtr(context);
             *pl = *pr;
@@ -1542,6 +1642,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Block(at), stackTop(sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             SimNode ** __restrict tail = list + total;
             SimNode ** __restrict body = list;
             for (; body!=tail; ++body) {
@@ -1559,6 +1660,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             SimNode ** __restrict tail = list + total;
             SimNode ** __restrict body = list;
             for (; body!=tail; ++body) {
@@ -1589,6 +1691,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
                 return if_true->eval(context);
@@ -1598,6 +1701,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                DAS_PROFILE_NODE \
                 bool cmp = cond->evalBool(context);                 \
                 if ( cmp ) {                                        \
                     return if_true->eval##TYPE(context);            \
@@ -1616,6 +1720,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res == 0 ) {
                 return if_true->eval(context);
@@ -1625,6 +1730,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                DAS_PROFILE_NODE \
                 auto res = EvalTT<TT>::eval(context,cond);          \
                 if ( res==0 ) {                                     \
                     return if_true->eval##TYPE(context);            \
@@ -1643,6 +1749,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
                 return if_true->eval(context);
@@ -1652,6 +1759,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                DAS_PROFILE_NODE \
                 auto res = EvalTT<TT>::eval(context,cond);          \
                 if ( res!=0 ) {                                     \
                     return if_true->eval##TYPE(context);            \
@@ -1670,6 +1778,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
                 return if_true->eval(context);
@@ -1686,6 +1795,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res==0 ) {
                 return if_true->eval(context);
@@ -1702,6 +1812,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), cond(c), if_true(t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
                 return if_true->eval(context);
@@ -1728,6 +1839,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(a), subexpr(se) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             auto pv = (OT *) subexpr->evalPtr(context);
             if ( !pv ) {
                 if ( !SAFE ) {
@@ -1751,6 +1863,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             V_END();
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (OT *) subexpr->evalPtr(context);
             if ( !pv ) {
                 if ( !SAFE ) {
@@ -1774,6 +1887,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             V_END();
         }
         __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
             auto pv = (OT *) subexpr->evalPtr(context);
             if ( !pv ) {
                 if ( !SAFE ) {
@@ -1798,6 +1912,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             V_END(); \
         } \
         __forceinline CTYPE compute(Context & context) { \
+            DAS_PROFILE_NODE \
             auto pv = (OT *) subexpr->evalPtr(context); \
             if ( !pv ) { \
                 if ( !SAFE ) { \
@@ -1841,6 +1956,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitFor(vis, totalCount);
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f * pi[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
                 pi[t] = (vec4f *)(context.stack.sp() + stackTop[t]);
@@ -1894,6 +2010,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             evalFinal(context);
             return v_zero();
         }
@@ -1907,6 +2024,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitFor(vis, 1);
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f * pi = (vec4f *)(context.stack.sp() + stackTop[0]);
             Iterator * sources;
             vec4f ll = source_iterators[0]->eval(context);
@@ -1940,6 +2058,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_AnyIterator ( const LineInfo & at, SimNode * s )
             : SimNode(at), source(s) { }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
             char * iter = context.heap.allocate(sizeof(IterT));
@@ -1975,6 +2094,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, "BoolAnd", sizeof(bool), "bool");
         }
         __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
             if ( !l->evalBool(context) ) {      // if not left, then false
                 return false;
             } else {
@@ -1990,6 +2110,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, "BoolOr", sizeof(bool), "bool");
         }
         __forceinline bool compute ( Context & context )  {
+            DAS_PROFILE_NODE
             if ( l->evalBool(context) ) {       // if left, then true
                 return true;
             } else {
@@ -2015,6 +2136,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         INLINE CTYPE compute ( Context & context ) {                    \
+            DAS_PROFILE_NODE                                            \
             auto val = x->eval##TYPE(context);                          \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
@@ -2031,6 +2153,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         __forceinline CTYPE compute ( Context & context ) {             \
+            DAS_PROFILE_NODE                                            \
             auto val = arguments[0]->eval##TYPE(context);               \
             return SimPolicy<CTYPE>::CALL(val,context);                 \
         }                                                               \
@@ -2045,6 +2168,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         __forceinline CTYPE compute ( Context & context ) {             \
+            DAS_PROFILE_NODE                                            \
             auto val = arguments[0]->eval##ATYPE(context);              \
             return SimPolicy<ACTYPE>::CALL(val,context);                \
         }                                                               \
@@ -2059,6 +2183,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         INLINE CTYPE compute ( Context & context ) {                    \
+            DAS_PROFILE_NODE                                            \
             auto val = (CTYPE *) x->evalPtr(context);                   \
             return SimPolicy<CTYPE>::CALL(*val,context);                \
         }                                                               \
@@ -2074,6 +2199,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
+            DAS_PROFILE_NODE \
             auto val = x->eval(context);                                \
             return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
         }                                                               \
@@ -2087,6 +2213,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
+            DAS_PROFILE_NODE \
             auto val = arguments[0]->eval(context);                     \
             return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
         }                                                               \
@@ -2123,6 +2250,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         INLINE CTYPE compute ( Context & context ) {                    \
+            DAS_PROFILE_NODE                                            \
             auto lv = l->eval##TYPE(context);                           \
             auto rv = r->eval##TYPE(context);                           \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
@@ -2140,6 +2268,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         __forceinline CTYPE compute ( Context & context ) {             \
+            DAS_PROFILE_NODE                                            \
             auto lv = arguments[0]->eval##TYPE(context);                \
             auto rv = arguments[1]->eval##TYPE(context);                \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
@@ -2155,6 +2284,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         INLINE CTYPE compute ( Context & context ) {                    \
+            DAS_PROFILE_NODE                                            \
             auto lv = (CTYPE *) l->evalPtr(context);                    \
             auto rv = r->eval##TYPE(context);                           \
             SimPolicy<CTYPE>::CALL(*lv,rv,context);                     \
@@ -2173,6 +2303,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         __forceinline bool compute ( Context & context ) {              \
+            DAS_PROFILE_NODE                                            \
             auto lv = l->eval##TYPE(context);                           \
             auto rv = r->eval##TYPE(context);                           \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
@@ -2187,6 +2318,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
+            DAS_PROFILE_NODE \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
             return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
@@ -2201,6 +2333,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
+            DAS_PROFILE_NODE \
             auto lv = arguments[0]->eval(context);                      \
             auto rv = arguments[1]->eval(context);                      \
             return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
@@ -2215,6 +2348,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         virtual vec4f eval ( Context & context ) override {             \
+            DAS_PROFILE_NODE \
             auto lv = l->evalPtr(context);                              \
             auto rv = r->eval(context);                                 \
             SimPolicy<CTYPE>::CALL(lv,rv,context);                      \
@@ -2231,6 +2365,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         __forceinline bool compute ( Context & context ) {              \
+            DAS_PROFILE_NODE                                            \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
             return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
@@ -2334,6 +2469,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp3(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
         __forceinline CTYPE compute ( Context & context ) {             \
+            DAS_PROFILE_NODE                                            \
             auto a0 = arguments[0]->eval##TYPE(context);                \
             auto a1 = arguments[1]->eval##TYPE(context);                \
             auto a2 = arguments[2]->eval##TYPE(context);                \
@@ -2349,6 +2485,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             return visitOp3(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                                   \
         virtual vec4f eval ( Context & context ) override {                 \
+            DAS_PROFILE_NODE \
             auto a0 = arguments[0]->eval(context);                          \
             auto a1 = arguments[1]->eval(context);                          \
             auto a2 = arguments[2]->eval(context);                          \

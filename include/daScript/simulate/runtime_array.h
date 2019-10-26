@@ -15,6 +15,7 @@ namespace das
             : SimNode(at), l(ll), r(rr), stride(sz), offset(o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             Array * pA = (Array *) l->evalPtr(context);
             auto idx = uint32_t(r->evalInt(context));
             if ( idx >= pA->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %u", idx, pA->size);
@@ -38,11 +39,13 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             TT * pR = (TT *) compute(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            DAS_PROFILE_NODE \
             return *(CTYPE *)compute(context);                      \
         }
         DAS_EVAL_NODE
@@ -96,6 +99,7 @@ namespace das
             return visitFor(vis, totalCount, "ForGoodArray");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             Array * __restrict pha[totalCount];
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
@@ -142,6 +146,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             evalFinal(context);
             return v_zero();
         }
@@ -154,6 +159,7 @@ namespace das
             return visitFor(vis, 1, "ForGoodArray");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             Array * __restrict pha;
             char * __restrict ph;
             pha = cast<Array *>::to(sources[0]->eval(context));
@@ -189,6 +195,7 @@ namespace das
             return visitFor(vis, totalCount, "ForGoodArray1");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             Array * __restrict pha[totalCount];
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
@@ -231,6 +238,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             evalFinal(context);
             return v_zero();
         }
@@ -243,6 +251,7 @@ namespace das
             return visitFor(vis, 1, "ForGoodArray1");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             Array * __restrict pha;
             char * __restrict ph;
             pha = cast<Array *>::to(sources[0]->eval(context));
@@ -275,6 +284,7 @@ namespace das
             return visitFor(vis, totalCount, "ForFixedArray");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
                 ph[t] = cast<char *>::to(sources[t]->eval(context));
@@ -313,6 +323,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             evalFinal(context);
             return v_zero();
         }
@@ -325,6 +336,7 @@ namespace das
             return visitFor(vis, 1, "ForFixedArray");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
@@ -354,6 +366,7 @@ namespace das
             return visitFor(vis, totalCount, "ForFixedArray1");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
                 ph[t] = cast<char *>::to(sources[t]->eval(context));
@@ -388,6 +401,7 @@ namespace das
             V_END();
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             evalFinal(context);
             return v_zero();
         }
@@ -400,6 +414,7 @@ namespace das
             return visitFor(vis, 1, "ForFixedArray1");
         }
         virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];

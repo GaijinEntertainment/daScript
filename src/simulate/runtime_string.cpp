@@ -162,6 +162,7 @@ namespace das
     }
 
     vec4f SimNode_StringBuilder::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
         StringBuilderWriter writer(context.stringHeap);
@@ -177,6 +178,7 @@ namespace das
     }
 
     vec4f SimNode_DeleteString::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         char ** str = (char**)(subexpr->evalPtr(context));
         str = str + total - 1;
         for ( uint32_t i=0; i!=total; ++i, str-- ) {
@@ -211,6 +213,7 @@ namespace das
     }
 
     vec4f SimNode_StringIterator::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         char * str = cast<char *>::to(ll);
         char * iter = context.heap.allocate(sizeof(StringIterator));

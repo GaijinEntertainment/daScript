@@ -66,6 +66,7 @@ namespace das
     }
 
     vec4f SimNode_DeleteStructPtr::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pStruct = (char **) subexpr->evalPtr(context);
         pStruct = pStruct + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pStruct-- ) {
@@ -78,6 +79,7 @@ namespace das
     }
 
     vec4f SimNode_Swizzle::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         union {
             vec4f   res;
             float   val[4];
@@ -93,6 +95,7 @@ namespace das
     // SimNode_MakeBlock
 
     vec4f SimNode_MakeBlock::eval ( Context & context )  {
+        DAS_PROFILE_NODE
         Block * block = (Block *) ( context.stack.sp() + stackTop );
         block->stackOffset = context.stack.spi();
         block->argumentsOffset = argStackTop ? (context.stack.spi() + argStackTop) : 0;
@@ -112,6 +115,7 @@ namespace das
     }
 
     vec4f SimNode_Debug::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f res = subexpr->eval(context);
         TextWriter ssw;
         if ( message ) ssw << message << " ";
@@ -124,6 +128,7 @@ namespace das
     // SimNode_Assert
 
     vec4f SimNode_Assert::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         if ( !subexpr->evalBool(context) ) {
             string error_message = "assert failed";
             if ( message )
@@ -144,6 +149,7 @@ namespace das
 #endif
 
     vec4f SimNode_TryCatch::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
@@ -184,6 +190,7 @@ namespace das
     // SimNode_CopyRefValue
 
     vec4f SimNode_CopyRefValue::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pl = l->evalPtr(context);
         auto pr = r->evalPtr(context);
         memcpy ( pl, pr, size );
@@ -193,6 +200,7 @@ namespace das
     // SimNode_MoveRefValue
 
     vec4f SimNode_MoveRefValue::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pl = l->evalPtr(context);
         auto pr = r->evalPtr(context);
         memcpy ( pl, pr, size );
@@ -250,6 +258,7 @@ namespace das
     }
 
     vec4f SimNode_Block::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
             (*body)->eval(context);
@@ -260,6 +269,7 @@ namespace das
     }
 
     vec4f SimNode_BlockNF::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
             (*body)->eval(context);
@@ -269,6 +279,7 @@ namespace das
     }
 
     vec4f SimNode_ClosureBlock::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
             (*body)->eval(context);
@@ -287,6 +298,7 @@ namespace das
 // SimNode_BlockWithLabels
 
     vec4f SimNode_BlockWithLabels::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         SimNode ** __restrict body = list;
     loopbegin:;
@@ -310,6 +322,7 @@ namespace das
     // SimNode_Let
 
     vec4f SimNode_Let::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
             list[i++]->eval(context);
         }
@@ -319,6 +332,7 @@ namespace das
     // SimNode_While
 
     vec4f SimNode_While::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         while ( cond->evalBool(context) && !context.stopFlags ) {
             SimNode ** __restrict body = list;
@@ -337,29 +351,34 @@ namespace das
     // Return
 
     vec4f SimNode_Return::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         if ( subexpr ) context.abiResult() = subexpr->eval(context);
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
 
     vec4f SimNode_ReturnNothing::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
 
     vec4f SimNode_ReturnConst::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         context.abiResult() = value;
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
 
     vec4f SimNode_ReturnConstString::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         context.abiResult() = cast<char *>::from(value);
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
     }
 
     vec4f SimNode_ReturnRefAndEval::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pl = context.abiCopyOrMoveResult();
         DAS_ASSERT(pl);
         auto pR = ((char **)(context.stack.sp() + stackTop));
@@ -371,6 +390,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnAndCopy::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pr = subexpr->evalPtr(context);
         auto pl = context.abiCopyOrMoveResult();
         DAS_ASSERT(pl);
@@ -381,6 +401,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnAndMove::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pr = subexpr->evalPtr(context);
         auto pl = context.abiCopyOrMoveResult();
         DAS_ASSERT(pl);
@@ -392,6 +413,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnReference::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         char * ref = subexpr->evalPtr(context);
         if ( context.stack.bottom()<=ref && ref<context.stack.sp()) {
             context.throw_error_at(debugInfo,"reference bellow current function stack frame");
@@ -411,6 +433,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnRefAndEvalFromBlock::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
         DAS_ASSERT(pl);
@@ -423,6 +446,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnAndCopyFromBlock::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pr = subexpr->evalPtr(context);
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
@@ -433,6 +457,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnAndMoveFromBlock::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pr = subexpr->evalPtr(context);
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
@@ -444,6 +469,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnReferenceFromBlock::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         char * ref = subexpr->evalPtr(context);
         if ( context.stack.bottom()<=ref && ref<context.stack.ap() ) {
             context.throw_error_at(debugInfo,"reference bellow current call chain stack frame");
@@ -455,6 +481,7 @@ namespace das
     }
 
     vec4f SimNode_ReturnLocalCMRes::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         SimNode ** __restrict body = list;
         for (; body!=tail; ++body) {
@@ -864,6 +891,59 @@ namespace das
             return v_zero();
         }
         throwBuf = JB;
+#endif
+    }
+
+    void Context::resetProfiler() {
+#if DAS_ENABLE_PROFILER
+        profileData.clear();
+#endif
+    }
+
+    void Context::dumpProfileInfo() {
+        TextPrinter tout;
+#if DAS_ENABLE_PROFILER
+        set<FileInfo *> allFiles;
+        for ( auto & it : profileData ) {
+            auto info = it.first.fileInfo;
+            if ( info && info->source ) {
+                allFiles.insert(info);
+            }
+        }
+        tout << "\nPROFILING RESULTS:\n";
+        for ( auto fi : allFiles ) {
+            tout << fi->name << "\n";
+            LineInfo info;
+            info.fileInfo = fi;
+            info.column = 0;
+            bool newLine = true;
+            int  line = 0;
+            char txt[2];
+            txt[1] = 0;
+            for ( int i = 0; i!=fi->sourceLength; ++i ) {
+                if ( newLine ) {
+                    line ++;
+                    newLine = false;
+                    info.line = line;
+                    char total[16];
+                    auto itI = profileData.find(info);
+                    if ( itI != profileData.end() ) {
+                        snprintf(total, 12, "%-10lu\t", (unsigned long)(itI->second));
+                        tout << total;
+                    } else {
+                        tout << "\t\t\t";
+                    }
+                }
+                txt[0] = fi->source[i];
+                if ( txt[0]=='\n' ) {
+                    newLine = true;
+                }
+                tout << txt;
+            }
+        }
+
+#else
+        tout << "\nPROFILIER IS DISABLED\n";
 #endif
     }
 

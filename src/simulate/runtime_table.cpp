@@ -87,6 +87,7 @@ namespace das
     // delete
 
     vec4f SimNode_DeleteTable::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pTable = (Table *) subexpr->evalPtr(context);
         pTable = pTable + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pTable-- ) {

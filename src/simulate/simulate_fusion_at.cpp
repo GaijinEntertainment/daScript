@@ -40,6 +40,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto rr = uint32_t(r.subexpr->evalInt(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u", rr, range); \
@@ -51,6 +52,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u", rr, range); \
@@ -80,6 +82,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
          virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto rr = uint32_t(r.subexpr->evalInt(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u", rr, range); \
@@ -91,6 +94,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
          virtual vec4f eval ( Context & context ) override { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u", rr, range); \
@@ -109,6 +113,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_##COMPUTEL##_Any : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto rr = uint32_t(r.subexpr->evalInt(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u", rr, range); \
@@ -121,6 +126,7 @@ namespace das {
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2At { \
         INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
             auto pl = l.compute##COMPUTEL(context); \
             auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
             if ( rr >= range ) context.throw_error_at(debugInfo,"index out of range, %u of %u", rr, range); \

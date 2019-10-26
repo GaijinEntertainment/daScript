@@ -86,6 +86,7 @@ namespace das
     }
 
     vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         Array * arr = cast<Array *>::to(ll);
         char * iter = context.heap.allocate(sizeof(GoodArrayIterator));
@@ -115,6 +116,7 @@ namespace das
     }
 
     vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         char * data = cast<char *>::to(ll);
         char * iter = context.heap.allocate(sizeof(FixedArrayIterator));
@@ -125,6 +127,7 @@ namespace das
     // delete
 
     vec4f SimNode_DeleteArray::eval ( Context & context ) {
+        DAS_PROFILE_NODE
         auto pArray = (Array *) subexpr->evalPtr(context);
         pArray = pArray + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pArray-- ) {

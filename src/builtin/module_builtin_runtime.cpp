@@ -319,6 +319,14 @@ namespace das
         return (Iterator *) iter;
     }
 
+    void resetProfiler( Context * context ) {
+        context->resetProfiler();
+    }
+
+    void dumpProfileInfo( Context * context ) {
+        context->dumpProfileInfo();
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
@@ -355,6 +363,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate", SideEffects::modifyExternal, "terminate");
         addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal, "stackwalk");
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
+        // profiler
+        addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "resetProfiler", SideEffects::modifyExternal, "resetProfiler");
+        addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dumpProfileInfo", SideEffects::modifyExternal, "dumpProfileInfo");
         // heap
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
                 SideEffects::modifyExternal, "heap_bytes_allocated");

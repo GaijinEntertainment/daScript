@@ -35,4 +35,7 @@ namespace das {
     Iterator * builtin_make_range_iterator ( range rng, Context * context );
     Iterator * builtin_make_lambda_iterator ( const Lambda lambda, Context * context );
     Iterator * builtin_make_nil_iterator ( Context * context );
+
+    void resetProfiler( Context * context );
+    void dumpProfileInfo( Context * context );
 }

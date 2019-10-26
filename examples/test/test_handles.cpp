@@ -124,6 +124,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
             return that;
         }
         char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             vec4f rv = value->eval(context);
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
@@ -154,6 +155,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
             V_END();
         }
         __forceinline int32_t compute ( Context & context ) {
+            DAS_PROFILE_NODE
             vec4f rv = value->eval(context);
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
@@ -182,6 +184,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
             V_END();
         }
         __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
             vec4f rv = value->eval(context);
             if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
                 auto it = prv->fields.find(name);
