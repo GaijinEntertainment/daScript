@@ -445,6 +445,18 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNode_ReturnLocalCMRes::eval ( Context & context ) {
+        SimNode ** __restrict tail = list + total;
+        SimNode ** __restrict body = list;
+        for (; body!=tail; ++body) {
+            (*body)->eval(context);
+            if (context.stopFlags) break;
+        }
+        context.abiResult() = cast<char *>::from(context.abiCopyOrMoveResult());
+        context.stopFlags |= EvalFlags::stopForReturn;
+        return v_zero();
+    }
+
     // Context
 
     Context::Context(uint32_t stackSize) : stack(stackSize) {

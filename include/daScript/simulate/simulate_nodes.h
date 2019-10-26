@@ -1569,6 +1569,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    struct SimNode_ReturnLocalCMRes : SimNode_Block {
+        SimNode_ReturnLocalCMRes ( const LineInfo & at )
+            : SimNode_Block(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+    };
+
     // LET
     struct SimNode_Let : SimNode_Block {
         SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}

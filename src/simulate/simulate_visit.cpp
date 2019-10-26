@@ -577,6 +577,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ReturnLocalCMRes::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(ReturnLocalCMRes);
+        V_BLOCK();
+        V_FINAL();
+        V_END();
+    }
+
     SimNode * SimNode_Let::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(Let);

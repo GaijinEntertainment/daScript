@@ -1535,7 +1535,13 @@ namespace das
             }
         }
         // now, lets do the standard everything
-        SimNode * simSubE = subexpr ? subexpr->simulate(context) : nullptr;
+        bool skipIt = false;
+        if ( subexpr && subexpr->rtti_isMakeLocal() ) {
+            if ( static_pointer_cast<ExprMakeLocal>(subexpr)->useCMRES ) {
+                skipIt = true;
+            }
+        }
+        SimNode * simSubE = (subexpr && !skipIt) ? subexpr->simulate(context) : nullptr;
         if (!subexpr) {
             return context.code->makeNode<SimNode_ReturnNothing>(at);
         } else if ( subexpr->rtti_isConstant() ) {
@@ -1569,6 +1575,19 @@ namespace das
                 simRet->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( returnCMRES ) {
+                // ReturnLocalCMRes
+                if ( subexpr->rtti_isMakeLocal() ) {
+                    auto mkl = static_pointer_cast<ExprMakeLocal>(subexpr);
+                    if ( mkl->useCMRES ) {
+                        SimNode_Block * block = context.code->makeNode<SimNode_ReturnLocalCMRes>(at);
+                        auto simlist = mkl->simulateLocal(context);
+                        block->total = int(simlist.size());
+                        block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
+                        for ( uint32_t i = 0; i != block->total; ++i )
+                            block->list[i] = simlist[i];
+                        return block;
+                    }
+                }
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
                 return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);
