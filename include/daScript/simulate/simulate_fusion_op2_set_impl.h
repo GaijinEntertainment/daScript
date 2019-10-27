@@ -22,6 +22,7 @@
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff,Const); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff,Local); \
+        IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef,Const); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef,Argument); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef,LocalRefOff); \
         IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,ArgumentRef,Local); \
@@ -47,6 +48,7 @@
             MATCH_OP2_SET(OPNAME,"GetLocalRefOff","ConstValue",LocalRefOff,Const) \
             MATCH_OP2_SET(OPNAME,"GetArgumentRefOff","GetArgumentRefOffR2V",ArgumentRefOff,ArgumentRefOff) \
             MATCH_OP2_SET(OPNAME,"GetArgumentRefOff","GetLocalR2V",ArgumentRefOff,Local) \
+            MATCH_OP2_SET(OPNAME,"GetArgument","ConstValue",ArgumentRef,Const) \
             MATCH_OP2_SET(OPNAME,"GetArgument","GetArgument",ArgumentRef,Argument) \
             MATCH_OP2_SET(OPNAME,"GetArgument","GetLocalRefOffR2V",ArgumentRef,LocalRefOff) \
             MATCH_OP2_SET(OPNAME,"GetArgument","GetLocalR2V",ArgumentRef,Local) \
