@@ -82,7 +82,7 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
 #undef FUSION_OP1_SUBEXPR
 #define FUSION_OP1_SUBEXPR(CTYPE,node)      (safeArg1(node,0))
 
-/* PtrFieldDeref any */
+/* FastCall op1 */
 
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
@@ -109,9 +109,32 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,FastCall,,vec4f,vec4f)
 
+/* Call op1 */
+
+#undef IMPLEMENT_ANY_OP1_NODE
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1Call1 { \
+        INLINE vec4f compute(Context & context) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[1]; \
+            argValues[0] = v_ldu((const float *)subexpr.compute##COMPUTE(context)); \
+            return context.call(fnPtr, argValues, debugInfo.line); \
+        } \
+        virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+#include "daScript/simulate/simulate_fusion_op1_impl.h"
+#include "daScript/simulate/simulate_fusion_op1_perm.h"
+
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Call,,vec4f,vec4f)
+
     void createFusionEngine_call1()
     {
         (*g_fusionEngine)["FastCall"].push_back(make_shared<Op1FusionPoint_FastCall_vec4f>());
+        (*g_fusionEngine)["Call"].push_back(make_shared<Op1FusionPoint_Call_vec4f>());
     }
 }
 
