@@ -1710,10 +1710,16 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override;
     };
 
-    // IF-THEN-ELSE (also Cond)
-    struct SimNode_IfThenElse : SimNode {
-        SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
+    struct SimNode_IfTheElseAny : SimNode {
+        SimNode_IfTheElseAny ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
+        SimNode * cond, * if_true, * if_false;
+    };
+
+    // IF-THEN-ELSE (also Cond)
+    struct SimNode_IfThenElse : SimNode_IfTheElseAny {
+        SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
+            : SimNode_IfTheElseAny(at,c,t,f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1736,13 +1742,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-        SimNode * cond, * if_true, * if_false;
     };
 
     template <typename TT>
-    struct SimNode_IfZeroThenElse : SimNode {
+    struct SimNode_IfZeroThenElse : SimNode_IfTheElseAny {
         SimNode_IfZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
-            : SimNode(at), cond(c), if_true(t), if_false(f) {}
+            : SimNode_IfTheElseAny(at,c,t,f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1765,13 +1770,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-        SimNode * cond, * if_true, * if_false;
     };
 
     template <typename TT>
-    struct SimNode_IfNotZeroThenElse : SimNode {
+    struct SimNode_IfNotZeroThenElse : SimNode_IfTheElseAny {
         SimNode_IfNotZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
-            : SimNode(at), cond(c), if_true(t), if_false(f) {}
+            : SimNode_IfTheElseAny(at,c,t,f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1794,13 +1798,12 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         DAS_EVAL_NODE
 #undef EVAL_NODE
-        SimNode * cond, * if_true, * if_false;
     };
 
     // IF-THEN
-    struct SimNode_IfThen : SimNode {
+    struct SimNode_IfThen : SimNode_IfTheElseAny {
         SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
-            : SimNode(at), cond(c), if_true(t) {}
+            : SimNode_IfTheElseAny(at,c,t,nullptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1811,13 +1814,12 @@ SIM_NODE_AT_VECTOR(Float, float)
                 return v_zero();
             }
         }
-        SimNode * cond, * if_true;
     };
 
     template <typename TT>
-    struct SimNode_IfZeroThen : SimNode {
+    struct SimNode_IfZeroThen : SimNode_IfTheElseAny {
         SimNode_IfZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
-            : SimNode(at), cond(c), if_true(t) {}
+            : SimNode_IfTheElseAny(at,c,t,nullptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1828,13 +1830,12 @@ SIM_NODE_AT_VECTOR(Float, float)
                 return v_zero();
             }
         }
-        SimNode * cond, * if_true;
     };
 
     template <typename TT>
-    struct SimNode_IfNotZeroThen : SimNode {
+    struct SimNode_IfNotZeroThen : SimNode_IfTheElseAny {
         SimNode_IfNotZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
-            : SimNode(at), cond(c), if_true(t) {}
+            : SimNode_IfTheElseAny(at,c,t,nullptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1845,9 +1846,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 return v_zero();
             }
         }
-        SimNode * cond, * if_true;
     };
-
 
     // WHILE
     struct SimNode_While : SimNode_Block {
