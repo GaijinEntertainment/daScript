@@ -3,6 +3,7 @@
 options heap = 200000//not required hint to increase initial heap footprint. <1% of performance. 200kb is enough
 
 require random
+require testProfile
 
 struct Node
     x,y:int = 0
@@ -105,6 +106,8 @@ def main
 def test
     profile(10, "tree")  <|
         main()
+    profile(10, "tree C++")  <|
+        testProfile::testTree()
 	// print("total = {int(heap_bytes_allocated())}\n")
     // print("depth = {heap_depth()}\n")
     verify(heap_depth()==1)

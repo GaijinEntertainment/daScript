@@ -59,6 +59,7 @@ void testParticles(int count);
 void testParticlesI(int count);
 int testPrimes(int n);
 void testTryCatch(das::Context * context);
+int testTree();
 
 void updateObject(Object & obj);
 void updateTest(ObjectArray & objects);
