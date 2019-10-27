@@ -36,6 +36,7 @@ namespace das {
             V_ARG(offset);
             break;
         case SimSourceType::sArgument:
+        case SimSourceType::sArgumentRef:
         case SimSourceType::sThisBlockArgument:
             V_SP(index);
             break;

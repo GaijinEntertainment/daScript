@@ -1251,12 +1251,21 @@ namespace das
                 if ( auto chain = value->trySimulate(context, extraOffset + fieldOffset, r2vType) ) {
                     return chain;
                 }
-            }
-            auto simV = value->simulate(context);
-            if ( r2vType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType, at, simV, fieldOffset + extraOffset);
+                auto simV = value->simulate(context);
+                if (r2vType != Type::none) {
+                    return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType, at, simV, fieldOffset + extraOffset);
+                }
+                else {
+                    return context.code->makeNode<SimNode_FieldDeref>(at, simV, fieldOffset + extraOffset);
+                }
             } else {
-                return context.code->makeNode<SimNode_PtrFieldDeref>(at, simV, fieldOffset + extraOffset);
+                auto simV = value->simulate(context);
+                if (r2vType != Type::none) {
+                    return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType, at, simV, fieldOffset + extraOffset);
+                }
+                else {
+                    return context.code->makeNode<SimNode_PtrFieldDeref>(at, simV, fieldOffset + extraOffset);
+                }
             }
         } else {
             if ( auto chain = value->trySimulate(context, extraOffset + fieldOffset, r2vType) ) {
@@ -1355,19 +1364,21 @@ namespace das
                 }
             }
         } else if ( argument ) {
-            if ( variable->type->isRef() ) {
-                if ( r2vType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_GetArgumentRefOffR2V>(r2vType, at, argumentIndex, extraOffset);
-                } else {
-                    return context.code->makeNode<SimNode_GetArgumentRefOff>(at, argumentIndex, extraOffset);
-                }
+            if ( variable->type->isPointer() && variable->type->isRef() ) {
+                return nullptr;
             } else if ( variable->type->isPointer() ) {
                 if ( r2vType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetArgumentRefOffR2V>(r2vType, at, argumentIndex, extraOffset);
                 } else {
                     return context.code->makeNode<SimNode_GetArgumentRefOff>(at, argumentIndex, extraOffset);
                 }
-            }
+            } else if (variable->type->isRef()) {
+                if ( r2vType!=Type::none ) {
+                    return context.code->makeValueNode<SimNode_GetArgumentRefOffR2V>(r2vType, at, argumentIndex, extraOffset);
+                } else {
+                    return context.code->makeNode<SimNode_GetArgumentRefOff>(at, argumentIndex, extraOffset);
+                }
+            } 
         } else { // global
 
         }

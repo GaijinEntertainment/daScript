@@ -14,6 +14,7 @@ namespace das {
         ,   sLocal
         ,   sLocalRefOff
         ,   sArgument
+        ,   sArgumentRef
         ,   sArgumentRefOff
         ,   sBlockArgument
         ,   sBlockArgumentRef
@@ -85,6 +86,11 @@ namespace das {
         }
         __forceinline void setArgument(int32_t i) { 
             type = SimSourceType::sArgument; 
+            index = i;
+            offset = 0;
+        }
+        __forceinline void setArgumentRef(int32_t i) { 
+            type = SimSourceType::sArgumentRef; 
             index = i;
             offset = 0;
         }
@@ -970,7 +976,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetArgumentRef : SimNode_GetArgument {
         DAS_PTR_NODE;
         SimNode_GetArgumentRef(const LineInfo & at, int32_t i)
-            : SimNode_GetArgument(at,i) {}
+            : SimNode_GetArgument(at,i) {
+            subexpr.setArgumentRef(i);
+        }
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
 

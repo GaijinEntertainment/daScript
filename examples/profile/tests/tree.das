@@ -1,71 +1,15 @@
 //this is port from https://github.com/frol/completely-unscientific-benchmarks
-//almost direct kotlin implementation
 options heap = 200000//not required hint to increase initial heap footprint. <1% of performance. 200kb is enough
 
 require random
 require testProfile
 
 struct Node
-    x,y:int = 0
+    x,y:int
     left, right: Node?
 
 var
     seed:int4 = int4(1,1,1,1)
-
-[unsafe_deref]
-def merge(var lower, greater: Node?): Node?
-    if lower == null 
-    	return greater
-    
-    if greater == null
-    	return lower
-    
-    if lower.y < greater.y
-        lower.right = merge(lower.right, greater)
-        return lower
-    else
-        greater.left = merge(lower, greater.left)
-        return greater
-
-struct Pair
-    first,second: Node?
-
-[unsafe_deref]
-def splitBinary(var orig: Node?; value: int): Pair
-    if orig == null
-    	return [[ Pair first=null, second=null ]]
-    
-    if orig.x < value
-        let splitPair = splitBinary(orig.right, value)
-        orig.right = splitPair.first
-        return [[ Pair first=orig, second=splitPair.second ]]
-    else
-        let splitPair = splitBinary(orig.left, value)
-        orig.left = splitPair.second
-        return [[ Pair first=splitPair.first, second=orig ]]
-
-def merge(var lower,equal,greater: Node?): Node?
-    return merge(merge(lower, equal), greater)
-
-struct SplitResult
-    lower,equal,greater:Node?
-
-def split(var orig: Node?; value: int): SplitResult
-    var lower_eg = splitBinary(orig, value)
-    var equal_greater = splitBinary(lower_eg.second, value + 1)
-    return [[ SplitResult lower = lower_eg.first, equal = equal_greater.first, greater = equal_greater.second ]]
-
-def hasValue(var mRoot:Node? &; x: int): bool
-    var splited = split(mRoot, x)
-    let res = splited.equal != null
-    mRoot = merge(splited.lower, splited.equal, splited.greater)
-    return res
-
-def insert(var mRoot:Node? &; x: int)
-    var splited = split(mRoot, x)
-    if splited.equal == null
-    	splited.equal = new [[Node x=x, y=random_int(seed)]]
-    mRoot = merge(splited.lower, splited.equal, splited.greater)
 
 [unsafe, unsafe_deref]
 def destroy(var root:Node?)
@@ -74,22 +18,64 @@ def destroy(var root:Node?)
 		destroy(root.right)
 		delete root
 
-//GC version - relies on GC phase
-def erase(var mRoot:Node? &; x: int)
-    var splited = split(mRoot, x)
-    mRoot = merge(splited.lower, splited.greater)
+[unsafe_deref]
+def merge(var lower, greater: Node?): Node?
+    if lower == null 
+    	return greater
+    if greater == null
+    	return lower
+    if lower.y < greater.y
+        lower.right = merge(lower.right, greater)
+        return lower
+    else
+        greater.left = merge(lower, greater.left)
+        return greater
 
-//raw delete version - even with GC will be faster delete
+def merge(var lower,equal,greater: Node?): Node?
+    return merge(merge(lower, equal), greater)
+
+[unsafe_deref]
+def split(var orig:Node?; var lower:Node?&; var greaterOrEqual:Node?&; value: int)
+    if orig == null
+    	lower = null
+		greaterOrEqual = null
+		return
+    if orig.x < value
+		lower = orig
+		split(lower.right,lower.right,greaterOrEqual,value)
+    else
+		greaterOrEqual = orig
+		split(greaterOrEqual.left,lower,greaterOrEqual.left,value)
+
+def split(var orig: Node?; var lower:Node?&; var equal:Node?&; var greater:Node?&; value: int)
+	var equalOrGreater : Node?
+    split(orig, lower, equalOrGreater, value)
+    split(equalOrGreater, equal, greater, value + 1)
+
+def hasValue(var mRoot:Node? &; x: int): bool
+	var lower, equal, greater : Node?
+    split(mRoot, lower, equal, greater, x)
+    let res = equal != null
+    mRoot = merge(lower, equal, greater)
+    return res
+
+def insert(var mRoot:Node? &; x: int)
+    var lower, equal, greater : Node?
+    split(mRoot, lower, equal, greater, x)
+    if equal == null
+    	equal = new [[Node x=x, y=random_int(seed)]]
+    mRoot = merge(lower, equal, greater)
+
 def erase_raw(var mRoot:Node? &; x: int)
-    var splited = split(mRoot, x)
-    mRoot = merge(splited.lower, splited.greater)
-    destroy(splited.equal)
+    var lower, equal, greater : Node?
+    split(mRoot, lower, equal, greater, x)
+    mRoot = merge(lower, greater)
+    destroy(equal)
 
 def main
     var tree:Node?
     var cur = 5
     var res = 0
-
     for i in range(1, 1000000)
         let a = i % 3
         cur = (cur * 57 + 43) % 10007

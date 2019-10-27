@@ -80,6 +80,7 @@ namespace das {
         case SimSourceType::sLocal:                            return "Loc";
         case SimSourceType::sLocalRefOff:                      return "Locro";
         case SimSourceType::sArgument:                         return "Arg";
+        case SimSourceType::sArgumentRef:                      return "Argr";
         case SimSourceType::sArgumentRefOff:                   return "Argro";
         case SimSourceType::sBlockArgument:                    return "Barg";
         case SimSourceType::sBlockArgumentRef:                 return "Bargr";
