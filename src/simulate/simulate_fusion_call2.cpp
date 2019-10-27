@@ -135,6 +135,8 @@ __forceinline SimNode * safeArg2 ( SimNode * node, int index ) {
 
 IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
 
+/* CallWithCopyOnReturn */
+
 // OP(COMPUTEL,*)
 #undef IMPLEMENT_OP2_NODE_ANYR
 #define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
@@ -184,9 +186,82 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
 
 IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
 
+/* FastCall */
+
+// OP(COMPUTEL,*)
+#undef IMPLEMENT_OP2_NODE_ANYR
+#define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2Call2 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[2]; \
+            argValues[0] = l.subexpr->eval(context); \
+            argValues[1] = v_ldu((const float *)r.compute##COMPUTEL(context)); \
+            auto aa = context.abiArg; \
+            context.abiArg = argValues; \
+            auto res = fnPtr->code->eval(context); \
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
+            context.abiArg = aa; \
+            return res; \
+        } \
+        virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+// OP(*,COMPUTER)
+#undef IMPLEMENT_OP2_NODE_ANYL
+#define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2Call2 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[2]; \
+            argValues[0] = v_ldu((const float *)l.compute##COMPUTER(context)); \
+            argValues[1] = r.subexpr->eval(context); \
+            auto aa = context.abiArg; \
+            context.abiArg = argValues; \
+            auto res = fnPtr->code->eval(context); \
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
+            context.abiArg = aa; \
+            return res; \
+        } \
+        virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+// OP(COMPUTEL,COMPUTER)
+#undef IMPLEMENT_OP2_NODE
+#define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2Call2 { \
+        INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[2]; \
+            argValues[0] = v_ldu((const float *)l.compute##COMPUTEL(context)); \
+            argValues[1] = v_ldu((const float *)r.compute##COMPUTER(context)); \
+            auto aa = context.abiArg; \
+            context.abiArg = argValues; \
+            auto res = fnPtr->code->eval(context); \
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
+            context.abiArg = aa; \
+            return res; \
+        } \
+        virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+#include "daScript/simulate/simulate_fusion_op2_impl.h"
+
+IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
+
     void createFusionEngine_call2() {
         (*g_fusionEngine)["Call"].push_back(make_shared<FusionPoint_Call_StringPtr>());
         (*g_fusionEngine)["CallAndCopyOrMove"].push_back(make_shared<FusionPoint_CallAndCopyOrMove_StringPtr>());
+        (*g_fusionEngine)["FastCall"].push_back(make_shared<FusionPoint_FastCall_StringPtr>());
     }
 }
 
