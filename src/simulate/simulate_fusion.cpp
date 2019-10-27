@@ -128,6 +128,7 @@ namespace das {
             createFusionEngine_at_array();
             createFusionEngine_tableindex();
             // call
+            createFusionEngine_call1();
             createFusionEngine_call2();
 #endif
         }

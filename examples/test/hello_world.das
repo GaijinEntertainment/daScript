@@ -2,6 +2,8 @@
 //almost direct kotlin implementation
 options heap = 200000//not required hint to increase initial heap footprint. <1% of performance. 200kb is enough
 
+options log_nodes = true
+
 require random
 
 struct Node
@@ -66,13 +68,12 @@ def insert(var mRoot:Node? &; x: int)
     	splited.equal = new [[Node x=x, y=random_int(seed)]]
     mRoot = merge(splited.lower, splited.equal, splited.greater)
 
-[unsafe]
+[unsafe, unsafe_deref]
 def destroy(var root:Node?)
-    if root == null
-        return
-    destroy(root.left)
-    destroy(root.right)
-    delete root
+    if root != null
+        destroy(root.left)
+        destroy(root.right)
+        delete root
 
 //GC version - relies on GC phase
 def erase(var mRoot:Node? &; x: int)

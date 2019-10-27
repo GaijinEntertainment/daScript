@@ -3,6 +3,8 @@
 // regular is almost direct C++-raw implementation
 options heap = 200000//not required hint to increase initial heap footprint. <1% of performance. 200kb is enough
 
+// options log_nodes = true
+
 require random
 require testProfile
 
@@ -41,8 +43,7 @@ def split(var orig:Node?; var lower:Node?&; var greaterOrEqual:Node?&; value: in
     if orig == null
     	lower = null
 		greaterOrEqual = null
-		return
-    if orig.x < value
+    elif orig.x < value
 		lower = orig
 		split(lower.right,lower.right,greaterOrEqual,value)
     else
