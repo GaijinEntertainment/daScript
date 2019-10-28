@@ -81,7 +81,7 @@ void init_bodies()
   float px = 0.0;
   float py = 0.0;   
   float pz = 0.0;            
-  for(int i=0; i < bodies.length(); ++i) {                                          
+  for(uint i=0; i < bodies.length(); ++i) {                                          
     px += bodies[i].vx * bodies[i].mass;
     py += bodies[i].vy * bodies[i].mass;      
     pz += bodies[i].vz * bodies[i].mass;            
