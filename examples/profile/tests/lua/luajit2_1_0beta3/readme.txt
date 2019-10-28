@@ -1,4 +1,5 @@
 This is latest (at 2019 Jan) LuaJIT2.1.0Beta3 with only one diff (to allow detailed profiling)
+Built with LLVM8.0 (clang-cl)
 
 diff --git a/src/lib_os.c b/src/lib_os.c
 index ffbc3fd..145ebd4 100644
