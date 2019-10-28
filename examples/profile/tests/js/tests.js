@@ -1,12 +1,10 @@
 // primes test
 
-class Node {
-    constructor(x) {
-        this.x = x
-        this.y = Math.random()
-        this.left = null
-        this.right = null
-    }
+function Node(x) {
+    this.x = x
+    this.y = Math.random()
+    this.left = null
+    this.right = null
 }
 
 
@@ -49,62 +47,59 @@ function merge3(lower, equal, greater) {
 }
 
 
-class SplitResult {
-    constructor(lower, equal, greater) {
-        this.lower = lower
-        this.equal = equal
-        this.greater = greater
-    }
+function SplitResult(lower, equal, greater) {
+    this.lower = lower
+    this.equal = equal
+    this.greater = greater
 }
 
 
 function split(orig, value) {
-    const [lower, equalGreater] = splitBinary(orig, value)
-    const [equal, greater] = splitBinary(equalGreater, value + 1)
-    return new SplitResult(lower, equal, greater)
+    var lower_eqg = splitBinary(orig, value)
+    var eq_greater = splitBinary(lower_eqg[1], value + 1)
+    return new SplitResult(lower_eqg[0], eq_greater[0], eq_greater[1])
 }
 
 
-class Tree {
-    constructor() {
-        this.root = null
-    }
+function Tree()
+{
+    this.root = null
+}
 
-    has_value(x) {
-        const splited = split(this.root, x)
-        const res = splited.equal !== null
-        this.root = merge3(splited.lower, splited.equal, splited.greater)
-        return res
+Tree.prototype.has_value = function(x) {
+    var splited = split(this.root, x)
+    var res = splited.equal !== null
+    this.root = merge3(splited.lower, splited.equal, splited.greater)
+    return res
+}
+
+Tree.prototype.insert = function(x) {
+    var splited = split(this.root, x)
+    if (splited.equal === null) {
+        splited.equal = new Node(x)
     }
-    
-    insert(x) {
-        const splited = split(this.root, x)
-        if (splited.equal === null) {
-            splited.equal = new Node(x)
-        }
-        this.root = merge3(splited.lower, splited.equal, splited.greater)
-    }
-    
-    erase(x) {
-        const splited = split(this.root, x)
-        this.root = merge(splited.lower, splited.greater)
-    }
+    this.root = merge3(splited.lower, splited.equal, splited.greater)
+}
+
+Tree.prototype.erase = function(x) {
+    var splited = split(this.root, x)
+    this.root = merge(splited.lower, splited.greater)
 }
 
 function testTree() {
-    const tree = new Tree()
-    let cur = 5
-    let res = 0
+    var tree = new Tree()
+    var cur = 5;
+    var res = 0;
 
-    for (let i = 1; i < 1000000; ++i) {
-        let a = i % 3
-        cur = (cur * 57 + 43) % 10007
+    for (var i = 1; i < 1000000; ++i) {
+        var a = i % 3;
+        cur = (cur * 57 + 43) % 10007;
         if (a === 0) {
-            tree.insert(cur)
+            tree.insert(cur);
         } else if (a === 1) {
-            tree.erase(cur)
+            tree.erase(cur);
         } else if (a == 2) {
-            res += tree.has_value(cur) ? 1 : 0
+            res += tree.has_value(cur) ? 1 : 0;
         }
     }
 	return res;
@@ -429,7 +424,7 @@ function profile(tname,cnt,testFn) {
 }
 
 function performance_tests() {
-	profile("tree",10,function(){
+	profile("tree",1,function(){
 		testTree();
 	});
 	profile("primes",20,function(){
@@ -471,5 +466,5 @@ function performance_tests() {
 	}
 	timeStamp();
 }
-performance_tests();
 
+performance_tests();
