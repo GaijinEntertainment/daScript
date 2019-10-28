@@ -5,6 +5,10 @@
 #include "daScript/daScript.h"
 #include "daScript/ast/ast_policy_types.h"
 
+#if defined(_MSC_VER) && defined(__clang__)
+#include <stdexcept>
+#endif
+
 #define FAST_PATH_ANNOTATION    1
 #define FUNC_TO_QUERY           1
 

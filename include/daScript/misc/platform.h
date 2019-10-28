@@ -12,6 +12,13 @@
 #pragma warning(disable:4702)    // unreachable code (due to exceptions)
 
 #pragma warning(disable:4316)    // '__m128': object allocated on the heap may not be aligned 16
+
+#ifdef __clang__
+// CLANG for windows
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wunused-value"
+#endif
+
 #endif
 
 #ifdef __clang__
