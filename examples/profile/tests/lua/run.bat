@@ -20,6 +20,7 @@ luajit2_1_0beta3\luajit.exe profile_try_catch.lua
 luajit2_1_0beta3\luajit.exe exp.lua 
 luajit2_1_0beta3\luajit.exe nbodies.lua
 luajit2_1_0beta3\luajit.exe sha1.lua
+luajit2_1_0beta3\luajit.exe tree.lua
 
 echo "Lua (low res timer, no addOne)"
 lua.exe fibI.lua
@@ -30,4 +31,5 @@ lua.exe profile_try_catch.lua
 lua.exe exp.lua 
 lua.exe nbodies.lua
 lua.exe sha1.lua
+lua.exe tree.lua
 
