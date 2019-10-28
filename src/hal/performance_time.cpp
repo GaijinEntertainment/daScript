@@ -2,19 +2,35 @@
 
 #ifdef _MSC_VER
 
+#ifndef __clang__
 #include <windows.h>
+#endif
 
 extern "C" int64_t ref_time_ticks () {
+#ifdef __clang__
+	return __rdtsc();
+#else
     LARGE_INTEGER  t0;
     QueryPerformanceCounter(&t0);
     return t0.QuadPart;
+#endif
 }
 
 extern "C" int get_time_usec ( int64_t reft ) {
+#ifdef __clang__
+	int64_t t0 = __rdtsc();
+	static int64_t freq = 0;
+	if (freq == 0) {
+		_sleep(1000);
+		freq = __rdtsc() - t0;
+	}
+	return (t0 - reft) * 1000000 / freq;
+#else
     int64_t t0 = ref_time_ticks();
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
     return (int)(((t0-reft)*1000000) / freq.QuadPart);
+#endif
 }
 
 #elif __linux__

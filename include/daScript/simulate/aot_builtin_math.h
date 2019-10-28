@@ -21,7 +21,8 @@ namespace das {
     __forceinline float lengthSq3(vec4f a){return v_extract_x(v_length3_sq_x(a));}
     __forceinline float lengthSq4(vec4f a){return v_extract_x(v_length4_sq_x(a));}
 
-#if defined(_MSC_VER) && (_MSC_VER==1923)
+#if defined(_MSC_VER) && !defined(__clang__) && (_MSC_VER==1923)
+	// workaround for internal compiler error with MSVC 2019
 	__forceinline float invlength2(vec4f a) { return 1.0f / length2(a); }
 	__forceinline float invlength3(vec4f a) { return 1.0f / length3(a); }
 	__forceinline float invlength4(vec4f a) { return 1.0f / length4(a); }
