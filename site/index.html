@@ -45,6 +45,7 @@
                 <span class="labels">
                     
                     News</span><br>
+                <span class="newsupdate">28 October 2019: Benchmarks has been updated. All lang compilers were built in LLVM8.0, architecture AVX .</span></br>
                 <span class="newsupdate">15 August 2019: <b>daScript site</b> has been released, check it out.</span>
             </td>
         </tr>
@@ -203,7 +204,7 @@ but the language has a static strong typed nature like ML or Zig, and it's POD t
         <br>
           As compiled Ahead-of-Time language it is also much faster then both LuaJIT and Chrome JS (both having extremely fast Just-in-Time).
         <br>
-          It is almost on par with C++ (msvc with all optimizations), usually within 10% of difference, and sometimes can even beat it!
+          It is almost on par with naive C++ (clang-cl llvm 8.0.1 with all optimizations), usually within 10% of difference, and sometimes can even beat it!
         <br>
           It is worth noting that unlike Just-in-Time, Ahead-of-Time compilation can be used on any platform, including those with signed binaries executables (such as iOS or consoles).
         <br>
