@@ -70,7 +70,7 @@
 __forceinline uint32_t __builtin_clz(uint32_t x) {
     unsigned long r = 0;
     _BitScanReverse(&r, x);
-    return (31 - r);
+    return uint32_t(31 - r);
 }
 #endif
 

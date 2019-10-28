@@ -21,9 +21,15 @@ namespace das {
     __forceinline float lengthSq3(vec4f a){return v_extract_x(v_length3_sq_x(a));}
     __forceinline float lengthSq4(vec4f a){return v_extract_x(v_length4_sq_x(a));}
 
+#if defined(_MSC_VER) && (_MSC_VER==1923)
+	__forceinline float invlength2(vec4f a) { return 1.0f / length2(a); }
+	__forceinline float invlength3(vec4f a) { return 1.0f / length3(a); }
+	__forceinline float invlength4(vec4f a) { return 1.0f / length4(a); }
+#else
     __forceinline float invlength2(vec4f a){vec4f v = a; v = v_mul(v,v); return v_extract_x(v_rsqrt_x(v_add_x(v, v_rot_1(v))));}
     __forceinline float invlength3(vec4f a){return v_extract_x(v_rsqrt_x(v_length3_sq_x(a)));}
     __forceinline float invlength4(vec4f a){return v_extract_x(v_rsqrt_x(v_length4_sq_x(a)));}
+#endif
 
     __forceinline float invlengthSq2(vec4f a){vec4f v = a; v = v_mul(v,v); return v_extract_x(v_rcp_x(v_add_x(v, v_rot_1(v))));}
     __forceinline float invlengthSq3(vec4f a){return v_extract_x(v_rcp_x(v_length3_sq_x(a)));}
@@ -33,6 +39,7 @@ namespace das {
     __forceinline float invdistance3  (vec4f a, vec4f b){return v_extract_x(v_rcp_x(v_length3_x(v_sub(a, b))));}
     __forceinline float distanceSq3   (vec4f a, vec4f b){return v_extract_x(v_length3_sq_x(v_sub(a, b)));}
     __forceinline float invdistanceSq3(vec4f a, vec4f b){return v_extract_x(v_rcp_x(v_length3_sq_x(v_sub(a,b))));}
+
     __forceinline float dot2(vec4f a, vec4f b){vec4f v = v_mul(a, b); return v_extract_x(v_add_x(v, v_rot_1(v)));}
     __forceinline float dot3(vec4f a, vec4f b){return v_extract_x(v_dot3_x(a, b));}
     __forceinline float dot4(vec4f a, vec4f b){return v_extract_x(v_dot4_x(a, b));}

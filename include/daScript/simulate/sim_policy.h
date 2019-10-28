@@ -116,11 +116,11 @@ namespace  das {
     struct SimPolicy_Float : SimPolicy_Type<float> {
         static __forceinline float Mod ( float a, float b, Context & context ) {
             if ( b==0.0f ) context.throw_error("division by zero in modulo");
-            return fmod(a,b);
+            return (float)fmod(a,b);
         }
         static __forceinline void SetMod ( float & a, float b, Context & context ) {
             if ( b==0.0f ) context.throw_error("division by zero in modulo");
-            a = fmod(a,b);
+            a = (float)fmod(a,b);
         }
     };
 
