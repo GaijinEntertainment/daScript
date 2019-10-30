@@ -49,83 +49,83 @@ namespace das {
         SimSourceType   type;
         void visit ( SimVisitor & vis );
         // construct
-        __forceinline void setSimNode(SimNode * se) { 
-            type = SimSourceType::sSimNode; 
-            subexpr = se; 
+        __forceinline void setSimNode(SimNode * se) {
+            type = SimSourceType::sSimNode;
+            subexpr = se;
         }
-        __forceinline void setConstValue(vec4f val) { 
-            type = SimSourceType::sConstValue; 
-            value = val; 
+        __forceinline void setConstValue(vec4f val) {
+            type = SimSourceType::sConstValue;
+            value = val;
         }
         __forceinline void setConstValuePtr(char * val) {
             type = SimSourceType::sConstValue;
             valuePtr = val;
         }
-        __forceinline void setCMResOfs(uint32_t ofs) { 
-            type = SimSourceType::sCMResOff; 
-            offset = ofs; 
+        __forceinline void setCMResOfs(uint32_t ofs) {
+            type = SimSourceType::sCMResOff;
+            offset = ofs;
         }
-        __forceinline void setGlobal(uint32_t ofs) { 
-            type = SimSourceType::sGlobal; 
-            offset = ofs; 
+        __forceinline void setGlobal(uint32_t ofs) {
+            type = SimSourceType::sGlobal;
+            offset = ofs;
         }
-        __forceinline void setBlockCMResOfs(uint32_t asp, uint32_t ofs) { 
-            type = SimSourceType::sBlockCMResOff; 
-            argStackTop = asp;  
-            offset = ofs; 
+        __forceinline void setBlockCMResOfs(uint32_t asp, uint32_t ofs) {
+            type = SimSourceType::sBlockCMResOff;
+            argStackTop = asp;
+            offset = ofs;
         }
-        __forceinline void setLocal(uint32_t sp) { 
-            type = SimSourceType::sLocal; 
+        __forceinline void setLocal(uint32_t sp) {
+            type = SimSourceType::sLocal;
             stackTop = sp;
             offset = 0;
         }
-        __forceinline void setLocalRefOff(uint32_t sp, uint32_t ofs) { 
-            type = SimSourceType::sLocalRefOff; 
+        __forceinline void setLocalRefOff(uint32_t sp, uint32_t ofs) {
+            type = SimSourceType::sLocalRefOff;
             stackTop = sp;
             offset = ofs;
         }
-        __forceinline void setArgument(int32_t i) { 
-            type = SimSourceType::sArgument; 
+        __forceinline void setArgument(int32_t i) {
+            type = SimSourceType::sArgument;
             index = i;
             offset = 0;
         }
-        __forceinline void setArgumentRef(int32_t i) { 
-            type = SimSourceType::sArgumentRef; 
+        __forceinline void setArgumentRef(int32_t i) {
+            type = SimSourceType::sArgumentRef;
             index = i;
             offset = 0;
         }
-        __forceinline void setArgumentRefOff(int32_t i, uint32_t ofs) { 
-            type = SimSourceType::sArgumentRefOff; 
+        __forceinline void setArgumentRefOff(int32_t i, uint32_t ofs) {
+            type = SimSourceType::sArgumentRefOff;
             index = i;
             offset = ofs;
         }
-        __forceinline void setThisBlockArgument(int32_t i) { 
-            type = SimSourceType::sThisBlockArgument; 
+        __forceinline void setThisBlockArgument(int32_t i) {
+            type = SimSourceType::sThisBlockArgument;
             index = i;
         }
-        __forceinline void setThisBlockArgumentRef(int32_t i) { 
-            type = SimSourceType::sThisBlockArgumentRef; 
+        __forceinline void setThisBlockArgumentRef(int32_t i) {
+            type = SimSourceType::sThisBlockArgumentRef;
             index = i;
         }
-        __forceinline void setBlockArgument(uint32_t asp, int32_t i) { 
-            type = SimSourceType::sBlockArgument; 
+        __forceinline void setBlockArgument(uint32_t asp, int32_t i) {
+            type = SimSourceType::sBlockArgument;
             argStackTop = asp;
             index = i;
         }
-        __forceinline void setBlockArgumentRef(uint32_t asp, int32_t i) { 
-            type = SimSourceType::sBlockArgumentRef; 
+        __forceinline void setBlockArgumentRef(uint32_t asp, int32_t i) {
+            type = SimSourceType::sBlockArgumentRef;
             argStackTop = asp;
             index = i;
         }
         // compute
-        __forceinline char * computeAnyPtr ( Context & context ) const { 
+        __forceinline char * computeAnyPtr ( Context & context ) const {
             return subexpr->evalPtr(context);
         }
-        __forceinline char * computeConst ( Context & ) const { 
+        __forceinline char * computeConst ( Context & ) const {
             return (char *)&value;
         }
-        __forceinline char * computeCMResOfs ( Context & context ) const { 
-            return context.abiCopyOrMoveResult() + offset; 
+        __forceinline char * computeCMResOfs ( Context & context ) const {
+            return context.abiCopyOrMoveResult() + offset;
         }
         __forceinline char * computeBlockCMResOfs ( Context & context ) const {
             auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
@@ -776,7 +776,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // CMRES "GET" + OFFSET
     struct SimNode_GetCMResOfs : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetCMResOfs(const LineInfo & at, uint32_t o) 
+        SimNode_GetCMResOfs(const LineInfo & at, uint32_t o)
             : SimNode_SourceBase(at) {
             subexpr.setCMResOfs(o);
         }
@@ -807,7 +807,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // BLOCK CMRES "GET" + OFFSET
     struct SimNode_GetBlockCMResOfs : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetBlockCMResOfs(const LineInfo & at, uint32_t o, uint32_t asp) 
+        SimNode_GetBlockCMResOfs(const LineInfo & at, uint32_t o, uint32_t asp)
             : SimNode_SourceBase(at) {
             subexpr.setBlockCMResOfs(asp, o);
         }
@@ -821,7 +821,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // LOCAL VARIABLE "GET"
     struct SimNode_GetLocal : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetLocal(const LineInfo & at, uint32_t sp) 
+        SimNode_GetLocal(const LineInfo & at, uint32_t sp)
             : SimNode_SourceBase(at) {
             subexpr.setLocal(sp);
         }
@@ -834,7 +834,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetLocalR2V : SimNode_GetLocal {
-        SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp) 
+        SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp)
             : SimNode_GetLocal(at,sp)  {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -1141,7 +1141,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetGlobal ( const LineInfo & at, uint32_t o ) 
+        SimNode_GetGlobal ( const LineInfo & at, uint32_t o )
             : SimNode_SourceBase(at) {
             subexpr.setGlobal(o);
         }
@@ -1534,7 +1534,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // CONST-VALUE
     struct SimNode_ConstValue : SimNode_SourceBase {
         SimNode_ConstValue(const LineInfo & at, vec4f c)
-            : SimNode_SourceBase(at) { 
+            : SimNode_SourceBase(at) {
             subexpr.setConstValue(c);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
