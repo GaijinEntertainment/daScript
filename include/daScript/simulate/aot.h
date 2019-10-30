@@ -923,6 +923,11 @@ namespace das {
         BlockFn blockFunction;
     };
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#endif
+
     template <typename resType>
     struct das_make_block<resType> : Block, SimNode_ClosureBlock {
         typedef function < resType () > BlockFn;
@@ -939,11 +944,6 @@ namespace das {
         }
         BlockFn blockFunction;
     };
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4100)
-#endif
 
     template <>
     struct das_make_block<void> : Block, SimNode_ClosureBlock {

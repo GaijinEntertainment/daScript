@@ -224,7 +224,7 @@ namespace das {
         virtual void preVisit ( ExprLabel * expr ) override {
             Visitor::preVisit(expr);
             auto sc = scopes.back();
-            sc->maxLabelIndex = max ( sc->maxLabelIndex, expr->label );
+            sc->maxLabelIndex = das::max ( sc->maxLabelIndex, expr->label );
         }
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
