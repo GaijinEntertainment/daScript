@@ -126,8 +126,28 @@ def test:bool
         for b in a
             verify_test_array(b,i++)
     testIntArray()
+    testConstInArray()
     return true
 
+// this test bellow is only here to make sure AOT compiles and runs for array<blah const>
 
+struct Foo
+    bar : int
 
+[sideeffects]
+def testAccept(t:array<Foo const>;e:Foo const[10])
+    for i in t
+        if i.bar == 13
+            return true
+    for j in e
+        if j.bar == 13
+            return false
+    return false
+
+[sideeffects]
+def testConstInArray
+    var a : array<Foo const>
+    resize(a,20)
+    var b : Foo const[10]
+    testAccept(a, b)
 

@@ -490,8 +490,13 @@ namespace das {
 
     template <typename TT>
     struct das_iterator<TArray<TT>> {
-        __forceinline das_iterator(const TArray<TT> & r) : that((Array *)&r) {
+        __forceinline das_iterator() = default;
+        __forceinline void init ( Array * r ) {
+            that = r;
             array_end = (TT *)(that->data + that->size*sizeof(TT));
+        }
+        __forceinline das_iterator(const TArray<TT> & r) {
+            init((Array *)&r);
         }
         __forceinline bool first ( Context * __context__, TT * & i ) {
             array_lock(*__context__, *that);
@@ -506,8 +511,24 @@ namespace das {
             array_unlock(*__context__, *that);
             i = nullptr;
         }
+        __forceinline bool first ( Context * __context__, const TT * & i ) {
+            return fisrt(__context__,(TT *)i);
+        }
+        __forceinline bool next  ( Context * __context__, const TT * & i ) {
+            return next(__context__,(TT *)i);
+        }
+        __forceinline void close ( Context * __context__, const TT * & i ) {
+            close(__context__,(TT *)i);
+        }
         Array * that;
-        TT * array_end;
+        const TT * array_end;
+    };
+
+    template <typename TT>
+    struct das_iterator<TArray<const TT>> : das_iterator<TArray<TT>> {
+        __forceinline das_iterator(const TArray<const TT> & r) {
+            das_iterator<TArray<TT>>::init((Array *)&r);
+        }
     };
 
     template <typename TT, uint32_t size>
