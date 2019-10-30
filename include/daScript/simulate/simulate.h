@@ -386,7 +386,7 @@ namespace das
             stack.invoke(block.stackOffset, EP, SP);
             BlockArguments * __restrict ba = nullptr;
             BlockArguments saveArguments;
-            if ( block.argumentsOffset ) {
+            if ( block.argumentsOffset || cmres ) {
                 ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
                 saveArguments = *ba;
                 ba->arguments = args;
@@ -693,7 +693,7 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
         stack.invoke(block.stackOffset,EP,SP);
         BlockArguments * ba = nullptr;
         BlockArguments saveArguments;
-        if ( block.argumentsOffset ) {
+        if ( block.argumentsOffset || cmres ) {
             ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
             saveArguments = *ba;
             ba->arguments = args;
