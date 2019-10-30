@@ -2148,6 +2148,7 @@ namespace das {
                     reportGenericInfer();
                 }
                 if ( block->returnType ) {
+                    setBlockCopyMoveFlags(block);
                     verifyType(block->returnType);
                 }
             }

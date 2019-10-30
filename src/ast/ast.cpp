@@ -889,8 +889,7 @@ namespace das {
         for ( auto & subexpr : finalList ) {
             cexpr->finalList.push_back(subexpr->clone());
         }
-        cexpr->isClosure = isClosure;
-        cexpr->inTheLoop = inTheLoop;
+        cexpr->blockFlags = blockFlags;
         if ( returnType )
             cexpr->returnType = make_shared<TypeDecl>(*returnType);
         for ( auto & arg : arguments ) {
