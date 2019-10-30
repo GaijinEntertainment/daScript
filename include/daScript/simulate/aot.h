@@ -1008,7 +1008,8 @@ namespace das {
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto ba = (BlockArguments *) ( context.stack.bottom() + argumentsOffset );
-            resType * result = (resType *) ba->copyOrMoveResult;
+            using ResultType = typename remove_const<resType>::type;
+            ResultType * result = (ResultType *) ba->copyOrMoveResult;
             using Indices = make_index_sequence<sizeof...(argType)>;
             *result = callBlockFunction(ba->arguments, Indices());
             return cast<void *>::from(result);
@@ -1029,7 +1030,8 @@ namespace das {
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto ba = (BlockArguments *) ( context.stack.bottom() + argumentsOffset );
-            resType * result = (resType *) ba->copyOrMoveResult;
+            using ResultType = typename remove_const<resType>::type;
+            ResultType * result = (ResultType *) ba->copyOrMoveResult;
             *result = blockFunction();
             return cast<void *>::from(result);
         }
@@ -1051,14 +1053,14 @@ namespace das {
         }
         // cmres
         static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk ) {
-            ResType result;
+            typename remove_const<ResType>::type result;
             __context__->invoke(blk, nullptr, &result);
             return result;
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
-            ResType result;
+            typename remove_const<ResType>::type result;
             __context__->invoke(blk, arguments, &result);
             return result;
         }
@@ -1100,6 +1102,22 @@ namespace das {
             vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
             return cast<ResType>::to(result);
         }
+        static __forceinline ResType invoke_cmres ( Context * __context__, const Func & blk ) {
+            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            typename remove_const<ResType>::type result;
+            __context__->callWithCopyOnReturn(simFunc, nullptr, &result, 0);
+            return result;
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke_cmres ( Context * __context__, const Func & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<ArgType>::from(arg)... };
+            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            typename remove_const<ResType>::type result;
+            __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+            return result;
+        }
     };
 
     template <>
@@ -1137,6 +1155,26 @@ namespace das {
             if (!simFunc) __context__->throw_error("invoke null function");
             vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
             return cast<ResType>::to(result);
+        }
+        static __forceinline ResType invoke_cmres ( Context * __context__, const Lambda & blk ) {
+            int32_t * fnIndex = (int32_t *)blk.capture;
+            if (!fnIndex) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            typename remove_const<ResType>::type result;
+            __context__->callWithCopyOnReturn(simFunc, nullptr, &result, 0);
+            return result;
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke_cmres ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
+            vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
+            int32_t * fnIndex = (int32_t *)blk.capture;
+            if (!fnIndex) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            typename remove_const<ResType>::type result;
+            __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+            return result;
         }
     };
 
