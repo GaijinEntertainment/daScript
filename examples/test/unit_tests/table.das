@@ -138,6 +138,44 @@ def test : bool
     erase(tab_string, "")
     assert(!key_exists(tab_string, ""))
 
+    test_erase_collision()
+
     return true
 
+let
+    TOTAL = 100
 
+struct TestStruct
+    test : string
+
+struct TableContainer
+    t : table<string; TestStruct>
+
+def check(var t : TableContainer; deletedEntries : array<int>)
+    for i in range (1, TOTAL)
+        var deleted : bool
+        for x in deletedEntries
+            if x == i
+                deleted = true
+                break
+        if deleted
+            continue
+        let n = "name_{i}"
+        if t.t[n].test != n
+            return false
+    return true
+
+def test_erase_collision
+    var t : TableContainer
+    var names : array<string>
+    for i in range(1, TOTAL)
+        push(names, "name_{i}")
+    for n in names
+        t.t[n] <- [[TestStruct test = n ]]
+    var deletedEntries : array<int>
+    verify(check(t, deletedEntries))
+    for i in range(1, TOTAL)
+        let x = "name_{i}"
+        push(deletedEntries, i)
+        erase(t.t, x)
+        verify(check(t, deletedEntries))
