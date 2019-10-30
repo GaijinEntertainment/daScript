@@ -92,15 +92,19 @@ namespace das
                 uint32_t mask = tab.capacity - 1;
                 uint32_t index = indexFromHash(hash, tab.shift);
                 uint32_t lastI = (index+tab.maxLookups) & mask;
+                uint32_t insertI = -1u;
                 auto pKeys = (KeyType *) tab.keys;
                 auto pHashes = tab.hashes;
                 while ( index != lastI ) {
                     auto kh = pHashes[index];
-                    if (kh <= HASH_KILLED32) {
+                    if (kh == HASH_EMPTY32 ) {
+                        if ( insertI != -1u ) index = insertI;
                         pHashes[index] = hash;
                         pKeys[index] = key;
                         tab.size++;
                         return (int)index;
+                    } else if (kh == HASH_KILLED32) {
+                        insertI = index;
                     } else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
                         return (int)index;
                     }
