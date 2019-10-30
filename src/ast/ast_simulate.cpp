@@ -716,7 +716,9 @@ namespace das
     SimNode * ExprAddr::simulate (Context & context) const {
         assert(func->index>=0 && "how, we specified in the unused");
         Func fn; fn.index = func->index + 1;
-        return context.code->makeNode<SimNode_ConstValue>(at,cast<Func>::from(fn));
+        vec4f cval = v_zero();
+        *(Func *)&cval = fn;
+        return context.code->makeNode<SimNode_ConstValue>(at,cval);
     }
 
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
