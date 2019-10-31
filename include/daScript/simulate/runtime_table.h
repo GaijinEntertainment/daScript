@@ -104,7 +104,7 @@ namespace das
                         tab.size++;
                         return (int)index;
                     } else if (kh == HASH_KILLED32) {
-                        insertI = index;
+                        if ( insertI == -1u ) insertI = index;
                     } else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
                         return (int)index;
                     }
