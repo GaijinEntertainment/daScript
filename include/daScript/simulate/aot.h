@@ -409,7 +409,7 @@ namespace das {
         __forceinline TV & operator () ( const TK & key, Context * __context__ ) {
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
-            int index = thh.reserve(*this, key, hfn);
+            int index = thh.reserve(*this, key, hfn, __context__);
             return ((TV *)data)[index];
         }
     };
@@ -655,7 +655,7 @@ namespace das {
                     uint32_t oldSize = dim.capacity*sizeof(TT);
                     __context__->heap.free(dim.data, oldSize);
                 } else {
-                    __context__->throw_error("deleting locked array");
+                    __context__->throw_error("can't delete locked array");
                 }
             }
             memset ( &dim, 0, sizeof(TArray<TT>) );
@@ -670,7 +670,7 @@ namespace das {
                     uint32_t oldSize = tab.capacity*(sizeof(TKey)+sizeof(TVal)+sizeof(uint32_t));
                     __context__->heap.free(tab.data, oldSize);
                 } else {
-                    __context__->throw_error("deleting locked table");
+                    __context__->throw_error("can't delete locked table");
                 }
             }
             memset ( &tab, 0, sizeof(TTable<TKey,TVal>) );
@@ -1320,6 +1320,7 @@ namespace das {
 
     template <typename TK, typename TV, typename TKey>
     bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, TKey _key ) {
+        if ( tab.lock ) context->throw_error("can't erase from locked table");
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,sizeof(TV));

@@ -87,7 +87,7 @@ namespace das
             return -1;
         }
 
-        __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash ) {
+        __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash, Context * context ) {
             for ( ;; ) {
                 uint32_t mask = tab.capacity - 1;
                 uint32_t index = indexFromHash(hash, tab.shift);
@@ -98,6 +98,7 @@ namespace das
                 while ( index != lastI ) {
                     auto kh = pHashes[index];
                     if (kh == HASH_EMPTY32 ) {
+                        if ( tab.lock ) context->throw_error("can't insert into locked table");
                         if ( insertI != -1u ) index = insertI;
                         pHashes[index] = hash;
                         pKeys[index] = key;

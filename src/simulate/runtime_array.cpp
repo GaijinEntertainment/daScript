@@ -6,7 +6,7 @@ namespace das
 {
     void array_clear ( Context & context, Array & arr ) {
         if ( arr.lock ) {
-            context.throw_error("clearing locked array");
+            context.throw_error("can't clear locked array");
             return;
         }
         arr.size = 0;
@@ -28,7 +28,7 @@ namespace das
 
     void array_reserve(Context & context, Array & arr, uint32_t newCapacity, uint32_t stride) {
         if (arr.lock) {
-            context.throw_error("changing capacity of a locked array");
+            context.throw_error("can't change capacity of a locked array");
             return;
         }
         if (arr.capacity >= newCapacity) {
@@ -48,7 +48,7 @@ namespace das
 
     void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero ) {
         if ( arr.lock ) {
-            context.throw_error("resizing locked array");
+            context.throw_error("can't resize locked array");
             return;
         }
         if ( newSize > arr.capacity ) {

@@ -139,7 +139,29 @@ def test : bool
     assert(!key_exists(tab_string, ""))
 
     test_erase_collision()
+    test_lock_panic()
 
+    return true
+
+[sideeffects]
+def test_lock_panic
+    var tab <- {{ "one" => 1; "two" => 2 }}
+    var failed = false
+    try
+        find(tab,"one") <| $(t:int?)
+            assert(t!=null)
+            tab["three"] = 3
+    recover
+        failed = true
+    assert(failed)
+    failed = false
+    try
+        find(tab,"three") <| $(t:int?)
+            assert(t==null)
+            erase(tab,"three")
+    recover
+        failed = true
+    assert(failed)
     return true
 
 let
@@ -165,6 +187,7 @@ def check(var t : TableContainer; deletedEntries : array<int>)
             return false
     return true
 
+[sideeffects]
 def test_erase_collision
     var t : TableContainer
     var names : array<string>
