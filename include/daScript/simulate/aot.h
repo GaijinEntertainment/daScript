@@ -409,7 +409,7 @@ namespace das {
         __forceinline TV & operator () ( const TK & key, Context * __context__ ) {
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
-            int index = thh.reserve(*this, key, hfn, __context__);
+            int index = thh.reserve(*this, key, hfn);
             return ((TV *)data)[index];
         }
     };

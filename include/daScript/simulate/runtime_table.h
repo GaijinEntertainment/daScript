@@ -87,7 +87,7 @@ namespace das
             return -1;
         }
 
-        __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash, Context * context ) {
+        __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash ) {
             for ( ;; ) {
                 uint32_t mask = tab.capacity - 1;
                 uint32_t index = indexFromHash(hash, tab.shift);

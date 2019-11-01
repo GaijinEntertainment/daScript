@@ -50,7 +50,7 @@ namespace das
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             TableHash<KeyType> thh(&context,valueTypeSize);
             auto hfn = hash_function(context, key);
-            int index = thh.reserve(*tab, key, hfn, &context);    // if index==-1, it was a through, so safe to do
+            int index = thh.reserve(*tab, key, hfn);    // if index==-1, it was a through, so safe to do
             return tab->data + index * valueTypeSize + offset;
         }
         uint32_t offset;
