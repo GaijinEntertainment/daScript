@@ -6,6 +6,13 @@ def join(a:array<auto(numt)>)
         t += x
     return t
 
+def findObject(objects : table<string; auto(T)>; guid : string): T?
+    var foundObj : T?
+    find(objects, guid) <| $(obj:T?)
+        foundObj = obj
+    return foundObj
+
+
 [export]
 def test:bool
     var a:array<float>
@@ -14,4 +21,7 @@ def test:bool
     push(a,3.0)
     let t = join(a)
     assert(t==6.0)
+    let tab <- {{ "one" => 1; "two" => 2 }}
+    verify(findObject(tab,"one") ?? 0==1)
+    verify(findObject(tab,"two") ?? 0==2)
     return true

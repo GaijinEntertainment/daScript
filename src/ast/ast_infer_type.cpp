@@ -2089,6 +2089,15 @@ namespace das {
                 error("block argument " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line),
                       var->at, CompilationError::variable_not_found);
             }
+            if ( var->type->isAlias() ) {
+                auto aT = inferAlias(var->type);
+                if ( aT ) {
+                    var->type = aT;
+                    reportGenericInfer();
+                } else {
+                    error("udefined type " + var->type->describe(), var->at, CompilationError::type_not_found);
+                }
+            }
             if ( var->type->isAuto() && !var->init) {
                 error("block argument type can't be infered, it needs an initializer or to be passed to the function with the explicit block definition",
                       var->at, CompilationError::cant_infer_missing_initializer );
