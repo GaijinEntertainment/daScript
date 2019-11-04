@@ -262,6 +262,11 @@ namespace das {
     template <typename TT> struct das_index<vec3<TT>> : das_vec_index<TT, vec3<TT>, 3> {};
     template <typename TT> struct das_index<vec4<TT>> : das_vec_index<TT, vec4<TT>, 4> {};
 
+    template <typename TT> struct das_index<const vec2<TT>> : das_vec_index<TT, const vec2<TT>, 2> {};
+    template <typename TT> struct das_index<const vec3<TT>> : das_vec_index<TT, const vec3<TT>, 3> {};
+    template <typename TT> struct das_index<const vec4<TT>> : das_vec_index<TT, const vec4<TT>, 4> {};
+
+
     template <typename VecT, int size>
     struct das_index<Matrix<VecT,size>> {
         using MatT = Matrix<VecT,size>;
@@ -270,12 +275,17 @@ namespace das {
             if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
             return value.m[idx];
         }
-        static __forceinline const VecT & at ( const MatT & value, int32_t index, Context * __context__ ) {
-            uint32_t idx = uint32_t(index);
+        static __forceinline VecT & at ( MatT & value, uint32_t idx, Context * __context__ ) {
             if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
             return value.m[idx];
         }
-        static __forceinline VecT & at ( MatT & value, uint32_t idx, Context * __context__ ) {
+    };
+
+    template <typename VecT, int size>
+    struct das_index<const Matrix<VecT,size>> {
+        using MatT = Matrix<VecT,size>;
+        static __forceinline const VecT & at ( const MatT & value, int32_t index, Context * __context__ ) {
+            uint32_t idx = uint32_t(index);
             if ( idx>=uint32_t(size) ) __context__->throw_error_ex("matrix index out of range, %u of %u", idx, size);
             return value.m[idx];
         }
@@ -286,23 +296,24 @@ namespace das {
     };
 
     template <typename TT>
-    struct das_index<TT *> {
+    struct das_index<TT * const> {
         static __forceinline TT & at ( TT * value, int32_t index, Context * ) {
             return value[index];
         }
-        static __forceinline const TT & at ( const TT * value, int32_t index, Context * ) {
+        static __forceinline TT & at ( TT * value, uint32_t index, Context * ) {
             return value[index];
         }
-        static __forceinline TT & at ( TT * value, uint32_t index, Context * ) {
+    };
+	
+    template <typename TT>
+    struct das_index<const TT * const> {
+        static __forceinline const TT & at ( const TT * value, int32_t index, Context * ) {
             return value[index];
         }
         static __forceinline const TT & at ( const TT * value, uint32_t index, Context * ) {
             return value[index];
         }
     };
-	
-    template <typename TT>
-    struct das_index<const TT *> : das_index<TT *> {};
 
     template <typename TT, uint32_t size>
     struct TDim {
@@ -458,13 +469,8 @@ namespace das {
     template <typename TT>
     struct das_iterator;
 
-    template <typename TT>
-    struct das_iterator<const TT> : das_iterator<TT> {
-        __forceinline das_iterator ( const TT & a ) : das_iterator<TT>(a) {}
-    };
-
     template <>
-    struct das_iterator <range> {
+    struct das_iterator <const range> {
         __forceinline das_iterator(const range & r) : that(r) {}
         __forceinline bool first ( Context *, int32_t & i ) { i = that.from; return i!=that.to; }
         __forceinline bool next  ( Context *, int32_t & i ) { i++; return i!=that.to; }
@@ -473,7 +479,12 @@ namespace das {
     };
 
     template <>
-    struct das_iterator <char *> {
+    struct das_iterator <range> : das_iterator<const range> {
+        __forceinline das_iterator(const range & r) : das_iterator<const range>(r) {}
+    };
+
+    template <>
+    struct das_iterator <char * const> {
         __forceinline das_iterator(const char * st) : str(st) {}
         __forceinline bool first ( Context *, int32_t & i ) {
             if ( !str || *str==0 ) return false;
@@ -488,15 +499,16 @@ namespace das {
         const char * str;
     };
 
+    template <>
+    struct das_iterator <char *> : das_iterator<char * const> {
+        __forceinline das_iterator(const char * st) : das_iterator<char * const>(st) {}
+    };
+
     template <typename TT>
     struct das_iterator<TArray<TT>> {
-        __forceinline das_iterator() = default;
-        __forceinline void init ( Array * r ) {
-            that = r;
+        __forceinline das_iterator(TArray<TT> & r) {
+            that = &r;
             array_end = (TT *)(that->data + that->size*sizeof(TT));
-        }
-        __forceinline das_iterator(const TArray<TT> & r) {
-            init((Array *)&r);
         }
         __forceinline bool first ( Context * __context__, TT * & i ) {
             array_lock(*__context__, *that);
@@ -511,29 +523,36 @@ namespace das {
             array_unlock(*__context__, *that);
             i = nullptr;
         }
-        __forceinline bool first ( Context * __context__, const TT * & i ) {
-            return fisrt(__context__,(TT *)i);
-        }
-        __forceinline bool next  ( Context * __context__, const TT * & i ) {
-            return next(__context__,(TT *)i);
-        }
-        __forceinline void close ( Context * __context__, const TT * & i ) {
-            close(__context__,(TT *)i);
-        }
         Array * that;
-        const TT * array_end;
+        TT * array_end;
     };
 
     template <typename TT>
-    struct das_iterator<TArray<const TT>> : das_iterator<TArray<TT>> {
-        __forceinline das_iterator(const TArray<const TT> & r) {
-            das_iterator<TArray<TT>>::init((Array *)&r);
+    struct das_iterator<const TArray<TT>> {
+        __forceinline das_iterator(const TArray<TT> & r) {
+            that = &r;
+            array_end = (TT *)(that->data + that->size*sizeof(TT));
         }
+        __forceinline bool first ( Context * __context__, const TT * & i ) {
+            array_lock(*__context__, *(Array *)(that)); // technically we don't need for the const array, but...
+            i = (const TT *) that->data;
+            return i!=array_end;
+        }
+        __forceinline bool next  ( Context *, const TT * & i ) {
+            i++;
+            return i!=array_end;
+        }
+        __forceinline void close ( Context * __context__, const TT * & i ) {
+            array_unlock(*__context__, *(Array *)(that));  // technically we don't need for the const array, but...
+            i = nullptr;
+        }
+        const Array * that;
+        const TT * array_end;
     };
 
     template <typename TT, uint32_t size>
     struct das_iterator<TDim<TT,size>> {
-        __forceinline das_iterator(const TDim<TT,size> & r) : that((TDim<TT,size> *)&r) {
+        __forceinline das_iterator(TDim<TT,size> & r) : that(&r) {
             array_end = that->data + size;
         }
         __forceinline bool first ( Context *, TT * & i ) {
@@ -550,6 +569,27 @@ namespace das {
         TDim<TT,size> * that;
         TT *            array_end;
     };
+
+    template <typename TT, uint32_t size>
+    struct das_iterator<const TDim<TT,size>> {
+        __forceinline das_iterator(const TDim<TT,size> & r) : that(&r) {
+            array_end = that->data + size;
+        }
+        __forceinline bool first ( Context *, const TT * & i ) {
+            i = (const TT *) that->data;
+            return i!=array_end;
+        }
+        __forceinline bool next  ( Context *, const TT * & i ) {
+            i++;
+            return i!=array_end;
+        }
+        __forceinline void close ( Context *, const TT * & i ) {
+            i = nullptr;
+        }
+        const TDim<TT,size> * that;
+        const TT *            array_end;
+    };
+
 
     template <typename TT>
     struct das_iterator<vector<TT>> {
@@ -570,6 +610,27 @@ namespace das {
         }
         TT *            array_start;
         TT *            array_end;
+    };
+
+    template <typename TT>
+    struct das_iterator<const vector<TT>> {
+        __forceinline das_iterator(const vector<TT> & r) {
+            array_start = r.data();
+            array_end = array_start + r.size();
+        }
+        __forceinline bool first ( Context *, const TT * & i ) {
+            i = array_start;
+            return i!=array_end;
+        }
+        __forceinline bool next  ( Context *, const TT * & i ) {
+            i++;
+            return i!=array_end;
+        }
+        __forceinline void close ( Context *, const TT * & i ) {
+            i = nullptr;
+        }
+        const TT *      array_start;
+        const TT *      array_end;
     };
 
     template <typename TT>

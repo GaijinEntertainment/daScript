@@ -48,7 +48,7 @@ namespace das {
 
     template <typename TT>
     void peek_das_string_T(const string & str, TT && block, Context *) {
-        block(str.c_str());
+        block((char *)str.c_str());
     }
 
     template <typename TT>

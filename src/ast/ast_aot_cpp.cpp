@@ -129,13 +129,10 @@ namespace das {
         TextWriter stream;
         auto baseType = type->baseType;
         if ( isConstRedundantForCpp(type) && redundantConst==CpptRedundantConst::yes ) {
-            skipConst = CpptSkipConst::yes;
-        }
-        if ( baseType != Type::tPointer ) {
-            if ( skipConst==CpptSkipConst::no ) {
-                if ( type->constant ) {
-                    stream << "const ";
-                }
+            if (substituteRef == CpptSubstitureRef::yes && type->ref) {
+                // skip const
+            } else {
+                skipConst = CpptSkipConst::yes;
             }
         }
         if ( type->dim.size() ) {
@@ -231,18 +228,16 @@ namespace das {
                 stream << "," << d << ">";
             }
         }
+        if ( skipConst==CpptSkipConst::no ) {
+            if ( type->constant ) {
+                stream << " const ";
+            }
+        }
         if ( type->ref && skipRef==CpptSkipRef::no ) {
             if ( substituteRef==CpptSubstitureRef::no ) {
                 stream << " &";
             } else {
                 stream << " *";
-            }
-        }
-        if ( baseType == Type::tPointer ) {
-            if ( skipConst==CpptSkipConst::no ) {
-                if ( type->constant ) {
-                    stream << "const ";
-                }
             }
         }
         return stream.str();
@@ -1017,6 +1012,11 @@ namespace das {
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
             ss << " = ";
+            if ( var->type->constant ) {
+                ss << "(";
+                describeVarLocalCppType(ss, var->type);
+                ss << ")";
+            }
             if ( var->type->ref ) {
                 ss << "&(";
             }
@@ -1436,7 +1436,7 @@ namespace das {
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
             if ( !(expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType()) ) {
-                ss << "das_index<" << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                ss << "das_index<" << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
                     << ">::at(";
             }
         }
@@ -2389,8 +2389,9 @@ namespace das {
                 }
             }
             auto & var = ffor->iteratorVariables[idx];
+            ss << string(tab,'\t') << "// " << var->name << " : " << var->type->describe() << "\n";
             ss << string(tab,'\t') << "das_iterator<"
-                << describeCppType(ffor->sources[idx]->type,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::yes)
+                << describeCppType(ffor->sources[idx]->type,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
                 << "> " << forSrcName(var->name) << "(";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
@@ -2403,7 +2404,7 @@ namespace das {
             ss << ");\n";
             auto & var = ffor->iteratorVariables[idx];
             // source
-            ss << string(tab,'\t') << describeCppType(var->type,CpptSubstitureRef::yes,CpptSkipRef::no,CpptSkipConst::yes)
+            ss << string(tab,'\t') << describeCppType(var->type,CpptSubstitureRef::yes,CpptSkipRef::no,CpptSkipConst::no)
                 << " " << collector.getVarName(var) << ";\n";
             // loop
             auto nl = needLoopName(ffor);
