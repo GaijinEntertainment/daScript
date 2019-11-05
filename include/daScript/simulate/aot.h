@@ -304,7 +304,7 @@ namespace das {
             return value[index];
         }
     };
-	
+
     template <typename TT>
     struct das_index<const TT * const> {
         static __forceinline const TT & at ( const TT * value, int32_t index, Context * ) {
