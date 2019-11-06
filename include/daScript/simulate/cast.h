@@ -59,10 +59,16 @@ namespace das
     };
 
     template <typename TT>
-    struct cast <const TT *> : cast<TT *> { };
+    struct cast <const TT *> {
+        static __forceinline const TT * to ( vec4f a )         { return (const TT *) v_extract_ptr(v_cast_vec4i((a))); }
+        static __forceinline vec4f from ( const TT * p )       { return v_cast_vec4f(v_splats_ptr((void *)p)); }
+    };
 
     template <typename TT>
-    struct cast <const TT &> : cast<TT &> { };
+    struct cast <const TT &> {
+        static __forceinline const TT & to ( vec4f a )         { return *(const TT *) v_extract_ptr(v_cast_vec4i((a))); }
+        static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_splats_ptr((void *)&p)); }
+    };
 
     template <>
     struct cast <vec4f> {
