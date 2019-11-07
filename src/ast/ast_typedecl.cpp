@@ -88,7 +88,7 @@ namespace das
         }
         // if its not an auto type, return as is
         if ( !autoT->isAuto() ) {
-            if ( autoT->isSameType(*initT) ) {
+            if ( autoT->isSameType(*initT, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
                 return make_shared<TypeDecl>(*autoT);
             } else {
                 return nullptr;
@@ -288,6 +288,9 @@ namespace das
                     stream << "[]";
                 }
             }
+        }
+        if ( local ) {
+            stream << "#";
         }
         return stream.str();
     }
@@ -550,6 +553,9 @@ namespace das
         if ( ref ) {
             ss << "#ref";
         }
+        if ( local ) {
+            ss << "#local";
+        }
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "#" << d;
@@ -595,9 +601,13 @@ namespace das
         */
     }
 
-    bool TypeDecl::isSameType ( const TypeDecl & decl, bool refMatters, bool constMatters, bool topLevel ) const {
+    bool TypeDecl::isSameType ( const TypeDecl & decl,
+             RefMatters refMatters,
+             ConstMatters constMatters,
+             LocalMatters localMatters,
+             bool topLevel ) const {
         if ( topLevel && !isRef() && !isPointer() ) {
-            constMatters = false;
+            constMatters = ConstMatters::no;
         }
         if ( baseType!=decl.baseType ) {
             return false;
@@ -611,7 +621,7 @@ namespace das
         if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
             if ( (firstType && !firstType->isVoid())
                 && (decl.firstType && !decl.firstType->isVoid())
-                && !firstType->isSameType(*decl.firstType,true,true,false) ) {
+                && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
                 return false;
             }
         }
@@ -621,20 +631,20 @@ namespace das
             }
         }
         if ( baseType==Type::tArray ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,true,true,false) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
                 return false;
             }
         }
         if ( baseType==Type::tTable ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,true,true,false) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
                 return false;
             }
-            if ( secondType && decl.secondType && !secondType->isSameType(*decl.secondType,true,true,false) ) {
+            if ( secondType && decl.secondType && !secondType->isSameType(*decl.secondType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
                 return false;
             }
         }
         if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,true,true,true) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,true) ) {
                 return false;
             }
             if ( firstType || argTypes.size() ) {    // if not any block or any function
@@ -644,7 +654,7 @@ namespace das
                 for ( size_t i=0; i != argTypes.size(); ++i ) {
                     const auto & arg = argTypes[i];
                     const auto & declArg = decl.argTypes[i];
-                    if ( !arg->isSameType(*declArg,true,true,true) ) {
+                    if ( !arg->isSameType(*declArg, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
                         return false;
                     }
                 }
@@ -653,12 +663,12 @@ namespace das
         if ( dim!=decl.dim ) {
             return false;
         }
-        if ( refMatters ) {
+        if ( refMatters == RefMatters::yes ) {
             if ( ref!=decl.ref ) {
                 return false;
             }
         }
-        if ( constMatters ) {
+        if ( constMatters == ConstMatters::yes ) {
             if ( constant!=decl.constant ) {
                 return false;
             }

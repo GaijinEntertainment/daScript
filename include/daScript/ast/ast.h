@@ -101,6 +101,7 @@ namespace das
         map<int,string> listI;
         int             lastOne = 0;
         Module *        module = nullptr;
+        bool            external = false;
     };
 
     class Structure : public enable_shared_from_this<Structure> {

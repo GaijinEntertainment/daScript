@@ -46,6 +46,21 @@ namespace das
         tTuple
     };
 
+    enum class RefMatters {
+        no
+    ,   yes
+    };
+
+    enum class ConstMatters {
+        no
+    ,   yes
+    };
+
+    enum class LocalMatters {
+        no
+    ,   yes
+    };
+
     struct StructInfo;
     struct TypeAnnotation;
     struct EnumInfo;
@@ -213,7 +228,7 @@ namespace das
     int getTypeSize ( TypeInfo * info );
     int getTypeAlign ( TypeInfo * info );
 
-    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, bool refMatters, bool constMatters, bool topLevel );
+    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, LocalMatters localMatters, bool topLevel );
     bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
     bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType );
 

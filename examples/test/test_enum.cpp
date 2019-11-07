@@ -5,26 +5,11 @@
 
 using namespace das;
 
-enum class SomeEnum {
-    zero
-,   one
-,   two
-};
-
 DAS_BASE_BIND_ENUM(SomeEnum, SomeEnum, zero, one, two)
 
 SomeEnum efn_takeOne_giveTwo ( SomeEnum one) {
     return (one == SomeEnum::one) ? SomeEnum::two : SomeEnum::zero;
 }
-
-
-// sample of weak enumeration
-
-enum SomeEnum98 {
-    SomeEnum98_zero = 0
-,   SomeEnum98_one  = 1
-,   SomeEnum98_two  = 2
-};
 
 DAS_BASE_BIND_ENUM_98(SomeEnum98, SomeEnum98, SomeEnum98_zero, SomeEnum98_one, SomeEnum98_two)
 

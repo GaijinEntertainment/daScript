@@ -24,8 +24,12 @@ def structure_for_each_annotation(st:StructInfo;subexpr:block<(ann:Annotation;ar
     rtti_builtin_structure_for_each_annotation(st,subexpr)
 
 [unsafe]
-def is_same_type( a,b:TypeInfo; refMatters:bool=true; constMatters:bool=true; topLevel:bool=true )
-    return builtin_is_same_type(reinterpret<TypeInfo const?>(a),reinterpret<TypeInfo const?>(b),refMatters,constMatters,topLevel)
+def is_same_type( a,b:TypeInfo;
+        refMatters:RefMatters=RefMatters yes;
+        constMatters:ConstMatters=ConstMatters yes;
+        localMatters:LocalMatters=LocalMatters yes;
+        topLevel:bool=true )
+    return builtin_is_same_type(reinterpret<TypeInfo const?>(a),reinterpret<TypeInfo const?>(b),refMatters,constMatters,localMatters,topLevel)
 
 [unsafe]
 def is_compatible_cast( a,b:StructInfo )

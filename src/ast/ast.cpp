@@ -120,7 +120,7 @@ namespace das {
             if ( fd.name != cfd.name ) {
                 return false;
             }
-            if ( !fd.type->isSameType(*cfd.type,true,true) ) {
+            if ( !fd.type->isSameType(*cfd.type, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
                 return false;
             }
         }

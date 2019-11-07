@@ -44,6 +44,10 @@ MAKE_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
 MAKE_TYPE_FACTORY(RttiProgram,RttiProgram)
 MAKE_TYPE_FACTORY(RttiModule,Module)
 
+DAS_BASE_BIND_ENUM(RefMatters,   RefMatters,   no, yes)
+DAS_BASE_BIND_ENUM(ConstMatters, ConstMatters, no, yes)
+DAS_BASE_BIND_ENUM(LocalMatters, LocalMatters, no, yes)
+
 namespace das {
 
     struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
@@ -502,6 +506,9 @@ namespace das {
             addAnnotation(make_shared<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_shared<EnumValueInfoAnnotation>(lib));
             addAnnotation(make_shared<EnumInfoAnnotation>(lib));
+            addEnumeration(make_shared<EnumerationRefMatters>());
+            addEnumeration(make_shared<EnumerationConstMatters>());
+            addEnumeration(make_shared<EnumerationLocalMatters>());
             auto sia = make_shared<StructInfoAnnotation>(lib);              // this is type forward decl
             addAnnotation(sia);
             addRecAnnotation<TypeInfoAnnotation>(lib);

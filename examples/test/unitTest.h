@@ -1,6 +1,23 @@
 #pragma once
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/bind_enum.h"
+
+enum class SomeEnum {
+    zero
+,   one
+,   two
+};
+
+DAS_BIND_ENUM_CAST(SomeEnum);
+
+enum SomeEnum98 {
+    SomeEnum98_zero = 0
+,   SomeEnum98_one  = 1
+,   SomeEnum98_two  = 2
+};
+
+DAS_BIND_ENUM_CAST_98(SomeEnum98);
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
 struct Point3 { float x, y, z; };

@@ -114,6 +114,7 @@ namespace das {
             case Type::tUInt:
             case Type::tFloat:
             case Type::tDouble:
+            case Type::tEnumeration:
                 return true;
             default:
                 return false;
@@ -190,7 +191,9 @@ namespace das {
             }
         } else if ( baseType==Type::tEnumeration ) {
             if ( type->enumType ) {
-                if ( type->enumType->module->name.empty() ) {
+                if ( type->enumType->external ) {
+                    stream << "/*bound enum*/ " << type->enumType->name;
+                } else if ( type->enumType->module->name.empty() ) {
                     stream << "/*enum*/ " << type->enumType->name;
                 } else {
                     stream << "/*enum*/ " << aotModuleName(type->enumType->module) << "::" << type->enumType->name;
@@ -743,16 +746,22 @@ namespace das {
     // enumeration
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
-            ss << "\nenum class " << enu->name << " {\n";
+            if ( !enu->external ) {
+                ss << "\nenum class " << enu->name << " {\n";
+            }
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu, name, value, last);
-            ss << "\t" << name << " = " << value;
-            if ( !last ) ss << ",";
-            ss << "\n";
+            if ( !enu->external ) {
+                ss << "\t" << name << " = " << value;
+                if ( !last ) ss << ",";
+                ss << "\n";
+            }
         }
         virtual EnumerationPtr visit ( Enumeration * enu ) override {
-            ss << "};\n";
+            if ( !enu->external ) {
+                ss << "};\n";
+            }
             return Visitor::visit(enu);
         }
     // strcuture

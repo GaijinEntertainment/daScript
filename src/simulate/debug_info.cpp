@@ -222,7 +222,7 @@ namespace das
 
     bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
         // passing non-ref to ref, or passing not the same type
-        if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,false,false,false) ) {
+        if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,RefMatters::no, ConstMatters::no, LocalMatters::no,false) ) {
             return false;
         }
         // ref or pointer can only add const
@@ -233,9 +233,9 @@ namespace das
         return true;
     }
 
-    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, bool refMatters, bool constMatters, bool topLevel ) {
+    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, LocalMatters localMatters, bool topLevel ) {
         if ( topLevel && THIS->isRef() ) {
-            constMatters = false;
+            constMatters = ConstMatters::yes;
         }
         if ( THIS->type != decl->type ) {
             return false;
@@ -251,7 +251,7 @@ namespace das
         if ( THIS->type==Type::tPointer || THIS->type==Type::tIterator ) {
             if ( (THIS->firstType && !isVoid(THIS->firstType))
                 && (decl->firstType && !isVoid(decl->firstType))
-                && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+                && !isSameType(THIS->firstType, decl->firstType, RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
                 return false;
             }
 
@@ -262,21 +262,25 @@ namespace das
             }
         }
         if ( THIS->type==Type::tArray ) {
-            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType,
+                                                                   RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
                 return false;
             }
         }
         if ( THIS->type==Type::tTable ) {
-            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType,
+                                                                   RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
                 return false;
             }
-            if ( THIS->secondType && decl->secondType && !isSameType(THIS->secondType, decl->secondType, true, true, false) ) {
+            if ( THIS->secondType && decl->secondType && !isSameType(THIS->secondType, decl->secondType,
+                                                                     RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
                 return false;
             }
         }
         if ( THIS->type==Type::tBlock || THIS->type==Type::tFunction
             || THIS->type==Type::tLambda || THIS->type==Type::tTuple ) {
-            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType, true, true, false) ) {
+            if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType,
+                                                                   RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
                 return false;
             }
             if ( THIS->firstType || THIS->argCount) {    // if not any block or any function
@@ -286,7 +290,7 @@ namespace das
                 for ( uint32_t i=0; i != THIS->argCount; ++i ) {
                     auto arg = THIS->argTypes[i];
                     auto declArg = decl->argTypes[i];
-                    if ( !isSameType(arg,declArg,true,true,true) ) {
+                    if ( !isSameType(arg,declArg,RefMatters::yes, ConstMatters::yes, LocalMatters::yes,true) ) {
                         return false;
                     }
                 }
@@ -301,12 +305,12 @@ namespace das
                 }
             }
         }
-        if ( refMatters ) {
+        if ( refMatters == RefMatters::yes ) {
             if ( THIS->isRef() != decl->isRef() ) {
                 return false;
             }
         }
-        if ( constMatters ) {
+        if ( constMatters == ConstMatters::yes ) {
             if ( THIS->isConst() != decl->isConst() ) {
                 return false;
             }
@@ -324,7 +328,7 @@ namespace das
             if ( strcmp(fd->name,cfd->name)!=0 ) {
                 return false;
             }
-            if ( !isSameType(fd,cfd,true,true,true) ) {
+            if ( !isSameType(fd,cfd,RefMatters::yes, ConstMatters::yes, LocalMatters::yes,true) ) {
                 return false;
             }
         }

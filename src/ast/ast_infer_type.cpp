@@ -481,7 +481,8 @@ namespace das {
                 return TypeDecl::inferGenericType(passType, argType) != nullptr;
             }
             // compare types which don't need inference
-            if (passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false))) {
+            if (passType && ((argType->isRef() && !passType->isRef()) ||
+                    !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, LocalMatters::no))) {
                 return false;
             }
             // ref types can only add constness
@@ -965,7 +966,7 @@ namespace das {
             }
             if ( decl.init ) {
                 if ( decl.init->type ) {
-                    if ( !decl.type->isSameType(*decl.init->type,false) ) {
+                    if ( !decl.type->isSameType(*decl.init->type,RefMatters::no, ConstMatters::yes, LocalMatters::yes) ) {
                         error("structure field initialization type mismatch, "
                               + decl.type->describe() + " = " + decl.init->type->describe(), decl.at,
                               CompilationError::invalid_initialization_type);
@@ -1050,7 +1051,7 @@ namespace das {
                     var->type = varT;
                     reportGenericInfer();
                 }
-            } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
+            } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("global variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
@@ -1118,7 +1119,7 @@ namespace das {
             }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
-            if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, false, false) ) {
+            if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("function argument default value type mismatch (" + arg->type->describe()
                     + ") vs (" + arg->init->type->describe() + ")", arg->init->at);
             }
@@ -1333,7 +1334,7 @@ namespace das {
                 error("can only dereference a pointer", expr->at, CompilationError::cant_dereference);
             } else if ( !seT->firstType || seT->firstType->isVoid() ) {
                 error("can only dereference a pointer to something", expr->at, CompilationError::cant_dereference);
-            } else if ( !seT->firstType->isSameType(*dvT,false,false) ) {
+            } else if ( !seT->firstType->isSameType(*dvT,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("default value type mismatch in (" + seT->firstType->describe() + ") vs ("
                       + dvT->describe() + ")", expr->at, CompilationError::cant_dereference);
             } else if ( seT->isRef() && !seT->isConst() && dvT->isConst() ) {
@@ -1510,7 +1511,8 @@ namespace das {
                 auto & passType = expr->arguments[i+1]->type;
                 auto & argType = blockT->argTypes[i];
                 // same type only
-                if ( passType && ((argType->isRef() && !passType->isRef()) || !argType->isSameType(*passType, false, false)) ) {
+                if ( passType && ((argType->isRef() && !passType->isRef()) ||
+                        !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, LocalMatters::no)) ) {
                     error("incomaptible argument " + to_string(i+1) + " (" + passType->describe() + ") vs "
                           + argType->describe() + ")", expr->at, CompilationError::invalid_argument_type);
                 }
@@ -1548,7 +1550,7 @@ namespace das {
             auto containerType = expr->arguments[0]->type;
             auto valueType = expr->arguments[1]->type;
             if ( containerType->isGoodTableType() ) {
-                if ( !containerType->firstType->isSameType(*valueType,false,false) )
+                if ( !containerType->firstType->isSameType(*valueType,RefMatters::no, ConstMatters::no, LocalMatters::no) )
                     error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
                 expr->type = make_shared<TypeDecl>(Type::tBool);
             } else {
@@ -1569,7 +1571,7 @@ namespace das {
             auto containerType = expr->arguments[0]->type;
             auto valueType = expr->arguments[1]->type;
             if ( containerType->isGoodTableType() ) {
-                if ( !containerType->firstType->isSameType(*valueType,false,false) )
+                if ( !containerType->firstType->isSameType(*valueType,RefMatters::no, ConstMatters::no, LocalMatters::no) )
                     error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*containerType->secondType);
@@ -1592,7 +1594,7 @@ namespace das {
             auto containerType = expr->arguments[0]->type;
             auto valueType = expr->arguments[1]->type;
             if ( containerType->isGoodTableType() ) {
-                if ( !containerType->firstType->isSameType(*valueType,false,false) )
+                if ( !containerType->firstType->isSameType(*valueType,RefMatters::no, ConstMatters::no, LocalMatters::no) )
                     error("key must be of the same type as table<key,...>", expr->at, CompilationError::invalid_argument_type);
                 expr->type = make_shared<TypeDecl>(Type::tBool);
             } else {
@@ -1803,7 +1805,7 @@ namespace das {
             auto funT = make_shared<TypeDecl>(*seTF);
             auto cresT = cTF->firstType;
             auto resT = funT->firstType;
-            if ( !cresT->isSameType(*resT,true,false) ) {
+            if ( !cresT->isSameType(*resT,RefMatters::yes, ConstMatters::no, LocalMatters::no) ) {
                 if ( resT->isStructure() || (resT->isPointer() && resT->firstType->isStructure()) ) {
                     auto tryRes = castStruct(at, resT, cresT, upcast);
                     if ( tryRes ) {
@@ -1816,7 +1818,7 @@ namespace das {
             for ( size_t i=0; i!=seTF->argTypes.size(); ++i ) {
                 auto seT = seTF->argTypes[i];
                 auto cT = cTF->argTypes[i];
-                if ( !cT->isSameType(*seT,true,false) ) {
+                if ( !cT->isSameType(*seT,RefMatters::yes, ConstMatters::no, LocalMatters::no) ) {
                     if ( seT->isStructure() || (seT->isPointer() && seT->firstType->isStructure()) ) {
                         auto tryArg = castStruct(at, seT, cT, upcast);
                         if ( tryArg ) {
@@ -1826,7 +1828,7 @@ namespace das {
                 }
                 funT->argTypes[i]->constant = cT->constant;
             }
-            if ( castType->isSameType(*funT,true,true) ) {
+            if ( castType->isSameType(*funT, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
                 return funT;
             } else {
                 error("incompatible cast, can't cast " + funT->describe() + " to " + castType->describe(), at,
@@ -1856,7 +1858,7 @@ namespace das {
                       CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
-            if ( expr->subexpr->type->isSameType(*expr->castType,true,true) ) {
+            if ( expr->subexpr->type->isSameType(*expr->castType, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
                 reportGenericInfer();
                 return expr->subexpr;
             }
@@ -1962,7 +1964,7 @@ namespace das {
                 expr->func = inferFunctionCall(expr).get();
                 swap ( resultType, expr->type );
                 if ( expr->func ) {
-                    if ( !expr->type->firstType->isSameType(*resultType,true,true) ) {
+                    if ( !expr->type->firstType->isSameType(*resultType, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
                         error("initializer returns (" +resultType->describe() + ") vs "
                             +  expr->type->firstType->describe() + ")",
                               expr->at, CompilationError::invalid_new_type);
@@ -1984,7 +1986,7 @@ namespace das {
             auto seT = expr->subexpr->type;
             auto ixT = expr->index->type;
             if ( seT->isGoodTableType() ) {
-                if ( !seT->firstType->isSameType(*ixT,false,false) ) {
+                if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                     error("table index type mismatch, (" + expr->index->type->describe() + ") vs (" +
                           ixT->describe() + ")", expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
@@ -2121,7 +2123,7 @@ namespace das {
                 }
             }
             if (!arg->type->isAuto()) {
-                if (!arg->init->type || !arg->type->isSameType(*arg->init->type, false, false)) {
+                if (!arg->init->type || !arg->type->isSameType(*arg->init->type, RefMatters::no, ConstMatters::no, LocalMatters::no)) {
                     error("block argument default value type mismatch (" + arg->type->describe()
                         + ") vs (" + arg->init->type->describe() + ")", arg->init->at);
                 }
@@ -2425,10 +2427,10 @@ namespace das {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
             if ( expr->left->type->isPointer() && expr->right->type->isPointer() )
-                if ( !expr->left->type->isSameType(*expr->right->type,false,false) )
+                if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, LocalMatters::no) )
                     error("operations on incompatible pointers are prohibited", expr->at);
             if ( expr->left->type->isEnum() && expr->right->type->isEnum() )
-                if ( !expr->left->type->isSameType(*expr->right->type,false,false) )
+                if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, LocalMatters::no) )
                     error("operations on different enumerations are prohibited", expr->at);
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
             auto functions = findMatchingFunctions(expr->op, types);
@@ -2484,7 +2486,7 @@ namespace das {
             expr->subexpr = Expression::autoDereference(expr->subexpr);
             if ( !expr->subexpr->type->isSimpleType(Type::tBool) ) {
                 error("cond operator condition must be boolean", expr->at, CompilationError::condition_must_be_bool);
-            } else if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
+            } else if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("cond operator must return the same types on both sides",
                       expr->at, CompilationError::operator_not_found);
             } else {
@@ -2517,7 +2519,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprMove * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
-            if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
+            if ( !expr->left->type->isSameType(*expr->right->type, RefMatters::no, ConstMatters::no, LocalMatters::yes) ) {
                 error("can only move the same type\n"+moveErrorInfo(expr), expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
                 error("can only move to a reference\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_write_to_non_reference);
@@ -2538,7 +2540,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
-            if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
+            if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("can only copy the same type\n"+copyErrorInfo(expr), expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
                 error("can only copy to a reference\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_write_to_non_reference);
@@ -2569,7 +2571,7 @@ namespace das {
                 }
             }
             // infer
-            if ( !expr->left->type->isSameType(*expr->right->type,false,false) ) {
+            if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("can only clone the same type " + expr->left->type->describe() + " vs " + expr->right->type->describe(),
                       expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
@@ -2653,7 +2655,7 @@ namespace das {
                 if ( !expr->subexpr ) {
                     error("expecting a return value", expr->at, CompilationError::expecting_return_value);
                 } else {
-                    if ( !resType->isSameType(*expr->subexpr->type,false,false) ) {
+                    if ( !resType->isSameType(*expr->subexpr->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                         error("incompatible return type, expecting ("
                               + resType->describe() + ") vs (" + expr->subexpr->type->describe() + ")",
                               expr->at, CompilationError::invalid_return_type);
@@ -2994,11 +2996,11 @@ namespace das {
                     var->type = varT;
                     reportGenericInfer();
                 }
-            } else if ( !var->type->isSameType(*var->init->type,false,false) ) {
+            } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("local variable initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
-            } else if ( var->type->ref && !var->type->isSameType(*var->init->type,false,false) && var->init->type->isRef()) {
+            } else if ( var->type->ref && !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, LocalMatters::no) && var->init->type->isRef()) {
                 error("local variable initialization type mismatch. reference can't be initialized via value, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
@@ -3327,7 +3329,7 @@ namespace das {
             }
             if ( expr->makeType->baseType == Type::tStructure ) {
                 if ( auto field = expr->makeType->structType->findField(decl->name) ) {
-                    if ( !field->type->isSameType(*decl->value->type,false,false) ) {
+                    if ( !field->type->isSameType(*decl->value->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                         error("can't initialize field, " + decl->name + " expecting ("
                               +field->type->describe()+"), passing ("+decl->value->type->describe()+")",
                                 decl->value->at, CompilationError::invalid_type );
@@ -3455,7 +3457,7 @@ namespace das {
                 for ( size_t ai=0; ai!=argCount; ++ai ) {
                     const auto & val = expr->values[ai];
                     const auto & argT = expr->recordType->argTypes[ai];
-                    if ( !argT->isSameType(*val->type,false,false) ) {
+                    if ( !argT->isSameType(*val->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                         error("invalid argument _" + to_string(ai) + ". expecting " +
                                 argT->describe() + ", not " + val->type->describe(),
                               expr->at, CompilationError::invalid_type);
@@ -3563,7 +3565,7 @@ namespace das {
             if ( !init->type|| !expr->recordType ) {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
-            if ( !expr->recordType->isSameType(*init->type,false,false) ) {
+            if ( !expr->recordType->isSameType(*init->type,RefMatters::no, ConstMatters::no, LocalMatters::no) ) {
                 error("can't initialize array element, " + to_string(index) + " expecting ("
                       +expr->recordType->describe()+"), passing ("+init->type->describe()+")",
                         init->at, CompilationError::invalid_type );
