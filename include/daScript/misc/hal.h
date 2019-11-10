@@ -14,7 +14,7 @@ __forceinline void * v_extract_ptr(vec4i a) {
 #if defined(_MSC_VER) && INTPTR_MAX == INT32_MAX//MSVC generates flawed code, for example in _builtin_binary_save, so make it out of line
 extern vec4i VECTORCALL v_splats_ptr(const void * a);
 #else
-__forceinline vec4i v_splats_ptr(const void * a) {
+__forceinline vec4i VECTORCALL v_splats_ptr(const void * a) {
 #if INTPTR_MAX == INT32_MAX
     return v_splatsi((int32_t)a);
 #else
