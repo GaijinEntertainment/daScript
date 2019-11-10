@@ -50,6 +50,7 @@ namespace das
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
         TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
+        TT->temporary = (TT->temporary | autoT->temporary) && !autoT->removeTemporary && !TT->removeTemporary;
         if ( (autoT->removeDim || TT->removeDim) && TT->dim.size() ) TT->dim.pop_back();
         TT->removeConstant = false;
         TT->removeDim = false;
@@ -88,7 +89,7 @@ namespace das
         }
         // if its not an auto type, return as is
         if ( !autoT->isAuto() ) {
-            if ( autoT->isSameType(*initT, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
+            if ( autoT->isSameType(*initT, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
                 return make_shared<TypeDecl>(*autoT);
             } else {
                 return nullptr;
@@ -139,6 +140,7 @@ namespace das
         TT->alias = autoT->alias;
         TT->removeRef = false;
         TT->removeConstant = false;
+        TT->removeTemporary = false;
         TT->removeDim = false;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
@@ -274,9 +276,12 @@ namespace das
         }
         if ( ref ) {
             stream << "&";
-        } 
+        }
+        if ( temporary ) {
+            stream << "#";
+        }
         if (contracts) {
-            if (removeConstant || removeRef || removeDim ) {
+            if (removeConstant || removeRef || removeDim || removeTemporary) {
                 stream << " delete ";
                 if (removeConstant) {
                     stream << "const";
@@ -287,10 +292,10 @@ namespace das
                 if (removeDim ) {
                     stream << "[]";
                 }
+                if (removeTemporary) {
+                    stream << "#";
+                }
             }
-        }
-        if ( local ) {
-            stream << "#";
         }
         return stream.str();
     }
@@ -553,7 +558,7 @@ namespace das
         if ( ref ) {
             ss << "#ref";
         }
-        if ( local ) {
+        if ( temporary ) {
             ss << "#local";
         }
         if ( dim.size() ) {
@@ -604,7 +609,7 @@ namespace das
     bool TypeDecl::isSameType ( const TypeDecl & decl,
              RefMatters refMatters,
              ConstMatters constMatters,
-             LocalMatters localMatters,
+             TemporaryMatters temporaryMatters,
              bool topLevel ) const {
         if ( topLevel && !isRef() && !isPointer() ) {
             constMatters = ConstMatters::no;
@@ -621,7 +626,7 @@ namespace das
         if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
             if ( (firstType && !firstType->isVoid())
                 && (decl.firstType && !decl.firstType->isVoid())
-                && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
+                && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes,false) ) {
                 return false;
             }
         }
@@ -631,20 +636,20 @@ namespace das
             }
         }
         if ( baseType==Type::tArray ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes,false) ) {
                 return false;
             }
         }
         if ( baseType==Type::tTable ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes,false) ) {
                 return false;
             }
-            if ( secondType && decl.secondType && !secondType->isSameType(*decl.secondType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,false) ) {
+            if ( secondType && decl.secondType && !secondType->isSameType(*decl.secondType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes,false) ) {
                 return false;
             }
         }
         if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
-            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,LocalMatters::yes,true) ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes,true) ) {
                 return false;
             }
             if ( firstType || argTypes.size() ) {    // if not any block or any function
@@ -654,7 +659,7 @@ namespace das
                 for ( size_t i=0; i != argTypes.size(); ++i ) {
                     const auto & arg = argTypes[i];
                     const auto & declArg = decl.argTypes[i];
-                    if ( !arg->isSameType(*declArg, RefMatters::yes, ConstMatters::yes, LocalMatters::yes) ) {
+                    if ( !arg->isSameType(*declArg, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
                         return false;
                     }
                 }
@@ -670,6 +675,11 @@ namespace das
         }
         if ( constMatters == ConstMatters::yes ) {
             if ( constant!=decl.constant ) {
+                return false;
+            }
+        }
+        if ( temporaryMatters == TemporaryMatters::yes ) {
+            if ( temporary != decl.temporary ) {
                 return false;
             }
         }
@@ -1152,8 +1162,7 @@ namespace das
         return true;
     }
 
-    Type TypeDecl::getRangeBaseType() const
-    {
+    Type TypeDecl::getRangeBaseType() const {
         switch ( baseType ) {
             case Type::tRange:  return Type::tInt;
             case Type::tURange: return Type::tUInt;
@@ -1164,13 +1173,11 @@ namespace das
         }
     }
 
-    bool TypeDecl::isRange() const
-    {
+    bool TypeDecl::isRange() const {
         return (baseType==Type::tRange || baseType==Type::tURange) && dim.size()==0;
     }
 
-    bool TypeDecl::isString() const
-    {
+    bool TypeDecl::isString() const {
         return (baseType==Type::tString) && dim.size()==0;
     }
 
@@ -1193,6 +1200,14 @@ namespace das
         return baseType==Type::tTuple || baseType==Type::tStructure || baseType==Type::tArray
                 || baseType==Type::tTable || baseType==Type::tBlock
                 || dim.size();
+    }
+
+    bool TypeDecl::isTempType() const {
+        return isRef() || isPointer();
+    }
+
+    bool TypeDecl::isTempExplicitType() const {
+        return isTempType() && (baseType==Type::tArray || baseType==Type::tTable); // todo: or Handle with function
     }
 
     bool TypeDecl::isNumeric() const {

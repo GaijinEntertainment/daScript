@@ -222,7 +222,7 @@ namespace das
 
     bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
         // passing non-ref to ref, or passing not the same type
-        if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,RefMatters::no, ConstMatters::no, LocalMatters::no,false) ) {
+        if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,RefMatters::no, ConstMatters::no, TemporaryMatters::no,false) ) {
             return false;
         }
         // ref or pointer can only add const
@@ -233,7 +233,12 @@ namespace das
         return true;
     }
 
-    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, LocalMatters localMatters, bool topLevel ) {
+    bool isSameType ( const TypeInfo * THIS,
+                     const TypeInfo * decl,
+                     RefMatters refMatters,
+                     ConstMatters constMatters,
+                     TemporaryMatters temporaryMatters,
+                     bool topLevel ) {
         if ( topLevel && THIS->isRef() ) {
             constMatters = ConstMatters::yes;
         }
@@ -251,7 +256,7 @@ namespace das
         if ( THIS->type==Type::tPointer || THIS->type==Type::tIterator ) {
             if ( (THIS->firstType && !isVoid(THIS->firstType))
                 && (decl->firstType && !isVoid(decl->firstType))
-                && !isSameType(THIS->firstType, decl->firstType, RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
+                && !isSameType(THIS->firstType, decl->firstType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, false) ) {
                 return false;
             }
 
@@ -263,24 +268,24 @@ namespace das
         }
         if ( THIS->type==Type::tArray ) {
             if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType,
-                                                                   RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
+                                                                   RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, false) ) {
                 return false;
             }
         }
         if ( THIS->type==Type::tTable ) {
             if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType,
-                                                                   RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
+                                                                   RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, false) ) {
                 return false;
             }
             if ( THIS->secondType && decl->secondType && !isSameType(THIS->secondType, decl->secondType,
-                                                                     RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
+                                                                     RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, false) ) {
                 return false;
             }
         }
         if ( THIS->type==Type::tBlock || THIS->type==Type::tFunction
             || THIS->type==Type::tLambda || THIS->type==Type::tTuple ) {
             if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType,
-                                                                   RefMatters::yes, ConstMatters::yes, LocalMatters::yes, false) ) {
+                                                                   RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, false) ) {
                 return false;
             }
             if ( THIS->firstType || THIS->argCount) {    // if not any block or any function
@@ -290,7 +295,7 @@ namespace das
                 for ( uint32_t i=0; i != THIS->argCount; ++i ) {
                     auto arg = THIS->argTypes[i];
                     auto declArg = decl->argTypes[i];
-                    if ( !isSameType(arg,declArg,RefMatters::yes, ConstMatters::yes, LocalMatters::yes,true) ) {
+                    if ( !isSameType(arg,declArg,RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes,true) ) {
                         return false;
                     }
                 }
@@ -315,6 +320,11 @@ namespace das
                 return false;
             }
         }
+        if ( temporaryMatters == TemporaryMatters::yes ) {
+            if ( THIS->isTemp() != decl->isTemp() ) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -328,7 +338,7 @@ namespace das
             if ( strcmp(fd->name,cfd->name)!=0 ) {
                 return false;
             }
-            if ( !isSameType(fd,cfd,RefMatters::yes, ConstMatters::yes, LocalMatters::yes,true) ) {
+            if ( !isSameType(fd,cfd,RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes,true) ) {
                 return false;
             }
         }

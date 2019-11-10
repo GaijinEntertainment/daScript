@@ -27,9 +27,9 @@ def structure_for_each_annotation(st:StructInfo;subexpr:block<(ann:Annotation;ar
 def is_same_type( a,b:TypeInfo;
         refMatters:RefMatters=RefMatters yes;
         constMatters:ConstMatters=ConstMatters yes;
-        localMatters:LocalMatters=LocalMatters yes;
+        temporaryMatters:TemporaryMatters=TemporaryMatters yes;
         topLevel:bool=true )
-    return builtin_is_same_type(reinterpret<TypeInfo const?>(a),reinterpret<TypeInfo const?>(b),refMatters,constMatters,localMatters,topLevel)
+    return builtin_is_same_type(reinterpret<TypeInfo const?>(a),reinterpret<TypeInfo const?>(b),refMatters,constMatters,temporaryMatters,topLevel)
 
 [unsafe]
 def is_compatible_cast( a,b:StructInfo )

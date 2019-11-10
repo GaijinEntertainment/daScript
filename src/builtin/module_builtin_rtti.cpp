@@ -46,7 +46,7 @@ MAKE_TYPE_FACTORY(RttiModule,Module)
 
 DAS_BASE_BIND_ENUM(RefMatters,   RefMatters,   no, yes)
 DAS_BASE_BIND_ENUM(ConstMatters, ConstMatters, no, yes)
-DAS_BASE_BIND_ENUM(LocalMatters, LocalMatters, no, yes)
+DAS_BASE_BIND_ENUM(TemporaryMatters, TemporaryMatters, no, yes)
 
 namespace das {
 
@@ -508,7 +508,7 @@ namespace das {
             addAnnotation(make_shared<EnumInfoAnnotation>(lib));
             addEnumeration(make_shared<EnumerationRefMatters>());
             addEnumeration(make_shared<EnumerationConstMatters>());
-            addEnumeration(make_shared<EnumerationLocalMatters>());
+            addEnumeration(make_shared<EnumerationTemporaryMatters>());
             auto sia = make_shared<StructInfoAnnotation>(lib);              // this is type forward decl
             addAnnotation(sia);
             addRecAnnotation<TypeInfoAnnotation>(lib);

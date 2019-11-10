@@ -1635,16 +1635,25 @@ type_declaration
         $typeDecl->removeRef = false;
         $$ = $typeDecl;
     }
+    |   type_declaration[typeDecl] DAS_DELETE DAS_CONST '&' {
+        $typeDecl->ref = false;
+        $typeDecl->constant = false;
+        $typeDecl->removeRef = true;
+        $typeDecl->removeConstant = true;
+        $$ = $typeDecl;
+    }
     |   type_declaration[typeDecl] DAS_DELETE '&' {
         $typeDecl->ref = false;
         $typeDecl->removeRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] DAS_DELETE DAS_CONST '&' {
-        $typeDecl->constant = false;
-        $typeDecl->removeConstant = true;
-        $typeDecl->ref = false;
-        $typeDecl->removeRef = true;
+    |   type_declaration[typeDecl] '#' {
+        $$ = $typeDecl;
+        $$->temporary = true;
+    }
+    |   type_declaration[typeDecl] DAS_DELETE '#' {
+        $typeDecl->temporary = false;
+        $typeDecl->removeTemporary = true;
         $$ = $typeDecl;
     }
     |   type_declaration[typeDecl] '?' {

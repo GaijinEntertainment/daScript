@@ -77,6 +77,7 @@ namespace das
     ,   cant_write_to_non_reference             =   30506       //  1 = blah
     ,   cant_copy                               =   30507       //  a = array<int>(x), expecting <-
     ,   cant_move                               =   30508       //  int a; a <- 1
+    ,   cant_pass_temporary                     =   30509       //  let t : int? = q // where q is int?#
 
     ,   condition_must_be_bool                  =   30601       //  if ( 10 ) ...
 

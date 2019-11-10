@@ -56,7 +56,7 @@ namespace das
     ,   yes
     };
 
-    enum class LocalMatters {
+    enum class TemporaryMatters {
         no
     ,   yes
     };
@@ -125,6 +125,7 @@ namespace das
             flag_isPod = 1<<3,
             flag_isRawPod = 1<<4,
             flag_isConst = 1<<5,
+            flag_isTemp = 1<<6,
         };
         Type                type;
         StructInfo *        structType;
@@ -144,6 +145,7 @@ namespace das
         __forceinline bool isPod() const { return flags & flag_isPod; }
         __forceinline bool isRawPod() const { return flags & flag_isRawPod; }
         __forceinline bool isConst() const { return flags & flag_isConst; }
+        __forceinline bool isTemp() const { return flags & flag_isTemp; }
     };
 
     TypeAnnotation * resolveAnnotation ( TypeInfo * info );
@@ -228,7 +230,7 @@ namespace das
     int getTypeSize ( TypeInfo * info );
     int getTypeAlign ( TypeInfo * info );
 
-    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, LocalMatters localMatters, bool topLevel );
+    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel );
     bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
     bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType );
 

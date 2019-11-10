@@ -123,6 +123,8 @@ namespace das {
             info->flags |= TypeInfo::flag_isPod;
         if (type->isConst())
             info->flags |= TypeInfo::flag_isConst;
+        if (type->temporary)
+            info->flags |= TypeInfo::flag_isTemp;
         if (type->isRawPod())
             info->flags |= TypeInfo::flag_isRawPod;
         if ( type->firstType ) {

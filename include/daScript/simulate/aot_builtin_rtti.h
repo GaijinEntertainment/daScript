@@ -4,7 +4,7 @@
 
 DAS_BIND_ENUM_CAST(RefMatters);
 DAS_BIND_ENUM_CAST(ConstMatters);
-DAS_BIND_ENUM_CAST(LocalMatters);
+DAS_BIND_ENUM_CAST(TemporaryMatters);
 
 DAS_BIND_ENUM_CAST_98(Type);
 

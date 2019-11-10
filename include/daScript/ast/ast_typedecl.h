@@ -42,7 +42,7 @@ namespace das {
         string getMangledName() const;
         bool canAot() const;
         bool canAot( set<Structure *> & recAot ) const;
-        bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters, LocalMatters localMatters, bool topLevel = true ) const;
+        bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel = true ) const;
         bool isExprType() const;
         bool isIteratorType ( const TypeDecl & decl ) const;
         bool isSimpleType () const;
@@ -58,6 +58,8 @@ namespace das {
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
+        bool isTempType() const;
+        bool isTempExplicitType() const; // this type can't be demoted from local to temp automatically
         bool isIndex() const;
         bool isNumeric() const;
         bool isPointer() const;
@@ -120,10 +122,11 @@ namespace das {
             struct {
                 bool    ref : 1 ;
                 bool    constant : 1;
-                bool    local : 1;
+                bool    temporary : 1;
                 bool    removeRef : 1;
                 bool    removeConstant : 1;
                 bool    removeDim : 1;
+                bool    removeTemporary : 1;
                 bool    aotAlias : 1;
             };
             uint32_t flags = 0;

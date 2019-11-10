@@ -1,7 +1,7 @@
 // options log=true, log_infer_passes=false, optimize=false
 // options log = true, log_optimization_passes=true
 
-[sideeffects]
+[sideeffects, unsafe]
 def ret_unsafe_ref : int &
     var t = 2
     return t

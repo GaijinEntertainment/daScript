@@ -3,17 +3,19 @@
 var
     g_t = 2
 
+[unsafe]
 def ret_ref : auto &
     var qq : auto & = g_t
     return qq
 
+[unsafe]
 def ret_safe_ref(var a:auto&) : auto&
     return a
 
 def add2(bl:block<int&>)
     invoke(bl) += 2
 
-[export]
+[export,unsafe]
 def test
     var x = ret_ref()
     var xx : int& = ret_safe_ref(x)

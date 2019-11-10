@@ -97,11 +97,37 @@ namespace das
         }
     };
 
-    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
+    struct defaultTempFn {
+        defaultTempFn() = default;
+        defaultTempFn ( bool args, bool result ) : tempArgs(args), tempResult(result) {}
+        bool operator () ( Function * fn ) {
+            if ( tempArgs ) {
+                for ( auto & arg : fn->arguments ) {
+                    if ( arg->type->isTempType() ) {
+                        arg->type->temporary = true;
+                    }
+                }
+            }
+            if ( tempResult ) {
+                if ( fn->result->isTempType() ) {
+                    fn->result->temporary = true;
+                }
+            }
+            return true;
+        }
+        bool tempArgs = false;
+        bool tempResult = false;
+    };
+
+    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
     inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
-                                  const string & cppName = string()) {
+                                  const string & cppName = string(), QQ && tempFn = QQ() ) {
         auto fnX = make_shared<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncT>>(name, lib, cppName);
         fnX->setSideEffects(seFlags);
+        if ( !tempFn(fnX.get()) ) {
+            DAS_FATAL_LOG("addExtern(%s)::tempFn failed in module %s\n", name.c_str(), mod.name.c_str());
+            DAS_FATAL_ERROR;
+        }
         if ( !mod.addFunction(fnX) ) {
             DAS_FATAL_LOG("addExtern(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
             DAS_FATAL_ERROR;
