@@ -311,10 +311,12 @@ namespace das
             auto right = rE->simulate(context);
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            DAS_ASSERTF(0, "we are calling makeMove where expression on a right is not a referece."
-                   "we should not be here, script compiler should have caught this during compilation."
-                   "compiler later will likely report internal compilation error.");
-            return nullptr;
+            // this here might happen during initialization, by moving value types
+            // like var t <- 5
+            // its ok to generate simplified set here
+            auto left = lE->simulate(context);
+            auto right = rE->simulate(context);
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
 
