@@ -235,14 +235,13 @@ namespace das {
         auto info = call->types[0];
         writer.walk(args[0], info);
         writer.close();
-        vec4f bargs[2];
         Array arr;
         arr.data = writer.bytesAt;
         arr.size = writer.bytesWritten;
         arr.capacity = writer.bytesWritten;
         arr.lock = 1;
-        bargs[0] = cast<char *>::from((char *)&arr);
-        context.invoke(*block, bargs, nullptr);
+        vec4f arg = cast<char *>::from((char *)&arr);
+        context.invoke(*block, &arg, nullptr);
         return v_zero();
     }
 
