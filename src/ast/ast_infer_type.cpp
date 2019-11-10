@@ -2094,7 +2094,7 @@ namespace das {
                 if ( block->returnType->canCopy() ) {
                     block->copyOnReturn = true;
                     block->moveOnReturn = false;
-                } else if ( func->result->canMove() ) {
+                } else if ( block->returnType->canMove() ) {
                     block->copyOnReturn = false;
                     block->moveOnReturn = true;
                 } else {
