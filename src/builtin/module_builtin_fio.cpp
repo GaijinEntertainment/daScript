@@ -208,6 +208,11 @@ namespace das {
     {
         auto fp = cast<FILE *>::to(args[0]);
         int32_t len = cast<int32_t>::to(args[1]);
+        if (len < 0)
+        {
+            context.throw_error_ex("can't read negative number from binary save, %d", len);
+            return v_zero();
+        }
         Block * block = cast<Block *>::to(args[2]);
         char * buf = (char *) malloc(len + 1);
         vec4f bargs[1];
