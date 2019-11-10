@@ -9,6 +9,19 @@
 
 using namespace das;
 
+#if defined(_MSC_VER) && !defined(_WIN64)
+
+void * operator new(std::size_t n) throw(std::bad_alloc)
+{
+    return das_aligned_alloc16(n);
+}
+void operator delete(void * p) throw()
+{
+    das_aligned_free16(p);
+}
+
+#endif
+
 bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;
@@ -240,8 +253,8 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "examples/test/hello_world.das"
-    // #define TEST_NAME   "examples/test/unit_tests/module_vis_fail.das"
+    // #define TEST_NAME   "examples/test/hello_world.das"
+    #define TEST_NAME   "examples/test/unit_tests/bin_serializer.das"
     unit_test(TEST_PATH TEST_NAME,false);
     //unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();

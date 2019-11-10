@@ -3,6 +3,19 @@
 
 using namespace das;
 
+#if defined(_MSC_VER) && !defined(_WIN64)
+
+void * operator new(std::size_t n) throw(std::bad_alloc)
+{
+    return das_aligned_alloc16(n);
+}
+void operator delete(void * p) throw()
+{
+    das_aligned_free16(p);
+}
+
+#endif
+
 static bool quiet = false;
 
 TextPrinter tout;
