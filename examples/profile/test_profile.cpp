@@ -66,8 +66,12 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 MAKE_TYPE_FACTORY(Object, Object)
 MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
 
-IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ, Object);
-IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu, Object);
+namespace das {
+
+	IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ, Object);
+	IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu, Object);
+
+}
 
 
 __noinline int AddOne(int a) {
