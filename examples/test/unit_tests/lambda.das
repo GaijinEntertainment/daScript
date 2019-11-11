@@ -16,6 +16,11 @@ def recv
     binary_load(t, network)
     return t.cnt
 
+[sideeffects]
+def onlyNull ( bar : lambda<(a:int):int> )
+	if bar != null
+		assert(false,"has to be null")
+
 [export]
 def test
     var CNT = 0
@@ -31,5 +36,7 @@ def test
     assert(z==15)
     x = invoke(counter,13)
     assert(x==15)
+	let l : lambda<(a:int):int>
+	onlyNull(l)
     return true
 

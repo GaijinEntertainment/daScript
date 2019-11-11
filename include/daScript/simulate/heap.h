@@ -169,6 +169,7 @@ namespace das {
                 case Type::tFloat:      return makeNode<NodeType<float>>(args...);
                 case Type::tDouble:     return makeNode<NodeType<double>>(args...);
                 case Type::tPointer:    return makeNode<NodeType<void *>>(args...);
+                case Type::tLambda:     return makeNode<NodeType<Lambda>>(args...);
                 default:
                     DAS_ASSERTF(0, "we should not even be here. we are calling makeNumericValueNode on an uspported baseType."
                                 "likely new numeric type been added.");

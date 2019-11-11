@@ -1140,6 +1140,7 @@ namespace das
             case Type::tDouble:
             case Type::tPointer:
             case Type::tFunction:
+            case Type::tLambda:
                 return false;
             default:
                 return true;

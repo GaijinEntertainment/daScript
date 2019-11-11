@@ -47,7 +47,7 @@ namespace das
         Lambda(void * ptr) : capture((char *)ptr) {}
         char *      capture;
         __forceinline TypeInfo * getTypeInfo() const {
-            return *(TypeInfo **)(capture-16);
+            return capture ? *(TypeInfo **)(capture-16) : nullptr;
         }
         __forceinline bool operator == ( const Lambda & b ) const {
             return capture == b.capture;
