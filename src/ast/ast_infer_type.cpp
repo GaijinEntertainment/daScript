@@ -1681,6 +1681,10 @@ namespace das {
                       expr->at, CompilationError::typeinfo_auto);
                 return Visitor::visit(expr);
             }
+            if ( !isFullySealedType(expr->typeexpr) ) {
+                error("typeinfo(" + (expr->typeexpr ? expr->typeexpr->describe() : "...") + ") can't be fully infered", expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
             verifyType(expr->typeexpr);
             if ( nErrors==program->errors.size() ) {
                 if ( expr->trait=="sizeof" ) {
@@ -3401,8 +3405,8 @@ namespace das {
             if ( expr->makeType->baseType == Type::tStructure ) {
                 if ( auto field = expr->makeType->structType->findField(decl->name) ) {
                     if ( !field->type->isSameType(*decl->value->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                        error("can't initialize field, " + decl->name + " expecting ("
-                              +field->type->describe()+"), passing ("+decl->value->type->describe()+")",
+                        error("can't initialize field " + decl->name + "; expecting "
+                              +field->type->describe()+", passing "+decl->value->type->describe(),
                                 decl->value->at, CompilationError::invalid_type );
                     }
                     if( !field->type->canCopy() && !decl->moveSemantic ) {
@@ -3637,8 +3641,8 @@ namespace das {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
             if ( !expr->recordType->isSameType(*init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("can't initialize array element, " + to_string(index) + " expecting ("
-                      +expr->recordType->describe()+"), passing ("+init->type->describe()+")",
+                error("can't initialize array element " + to_string(index) + "; expecting "
+                      +expr->recordType->describe()+", passing "+init->type->describe(),
                         init->at, CompilationError::invalid_type );
             } else if ( !expr->recordType->canCopy() && expr->recordType->canMove() && init->type->isConst() ) {
                 error("can't move from a constant value\n\t" + init->type->describe(), 
