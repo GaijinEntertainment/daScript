@@ -168,7 +168,7 @@ Pointers
 --------------
 
 Pointers are types that 'references' (points) some other data, but can be null (points to nothing).
-In order to work with actual value, one need to derefence using deref builtin function them or use safe navigation operators.
+In order to work with actual value, one need to dereference using deref builtin function them or use safe navigation operators.
 deref will panic, if null pointer is passed to it.
 Pointers can be created using new operator, or with C++ environment.
 ::

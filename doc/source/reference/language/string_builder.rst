@@ -14,7 +14,7 @@ All strings in daScript can be either string literals, or *built strings*.
 Both are written with "", but string builder strings also contains any expresion in curly brackets '{}'::
 
     let str1 = "String Literal"
-    let str2 = "str1={str2}"  // str2 will be "str1=String Literal"
+    let str2 = "str1={str1}"  // str2 will be "str1=String Literal"
 
 In the example above, str2 will actually be compile-time defined, as expression in {} is compile-time computable.
 But generally, that can be run-time compiled as well.
