@@ -21,6 +21,10 @@ def onlyNull ( bar : lambda<(a:int):int> )
 	if bar != null
 		assert(false,"has to be null")
 
+def addX(a:int)
+	return lambda() <| $(b:int)
+		return a + b
+
 [export]
 def test
     var CNT = 0
@@ -38,5 +42,8 @@ def test
     assert(x==15)
 	let l : lambda<(a:int):int>
 	onlyNull(l)
+	let t = addX(1)
+	let q = invoke(t,2)
+	assert(q==3)
     return true
 
