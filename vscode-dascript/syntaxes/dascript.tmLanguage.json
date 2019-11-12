@@ -1,0 +1,570 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "daScript",
+  "scopeName": "source.dascript",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#annotations"
+    },
+    {
+      "include": "#struct_declaration"
+    },
+    {
+      "include": "#function"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#builtin_types"
+    },
+    {
+      "include": "#builtin_functions_name"
+    },
+    {
+      "include": "#builtin_functions_call"
+    },
+    {
+      "include": "#function_call"
+    },
+    {
+      "include": "#member_access_class"
+    }
+  ],
+  "repository": {
+    "literals": {
+      "patterns": [
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.dascript"
+        },
+        {
+          "match": "\\b(?i:(0x\\h+)L)",
+          "name": "constant.numeric.integer.hexadecimal.long.dascript"
+        },
+        {
+          "match": "\\b(?i:(0x\\h+))",
+          "name": "constant.numeric.integer.hexadecimal.dascript"
+        },
+        {
+          "match": "\\b(?i:(0b[01]+)L)",
+          "name": "constant.numeric.integer.binary.long.dascript"
+        },
+        {
+          "match": "\\b(?i:(0b[01]+))",
+          "name": "constant.numeric.integer.binary.dascript"
+        },
+        {
+          "match": "\\b(?i:(0[o]?[0-7]+)L)",
+          "name": "constant.numeric.integer.octal.long.dascript"
+        },
+        {
+          "match": "\\b(?i:(0[o]?[0-7]+)u)",
+          "name": "constant.numeric.integer.octal.ulong.dascript"
+        },
+        {
+          "match": "\\b(?i:(0[o]?[0-7]+))",
+          "name": "constant.numeric.integer.octal.dascript"
+        },
+        {
+          "match": "\\b(?i:(((\\d+(\\.(?=[^[:alpha:]_])\\d*)?|(?<=[^[:alnum:]_])\\.\\d+)(e[\\-\\+]?\\d+)?))J)",
+          "name": "constant.numeric.complex.dascript"
+        },
+        {
+          "match": "\\b(?i:(\\d+\\.\\d*(e[\\-\\+]?\\d+)?))(?=[^[:alpha:]_])",
+          "name": "constant.numeric.float.dascript"
+        },
+        {
+          "match": "(?<=[^[:alnum:]_])(?i:(\\.\\d+(e[\\-\\+]?\\d+)?))",
+          "name": "constant.numeric.float.dascript"
+        },
+        {
+          "match": "\\b(?i:(\\d+e[\\-\\+]?\\d+))",
+          "name": "constant.numeric.float.dascript"
+        },
+        {
+          "match": "\\b(?i:(\\d+e[\\-\\+]?\\d+))",
+          "name": "constant.numeric.float.dascript"
+        },
+        {
+          "match": "\\b(?i:([1-9]+[0-9]*|0)L)",
+          "name": "constant.numeric.integer.decimal.long.dascript"
+        },
+        {
+          "match": "\\b([1-9]+[0-9]*|0)",
+          "name": "constant.numeric.integer.decimal.dascript"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(struct|def|\\$|recover|let|var|continue|break|finally|new|delete|enum|enum|for|while|if|else|elif|options|null|return|typeinfo|this|cast|upcast|reinterpret|operator|in|scope|require|typedef|with|override|type|expect|auto|include|where)\\b",
+          "name": "keyword.control.dascript"
+        },
+        {
+          "match": "\\b(const)\\b",
+          "name": "storage.modifier.specifier.const.dascript"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "name": "keyword.operator.dascript",
+          "match": "%|\\*|/|-|\\+"
+        },
+        {
+          "name": "keyword.operator.dascript",
+          "match": "\\.|\\?\\.|\\?\\?"
+        },
+        {
+          "name": "keyword.operator.dascript",
+          "match": "<\\||\\|>"
+        },
+        {
+          "name": "keyword.operator.dascript",
+          "match": "<|>|&|!|\\|"
+        },
+        {
+          "name": "keyword.operator.assignment.dascript",
+          "match": "(=|:=|<-)"
+        },
+        {
+          "name": "keyword.operator.increment.dascript",
+          "match": "\\+\\+"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.dascript",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.dascript",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.dascript",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.dascript",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.other.dascript",
+          "begin": "@\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.dascript",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash",
+          "begin": "(\\/\\/)",
+          "end": "(?=\\n)",
+          "patterns": [
+            {
+              "match": "(\\\\)\\n"
+            }
+          ]
+        },
+        {
+          "name": "comment.block",
+          "begin": "(\\/\\*)",
+          "end": "(\\*\\/)"
+        }
+      ]
+    },
+    "generic_names": {
+      "name": "meta.identifier.dascript",
+      "match": "[[:alpha:]_][[:alnum:]_]*"
+    },
+    "dotted_name": {
+      "begin": "(?=(?:\\.(?!\\s+require)\\s*)?[[:alpha:]_][[:alnum:]_]*(?:\\s*\\.\\s*[[:alpha:]_][[:alnum:]_]*)*)",
+      "end": "(?![[:alnum:]_\\.\\s])|(?=(?<!\\.)\\s+[^.])|$",
+      "patterns": [
+        {
+          "begin": "(\\.)(?=[[:alpha:]_][[:alnum:]_]*)",
+          "beginCaptures": {
+            "1": {
+              "name": "meta.dot.dascript"
+            }
+          },
+          "end": "(?![[:alnum:]_])",
+          "patterns": [
+            {
+              "include": "#builtin_functions_name"
+            },
+            {
+              "include": "#generic_names"
+            }
+          ]
+        }
+      ]
+    },
+    "keyword_arguments": {
+      "begin": "\\b([[:alpha:]_][[:alnum:]_]*)\\s*(=)(?!=)",
+      "beginCaptures": {
+        "1": {
+          "name": "variable.parameter.function.keyword.dascript"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.dascript"
+        }
+      },
+      "end": "\\s*(?:(,)|(?=[\\)\\:]))",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.separator.parameters.dascript"
+        }
+      },
+      "patterns": [
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "builtin_types": {
+      "name": "support.type.dascript",
+      "match": "(?x) (?<!\\.) \\b( bool | buffer | bytearray | bytes | complex | dict | float | frozenset | int | list | long | memoryview | object | property | range | set | slice | str | tuple | type | unicode | xrange | string | int | uint | float | bool | double | int64 | uint64 | int2 | int3 | int4 | uint2 | uint3 | uint4 | float2 | float3 | float4 | int8, uint8, int16, uint16) \\b(?!(\\s*\\())"
+    },
+    "builtin_functions_name": {
+      "name": "support.function.builtin.name.dascript",
+      "match": "(?x) (?<!\\.|@)\\b( print | deref | addr | assert | invoke | panic | stackwalk | terminate | breakpoint | heap_bytes_allocated | verify | static_assert | debug | push | emplace | resize | erase | length | clear | capacity | key_exists | find) \\b\\s*(?!(\\())"
+    },
+    "builtin_functions_call": {
+      "name": "meta.function-call.dascript",
+      "begin": "(?x) (?<!\\.)\\b( print | deref | addr | assert | invoke | panic | stackwalk | terminate | breakpoint | heap_bytes_allocated | verify | static_assert | debug | push | emplace | resize | erase | length | clear | capacity | key_exists | find) \\b\\s*(?=\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "support.function.builtin.call.dascript"
+        }
+      },
+      "end": "(\\))",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.arguments.end.dascript"
+        }
+      },
+      "patterns": [
+        {
+          "begin": "(?=[[:alpha:]_][[:alnum:]_]*(?:\\s*\\.\\s*[[:alpha:]_][[:alnum:]_]*)*\\s*\\()",
+          "end": "(?=\\s*\\()",
+          "patterns": [
+            {
+              "include": "#dotted_name"
+            }
+          ]
+        },
+        {
+          "begin": "(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.arguments.begin.dascript"
+            }
+          },
+          "contentName": "meta.function-call.arguments.dascript",
+          "end": "(?=\\))",
+          "patterns": [
+            {
+              "include": "#keyword_arguments"
+            },
+            {
+              "include": "$self"
+            }
+          ]
+        }
+      ]
+    },
+    "function_call": {
+      "patterns": [
+        {
+          "name": "meta.function-call.python",
+          "begin": "(?<=\\)|\\])\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.arguments.begin.dascript"
+            }
+          },
+          "contentName": "meta.function-call.arguments.dascript",
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.arguments.end.dascript"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#keyword_arguments"
+            },
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.function-call.python",
+          "begin": "(?:\\.)?([[:alpha:]_][[:alnum:]_\\:]*)\\s*(?=(\\())",
+          "beginCaptures": {
+            "1": {
+              "name": "meta.function-call.generic.python"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.arguments.end.dascript"
+            }
+          },
+          "patterns": [
+            {
+              "begin": "(\\()",
+              "beginCaptures": {
+                "1": {
+                  "name": "punctuation.definition.arguments.begin.dascript"
+                }
+              },
+              "contentName": "meta.function-call.arguments.python",
+              "end": "(?=\\))",
+              "patterns": [
+                {
+                  "include": "#keyword_arguments"
+                },
+                {
+                  "include": "$self"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "annotated_arguments": {
+      "begin": "\\b([[:alpha:]_][[:alnum:]_\\,]*)\\s*(:)|(?=\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "variable.parameter.function.dascript"
+        },
+        "2": {
+          "name": "punctuation.separator.annotation.dascript"
+        }
+      },
+      "end": "\\s*(?:(;)|(?=$\\n?|\\)|(?:(?<!:):(?!:))))",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.separator.parameters.dascript"
+        }
+      },
+      "patterns": [
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.dascript"
+        },
+        {
+          "match": "\\b(const)\\b",
+          "name": "storage.modifier.specifier.const.dascript"
+        },
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "function": {
+      "name": "meta.function.dascript",
+      "begin": "(def)\\s+(?=[\\w]+\\s*\\()|(\\$)\\s*(?=\\[(?:.*?)\\])|(\\$)\\s*(?=\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.function.dascript"
+        },
+        "2": {
+          "name": "storage.type.function.dascript"
+        },
+        "3": {
+          "name": "storage.type.function.dascript"
+        }
+      },
+      "end": "(\\))",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.function.begin.dascript"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#annotations"
+        },
+        {
+          "name": "entity.name.function.dascript",
+          "begin": "(?=\\w+)",
+          "end": "(?!\\w)"
+        },
+        {
+          "contentName": "meta.function.parameters.dascript",
+          "begin": "(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.parameters.begin.dascript"
+            }
+          },
+          "end": "(?=\\))",
+          "patterns": [
+            {
+              "match": "(\\bvar\\b)",
+              "name": "storage.modifier.specifier.var.dascript"
+            },
+            {
+              "include": "#annotated_arguments"
+            },
+            {
+              "match": "\\b(?:([[:alpha:]_][[:alnum:]_]*))\\s*(?:(;)|(?=[\\n\\)]))",
+              "captures": {
+                "1": {
+                  "name": "variable.parameter.function.dascript"
+                },
+                "2": {
+                  "name": "punctuation.separator.parameters.dascript"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "begin": "(\\))",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.parameters.end.dascript"
+            }
+          },
+          "end": "(?=\\))",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "meta.declaration.annotation.dascript",
+          "begin": "(((?<!\\[)\\[(?!\\[))\\s*([^\\s(\\]]+))\\s*(\\()?",
+          "beginCaptures": {
+            "2": {
+              "name": "punctuation.definition.annotation.dascript"
+            },
+            "3": {
+              "name": "storage.type.annotation.dascript"
+            },
+            "4": {
+              "name": "punctuation.definition.annotation-arguments.begin.bracket.round.dascript"
+            }
+          },
+          "end": "(\\))?(\\])",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.annotation-arguments.end.bracket.round.dascript"
+            },
+            "2": {
+              "name": "punctuation.definition.annotation.dascript"
+            }
+          },
+          "patterns": [
+            {
+              "match": "(\\w*)\\s*(=)",
+              "captures": {
+                "1": {
+                  "name": "constant.other.key.dascript"
+                },
+                "2": {
+                  "name": "keyword.operator.assignment.dascript"
+                }
+              }
+            },
+            {
+              "include": "#strings"
+            }
+          ]
+        }
+      ]
+    },
+    "struct_declaration": {
+      "patterns": [
+        {
+          "name": "meta.class.dascript",
+          "begin": "(?x)\\s*(struct)\\s+(?=[[:alpha:]_]\\w*\\s*(:|\\())",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.class.dascript"
+            }
+          },
+          "end": "(?=\\n)",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.class.begin.dascript"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#struct_name"
+            },
+            {
+              "include": "#struct_inheritance"
+            }
+          ]
+        }
+      ]
+    },
+    "struct_name": {
+      "name": "entity.name.type.class.dascript",
+      "match": "(?x)\\b([[:alpha:]_]\\w*)\\b"
+    },
+    "struct_inheritance": {
+      "name": "meta.class.inheritance.dascript",
+      "begin": "(:)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.inheritance.begin.dascript"
+        }
+      },
+      "end": "(?=\\n)",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.inheritance.end.dascript"
+        }
+      },
+      "patterns": [
+        {
+          "match": "(?x)\\b([[:alpha:]_]\\w*)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.other.inherited-class.dascript"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

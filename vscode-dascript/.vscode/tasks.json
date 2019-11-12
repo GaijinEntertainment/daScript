@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "npx js-yaml syntaxes/dascript.tmLanguage.yaml > syntaxes/dascript.tmLanguage.json",
+      "problemMatcher": {
+        "owner": "yaml",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^YAMLException:(.*) at line (\\d+), column (\\d+):(.*)$",
+          "message": 1,
+          "line": 2,
+          "column": 3
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "promptOnClose": true
+    }
+  ]
+}

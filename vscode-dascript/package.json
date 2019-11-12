@@ -1,0 +1,43 @@
+{
+    "name": "dascript",
+    "displayName": "daScript",
+    "description": "daScript is high-performance statically strong typed scripting language, designed to be high-performance as embeddable ‘scripting’ language for real-time applications (like games).",
+    "version": "0.0.2",
+    "publisher": "eguskov",
+    "engines": {
+        "vscode": "^1.40.0"
+    },
+    "repository": {
+    "type": "git",
+    "url": "https://github.com/eguskov/vscode-dascript.git"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "dascript",
+                "aliases": [
+                    "daScript",
+                    "dascript"
+                ],
+                "extensions": [
+                    ".das",
+                    ".dascript"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "dascript",
+                "scopeName": "source.dascript",
+                "path": "./syntaxes/dascript.tmLanguage.json"
+            }
+        ]
+    },
+    "devDependencies": {
+        "js-yaml": "^3.13.1"
+    }
+}
