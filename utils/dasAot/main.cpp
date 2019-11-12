@@ -3,7 +3,7 @@
 
 using namespace das;
 
-#if defined(_MSC_VER) && !defined(_WIN64)
+#if !defined(DAS_GLOBAL_NEW) && defined(_MSC_VER) && !defined(_WIN64)
 
 void * operator new(std::size_t n) throw(std::bad_alloc)
 {
