@@ -142,6 +142,7 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addArrayTypes(lib);
         // RUNTIME
         addRuntime(lib);
+        addRuntimeSort(lib);
         // TIME
         addTime(lib);
         // NOW, for the builtin module

@@ -303,12 +303,21 @@ namespace das {
         }
 
         // infer alias type
-        TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr ) const {
+        TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
             if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
                 return nullptr;
             }
             if ( decl->baseType==Type::alias ) {
-                if ( auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias) ) {
+                auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
+                if ( aliases ) {
+                    if ( aT && aT->baseType==Type::autoinfer ) {
+                        auto it = aliases->find(decl->alias);
+                        if ( it != aliases->end() ) {
+                            aT = it->second.get();
+                        }
+                    }
+                }
+                if ( aT ) {
                     auto resT = make_shared<TypeDecl>(*aT);
                     resT->at = decl->at;
                     resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
@@ -328,38 +337,38 @@ namespace das {
             auto resT = make_shared<TypeDecl>(*decl);
             if ( decl->baseType==Type::tPointer ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                     if ( !resT->firstType ) return nullptr;
                 }
             } if ( decl->baseType==Type::tIterator ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tArray ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tTable ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                     if ( !resT->firstType ) return nullptr;
                 }
                 if ( decl->secondType ) {
-                    resT->secondType = inferAlias(decl->secondType,fptr);
+                    resT->secondType = inferAlias(decl->secondType,fptr,aliases);
                     if ( !resT->secondType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
-                    if ( auto infAT = inferAlias(declAT,fptr) ) {
+                    if ( auto infAT = inferAlias(declAT,fptr,aliases) ) {
                         resT->argTypes[iA] = infAT;
                     } else {
                         return nullptr;
                     }
                 }
-                resT->firstType = inferAlias(decl->firstType,fptr);
+                resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                 if ( !resT->firstType ) return nullptr;
             }
             return resT;
@@ -477,7 +486,7 @@ namespace das {
             return result;
         }
 
-        bool isMatchingArgument(const FunctionPtr & pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock) const {
+        bool isMatchingArgument(const FunctionPtr & pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap * aliases = nullptr ) const {
             if (!passType) {
                 return false;
             }
@@ -487,14 +496,14 @@ namespace das {
             if (inferAuto) {
                 // if it's an alias, we de'alias it, and see if it matches at all
                 if (argType->isAlias()) {
-                    argType = inferAlias(argType, pFn);
+                    argType = inferAlias(argType, pFn, aliases);
                     if ( !argType ) {
                         return false;
                     }
                 }
                 // match auto argument
                 if (argType->isAuto()) {
-                    return TypeDecl::inferGenericType(argType, passType) != nullptr;
+                    return TypeDecl::inferGenericType(argType, passType, aliases) != nullptr;
                 }
             }
             // match inferable block
@@ -530,9 +539,28 @@ namespace das {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
             }
-            for ( size_t ai = 0; ai != types.size(); ++ai ) {
-                if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
-                    return false;
+            if ( inferAuto && inferBlock ) {
+                AliasMap aliases;
+                for ( ;; ) {
+                    bool anyFailed = false;
+                    auto totalAliases = aliases.size();
+                    for ( size_t ai = 0; ai != types.size(); ++ai ) {
+                        auto argType = pFn->arguments[ai]->type;
+                        auto passType = types[ai];
+                        if (!isMatchingArgument(pFn,argType,passType,inferAuto,inferBlock,&aliases)) {
+                            anyFailed = true;
+                            continue;
+                        }
+                        TypeDecl::updateAliasMap(argType, passType, aliases);
+                    }
+                    if ( !anyFailed ) break;
+                    if ( totalAliases == aliases.size() ) return false;
+                }
+            } else {
+                for ( size_t ai = 0; ai != types.size(); ++ai ) {
+                    if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
+                        return false;
+                    }
                 }
             }
             for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {

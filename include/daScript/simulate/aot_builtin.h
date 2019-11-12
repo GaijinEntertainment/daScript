@@ -38,4 +38,9 @@ namespace das {
 
     void resetProfiler( Context * context );
     void dumpProfileInfo( Context * context );
+
+    template <typename TT>
+    __forceinline void builtin_sort ( TT * data, int32_t length ) {
+        sort ( data, data + length );
+    }
 }

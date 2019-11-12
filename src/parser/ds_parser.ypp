@@ -327,6 +327,7 @@
 %type <pExpression>     array_comprehension_where
 %type <pExpression>     array_comprehension
 %type <pExpression>     expr_method_call
+%type <pExpression>     block_or_simple_block
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -976,6 +977,17 @@ expr_list
     }
     ;
 
+block_or_simple_block
+    :   expression_block[block]     { $$ = $block; }
+    |   MAPTO[loc] expr[subexpr]        {
+            auto retE = make_shared<ExprReturn>(tokAt(@loc), ExpressionPtr($subexpr));
+            auto blkE = new ExprBlock();
+            blkE->at = tokAt(@loc);
+            blkE->list.push_back(retE);
+            $$ = blkE;
+    }
+    ;
+
 expr_block
     :   expression_block[block]             {
         ExprBlock * closure = (ExprBlock *) $block;
@@ -983,7 +995,7 @@ expr_block
         closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
     }
     |   '$' optional_annotation_list[annL] optional_function_argument_list[list]
-                                optional_function_type[result] expression_block[block] {
+                                optional_function_type[result] block_or_simple_block[block] {
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
         ExprBlock * closure = (ExprBlock *) $block;
         closure->returnType = TypeDeclPtr($result);

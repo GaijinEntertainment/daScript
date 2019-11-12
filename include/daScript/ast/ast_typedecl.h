@@ -20,6 +20,8 @@ namespace das {
     struct Expression;
     typedef shared_ptr<Expression> ExpressionPtr;
 
+    typedef map<string,TypeDeclPtr> AliasMap;
+
     class Visitor;
 
     class Module;
@@ -104,8 +106,9 @@ namespace das {
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
-        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT );
+        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases = nullptr );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
+        static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases );
         Type getRangeBaseType() const;
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         Type                    baseType = Type::tVoid;

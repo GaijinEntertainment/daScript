@@ -75,7 +75,27 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
+    void TypeDecl::updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases ) {
+        if ( decl->baseType==Type::autoinfer && !decl->alias.empty() ) {
+            if ( aliases.find(decl->alias)==aliases.end() ) {
+                auto TT = make_shared<TypeDecl>(*pass);
+                TT->alias = decl->alias;
+                TT->dim.clear();
+                TT->constant = false;
+                TT->temporary = false;
+                TT->ref = false;
+                aliases[decl->alias] = TT;
+            }
+        } else {
+            if ( decl->firstType ) updateAliasMap(decl->firstType, pass->firstType, aliases);
+            if ( decl->secondType ) updateAliasMap(decl->secondType, pass->secondType, aliases);
+            for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                updateAliasMap(decl->argTypes[iA], pass->argTypes[iA], aliases);
+            }
+        }
+    }
+
+    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases ) {
         // can't infer from the type, which is already 'auto'
         if (initT->isAuto()) {
             if (!autoT->isAuto()) {
@@ -84,6 +104,14 @@ namespace das
                 || autoT->baseType == Type::tLambda || autoT->baseType == Type::tTuple) {
                 // ok. if its fancy, we allow two-sided infer
             } else {
+                /*
+                if ( aliases && !autoT->alias.empty() ) {
+                    auto it = aliases->find(autoT->alias);
+                    if ( it != aliases->end() ) {
+                        return make_shared<TypeDecl>(*it->second);
+                    }
+                }
+                */
                 return nullptr;
             }
         }
