@@ -1254,7 +1254,16 @@ namespace das {
                     }
                 }
             } else {
-                ss << " " << that->op << " ";
+                if ( that->type->baseType==Type::tBool ) {
+                    ss << " ";
+                    if ( that->op=="&" ) ss << "&&";
+                    else if ( that->op=="|" ) ss << "||";
+                    else if ( that->op=="^" ) ss << "^^";
+                    else ss << that->op;
+                    ss << " ";
+                } else {
+                    ss << " " << that->op << " ";
+                }
             }
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {

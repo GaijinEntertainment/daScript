@@ -1,14 +1,9 @@
-options log = true
-// options log_infer_passes = true
-
 def test_sort ( var arr : auto(TT) )
     sort ( arr )
-    print ( "sorted {typeinfo(typename type TT)} arr = {arr}\n")
     let len = length(arr)
     for i in range(1,len)
         assert ( arr[i-1] < arr[i] )
     sort ( arr, $(a,b) => !(a < b) )
-    print ( "reverse-sorted {typeinfo(typename type TT)} arr = {arr}\n")
     for i in range(1,len)
         assert ( !(arr[i-1] < arr[i]) )
 
@@ -40,3 +35,4 @@ def test
     test_sort ( [[Foo x=1,y=2; x=1,y=1; x=2,y=2; x=0,y=1]] )    // Foo[]
     test_sort ( [{Foo x=1,y=2; x=1,y=1; x=2,y=2; x=0,y=1}] )    // array<Foo>
     return true
+

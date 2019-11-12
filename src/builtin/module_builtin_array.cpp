@@ -53,6 +53,14 @@ namespace das {
         array_clear(*context, pArray);
     }
 
+    void builtin_array_lock ( const Array & arr, Context * context ) {
+        array_lock(*context, const_cast<Array&>(arr));
+    }
+
+    void builtin_array_unlock ( const Array & arr, Context * context ) {
+        array_unlock(*context, const_cast<Array&>(arr));
+    }
+
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
         // array functions
         addExtern<DAS_BIND_FUN(builtin_array_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_array_clear");
@@ -63,5 +71,7 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve", SideEffects::modifyArgument, "builtin_array_reserve");
         addExtern<DAS_BIND_FUN(builtin_array_push)>(*this, lib, "__builtin_array_push", SideEffects::modifyArgument, "builtin_array_push");
         addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase", SideEffects::modifyArgument, "builtin_array_erase");
+        addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock", SideEffects::modifyArgument, "builtin_array_lock");
+        addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock", SideEffects::modifyArgument, "builtin_array_unlock");
     }
 }

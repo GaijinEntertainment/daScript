@@ -64,6 +64,7 @@ namespace das {
         bool isTempExplicitType() const; // this type can't be demoted from local to temp automatically
         bool isIndex() const;
         bool isNumeric() const;
+        bool isNumericComparable() const;
         bool isPointer() const;
         bool isEnum() const;
         bool isHandle() const;

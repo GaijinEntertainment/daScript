@@ -1805,6 +1805,21 @@ make_struct_decl
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
+    |   BRACBRB [loc] type_declaration[mkt] make_struct_dim[msd] '}' ']' {
+        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
+        $msd->at = tokAt(@loc);
+        auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
+        tam->arguments.push_back(ExpressionPtr($msd));
+        $$ = tam;
+    }
+    |   BRACBRB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] '}' ']' {
+        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStructure *)$msd)->useInitializer = true;
+        $msd->at = tokAt(@loc);
+        auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
+        tam->arguments.push_back(ExpressionPtr($msd));
+        $$ = tam;
+    }
     ;
 
 make_tuple

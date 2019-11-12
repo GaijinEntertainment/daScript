@@ -172,4 +172,45 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete cons
         static_assert(false,"this array can't be copied or moved")
     return <- tab
 
+[unsafe]
+def sort ( var a : auto(TT)[] )
+    if typeinfo(is_numeric_comparable type TT)
+        __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
+    elif typeinfo(is_string type TT)
+        __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
+    else
+        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a) ) <| $ ( x, y  : TT ) : bool
+            return x < y
+
+[unsafe]
+def sort ( var a : array<auto(TT)> )
+    __builtin_array_lock(a)
+    if typeinfo(is_numeric_comparable type TT)
+        __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
+    elif typeinfo(is_string type TT)
+        __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
+    else
+        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a) ) <| $ ( x, y  : TT ) : bool
+            return x < y
+    __builtin_array_unlock(a)
+
+[unsafe]
+def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
+    if typeinfo(is_numeric_comparable type TT)
+        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+    elif typeinfo(is_string type TT)
+        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+    else
+        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a), cmp )
+
+[unsafe]
+def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
+    __builtin_array_lock(a)
+    if typeinfo(is_numeric_comparable type TT)
+        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+    elif typeinfo(is_string type TT)
+        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+    else
+        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a), cmp )
+    __builtin_array_unlock(a)
 

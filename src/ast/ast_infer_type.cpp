@@ -1756,6 +1756,15 @@ namespace das {
                 } else if ( expr->trait=="is_pointer" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
+                } else if ( expr->trait=="is_string" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isString());
+                } else if ( expr->trait=="is_numeric" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumeric());
+                } else if ( expr->trait=="is_numeric_comparable" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumericComparable());
                 } else if ( expr->trait=="can_copy" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canCopy());
@@ -2519,7 +2528,7 @@ namespace das {
                 if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
                     error("operations on different enumerations are prohibited", expr->at);
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
-            auto functions = findMatchingFunctions(expr->op, types);
+            auto functions = findMatchingFunctions("_::" + expr->op, types);    // NOTE: operators always in the context of the callee
             if (functions.size() != 1) {
                 if (expr->left->type->isNumeric() && expr->right->type->isNumeric()) {
                     TextWriter tw;

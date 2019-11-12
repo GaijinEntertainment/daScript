@@ -43,6 +43,10 @@ def test_pick()
     let q2 = random_pick(s2,seed)
     assert(q2=="pick_2")
 
+[sideeffects]
+def qq ( a : auto(T1); b : block<(a1:T1;a2:T2):bool>; c : auto(T2) )
+    pass
+
 [export]
 def test
 	// global infer
@@ -101,6 +105,8 @@ def test
 	assert(!typeinfo(is_dim ZZT))
 	let ZZA = [[auto[] "two"=>2]]
 	assert(typeinfo(is_dim ZZA) & typeinfo(dim ZZA)==1)
+    // infering block goo
+    qq(1,$(XX,YY) => true,2.0)
     return true
 
 def fn3
