@@ -377,7 +377,7 @@ namespace das
         };
         uint32_t                stackTop = 0;
         uint32_t                refStackTop = 0;
-        Function *              func = nullptr;
+        Function *              returnFunc = nullptr;
         ExprBlock *             block = nullptr;
     };
 

@@ -43,9 +43,10 @@ namespace das
 #define str(a) #a
 
 #define ADD_NUMERIC_SORT(CTYPE) \
-    addExtern<DAS_BIND_FUN(builtin_sort<CTYPE>)>(*this, lib, "__builtin_sort", SideEffects::modifyArgument, "builtin_sort"); \
+    addExtern<DAS_BIND_FUN(builtin_sort<CTYPE>)>(*this, lib, "__builtin_sort", \
+        SideEffects::modifyArgument, "builtin_sort<" xstr(CTYPE) ">"); \
     addExtern<DAS_BIND_FUN(builtin_sort_cblock<CTYPE>)>(*this, lib, "__builtin_sort_cblock", \
-        SideEffects::modifyArgument, "builtin_sort_cblock<" xstr(CTYPE) ">" );
+        SideEffects::modifyArgument, "builtin_sort_cblock<" xstr(CTYPE) ">");
 
     void Module_BuiltIn::addRuntimeSort(ModuleLibrary & lib) {
         // numeric

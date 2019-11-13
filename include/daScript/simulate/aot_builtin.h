@@ -46,19 +46,6 @@ namespace das {
         sort ( data, data + length );
     }
 
-    /*
-    template <typename TT, typename BlockT>
-    void builtin_sort_cblock_T ( TT * anyData, int32_t length, BlockT && block, Context * context ) {
-        sort ( anyData, anyData + length, block );
-    }
-
-    template <typename TT, typename BlockT>
-    void builtin_sort_any_cblock_T ( TT * anyData, int32_t elementSize, int32_t length, BlockT && block, Context * context ) {
-        DAS_ASSERT(sizeof(TT)==elementSize);
-        sort ( anyData, anyData + length, block );
-    }
-    */
-
     void builtin_sort_string ( void * data, int32_t length );
     void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context );
 

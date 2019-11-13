@@ -2799,7 +2799,6 @@ namespace das {
             expr->block = nullptr;
         }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
-            expr->func = nullptr;
             if ( blocks.size() ) {
                 ExprBlock * block = blocks.back();
                 expr->block = block;
@@ -2823,7 +2822,6 @@ namespace das {
                 }
             } else {
                 // infer
-                expr->func = func.get();
                 func->hasReturn = true;
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);

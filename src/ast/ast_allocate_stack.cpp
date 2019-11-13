@@ -44,6 +44,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( failedToCMRES ) return;
             if ( inBlock ) return;
+            expr->returnFunc = func.get();
             // we can safely skip makeLocal, invoke, or call
             // they are going to CMRES directly, and do not affect nothing
             if ( !func->result->isRefType() ) return;

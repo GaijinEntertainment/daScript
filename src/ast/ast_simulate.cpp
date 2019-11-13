@@ -1610,9 +1610,9 @@ namespace das
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
                 return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);
-            } else if ( func && func->copyOnReturn ) {
+            } else if ( returnFunc && returnFunc->copyOnReturn ) {
                 return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
-            } else if ( func && func->moveOnReturn ) {
+            } else if ( returnFunc && returnFunc->moveOnReturn ) {
                 return context.code->makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
             }
         }
