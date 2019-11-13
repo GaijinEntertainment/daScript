@@ -276,5 +276,7 @@ namespace das {
         // 3x4
         addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument,"float3x4_identity");
         addExtern<DAS_BIND_FUN(float3x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*", SideEffects::none,"float3x4_mul");
+        addExtern<DAS_BIND_FUN(float3x4_mul_vec3p), SimNode_ExtFuncCall>(*this, lib, "*", SideEffects::none,"float3x4_mul_vec3p");
+        addExtern<DAS_BIND_FUN(rotate)>(*this, lib, "rotate", SideEffects::none, "rotate");
     }
 }
