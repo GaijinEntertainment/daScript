@@ -1,6 +1,6 @@
 Terminals unused in grammar
 
-   "lexer error"
+    "lexer error"
 
 
 State 37 conflicts: 1 shift/reduce
@@ -480,387 +480,451 @@ Grammar
 
 Terminals, with rules where they appear
 
-$end (0) 0
-'!' (33) 65 190
-'#' (35) 322 323
-'$' (36) 157
-'%' (37) 79 202
-'&' (38) 86 209 319 320 321
-'(' (40) 54 60 61 129 130 148 149 150 151 180 181 182 216 221 222 223
-    224 226 227 228 229 310 348 350
-')' (41) 54 60 61 129 130 148 149 150 151 180 181 182 216 221 222 223
-    224 226 227 228 229 310 348 350
-'*' (42) 77 200 225
-'+' (43) 75 192 198
-',' (44) 30 50 56 153 283 344 352
-'-' (45) 76 193 199
-'.' (46) 23 218
-'/' (47) 24 78 201
-':' (58) 32 33 63 231 258 259 265 266 267 279
-';' (59) 11 12 40 104 106 107 112 113 117 118 119 134 135 136 247 251
-    254 265 266 268 274 275 327 346 357 361 364 365
-'<' (60) 80 145 146 147 149 151 203 326 327 328 330 331 333 334 336
-    337 338
-'=' (61) 43 44 45 46 47 48 165 255 262 275 276
-'>' (62) 81 145 146 147 149 151 204 326 327 328 330 331 333 334 336
-    337 338
-'?' (63) 231 324
-'@' (64) 220
-'[' (91) 58 180 217 242 314 315 316
-']' (93) 58 180 217 242 314 315 316 347 348 349 350 358 359 365
-'^' (94) 88 211
-'{' (123) 102 103 272 277 281
-'|' (124) 87 210
-'}' (125) 102 103 272 277 281 349 350 359 362
-'~' (126) 66 191
-error (256) 122
-"lexer error" (258)
-"struct" (259) 281
-"let" (260) 142
-"def" (261) 101
-"while" (262) 41
-"if" (263) 39
-"else" (264) 37
-"for" (265) 40 365
-"catch" (266) 139
-"true" (267) 47 188
-"false" (268) 48 189
-"new" (269) 128 129 130 131
-"typeinfo" (270) 148 149 150 151
-"type" (271) 150 151
-"in" (272) 40 141 365
-"elif" (273) 38
-"array" (274) 326
-"return" (275) 134 135 136 137 138
-"null" (276) 183
-"break" (277) 132
-"try" (278) 139
-"options" (279) 20
-"table" (280) 327
-"expect" (281) 28
-"const" (282) 317 318 320
-"require" (283) 21 52
-"operator" (284) 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81
-    82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100
-"enum" (285) 277
-"finally" (286) 103
-"delete" (287) 127 316 318 320 321 323
-"deref" (288) 226
-"scope" (289) 141
-"typedef" (290) 276
-"with" (291) 42
-"cast" (292) 145
-"override" (293) 244
-"upcast" (294) 146
-"iterator" (295) 328
-"var" (296) 143 249
-"addr" (297) 227
-"continue" (298) 133
-"where" (299) 364
-"pass" (300) 119
-"reinterpret" (301) 147
-"module" (302) 12
-"public" (303) 27
-"label" (304) 33 34
-"goto" (305) 34 35
-"bool" (306) 284
-"void" (307) 304
-"string" (308) 285
-"auto" (309) 309 310
-"int" (310) 286
-"int2" (311) 290
-"int3" (312) 291
-"int4" (313) 292
-"uint" (314) 293
-"uint2" (315) 297
-"uint3" (316) 298
-"uint4" (317) 299
-"float" (318) 300
-"float2" (319) 301
-"float3" (320) 302
-"float4" (321) 303
-"range" (322) 305
-"urange" (323) 306
-"block" (324) 329 330 331
-"int64" (325) 289
-"uint64" (326) 296
-"double" (327) 307
-"function" (328) 332 333 334
-"lambda" (329) 228 229 335 336 337
-"int8" (330) 287
-"uint8" (331) 294
-"int16" (332) 288
-"uint16" (333) 295
-"tuple" (334) 338
-"+=" (335) 67 171
-"-=" (336) 68 172
-"/=" (337) 70 174
-"*=" (338) 69 173
-"%=" (339) 71 175
-"&=" (340) 72 168
-"|=" (341) 73 169
-"^=" (342) 74 170
-"<<" (343) 93 194
-">>" (344) 94 195
-"++" (345) 89 91 212 214
-"--" (346) 90 92 213 215
-"<=" (347) 84 207
-"<<=" (348) 95 176
-">>=" (349) 96 177
-">=" (350) 85 208
-"==" (351) 82 205
-"!=" (352) 83 206
-"->" (353) 181 182
-"<-" (354) 136 138 166 256 263
-"??" (355) 230 325
-"?." (356) 219
-"<|" (357) 238
-" <|" (358) 123
-"|>" (359) 239
-":=" (360) 167 264
-"<<<" (361) 97 196
-">>>" (362) 98 197
-"<<<=" (363) 99 178
-">>>=" (364) 100 179
-"=>" (365) 155 353
-"[[" (366) 347 348 358 365
-"[{" (367) 349 350 359
-"{{" (368) 362
-"integer constant" <i> (369) 31 32 33 34 45 158 275
-"long integer constant" <i64> (370) 160
-"unsigned integer constant" <ui> (371) 159
-"unsigned long integer constant" <ui64> (372) 161
-"floating point constant" <fd> (373) 46 162
-"double constant" <d> (374) 163
-"name" <s> (375) 12 22 23 24 43 44 45 46 47 48 64 124 125 126 148 149
-    150 151 181 182 218 219 240 274 275 276 277 280 282 283 310 343
-    344
-"start of the string" (376) 15 19
-STRING_CHARACTER <ch> (377) 13 14
-"end of the string" (378) 15 19
-"{" (379) 18
-"}" (380) 18
-UNARY_MINUS (381)
-UNARY_PLUS (382)
-PRE_INC (383)
-PRE_DEC (384)
-POST_INC (385)
-POST_DEC (386)
-DEREF (387)
-COLCOL (388) 125 126
+    $end (0) 0
+    '!' (33) 65 190
+    '#' (35) 322 323
+    '$' (36) 157
+    '%' (37) 79 202
+    '&' (38) 86 209 319 320 321
+    '(' (40) 54 60 61 129 130 148 149 150 151 180 181 182 216 221 222 223 224 226 227 228 229 310 348 350
+    ')' (41) 54 60 61 129 130 148 149 150 151 180 181 182 216 221 222 223 224 226 227 228 229 310 348 350
+    '*' (42) 77 200 225
+    '+' (43) 75 192 198
+    ',' (44) 30 50 56 153 283 344 352
+    '-' (45) 76 193 199
+    '.' (46) 23 218
+    '/' (47) 24 78 201
+    ':' (58) 32 33 63 231 258 259 265 266 267 279
+    ';' (59) 11 12 40 104 106 107 112 113 117 118 119 134 135 136 247 251 254 265 266 268 274 275 327 346 357 361 364 365
+    '<' (60) 80 145 146 147 149 151 203 326 327 328 330 331 333 334 336 337 338
+    '=' (61) 43 44 45 46 47 48 165 255 262 275 276
+    '>' (62) 81 145 146 147 149 151 204 326 327 328 330 331 333 334 336 337 338
+    '?' (63) 231 324
+    '@' (64) 220
+    '[' (91) 58 180 217 242 314 315 316
+    ']' (93) 58 180 217 242 314 315 316 347 348 349 350 358 359 365
+    '^' (94) 88 211
+    '{' (123) 102 103 272 277 281
+    '|' (124) 87 210
+    '}' (125) 102 103 272 277 281 349 350 359 362
+    '~' (126) 66 191
+    error (256) 122
+    "lexer error" (258)
+    "struct" (259) 281
+    "let" (260) 142
+    "def" (261) 101
+    "while" (262) 41
+    "if" (263) 39
+    "else" (264) 37
+    "for" (265) 40 365
+    "catch" (266) 139
+    "true" (267) 47 188
+    "false" (268) 48 189
+    "new" (269) 128 129 130 131
+    "typeinfo" (270) 148 149 150 151
+    "type" (271) 150 151
+    "in" (272) 40 141 365
+    "elif" (273) 38
+    "array" (274) 326
+    "return" (275) 134 135 136 137 138
+    "null" (276) 183
+    "break" (277) 132
+    "try" (278) 139
+    "options" (279) 20
+    "table" (280) 327
+    "expect" (281) 28
+    "const" (282) 317 318 320
+    "require" (283) 21 52
+    "operator" (284) 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100
+    "enum" (285) 277
+    "finally" (286) 103
+    "delete" (287) 127 316 318 320 321 323
+    "deref" (288) 226
+    "scope" (289) 141
+    "typedef" (290) 276
+    "with" (291) 42
+    "cast" (292) 145
+    "override" (293) 244
+    "upcast" (294) 146
+    "iterator" (295) 328
+    "var" (296) 143 249
+    "addr" (297) 227
+    "continue" (298) 133
+    "where" (299) 364
+    "pass" (300) 119
+    "reinterpret" (301) 147
+    "module" (302) 12
+    "public" (303) 27
+    "label" (304) 33 34
+    "goto" (305) 34 35
+    "bool" (306) 284
+    "void" (307) 304
+    "string" (308) 285
+    "auto" (309) 309 310
+    "int" (310) 286
+    "int2" (311) 290
+    "int3" (312) 291
+    "int4" (313) 292
+    "uint" (314) 293
+    "uint2" (315) 297
+    "uint3" (316) 298
+    "uint4" (317) 299
+    "float" (318) 300
+    "float2" (319) 301
+    "float3" (320) 302
+    "float4" (321) 303
+    "range" (322) 305
+    "urange" (323) 306
+    "block" (324) 329 330 331
+    "int64" (325) 289
+    "uint64" (326) 296
+    "double" (327) 307
+    "function" (328) 332 333 334
+    "lambda" (329) 228 229 335 336 337
+    "int8" (330) 287
+    "uint8" (331) 294
+    "int16" (332) 288
+    "uint16" (333) 295
+    "tuple" (334) 338
+    "+=" (335) 67 171
+    "-=" (336) 68 172
+    "/=" (337) 70 174
+    "*=" (338) 69 173
+    "%=" (339) 71 175
+    "&=" (340) 72 168
+    "|=" (341) 73 169
+    "^=" (342) 74 170
+    "<<" (343) 93 194
+    ">>" (344) 94 195
+    "++" (345) 89 91 212 214
+    "--" (346) 90 92 213 215
+    "<=" (347) 84 207
+    "<<=" (348) 95 176
+    ">>=" (349) 96 177
+    ">=" (350) 85 208
+    "==" (351) 82 205
+    "!=" (352) 83 206
+    "->" (353) 181 182
+    "<-" (354) 136 138 166 256 263
+    "??" (355) 230 325
+    "?." (356) 219
+    "<|" (357) 238
+    " <|" (358) 123
+    "|>" (359) 239
+    ":=" (360) 167 264
+    "<<<" (361) 97 196
+    ">>>" (362) 98 197
+    "<<<=" (363) 99 178
+    ">>>=" (364) 100 179
+    "=>" (365) 155 353
+    "[[" (366) 347 348 358 365
+    "[{" (367) 349 350 359
+    "{{" (368) 362
+    "integer constant" <i> (369) 31 32 33 34 45 158 275
+    "long integer constant" <i64> (370) 160
+    "unsigned integer constant" <ui> (371) 159
+    "unsigned long integer constant" <ui64> (372) 161
+    "floating point constant" <fd> (373) 46 162
+    "double constant" <d> (374) 163
+    "name" <s> (375) 12 22 23 24 43 44 45 46 47 48 64 124 125 126 148 149 150 151 181 182 218 219 240 274 275 276 277 280 282 283 310 343 344
+    "start of the string" (376) 15 19
+    STRING_CHARACTER <ch> (377) 13 14
+    "end of the string" (378) 15 19
+    "{" (379) 18
+    "}" (380) 18
+    UNARY_MINUS (381)
+    UNARY_PLUS (382)
+    PRE_INC (383)
+    PRE_DEC (384)
+    POST_INC (385)
+    POST_DEC (386)
+    DEREF (387)
+    COLCOL (388) 125 126
 
 
 Nonterminals, with rules where they appear
 
-$accept (161)
-    on left: 0
-program (162)
-    on left: 1 2 3 4 5 6 7 8 9 10 11, on right: 0 2 3 4 5 6 7 8 9 10
-    11
-module_declaration (163)
-    on left: 12, on right: 2
-character_sequence <s> (164)
-    on left: 13 14, on right: 14 15 17
-string_constant <s> (165)
-    on left: 15, on right: 43
-string_builder_body <pExpression> (166)
-    on left: 16 17 18, on right: 17 18 19
-string_builder <pExpression> (167)
-    on left: 19, on right: 186
-options_declaration (168)
-    on left: 20, on right: 9
-require_declaration (169)
-    on left: 21, on right: 8
-require_module_name <s> (170)
-    on left: 22 23 24, on right: 23 24 25
-require_module (171)
-    on left: 25, on right: 21
-is_public_module <b> (172)
-    on left: 26 27, on right: 25
-expect_declaration (173)
-    on left: 28, on right: 7
-expect_list (174)
-    on left: 29 30, on right: 28 30
-expect_error (175)
-    on left: 31 32, on right: 29 30
-expression_label <pExpression> (176)
-    on left: 33, on right: 117
-expression_goto <pExpression> (177)
-    on left: 34 35, on right: 118
-expression_else <pExpression> (178)
-    on left: 36 37 38, on right: 38 39
-expression_if_then_else <pExpression> (179)
-    on left: 39, on right: 115
-expression_for_loop <pExpression> (180)
-    on left: 40, on right: 111
-expression_while_loop <pExpression> (181)
-    on left: 41, on right: 109
-expression_with <pExpression> (182)
-    on left: 42, on right: 110
-annotation_argument <aa> (183)
-    on left: 43 44 45 46 47 48, on right: 49 50
-annotation_argument_list <aaList> (184)
-    on left: 49 50, on right: 20 50 54 242
-annotation_declaration_name <s> (185)
-    on left: 51 52, on right: 53 54
-annotation_declaration <fa> (186)
-    on left: 53 54, on right: 55 56
-annotation_list <faList> (187)
-    on left: 55 56, on right: 56 58
-optional_annotation_list <faList> (188)
-    on left: 57 58, on right: 101 157 281
-optional_function_argument_list <pVarDeclList> (189)
-    on left: 59 60 61, on right: 101 157 331 334 337
-optional_function_type <pTypeDecl> (190)
-    on left: 62 63, on right: 101 157 331 334 337
-function_name <s> (191)
-    on left: 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81
-    82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100, on right:
-    101
-function_declaration (192)
-    on left: 101, on right: 6
-expression_block <pExpression> (193)
-    on left: 102 103, on right: 37 38 39 40 41 42 101 139 154 156
-expression_any <pExpression> (194)
-    on left: 104 105 106 107 108 109 110 111 112 113 114 115 116 117
-    118 119, on right: 121
-expressions <pExpression> (195)
-    on left: 120 121 122, on right: 102 103 121 122
-expr_pipe <pExpression> (196)
-    on left: 123, on right: 105 137 138 261 267 269
-name_in_namespace <s> (197)
-    on left: 124 125 126, on right: 51 180 184 220 221 222 240 279
-    308
-expression_delete <pExpression> (198)
-    on left: 127, on right: 107
-expr_new <pExpression> (199)
-    on left: 128 129 130 131, on right: 234
-expression_break <pExpression> (200)
-    on left: 132, on right: 112
-expression_continue <pExpression> (201)
-    on left: 133, on right: 113
-expression_return <pExpression> (202)
-    on left: 134 135 136 137 138, on right: 114
-expression_try_catch <pExpression> (203)
-    on left: 139, on right: 116
-let_scope <b> (204)
-    on left: 140 141, on right: 144
-kwd_let <b> (205)
-    on left: 142 143, on right: 144 272
-expression_let <pExpression> (206)
-    on left: 144, on right: 108
-expr_cast <pExpression> (207)
-    on left: 145 146 147, on right: 233
-expr_type_info <pExpression> (208)
-    on left: 148 149 150 151, on right: 232
-expr_list <pExpression> (209)
-    on left: 152 153, on right: 40 130 153 182 222 224 365
-block_or_simple_block <pExpression> (210)
-    on left: 154 155, on right: 157
-expr_block <pExpression> (211)
-    on left: 156 157, on right: 123 237
-expr_numeric_const <pExpression> (212)
-    on left: 158 159 160 161 162 163, on right: 185
-expr_assign <pExpression> (213)
-    on left: 164 165 166 167 168 169 170 171 172 173 174 175 176 177
-    178 179, on right: 106 123
-expr_named_call <pExpression> (214)
-    on left: 180, on right: 236
-expr_method_call <pExpression> (215)
-    on left: 181 182, on right: 235
-expr <pExpression> (216)
-    on left: 183 184 185 186 187 188 189 190 191 192 193 194 195 196
-    197 198 199 200 201 202 203 204 205 206 207 208 209 210 211 212
-    213 214 215 216 217 218 219 220 221 222 223 224 225 226 227 228
-    229 230 231 232 233 234 235 236 237 238 239 240, on right: 18 35
-    38 39 41 42 127 135 136 145 146 147 148 149 152 153 155 164 165
-    166 167 168 169 170 171 172 173 174 175 176 177 178 179 181 182
-    190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205
-    206 207 208 209 210 211 212 213 214 215 216 217 218 219 225 226
-    227 229 230 231 238 239 259 260 266 268 314 343 344 351 352 353
-    364 365
-optional_field_annotation <aaList> (217)
-    on left: 241 242, on right: 245
-optional_override <b> (218)
-    on left: 243 244, on right: 245
-structure_variable_declaration <pVarDecl> (219)
-    on left: 245, on right: 247
-struct_variable_declaration_list <pVarDeclList> (220)
-    on left: 246 247, on right: 247 281
-function_argument_declaration <pVarDecl> (221)
-    on left: 248 249, on right: 250 251
-function_argument_list <pVarDeclList> (222)
-    on left: 250 251, on right: 61 251
-tuple_type <pVarDecl> (223)
-    on left: 252, on right: 253 254
-tuple_type_list <pVarDeclList> (224)
-    on left: 253 254, on right: 254 338
-copy_or_move <b> (225)
-    on left: 255 256, on right: 259 260 261 343 344
-variable_declaration <pVarDecl> (226)
-    on left: 257 258 259 260 261, on right: 245 248 249
-copy_or_move_or_clone <i> (227)
-    on left: 262 263 264, on right: 266 267 268 269
-let_variable_declaration <pVarDecl> (228)
-    on left: 265 266 267 268 269, on right: 144 271
-global_variable_declaration_list <pVarDeclList> (229)
-    on left: 270 271, on right: 271 272
-global_let (230)
-    on left: 272, on right: 5
-enum_list <pEnum> (231)
-    on left: 273 274 275, on right: 274 275 277
-alias_declaration (232)
-    on left: 276, on right: 10
-enum_declaration (233)
-    on left: 277, on right: 4
-optional_structure_parent <s> (234)
-    on left: 278 279, on right: 280
-structure_name <pStructure> (235)
-    on left: 280, on right: 281
-structure_declaration (236)
-    on left: 281, on right: 3
-variable_name_list <pNameList> (237)
-    on left: 282 283, on right: 40 257 258 259 260 261 265 266 267
-    268 269 283 365
-basic_type_declaration <type> (238)
-    on left: 284 285 286 287 288 289 290 291 292 293 294 295 296 297
-    298 299 300 301 302 303 304 305 306 307, on right: 223 224 311
-structure_type_declaration <pTypeDecl> (239)
-    on left: 308, on right: 313
-auto_type_declaration <pTypeDecl> (240)
-    on left: 309 310, on right: 312
-type_declaration <pTypeDecl> (241)
-    on left: 311 312 313 314 315 316 317 318 319 320 321 322 323 324
-    325 326 327 328 329 330 331 332 333 334 335 336 337 338, on right:
-    63 128 129 130 145 146 147 150 151 252 258 259 265 266 267 276
-    314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 330
-    333 336 347 348 349 350 358 359
-make_decl <pExpression> (242)
-    on left: 339 340 341 342, on right: 131 187
-make_struct_fields <pMakeStruct> (243)
-    on left: 343 344, on right: 180 344 345 346
-make_struct_dim <pExpression> (244)
-    on left: 345 346, on right: 346 347 348 349 350
-make_struct_decl <pExpression> (245)
-    on left: 347 348 349 350, on right: 339
-make_tuple <pExpression> (246)
-    on left: 351 352, on right: 352 354
-make_map_tuple <pExpression> (247)
-    on left: 353, on right: 355 360 361
-make_any_tuple <pExpression> (248)
-    on left: 354 355, on right: 356 357
-make_dim <pExpression> (249)
-    on left: 356 357, on right: 357 358 359
-make_dim_decl <pExpression> (250)
-    on left: 358 359, on right: 340
-make_table <pExpression> (251)
-    on left: 360 361, on right: 361 362
-make_table_decl <pExpression> (252)
-    on left: 362, on right: 341
-array_comprehension_where <pExpression> (253)
-    on left: 363 364, on right: 365
-array_comprehension <pExpression> (254)
-    on left: 365, on right: 342
+    $accept (161)
+        on left: 0
+    program (162)
+        on left: 1 2 3 4 5 6 7 8 9 10 11
+        on right: 0 2 3 4 5 6 7 8 9 10 11
+    module_declaration (163)
+        on left: 12
+        on right: 2
+    character_sequence <s> (164)
+        on left: 13 14
+        on right: 14 15 17
+    string_constant <s> (165)
+        on left: 15
+        on right: 43
+    string_builder_body <pExpression> (166)
+        on left: 16 17 18
+        on right: 17 18 19
+    string_builder <pExpression> (167)
+        on left: 19
+        on right: 186
+    options_declaration (168)
+        on left: 20
+        on right: 9
+    require_declaration (169)
+        on left: 21
+        on right: 8
+    require_module_name <s> (170)
+        on left: 22 23 24
+        on right: 23 24 25
+    require_module (171)
+        on left: 25
+        on right: 21
+    is_public_module <b> (172)
+        on left: 26 27
+        on right: 25
+    expect_declaration (173)
+        on left: 28
+        on right: 7
+    expect_list (174)
+        on left: 29 30
+        on right: 28 30
+    expect_error (175)
+        on left: 31 32
+        on right: 29 30
+    expression_label <pExpression> (176)
+        on left: 33
+        on right: 117
+    expression_goto <pExpression> (177)
+        on left: 34 35
+        on right: 118
+    expression_else <pExpression> (178)
+        on left: 36 37 38
+        on right: 38 39
+    expression_if_then_else <pExpression> (179)
+        on left: 39
+        on right: 115
+    expression_for_loop <pExpression> (180)
+        on left: 40
+        on right: 111
+    expression_while_loop <pExpression> (181)
+        on left: 41
+        on right: 109
+    expression_with <pExpression> (182)
+        on left: 42
+        on right: 110
+    annotation_argument <aa> (183)
+        on left: 43 44 45 46 47 48
+        on right: 49 50
+    annotation_argument_list <aaList> (184)
+        on left: 49 50
+        on right: 20 50 54 242
+    annotation_declaration_name <s> (185)
+        on left: 51 52
+        on right: 53 54
+    annotation_declaration <fa> (186)
+        on left: 53 54
+        on right: 55 56
+    annotation_list <faList> (187)
+        on left: 55 56
+        on right: 56 58
+    optional_annotation_list <faList> (188)
+        on left: 57 58
+        on right: 101 157 281
+    optional_function_argument_list <pVarDeclList> (189)
+        on left: 59 60 61
+        on right: 101 157 331 334 337
+    optional_function_type <pTypeDecl> (190)
+        on left: 62 63
+        on right: 101 157 331 334 337
+    function_name <s> (191)
+        on left: 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100
+        on right: 101
+    function_declaration (192)
+        on left: 101
+        on right: 6
+    expression_block <pExpression> (193)
+        on left: 102 103
+        on right: 37 38 39 40 41 42 101 139 154 156
+    expression_any <pExpression> (194)
+        on left: 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119
+        on right: 121
+    expressions <pExpression> (195)
+        on left: 120 121 122
+        on right: 102 103 121 122
+    expr_pipe <pExpression> (196)
+        on left: 123
+        on right: 105 137 138 261 267 269
+    name_in_namespace <s> (197)
+        on left: 124 125 126
+        on right: 51 180 184 220 221 222 240 279 308
+    expression_delete <pExpression> (198)
+        on left: 127
+        on right: 107
+    expr_new <pExpression> (199)
+        on left: 128 129 130 131
+        on right: 234
+    expression_break <pExpression> (200)
+        on left: 132
+        on right: 112
+    expression_continue <pExpression> (201)
+        on left: 133
+        on right: 113
+    expression_return <pExpression> (202)
+        on left: 134 135 136 137 138
+        on right: 114
+    expression_try_catch <pExpression> (203)
+        on left: 139
+        on right: 116
+    let_scope <b> (204)
+        on left: 140 141
+        on right: 144
+    kwd_let <b> (205)
+        on left: 142 143
+        on right: 144 272
+    expression_let <pExpression> (206)
+        on left: 144
+        on right: 108
+    expr_cast <pExpression> (207)
+        on left: 145 146 147
+        on right: 233
+    expr_type_info <pExpression> (208)
+        on left: 148 149 150 151
+        on right: 232
+    expr_list <pExpression> (209)
+        on left: 152 153
+        on right: 40 130 153 182 222 224 365
+    block_or_simple_block <pExpression> (210)
+        on left: 154 155
+        on right: 157
+    expr_block <pExpression> (211)
+        on left: 156 157
+        on right: 123 237
+    expr_numeric_const <pExpression> (212)
+        on left: 158 159 160 161 162 163
+        on right: 185
+    expr_assign <pExpression> (213)
+        on left: 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179
+        on right: 106 123
+    expr_named_call <pExpression> (214)
+        on left: 180
+        on right: 236
+    expr_method_call <pExpression> (215)
+        on left: 181 182
+        on right: 235
+    expr <pExpression> (216)
+        on left: 183 184 185 186 187 188 189 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210 211 212 213 214 215 216 217 218 219 220 221 222 223 224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239 240
+        on right: 18 35 38 39 41 42 127 135 136 145 146 147 148 149 152 153 155 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 181 182 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210 211 212 213 214 215 216 217 218 219 225 226 227 229 230 231 238 239 259 260 266 268 314 343 344 351 352 353 364 365
+    optional_field_annotation <aaList> (217)
+        on left: 241 242
+        on right: 245
+    optional_override <b> (218)
+        on left: 243 244
+        on right: 245
+    structure_variable_declaration <pVarDecl> (219)
+        on left: 245
+        on right: 247
+    struct_variable_declaration_list <pVarDeclList> (220)
+        on left: 246 247
+        on right: 247 281
+    function_argument_declaration <pVarDecl> (221)
+        on left: 248 249
+        on right: 250 251
+    function_argument_list <pVarDeclList> (222)
+        on left: 250 251
+        on right: 61 251
+    tuple_type <pVarDecl> (223)
+        on left: 252
+        on right: 253 254
+    tuple_type_list <pVarDeclList> (224)
+        on left: 253 254
+        on right: 254 338
+    copy_or_move <b> (225)
+        on left: 255 256
+        on right: 259 260 261 343 344
+    variable_declaration <pVarDecl> (226)
+        on left: 257 258 259 260 261
+        on right: 245 248 249
+    copy_or_move_or_clone <i> (227)
+        on left: 262 263 264
+        on right: 266 267 268 269
+    let_variable_declaration <pVarDecl> (228)
+        on left: 265 266 267 268 269
+        on right: 144 271
+    global_variable_declaration_list <pVarDeclList> (229)
+        on left: 270 271
+        on right: 271 272
+    global_let (230)
+        on left: 272
+        on right: 5
+    enum_list <pEnum> (231)
+        on left: 273 274 275
+        on right: 274 275 277
+    alias_declaration (232)
+        on left: 276
+        on right: 10
+    enum_declaration (233)
+        on left: 277
+        on right: 4
+    optional_structure_parent <s> (234)
+        on left: 278 279
+        on right: 280
+    structure_name <pStructure> (235)
+        on left: 280
+        on right: 281
+    structure_declaration (236)
+        on left: 281
+        on right: 3
+    variable_name_list <pNameList> (237)
+        on left: 282 283
+        on right: 40 257 258 259 260 261 265 266 267 268 269 283 365
+    basic_type_declaration <type> (238)
+        on left: 284 285 286 287 288 289 290 291 292 293 294 295 296 297 298 299 300 301 302 303 304 305 306 307
+        on right: 223 224 311
+    structure_type_declaration <pTypeDecl> (239)
+        on left: 308
+        on right: 313
+    auto_type_declaration <pTypeDecl> (240)
+        on left: 309 310
+        on right: 312
+    type_declaration <pTypeDecl> (241)
+        on left: 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 332 333 334 335 336 337 338
+        on right: 63 128 129 130 145 146 147 150 151 252 258 259 265 266 267 276 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 330 333 336 347 348 349 350 358 359
+    make_decl <pExpression> (242)
+        on left: 339 340 341 342
+        on right: 131 187
+    make_struct_fields <pMakeStruct> (243)
+        on left: 343 344
+        on right: 180 344 345 346
+    make_struct_dim <pExpression> (244)
+        on left: 345 346
+        on right: 346 347 348 349 350
+    make_struct_decl <pExpression> (245)
+        on left: 347 348 349 350
+        on right: 339
+    make_tuple <pExpression> (246)
+        on left: 351 352
+        on right: 352 354
+    make_map_tuple <pExpression> (247)
+        on left: 353
+        on right: 355 360 361
+    make_any_tuple <pExpression> (248)
+        on left: 354 355
+        on right: 356 357
+    make_dim <pExpression> (249)
+        on left: 356 357
+        on right: 357 358 359
+    make_dim_decl <pExpression> (250)
+        on left: 358 359
+        on right: 340
+    make_table <pExpression> (251)
+        on left: 360 361
+        on right: 361 362
+    make_table_decl <pExpression> (252)
+        on left: 362
+        on right: 341
+    array_comprehension_where <pExpression> (253)
+        on left: 363 364
+        on right: 365
+    array_comprehension <pExpression> (254)
+        on left: 365
+        on right: 342
 
 
 State 0

@@ -28,7 +28,11 @@ namespace das
         asc.bargs = bargs;
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
             asc.node = code;
+#if defined(_MSC_VER)
+            qsort_s(anyData, length, elementSize, &anySortCmp, &asc);
+#else
             qsort_r(anyData, length, elementSize, &asc, &anySortCmp);
+#endif
         });
     }
 
