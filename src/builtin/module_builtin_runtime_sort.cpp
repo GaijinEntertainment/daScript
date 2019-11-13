@@ -14,7 +14,15 @@ namespace das
         Context *   context;
     };
 
+#if __APPLE__
     __forceinline int anySortCmp ( void * ctx, const void * x, const void * y ) {
+#elif _WIN32
+    __forceinline int anySortCmp ( void * ctx, const void * x, const void * y ) {
+#elif _TARGET_PS4
+    __forceinline int anySortCmp ( const void * x, const void * y, void * ctx ) {
+#else
+    __forceinline int anySortCmp ( const void * x, const void * y, void * ctx ) {
+#endif
         AnySortContext * asc = (AnySortContext *) ctx;
         asc->bargs[0] = cast<void *>::from(x);
         asc->bargs[1] = cast<void *>::from(y);
@@ -28,10 +36,14 @@ namespace das
         asc.bargs = bargs;
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
             asc.node = code;
-#if defined(_MSC_VER)
+#if __APPLE__
+            qsort_r(anyData, length, elementSize, &asc, &anySortCmp);
+#elif _WIN32
+            qsort_s(anyData, length, elementSize, &anySortCmp, &asc);
+#elif _TARGET_PS4
             qsort_s(anyData, length, elementSize, &anySortCmp, &asc);
 #else
-            qsort_r(anyData, length, elementSize, &asc, &anySortCmp);
+            qsort_r(anyData, length, elementSize, &anySortCmp, &asc);
 #endif
         });
     }

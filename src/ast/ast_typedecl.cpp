@@ -95,7 +95,7 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases ) {
+    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * /* aliases */ ) {
         // can't infer from the type, which is already 'auto'
         if (initT->isAuto()) {
             if (!autoT->isAuto()) {
