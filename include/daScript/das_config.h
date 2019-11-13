@@ -10,4 +10,7 @@
 #include <algorithm>
 namespace das {using namespace std;}
 #define DAS_STD_HAS_BIND 1
-// #define DAS_FUSION 0
+
+#ifndef DAS_FUSION
+  #define DAS_FUSION  1
+#endif

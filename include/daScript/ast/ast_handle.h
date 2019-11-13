@@ -12,6 +12,22 @@ namespace das
     #define DAS_BIND_MANAGED_FIELD(FIELDNAME)   DAS_BIND_FIELD(ManagedType,FIELDNAME)
     #define DAS_BIND_MANAGED_PROP(FIELDNAME)    DAS_BIND_PROP(ManagedType,FIELDNAME)
 
+    struct DummyTypeAnnotation : TypeAnnotation {
+        DummyTypeAnnotation(const string & name, const string & cppName, size_t sz, size_t al)
+            : TypeAnnotation(name,cppName), dummySize(sz), dummyAlignment(al) {
+        }
+        virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
+        virtual bool isRefType() const override { return true; }
+        virtual bool isLocal() const override { return false; }
+        virtual bool canCopy() const override { return false; }
+        virtual bool canMove() const override { return false; }
+        virtual bool canClone() const override { return false; }
+        virtual size_t getAlignOf() const override { return dummyAlignment;}
+        virtual size_t getSizeOf() const override { return dummySize;}
+        size_t dummySize;
+        size_t dummyAlignment;
+    };
+
     struct DasStringTypeAnnotation : TypeAnnotation {
         DasStringTypeAnnotation() : TypeAnnotation("das_string","das::string") {}
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }

@@ -24,6 +24,11 @@ struct Point3 { float x, y, z; };
 
 template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {};
 
+struct SomeDummyType {
+    int32_t foo;
+    float   bar;
+};
+
 __forceinline Point3 getSamplePoint3() {return Point3{0,1,2};}
 __forceinline Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
 

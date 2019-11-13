@@ -197,10 +197,6 @@ namespace das {
                         error("tuple element can't be ref, " + argType->describe(),
                               argType->at,CompilationError::invalid_type);
                     }
-                    if ( !argType->isLocal() ) {
-                        error("tuple element has to be 'local', " + argType->describe(),
-                              argType->at,CompilationError::invalid_type);
-                    }
                     if ( argType->isTempType() && argType->temporary ) {
                         error("tuple element can't be temporary value, " + decl->describe(),
                               argType->at,CompilationError::invalid_type);
@@ -1024,8 +1020,6 @@ namespace das {
                 error("structure field type can't be declared void",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->ref ) {
                 error("structure field type can't be declared a reference",decl.at,CompilationError::invalid_structure_field_type);
-            } else if ( !decl.type->isLocal() ) {
-                error("structure field has to be 'local'",decl.at,CompilationError::invalid_type);
             } else if ( decl.type->isTempType() && decl.type->temporary ) {
                 error("structure field can't be temporary value, " + decl.type->describe(), decl.at,CompilationError::invalid_type);
             }
@@ -1718,6 +1712,9 @@ namespace das {
                 if ( expr->trait=="sizeof" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+                } else if ( expr->trait=="alignof" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getAlignOf());
                 } else if ( expr->trait=="is_dim" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->dim.size()!=0);

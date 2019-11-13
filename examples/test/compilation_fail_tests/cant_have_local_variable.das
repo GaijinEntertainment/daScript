@@ -1,9 +1,9 @@
-expect 30108:4, 30101:3
+expect 30108:4, 30101:2
 
 require UnitTest
 
 struct StructureNotLocal
-    a:TestObjectNotLocal                // 30101: structure field has to be 'local'
+    a:TestObjectNotLocal
 
 [export]
 def test:bool

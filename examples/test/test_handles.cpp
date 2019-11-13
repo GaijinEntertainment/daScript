@@ -314,6 +314,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // structure annotations
     addAnnotation(make_shared<CheckRange>());
     addAnnotation(make_shared<IntFieldsAnnotation>());
+    // dummy type example
+    addAnnotation(make_shared<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
     addAnnotation(make_shared<TestObjectNotLocalAnnotation>(lib));
     addAnnotation(make_shared<TestObjectFooAnnotation>(lib));
