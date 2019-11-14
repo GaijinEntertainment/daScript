@@ -5,6 +5,7 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/sim_policy.h"
+#include "das_qsort_r.h"
 
 namespace das
 {
@@ -14,37 +15,14 @@ namespace das
         Context *   context;
     };
 
-#if __APPLE__
-    __forceinline int anySortCmp ( void * ctx, const void * x, const void * y ) {
-#elif _WIN32
-    __forceinline int anySortCmp ( void * ctx, const void * x, const void * y ) {
-#elif _TARGET_PS4
-    __forceinline int anySortCmp ( const void * x, const void * y, void * ctx ) {
-#else
-    __forceinline int anySortCmp ( const void * x, const void * y, void * ctx ) {
-#endif
-        AnySortContext * asc = (AnySortContext *) ctx;
-        asc->bargs[0] = cast<void *>::from(x);
-        asc->bargs[1] = cast<void *>::from(y);
-        return asc->node->evalBool(*asc->context) ? -1 : 1;
-    }
-
     void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
         vec4f bargs[2];
-        AnySortContext asc;
-        asc.context = context;
-        asc.bargs = bargs;
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-            asc.node = code;
-#if __APPLE__
-            qsort_r(anyData, length, elementSize, &asc, &anySortCmp);
-#elif _WIN32
-            qsort_s(anyData, length, elementSize, &anySortCmp, &asc);
-#elif _TARGET_PS4
-            qsort_s(anyData, length, elementSize, &anySortCmp, &asc);
-#else
-            qsort_r(anyData, length, elementSize, &anySortCmp, &asc);
-#endif
+            das_qsort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+              bargs[0] = cast<void *>::from(x);
+              bargs[1] = cast<void *>::from(y);
+              return code->evalBool(*context);
+            });
         });
     }
 
