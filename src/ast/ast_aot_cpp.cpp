@@ -131,7 +131,9 @@ namespace das {
         auto baseType = type->baseType;
         if ( isConstRedundantForCpp(type) && redundantConst==CpptRedundantConst::yes ) {
             if (substituteRef == CpptSubstitureRef::yes && type->ref) {
-                // skip const
+                // can't skip const
+            } else if ( type->ref ) {
+                // can't skip const
             } else {
                 skipConst = CpptSkipConst::yes;
             }

@@ -10,3 +10,4 @@ def test_add(m : float3x4):float3
 def test
     let m : float3x4
     assert(test_add(m) == float3(0,0,0))
+    return true

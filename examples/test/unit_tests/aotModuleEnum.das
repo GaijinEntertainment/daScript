@@ -1,6 +1,7 @@
-require moduleEnum
+require _moduleEnum
 
 [export]
 def test
-    let a = moduleEnum::Numbers zero
+    let a = _moduleEnum::Numbers zero
     assert(int(a) == 0)
+    return true
