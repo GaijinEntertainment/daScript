@@ -82,6 +82,17 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            for ( const auto & annDecl : expr->func->annotations ) {
+                auto ann = annDecl->annotation;
+                if ( ann->rtti_isFunctionAnnotation() ) {
+                    auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann);
+                    string err;
+                    if ( !fnAnn->verifyCall(expr, err) ) {
+                        program->error("call annotated by " + fnAnn->name + " failed, " + err,
+                                       expr->at, CompilationError::annotation_failed);
+                    }
+                }
+            }
             if ( checkAotSideEffects ) {
                 if ( expr->arguments.size()>1 ) {
                     for ( auto & arg : expr->arguments ) {

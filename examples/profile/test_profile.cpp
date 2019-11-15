@@ -397,6 +397,14 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
         EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
         aotEsRunBlock(ss, table, g_components);
     }
+    virtual bool verifyCall ( ExprCallFunc * call, string & err ) override {
+        auto brt = call->arguments[0]->type->firstType;
+        if ( !brt->isVoid() ) {
+            err = "block can't return values";
+            return false;
+        }
+        return true;
+    }
 };
 
 vector<float3>   g_pos ( g_total );
