@@ -18,11 +18,11 @@ Common Symbols
 all numerics (uint*, int*, float*, double)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. js:function:: min(x, y)
+.. das:function:: min(x, y)
 
     returns the minimum of `x` and `y`
 
-.. js:function:: max(x, y)
+.. das:function:: max(x, y)
 
     returns the minimum of `x` and `y`
 
@@ -30,110 +30,110 @@ all numerics (uint*, int*, float*, double)
 float* and double
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. js:function:: abs(x)
+.. das:function:: abs(x)
 
     returns the absolute value of `x` as same time
 
-.. js:function:: acos(x)
+.. das:function:: acos(x)
 
     returns the arccosine of `x`
 
-.. js:function:: asin(x)
+.. das:function:: asin(x)
 
     returns the arcsine of `x`
 
-.. js:function:: atan(x)
+.. das:function:: atan(x)
 
     returns the arctangent of `x`
 
-.. js:function:: atan2(x,y)
+.. das:function:: atan2(x,y)
 
     returns the arctangent of  `x/y`
 
-.. js:function:: cos(x)
+.. das:function:: cos(x)
 
     returns the cosine of `x`
 
-.. js:function:: sin(x)
+.. das:function:: sin(x)
 
     returns the sine of `x`
 
-.. js:function:: tan(x)
+.. das:function:: tan(x)
 
     returns the tangent of `x`
 
-.. js:function:: exp(x)
+.. das:function:: exp(x)
 
     returns the exponential value of the float parameter `x`
 
-.. js:function:: log(x)
+.. das:function:: log(x)
 
     returns the natural logarithm of `x`
 
-.. js:function:: exp2(x)
+.. das:function:: exp2(x)
 
     returns the 2^x value of the float parameter `x`
 
-.. js:function:: log2(x)
+.. das:function:: log2(x)
 
     returns the logarithm base-2 of `x`
 
-.. js:function:: pow(x,y)
+.. das:function:: pow(x,y)
 
     returns `x` raised to the power of `y`
 
-.. js:function:: sqrt(x)
+.. das:function:: sqrt(x)
 
     returns the square root of `x`
 
-.. js:function:: rcp(x)
+.. das:function:: rcp(x)
 
     returns the 1/x of `x`
 
-.. js:data:: PI
+.. das:data:: PI
 
     The numeric constant pi (3.141592) is the ratio of the circumference of a circle to its diameter
 
-.. js:function:: ceil(x)
+.. das:function:: ceil(x)
 
     returns a float value representing the smallest integer (type is still float) that is greater than or equal to `x`
 
-.. js:function:: floor(x)
+.. das:function:: floor(x)
 
     returns a float value representing the largest integer that is less than or equal to `x`
 
-.. js:function:: abs(x)
+.. das:function:: abs(x)
 
     returns a positive value representing with same module as `x`
 
-.. js:function:: saturate(x)
+.. das:function:: saturate(x)
 
     returns a clamped to [0..1] inclusive range `x`
 
 ^^^^^^^^^^^^^^^^^^^^^^^^
 float* only
 ^^^^^^^^^^^^^^^^^^^^^^^^
-.. js:function:: atan2_est(x,y)
+.. das:function:: atan2_est(x,y)
 
     returns the faster approximation of arctangent of  `x/y` - float only
 
-.. js:function:: rcp_est(x)
+.. das:function:: rcp_est(x)
 
     returns the fast approximation 1/x of `x` - float only
 
-.. js:function:: ceili(x)
+.. das:function:: ceili(x)
 
     returns a value representing the smallest integer (integer type!) that is greater than or equal to `x`
 
-.. js:function:: floori(x)
+.. das:function:: floori(x)
 
     returns a integer value representing the largest integer that is less than or equal to `x`
 
-.. js:function:: roundi(x)
+.. das:function:: roundi(x)
 
     returns a integer value representing the integer that is closest to `x`
 
-.. js:function:: trunci(x)
+.. das:function:: trunci(x)
 
     returns a integer value representing the float without fraction part of `x`
 
@@ -142,19 +142,19 @@ float* only
 Noise functions
 +++++++++++++++++
 
-.. js:function:: uint32_hash(x:uint)
+.. das:function:: uint32_hash(x:uint)
 
     returns hashed value of `x`
 
-.. js:function:: uint_noise_1D(position: int; seed:uint)
+.. das:function:: uint_noise_1D(position: int; seed:uint)
 
     returns noise value of `position` in `seed` sequence
 
-.. js:function:: uint_noise_2D(x,y: int; seed:uint)
+.. das:function:: uint_noise_2D(x,y: int; seed:uint)
 
     returns noise value of `x,y` position in `seed` sequence
 
-.. js:function:: uint_noise_3D(x,y,z: int; seed:uint)
+.. das:function:: uint_noise_3D(x,y,z: int; seed:uint)
 
     returns noise value of `x,y,z` position in `seed` sequence
 
@@ -167,47 +167,47 @@ Vector functions
 float2, float3, float4:
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. js:function:: length(x)
+.. das:function:: length(x)
 
     returns a non-negative value representing magnitude of `x`
 
-.. js:function:: length_sq(x)
+.. das:function:: length_sq(x)
 
     returns a non-negative value representing squared magnitude of `x`
 
-.. js:function:: inv_length(x)
+.. das:function:: inv_length(x)
 
     returns a non-negative value representing 1/magnitude of `x`
 
-.. js:function:: inv_length_sq(x)
+.. das:function:: inv_length_sq(x)
 
     returns a non-negative value representing 1/squared magnitude of `x`
 
-.. js:function:: distance(x, y)
+.. das:function:: distance(x, y)
 
     returns a non-negative value representing distance between `x` and `y`
 
-.. js:function:: distance_sq(x)
+.. das:function:: distance_sq(x)
 
     returns a non-negative value representing squared distance between `x` and `y`
 
-.. js:function:: inv_distance(x, y)
+.. das:function:: inv_distance(x, y)
 
     returns a non-negative value representing 1/distance between `x` and `y`
 
-.. js:function:: inv_distance_sq(x)
+.. das:function:: inv_distance_sq(x)
 
     returns a non-negative value representing 1/squared distance between `x` and `y`
 
-.. js:function:: dot(x, y)
+.. das:function:: dot(x, y)
 
     returns scalar representating dot product between `x` and `y`
 
-.. js:function:: normalize(x)
+.. das:function:: normalize(x)
 
     returns normalized `x`, or nan if length(x) is 0
 	
-.. js:function:: safe_normalize(x)
+.. das:function:: safe_normalize(x)
 
     returns normalized `x`, or 0 if length(x) is 0
 
@@ -215,17 +215,17 @@ float2, float3, float4:
 float3 only:
 ^^^^^^^^^^^^
 
-.. js:function:: cross(x, y)
+.. das:function:: cross(x, y)
 
     returns vector representating cross product between `x` and `y`
-.. js:function:: reflect(v, n)
+.. das:function:: reflect(v, n)
 
     returns vector representating reflection of `x` from `n` same as ::
 
         def reflect(v, n: float3)
             return v - 2. * dot(v, n) * n
 
-.. js:function:: refract(v, n)
+.. das:function:: refract(v, n)
 
     returns vector representating reflection of `x` from `n` same as ::
 
@@ -241,14 +241,14 @@ float3 only:
 lerp/madd/clamp
 +++++++++++++++++
 
-.. js:function:: lerp(a, b, t)
+.. das:function:: lerp(a, b, t)
 
     returns vector or scalar representating `a` + (`b` - `a`) * `t`
 
-.. js:function:: madd(a, b, c)
+.. das:function:: madd(a, b, c)
 
     returns vector or scalar representating `a` * `b` + `c`
 
-.. js:function:: clamp(t, a, b)
+.. das:function:: clamp(t, a, b)
 
     returns vector or scalar representating min(max(`t`, `a`), `b`)

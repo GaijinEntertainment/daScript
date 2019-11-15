@@ -15,11 +15,11 @@ daScript API
 Global symbols
 +++++++++++++++
 
-.. js:function:: binary_save(f, block<blob: string>)
+.. das:function:: binary_save(f, block<blob: string>)
 
     saves f to returned blob (provided to a block)
 
-.. js:function:: binary_load(var obj; blob: string)
+.. das:function:: binary_load(var obj; blob: string)
 
     loads obj from blob
 
