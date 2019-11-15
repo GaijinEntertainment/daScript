@@ -1488,6 +1488,11 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstEnumeration * c ) override {
             auto value = c->getValue();
+            if ( c->enumType->external ) {
+                ss << "/*bound enum*/ ";
+            } else if ( c->enumType->module && !c->enumType->module->name.empty() ) {
+                ss << aotModuleName(c->enumType->module) << "::";
+            }
             ss << c->enumType->name << "::" << c->enumType->find(value,to_string(value));
             return Visitor::visit(c);
         }
