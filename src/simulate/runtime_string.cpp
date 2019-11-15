@@ -75,6 +75,8 @@ namespace das
                     case 'r':   result += '\r';    break;
                     case 't':   result += '\t';    break;
                     case 'u':   DAS_ASSERTF(0, "utf-8 characters not supported yet"); break;
+                    case '\n':  break;  // skip LF
+                    case '\r':  if ( str+1!=strEnd && str[1]=='\n' ) str++; break;  // skip CR LF or just CR
                     default:    result += *str; if ( error ) *error = true; break;  // invalid escape character
                 }
             } else
