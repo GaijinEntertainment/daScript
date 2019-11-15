@@ -1791,7 +1791,7 @@ return DAS_GOTO;
 case 45:
 YY_RULE_SETUP
 #line 236 "ds_lexer.lpp"
-return DAS_MODULE;
+das_need_oxford_comma = false; return DAS_MODULE;
 	YY_BREAK
 case 46:
 YY_RULE_SETUP

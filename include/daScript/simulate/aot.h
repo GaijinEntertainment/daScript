@@ -1298,6 +1298,7 @@ namespace das {
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
             __context__->stopFlags = 0;
+            __context__->exception = nullptr;
             catch_block();
         }
 #else

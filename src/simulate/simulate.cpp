@@ -161,6 +161,7 @@ namespace das
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
+                context.exception = nullptr;
                 catch_block->eval(context);
             }
         #else
@@ -863,7 +864,7 @@ namespace das
         stack.watermark(EP,SP);
 #if DAS_ENABLE_EXCEPTIONS
         try {
-            return call(fnPtr, args, res, 0);
+            return callWithCopyOnReturn(fnPtr, args, res, 0);
         } catch ( const dasException & ) {
             /*
             to_err("\nunhandled exception\n");
