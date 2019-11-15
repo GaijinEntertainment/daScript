@@ -13,7 +13,7 @@ Global Symbols
 
 clock - builtin type. You can use clock-clock to get difference of time in seconds (float). clock type can be printed and string built.
 
-.. js:function:: getClock()
+.. das:function:: getClock()
 
     returns current clock (current time)
 
