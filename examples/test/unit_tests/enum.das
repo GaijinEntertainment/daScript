@@ -26,6 +26,9 @@ def test
     assert ( Zen zero == Zen zero )
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
-	assert ( efn_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
-	assert ( efn_takeOne_giveTwo_98(SomeEnum98 SomeEnum98_one)==SomeEnum98 SomeEnum98_two )
+	verify ( efn_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
+	verify ( efn_takeOne_giveTwo_98(SomeEnum98 SomeEnum98_one)==SomeEnum98 SomeEnum98_two )
+    var goo : GooEnum
+    goo = GooEnum regular
+    verify ( efn_flip(goo)==GooEnum hazardous )
     return true

@@ -96,6 +96,7 @@ namespace das
         pair<int,bool> find ( const string & f ) const;
     public:
         string          name;
+        string          cppName;
         LineInfo        at;
         map<string,int> list;
         map<int,string> listI;

@@ -194,7 +194,7 @@ namespace das {
         } else if ( baseType==Type::tEnumeration ) {
             if ( type->enumType ) {
                 if ( type->enumType->external ) {
-                    stream << "/*bound enum*/ " << type->enumType->name;
+                    stream << "/*bound enum*/ " << type->enumType->cppName;
                 } else if ( type->enumType->module->name.empty() ) {
                     stream << "/*enum*/ " << type->enumType->name;
                 } else {
@@ -1488,12 +1488,8 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstEnumeration * c ) override {
             auto value = c->getValue();
-            if ( c->enumType->external ) {
-                ss << "/*bound enum*/ ";
-            } else if ( c->enumType->module && !c->enumType->module->name.empty() ) {
-                ss << aotModuleName(c->enumType->module) << "::";
-            }
-            ss << c->enumType->name << "::" << c->enumType->find(value,to_string(value));
+            ss << describeCppType(c->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes,CpptRedundantConst::no)
+                << "::" << c->enumType->find(value,to_string(value));
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {

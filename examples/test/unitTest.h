@@ -11,6 +11,15 @@ enum class SomeEnum {
 
 DAS_BIND_ENUM_CAST(SomeEnum);
 
+namespace Goo {
+    enum class GooEnum {
+        regular
+    ,   hazardous
+    };
+}
+
+DAS_BIND_ENUM_CAST(Goo::GooEnum);
+
 enum SomeEnum98 {
     SomeEnum98_zero = 0
 ,   SomeEnum98_one  = 1
@@ -18,6 +27,11 @@ enum SomeEnum98 {
 };
 
 DAS_BIND_ENUM_CAST_98(SomeEnum98);
+
+Goo::GooEnum efn_flip ( Goo::GooEnum goo );
+SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
+SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
+SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
 struct Point3 { float x, y, z; };

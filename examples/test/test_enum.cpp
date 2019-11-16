@@ -7,7 +7,13 @@ using namespace das;
 
 DAS_BASE_BIND_ENUM(SomeEnum, SomeEnum, zero, one, two)
 
-SomeEnum efn_takeOne_giveTwo ( SomeEnum one) {
+DAS_BASE_BIND_ENUM(Goo::GooEnum, GooEnum, regular, hazardous)
+
+Goo::GooEnum efn_flip ( Goo::GooEnum goo ) {
+    return (goo == Goo::GooEnum::regular) ? Goo::GooEnum::hazardous : Goo::GooEnum::regular;
+}
+
+SomeEnum efn_takeOne_giveTwo ( SomeEnum one ) {
     return (one == SomeEnum::one) ? SomeEnum::two : SomeEnum::zero;
 }
 
@@ -24,10 +30,12 @@ SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two) {
 void Module_UnitTest::addEnumTest(ModuleLibrary &lib)
 {
     // enum
+    addEnumeration(make_shared<EnumerationGooEnum>());
     addEnumeration(make_shared<EnumerationSomeEnum>());
-    addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo)>(*this, lib, "efn_takeOne_giveTwo", SideEffects::none);
+    addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo)>(*this, lib, "efn_takeOne_giveTwo", SideEffects::modifyExternal);
+    addExtern<DAS_BIND_FUN(efn_flip)>(*this, lib, "efn_flip", SideEffects::modifyExternal, "efn_flip");
     // enum98
     addEnumeration(make_shared<EnumerationSomeEnum98>());
-    addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo_98_DasProxy)>(*this, lib, "efn_takeOne_giveTwo_98", SideEffects::none);
+    addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo_98_DasProxy)>(*this, lib, "efn_takeOne_giveTwo_98", SideEffects::modifyExternal);
 };
 
