@@ -64,7 +64,7 @@ MACRO(FIND_FLEX_AND_BISON)
 ENDMACRO(FIND_FLEX_AND_BISON)
 
 MACRO(XXD input)
-	IF(XXD_BIN-NOTFOUND)
+	IF(NOT XXD_BIN)
 		MESSAGE(STATUS "XXD not found, pre-generated files will be used." )
 	ELSE()
 		get_filename_component(input_src ${input} ABSOLUTE)
