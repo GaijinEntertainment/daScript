@@ -5,6 +5,10 @@ enum Numbers
     one
     two
     ten = 10
+    sixteen = 0x10
+    neg_ten = -10
+    neg_one = 0xffffffff
+    neg_one_i = -1
 
 enum Zen
     zero
@@ -13,6 +17,10 @@ enum Zen
 [export]
 def test
     assert ( int(Numbers ten)==10 )
+    assert ( int(Numbers sixteen)==16 )
+    assert ( int(Numbers neg_ten)==-10 )
+    assert ( int(Numbers neg_one)==-1 )
+    assert ( int(Numbers neg_one_i)==-1 )
     let t : Numbers
     assert ( t == Numbers zero )
     var q = Numbers one

@@ -284,6 +284,7 @@
 %type <i>               copy_or_move_or_clone
 
 %type <pEnum>           enum_list
+%type <i>               enum_const_value
 
 %type <pExpression>     expr
 %type <pExpression>     expr_assign
@@ -1376,6 +1377,13 @@ global_let
     }
     ;
 
+enum_const_value
+    :   INTEGER[value]                  { $$ = $value; }
+    |   '-' INTEGER[value]              { $$ = -$value; }
+    |   UNSIGNED_INTEGER[value]         { $$ = int32_t($value); }
+    |   '-' UNSIGNED_INTEGER[value]     { $$ = -int32_t($value); }
+    ;
+
 enum_list
     :   {
         $$ = new Enumeration();
@@ -1389,7 +1397,7 @@ enum_list
         delete $name;
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] '=' INTEGER[value] ';' {
+    |   enum_list[pE] NAME[name] '=' enum_const_value[value] ';' {
 		das_checkName(*$name,tokAt(@name));
         if ( !$pE->add(*$name,$value) ) {
             das_yyerror("enumeration value alread declared " + *$name, tokAt(@name),
