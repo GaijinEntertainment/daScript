@@ -3456,6 +3456,22 @@ namespace das {
                 swap(cargs, expr->arguments);
                 return evalAndFold(expr);
             }
+            if ( expr->func ) {
+                for ( const auto & ann : expr->func->annotations ) {
+                    if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                        auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                        string err;
+                        auto fexpr = fnAnn->transformCall(expr, err);
+                        if ( !err.empty() ) {
+                            program->error("call annotated by " + fnAnn->name + " failed to transform, " + err,
+                                           expr->at, CompilationError::annotation_failed);
+                        } else if ( fexpr ) {
+                            reportGenericInfer();
+                            return fexpr;
+                        }
+                    }
+                }
+            }
             return Visitor::visit(expr);
         }
     // StringBuilder

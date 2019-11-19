@@ -1,5 +1,3 @@
-options log = true
-
 require UnitTest
 
 [sideeffects]
@@ -12,3 +10,4 @@ def test
     let b = GetGoo("goo")
     assert(a==b)
     return true
+

@@ -306,6 +306,37 @@ int *getPtr() {return &g_st;}
 
 das::uint2 get_screen_dimensions() {return das::uint2{1280, 720};}
 
+uint32_t CheckEid ( char * const name, Context * context ) {
+    return hash_function(*context, name);
+}
+
+uint32_t CheckEidHint ( char * const name, uint32_t hashHint, Context * context ) {
+    uint32_t hv = hash_function(*context, name);
+    if ( hv != hashHint ) context->throw_error("invalid hash value");
+    return hashHint;
+}
+
+struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
+    CheckEidFunctionAnnotation() : TransformFunctionAnnotation("check_eid") { }
+    virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & /*err*/ ) override {
+        auto arg = call->arguments[0];
+        if ( arg->type && arg->type->isString() && arg->type->isConst() && arg->rtti_isConstant() ) {
+
+            auto starg = static_pointer_cast<ExprConstString>(arg);
+            uint32_t hv = hash_blockz32((uint8_t *)starg->text.c_str());
+
+            auto hconst = make_shared<ExprConstUInt>(arg->at, hv);
+            hconst->type = make_shared<TypeDecl>(Type::tUInt);
+            hconst->type->constant = true;
+
+            auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
+            newCall->arguments.insert(newCall->arguments.begin() + 1, hconst);
+            return newCall;
+        }
+        return nullptr;
+    }
+};
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -322,19 +353,27 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
     // register function
     addEquNeq<TestObjectFoo>(*this, lib);
-    addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init", SideEffects::none);
-    addExtern<DAS_BIND_FUN(get_screen_dimensions)>(*this, lib, "get_screen_dimensions", SideEffects::none);
-    addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::modifyExternal);
-    addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyArgument);
-    addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyArgument);
-    addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields", SideEffects::modifyExternal);
-    addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::none);
-    addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::modifyArgument);
-    addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr", SideEffects::modifyExternal);
+    addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init", SideEffects::none, "new_and_init");
+    addExtern<DAS_BIND_FUN(get_screen_dimensions)>(*this, lib, "get_screen_dimensions", SideEffects::none, "get_screen_dimensions");
+    addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::modifyExternal, "test_das_string");
+    addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyArgument, "testFoo");
+    addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyArgument, "testAdd");
+    addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields", SideEffects::modifyExternal, "testFields");
+    addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::none, "getSamplePoint3");
+    addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::modifyArgument, "doubleSamplePoint3");
+    addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr", SideEffects::modifyExternal, "getPtr");
     // register Cpp alignment functions
-    addExtern<DAS_BIND_FUN(CppS1Size)>(*this, lib, "CppS1Size", SideEffects::modifyExternal);
-    addExtern<DAS_BIND_FUN(CppS2Size)>(*this, lib, "CppS2Size", SideEffects::modifyExternal);
-    addExtern<DAS_BIND_FUN(CppS2DOffset)>(*this, lib, "CppS2DOffset", SideEffects::modifyExternal);
+    addExtern<DAS_BIND_FUN(CppS1Size)>(*this, lib, "CppS1Size", SideEffects::modifyExternal, "CppS1Size");
+    addExtern<DAS_BIND_FUN(CppS2Size)>(*this, lib, "CppS2Size", SideEffects::modifyExternal, "CppS2Size");
+    addExtern<DAS_BIND_FUN(CppS2DOffset)>(*this, lib, "CppS2DOffset", SideEffects::modifyExternal, "CppS2DOffset");
+    // register CheckEid functions
+    addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid", SideEffects::modifyExternal, "CheckEidHint");
+    auto ceid = addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid", SideEffects::modifyExternal, "CheckEid");
+    auto ceid_decl = make_shared<AnnotationDeclaration>();
+    ceid_decl->annotation = make_shared<CheckEidFunctionAnnotation>();
+    ceid->annotations.push_back(ceid_decl);
+    // and verify
+    verifyAotReady();
 }
 
 ModuleAotType Module_UnitTest::aotRequire ( TextWriter & tw ) const {

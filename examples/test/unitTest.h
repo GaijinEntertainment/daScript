@@ -91,3 +91,6 @@ __forceinline int CppS1Size() { return int(sizeof(CppS1)); }
 __forceinline int CppS2Size() { return int(sizeof(CppS2)); }
 __forceinline int CppS2DOffset() { return int(offsetof(CppS2, d)); }
 
+uint32_t CheckEid ( char * const name, das::Context * context );
+uint32_t CheckEidHint ( char * const name, uint32_t hashHint, das::Context * context );
+

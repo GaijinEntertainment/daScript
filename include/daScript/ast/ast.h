@@ -203,9 +203,27 @@ namespace das
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
         virtual bool verifyCall ( ExprCallFunc * /*call*/, string & /*err*/ ) { return true; }
+        virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) { return nullptr; }
         virtual string aotName ( ExprCallFunc * call );
         virtual void aotPrefix ( TextWriter &, ExprCallFunc * ) { }
         virtual bool isGeneric() const { return false; }
+    };
+
+    struct TransformFunctionAnnotation : FunctionAnnotation {
+        TransformFunctionAnnotation ( const string & n ) : FunctionAnnotation(n) {}
+        virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) override = 0;
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+            return false;
+        }
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+            return false;
+        }
+        virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+            return false;
+        }
+        virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+            return false;
+        }
     };
 
     struct TypeAnnotation : Annotation {
