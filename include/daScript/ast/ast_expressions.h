@@ -416,24 +416,20 @@ namespace das
         ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConstT(a,i,Type::tInt) {}
     };
 
-    struct ExprConstEnumeration : ExprConstT<int32_t,ExprConstEnumeration> {
-        ExprConstEnumeration(int32_t i = 0, const TypeDeclPtr & td = nullptr)
-            : ExprConstT(i,Type::tEnumeration) {
-                if ( td ) {
-                    enumType = td->enumType;
-                }
+    struct ExprConstEnumeration : ExprConst {
+        ExprConstEnumeration(const string & name = string(), const TypeDeclPtr & td = nullptr)
+            : ExprConst(Type::tEnumeration), text(name) {
+            if ( td ) enumType = td->enumType;
         }
-        ExprConstEnumeration(const LineInfo & a, int32_t i, const TypeDeclPtr & td)
-            : ExprConstT(a,i,Type::tEnumeration) {
+        ExprConstEnumeration(const LineInfo & a, const string & name, const TypeDeclPtr & td)
+            : ExprConst(a,Type::tEnumeration), text(name) {
             enumType = td->enumType;
         }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
-            auto cexpr = clonePtr<ExprConstEnumeration>(expr);
-            ExprConstT<int32_t,ExprConstEnumeration> ::clone(cexpr);
-            cexpr->enumType = enumType;
-            return cexpr;
-        }
-        EnumerationPtr enumType;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        EnumerationPtr  enumType;
+        string          text;
     };
 
     struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
@@ -470,6 +466,8 @@ namespace das
         ExprConstUInt(uint32_t i = 0) : ExprConstT(i,Type::tUInt) {}
         ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConstT(a,i,Type::tUInt) {}
     };
+
+    int32_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
 
     struct ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())  : ExprConstT(i,Type::tUInt2) {}

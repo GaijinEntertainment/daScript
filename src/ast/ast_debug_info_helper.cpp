@@ -18,7 +18,7 @@ namespace das {
         for ( auto & ev : en.list ) {
             eni->fields[i] = (EnumValueInfo *) debugInfo->allocate(sizeof(EnumValueInfo));
             eni->fields[i]->name = debugInfo->allocateName(ev.first);
-            eni->fields[i]->value = ev.second;
+            eni->fields[i]->value = getConstExprIntOrUInt(ev.second);
             i ++;
         }
         eni->hash = hash_value(eni);

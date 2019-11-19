@@ -62,31 +62,45 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
-    pair<int,bool> Enumeration::find ( const string & na ) const {
-        auto it = list.find(na);
-        return it!=list.end() ? pair<int,bool>(it->second,true) : pair<int,bool>(0,false);
+    pair<ExpressionPtr,bool> Enumeration::find ( const string & na ) const {
+        auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
+            return arg.first == na;
+        });
+        return it!=list.end() ?
+            pair<ExpressionPtr,bool>(it->second,true) :
+            pair<ExpressionPtr,bool>(nullptr,false);
     }
 
     int Enumeration::find ( const string & na, int def ) const {
-        auto it = list.find(na);
-        return it!=list.end() ? it->second : def;
+        auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
+            return arg.first == na;
+        });
+        return it!=list.end() ? getConstExprIntOrUInt(it->second) : def;
     }
 
     string Enumeration::find ( int va, const string & def ) const {
-        auto it = listI.find(va);
-        return it!=listI.end() ? it->second : def;
+        for ( const auto & it : list ) {
+            if ( getConstExprIntOrUInt(it.second)==va ) {
+                return it.first;
+            }
+        }
+        return def;
     }
 
     bool Enumeration::add ( const string & f ) {
-        return add(f, lastOne);
+        return add(f, nullptr);
     }
 
-    bool Enumeration::add ( const string & f, int v ) {
-        auto it = list.find(f);
+    bool Enumeration::addI ( const string & f, int32_t value ) {
+        return add(f, make_shared<ExprConstInt>(value));
+    }
+
+    bool Enumeration::add ( const string & na, const ExpressionPtr & expr ) {
+        auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
+            return arg.first == na;
+        });
         if ( it == list.end() ) {
-            list[f] = v;
-            listI[v] = f;
-            lastOne = v + 1;
+            list.emplace_back(na, expr);
             return true;
         } else {
             return false;
@@ -559,7 +573,25 @@ namespace das {
         return cexpr;
     }
 
-    // Const
+    // ConstEnumeration
+
+    ExpressionPtr ExprConstEnumeration::visit(Visitor & vis) {
+        vis.preVisit((ExprConst *)this);
+        vis.preVisit(this);
+        auto res = vis.visit(this);
+        if ( res.get() != this )
+            return res;
+        return vis.visit((ExprConst *)this);
+    }
+
+    ExpressionPtr ExprConstEnumeration::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprConstEnumeration>(expr);
+        cexpr->enumType = enumType;
+        cexpr->text = text;
+        return cexpr;
+    }
+
+    // ConstString
 
     ExpressionPtr ExprConstString::visit(Visitor & vis) {
         vis.preVisit((ExprConst *)this);
@@ -1779,12 +1811,22 @@ namespace das {
         }
     }
 
+    int32_t getConstExprIntOrUInt ( const ExpressionPtr & expr ) {
+        DAS_ASSERTF ( expr && expr->rtti_isConstant(),
+                     "expecting constant. something in enumeration (or otherwise) did not fold.");
+        auto econst = static_pointer_cast<ExprConst>(expr);
+        DAS_ASSERTF ( econst->baseType==Type::tInt || econst->baseType==Type::tUInt,
+                     "expecting int or uint constant only. something in enumeration (or otherwise) did not fold.");
+        return econst->baseType==Type::tInt ?
+            static_pointer_cast<ExprConstInt>(expr)->getValue() :
+            int32_t(static_pointer_cast<ExprConstUInt>(expr)->getValue());
+    }
+
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
             case Type::tBool:           return make_shared<ExprConstBool>(at, cast<bool>::to(value));
             case Type::tInt64:          return make_shared<ExprConstInt64>(at, cast<int64_t>::to(value));
-            case Type::tEnumeration:    return make_shared<ExprConstEnumeration>(at, cast<int32_t>::to(value), type);
             case Type::tInt:            return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
             case Type::tInt2:           return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
             case Type::tInt3:           return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
@@ -1827,7 +1869,10 @@ namespace das {
         size_t count = 0;
         size_t total = penum->list.size();
         for ( auto & itf : penum->list ) {
-            vis.preVisitEnumerationValue(penum, itf.first, itf.second, count++==total);
+            vis.preVisitEnumerationValue(penum, itf.first, itf.second.get(), count==total);
+            if ( itf.second ) itf.second = itf.second->visit(vis);
+            itf.second = vis.visitEnumerationValue(penum, itf.first, itf.second.get(), count==total);
+            count ++;
         }
         return vis.visit(penum);
     }

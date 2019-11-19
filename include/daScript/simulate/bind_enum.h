@@ -45,7 +45,7 @@ public:\
         enum_name enumArray[] = { DAS_FOR_EACH(helper, enum_name, __VA_ARGS__) };\
         static const char *enumArrayName[] = { DAS_FOR_EACH(DAS_BIND_ENUM_PRINT_HELPER, enum_name, __VA_ARGS__) };\
         for (uint32_t i = 0; i < sizeof(enumArray)/sizeof(enumArray[0]); ++i)\
-            add(enumArrayName[i], int32_t(enumArray[i]));\
+            addI(enumArrayName[i], int32_t(enumArray[i]));\
     }\
 };
 

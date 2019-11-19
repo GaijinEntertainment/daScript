@@ -230,11 +230,23 @@ namespace das {
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
-            auto sim = Program::makeConst(expr->at, expr->type, value);
-            sim->type = make_shared<TypeDecl>(*expr->type);
-            sim->constexpression = true;
-            reportFolding();
-            return sim;
+            if ( expr->type->baseType==Type::tEnumeration ) {
+                int32_t ival = cast<int32_t>::to(value);
+                auto cef = expr->type->enumType->find(ival, "");
+                if ( cef.empty() ) return expr->shared_from_this(); // it folded to unsupported value
+                auto sim = make_shared<ExprConstEnumeration>(expr->at, cef, expr->type);
+                sim->type = make_shared<TypeDecl>(Type::tEnumeration);
+                sim->type->enumType = expr->type->enumType;
+                sim->constexpression = true;
+                reportFolding();
+                return sim;
+            } else {
+                auto sim = Program::makeConst(expr->at, expr->type, value);
+                sim->type = make_shared<TypeDecl>(*expr->type);
+                sim->constexpression = true;
+                reportFolding();
+                return sim;
+            }
         } else {
             return expr->shared_from_this();
         }

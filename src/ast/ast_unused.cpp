@@ -456,13 +456,27 @@ namespace das {
                         }
                     } else {
                         if ( expr->type->isFoldable() && !expr->variable->access_init ) {
-                            reportFolding();
-                            if ( expr->type->baseType==Type::tString ) {
+                            if ( expr->type->baseType==Type::tEnumeration ) {
+                                auto cfv = expr->type->enumType->find(0, "");
+                                if ( !cfv.empty() ) {
+                                    reportFolding();
+                                    auto exprV = make_shared<ExprConstEnumeration>(expr->at, cfv, make_shared<TypeDecl>(*expr->type));
+                                    exprV->type = make_shared<TypeDecl>(Type::tEnumeration);
+                                    exprV->type->enumType = expr->type->enumType;
+                                    exprV->type->constant = true;
+                                    return exprV;
+                                }
+                            } else if ( expr->type->baseType==Type::tString ) {
+                                reportFolding();
                                 auto exprV = make_shared<ExprConstString>(expr->at);
+                                exprV->type = make_shared<TypeDecl>(Type::tString);
+                                exprV->type->constant = true;
                                 return exprV;
                             } else {
+                                reportFolding();
                                 auto exprV = Program::makeConst(expr->at, expr->type, v_zero());
                                 exprV->type = make_shared<TypeDecl>(*expr->type);
+                                exprV->type->constant = true;
                                 return exprV;
                             }
                         }

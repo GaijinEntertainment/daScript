@@ -31,7 +31,10 @@ namespace das {
         virtual TypeDeclPtr visit ( TypeDecl * td ) { return td->shared_from_this(); }
         // ENUMERATOIN
         virtual void preVisit ( Enumeration * enu ) { }
-        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) { }
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) { }
+        virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) {
+            return value->shared_from_this();
+        }
         virtual EnumerationPtr visit ( Enumeration * enu ) { return enu->shared_from_this(); }
         // STRUCTURE
         virtual void preVisit ( Structure * var ) { }

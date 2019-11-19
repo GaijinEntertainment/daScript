@@ -32,6 +32,7 @@ void Module_UnitTest::addEnumTest(ModuleLibrary &lib)
     // enum
     addEnumeration(make_shared<EnumerationGooEnum>());
     addEnumeration(make_shared<EnumerationSomeEnum>());
+    addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo)>(*this, lib, "free_takeOne_giveTwo", SideEffects::none, "efn_takeOne_giveTwo");
     addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo)>(*this, lib, "efn_takeOne_giveTwo", SideEffects::modifyExternal);
     addExtern<DAS_BIND_FUN(efn_flip)>(*this, lib, "efn_flip", SideEffects::modifyExternal, "efn_flip");
     // enum98

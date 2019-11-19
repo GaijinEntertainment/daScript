@@ -16,6 +16,8 @@ enum Zen
 
 [export]
 def test
+    assert ( int(Numbers zero)==0 )
+    assert ( int(Numbers two)==2 )
     assert ( int(Numbers ten)==10 )
     assert ( int(Numbers sixteen)==16 )
     assert ( int(Numbers neg_ten)==-10 )
@@ -34,6 +36,8 @@ def test
     assert ( Zen zero == Zen zero )
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
+    assert ( free_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
+    assert ( free_takeOne_giveTwo(SomeEnum two)==SomeEnum zero )
 	verify ( efn_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
 	verify ( efn_takeOne_giveTwo_98(SomeEnum98 SomeEnum98_one)==SomeEnum98 SomeEnum98_two )
     var goo : GooEnum

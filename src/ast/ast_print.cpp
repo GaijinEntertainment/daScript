@@ -112,9 +112,13 @@ namespace das {
             Visitor::preVisit(enu);
             ss << "enum " << enu->name << "\n";
         }
-        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) override {
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu, name, value, last);
-            ss << "\t" << name << " = " << value << "\n";
+            ss << "\t" << name << " = ";
+        }
+        virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
+            ss << "\n";
+            return Visitor::visitEnumerationValue(enu, name, value, last);
         }
     // strcuture
         virtual void preVisit ( Structure * that ) override {
@@ -455,8 +459,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstEnumeration * c ) override {
-            auto value = c->getValue();
-            ss << c->enumType->name << " " << c->enumType->find(value,to_string(value));
+            ss << c->enumType->name << " " << c->text;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {

@@ -748,21 +748,25 @@ namespace das {
     // enumeration
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
-            if ( !enu->external ) {
-                ss << "\nenum class " << enu->name << " {\n";
+            if ( enu->external ) {
+                ss << "#if 0 // external enum\n";
             }
+            ss << "\nenum class " << enu->name << " {\n";
         }
-        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, int value, bool last ) override {
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu, name, value, last);
-            if ( !enu->external ) {
-                ss << "\t" << name << " = " << value;
-                if ( !last ) ss << ",";
-                ss << "\n";
-            }
+            ss << "\t" << name << " = int32_t(";
+        }
+        virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
+            ss << ")";
+            if ( !last ) ss << ",";
+            ss << "\n";
+            return Visitor::visitEnumerationValue(enu, name, value, last);
         }
         virtual EnumerationPtr visit ( Enumeration * enu ) override {
-            if ( !enu->external ) {
-                ss << "};\n";
+            ss << "};\n";
+            if ( enu->external ) {
+                ss << "#endif // external enum\n";
             }
             return Visitor::visit(enu);
         }
@@ -1487,9 +1491,8 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstEnumeration * c ) override {
-            auto value = c->getValue();
             ss << describeCppType(c->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes,CpptRedundantConst::no)
-                << "::" << c->enumType->find(value,to_string(value));
+                << "::" << c->text;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {

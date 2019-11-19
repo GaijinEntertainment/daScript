@@ -51,6 +51,7 @@ namespace das {
         bool                    needRestart = false;
         uint32_t                newLambdaIndex = 1;
         bool                    enableInferTimeFolding;
+        Expression *            lastEnuValue = nullptr;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -959,6 +960,53 @@ namespace das {
             if ( inferTypeExpr(type) ) {
                 reportGenericInfer();
             }
+        }
+
+    // enumeration
+
+        virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
+            if ( !value ) {
+                if ( lastEnuValue ) {
+                    if ( lastEnuValue->rtti_isConstant() && lastEnuValue->type && lastEnuValue->type->isIndex() ) {
+                        reportGenericInfer();
+                        auto nextInt = getConstExprIntOrUInt(lastEnuValue->shared_from_this()) + 1;
+                        auto nextValue = make_shared<ExprConstInt>(nextInt);
+                        nextValue->type = make_shared<TypeDecl>(Type::tInt);
+                        lastEnuValue = nextValue.get();
+                        return nextValue;
+                    } else {
+                        error("enumeration value " + name + " can't be infered yet", enu->at);
+                    }
+                } else {
+                    reportGenericInfer();
+                    auto zeroValue = make_shared<ExprConstInt>(0);
+                    zeroValue->type = make_shared<TypeDecl>(Type::tInt);
+                    lastEnuValue = zeroValue.get();
+                    return zeroValue;
+                }
+            } else {
+                if ( !value->type ) {
+                    error("enumeration value " + name + " can't be infered yet", value->at);
+                } else if ( !value->type || !value->type->isIndex() ) {
+                    error("enumeration value " + name + " has to be int or uint",
+                          value->at, CompilationError::invalid_enumeration);
+                } else if ( !value->rtti_isConstant() ) {
+                    error("enumeration value " + name + " must be constant",
+                          value->at, CompilationError::invalid_enumeration);
+                }
+            }
+            lastEnuValue = value;
+            return Visitor::visitEnumerationValue(enu, name, value, last);
+        }
+
+        virtual void preVisit ( Enumeration * enu ) override {
+            Visitor::preVisit(enu);
+            lastEnuValue = nullptr;
+        }
+
+        virtual EnumerationPtr visit ( Enumeration * enu ) override {
+            lastEnuValue = nullptr;
+            return Visitor::visit(enu);
         }
 
     // strcuture
@@ -2855,6 +2903,13 @@ namespace das {
         }
         ExpressionPtr getConstExpr ( Expression * expr ) {
             if ( expr->rtti_isConstant() && expr->type && expr->type->isFoldable() ) {
+                if ( expr->type->isEnum() ) {
+                    auto enumc = static_cast<ExprConstEnumeration *>(expr);
+                    auto enumv = enumc->enumType->find(enumc->text);
+                    if ( !enumv.second ) return nullptr;                        // not found???
+                    if ( !enumv.first ) return nullptr;                         // not resolved
+                    if ( !enumv.first->rtti_isConstant() ) return nullptr;      // not a constant
+                }
                 return expr->shared_from_this();
             }
             if ( expr->rtti_isR2V() ) {

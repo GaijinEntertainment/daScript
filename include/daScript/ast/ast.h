@@ -88,19 +88,18 @@ namespace das
         Enumeration() = default;
         Enumeration( const string & na ) : name(na) {}
         bool add ( const string & f );
-        bool add ( const string & f, int v );
+        bool add ( const string & f, const ExpressionPtr & expr );
+        bool addI ( const string & f, int32_t value );
         string describe() const { return name; }
         string getMangledName() const;
         int find ( const string & na, int def ) const;
         string find ( int va, const string & def ) const;
-        pair<int,bool> find ( const string & f ) const;
+        pair<ExpressionPtr,bool> find ( const string & f ) const;
     public:
         string          name;
         string          cppName;
         LineInfo        at;
-        map<string,int> list;
-        map<int,string> listI;
-        int             lastOne = 0;
+        vector<pair<string,ExpressionPtr>> list;
         Module *        module = nullptr;
         bool            external = false;
     };
