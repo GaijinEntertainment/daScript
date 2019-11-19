@@ -14,8 +14,16 @@ enum Zen
     zero
     not_zero
 
+struct Foo
+    a : int
+    b : float
+
+enum QQ
+    size_of_Foo_Padded = typeinfo(sizeof type Foo) + 8
+
 [export]
 def test
+    assert ( int(QQ size_of_Foo_Padded)==16 )
     assert ( int(Numbers zero)==0 )
     assert ( int(Numbers two)==2 )
     assert ( int(Numbers ten)==10 )
