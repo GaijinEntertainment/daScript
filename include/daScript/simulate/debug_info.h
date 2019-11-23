@@ -126,6 +126,7 @@ namespace das
             flag_isRawPod = 1<<4,
             flag_isConst = 1<<5,
             flag_isTemp = 1<<6,
+            flag_isImplicit = 1<<7,
         };
         Type                type;
         StructInfo *        structType;
@@ -146,6 +147,7 @@ namespace das
         __forceinline bool isRawPod() const { return flags & flag_isRawPod; }
         __forceinline bool isConst() const { return flags & flag_isConst; }
         __forceinline bool isTemp() const { return flags & flag_isTemp; }
+        __forceinline bool isImplicit() const { return flags & flag_isImplicit; }
     };
 
     TypeAnnotation * resolveAnnotation ( TypeInfo * info );

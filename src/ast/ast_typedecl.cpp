@@ -308,6 +308,9 @@ namespace das
         if ( temporary ) {
             stream << "#";
         }
+        if ( implicit ) {
+            stream << "!";
+        }
         if (contracts) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {
                 stream << " delete ";
@@ -641,6 +644,9 @@ namespace das
              bool topLevel ) const {
         if ( topLevel && !isRef() && !isPointer() ) {
             constMatters = ConstMatters::no;
+        }
+        if ( topLevel && !isTempType() ) {
+            temporaryMatters = TemporaryMatters::no;
         }
         if ( baseType!=decl.baseType ) {
             return false;
@@ -1232,11 +1238,37 @@ namespace das
     }
 
     bool TypeDecl::isTempType() const {
-        return isRef() || isPointer();
+        return isRef() || isPointer() || baseType==Type::tIterator;
     }
 
-    bool TypeDecl::isTempExplicitType() const {
-        return isTempType() && (baseType==Type::tArray || baseType==Type::tTable); // todo: or Handle with function
+    bool TypeDecl::isTemp( bool topLevel ) const {
+        if ( topLevel && !isTempType() ) {
+            return false;
+        } else if ( temporary ) {
+            return true;
+        } else if ( baseType==Type::tStructure ) {
+            return structType ? structType->isTemp() : false;
+        } else if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
+            return firstType ? firstType->isTemp(false) : false;
+        } else if ( baseType==Type::tArray ) {
+            return firstType ? firstType->isTemp(false) : false;
+        } else if ( baseType==Type::tTable ) {
+            if ( firstType && firstType->isTemp(false) ) {
+                return true;
+            } else if ( secondType && secondType->isTemp(false) ) {
+                return true;
+            }
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
+            if ( firstType && firstType->isTemp() ) {
+                return true;
+            }
+            for ( const auto & argT : argTypes ) {
+                if ( argT->isTemp() ) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     bool TypeDecl::isNumeric() const {

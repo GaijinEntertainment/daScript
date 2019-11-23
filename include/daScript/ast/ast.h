@@ -136,6 +136,7 @@ namespace das
         bool isPod() const;
         bool isRawPod() const;
         bool isLocal() const;
+        bool isTemp() const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;

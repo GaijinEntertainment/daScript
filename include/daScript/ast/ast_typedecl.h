@@ -60,8 +60,8 @@ namespace das {
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
+        bool isTemp( bool topLevel = true ) const;
         bool isTempType() const;
-        bool isTempExplicitType() const; // this type can't be demoted from local to temp automatically
         bool isIndex() const;
         bool isNumeric() const;
         bool isNumericComparable() const;
@@ -127,6 +127,7 @@ namespace das {
                 bool    ref : 1 ;
                 bool    constant : 1;
                 bool    temporary : 1;
+                bool    implicit : 1;
                 bool    removeRef : 1;
                 bool    removeConstant : 1;
                 bool    removeDim : 1;

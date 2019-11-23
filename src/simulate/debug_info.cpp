@@ -369,6 +369,12 @@ namespace das
         }
         if ( info->flags & TypeInfo::flag_ref )
             stream << " &";
+        if ( info->flags & TypeInfo::flag_isTemp ) {
+            stream << " #";
+        }
+        if ( info->flags & TypeInfo::flag_isImplicit ) {
+            stream << " !";
+        }
         return stream.str();
     }
 

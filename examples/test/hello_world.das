@@ -1,14 +1,20 @@
 options log = true
+// options log_infer_passes = true
 
-require UnitTest
-
-[sideeffects]
-def GetGoo(arg:string)
-    return CheckEid(arg)
+[unsafe]
+def lock ( Tab : table<auto(keyT);auto(valT)>; blk : block<(t : table<keyT;valT>#):void >  )
+    __builtin_table_lock(Tab)
+    invoke(blk,reinterpret<table<auto(keyT);auto(valT)> const!>(Tab))
+    __builtin_table_unlock(Tab)
 
 [export]
 def test
-    let a = CheckEid("goo")
-    let b = GetGoo("goo")
-    assert(a==b)
+    var t <- {{ "one" => 1; "two" => 2 }}
+    print("t = {t}\n")
+    var tClone : table<string;int>
+    lock ( t ) <| $ ( localT )
+        debug(localT,"localT = ")
+        let l = length(localT)
+        print("length(localT) = {l}\n")
+        tClone := localT
     return true

@@ -104,10 +104,6 @@ namespace das {
                         error("can't declare a pointer to a reference, " + decl->describe(),
                               ptrType->at,CompilationError::invalid_type);
                     }
-                    if ( ptrType->isTempType() && ptrType->temporary ) {
-                        error("can't declare a pointer to a temporary value, " + decl->describe(),
-                              ptrType->at,CompilationError::invalid_type);
-                    }
                     verifyType(ptrType);
                 }
             } else if ( decl->baseType==Type::tIterator ) {
@@ -132,10 +128,6 @@ namespace das {
                         error("array type has to be 'local', " + arrayType->describe(),
                               arrayType->at,CompilationError::invalid_type);
                     }
-                    if ( arrayType->isTempType() && arrayType->temporary ) {
-                        error("can't declare an array of temporary values, " + decl->describe(),
-                              arrayType->at,CompilationError::invalid_type);
-                    }
                     verifyType(arrayType);
                 }
             } else if ( decl->baseType==Type::tTable ) {
@@ -152,10 +144,6 @@ namespace das {
                         error("table key has to be declare as a basic 'hashable' type, " + keyType->describe(),
                               keyType->at,CompilationError::invalid_table_type);
                     }
-                    if ( keyType->isTempType() && keyType->temporary ) {
-                        error("table key can't be temporary value, " + decl->describe(),
-                              keyType->at,CompilationError::invalid_type);
-                    }
                     verifyType(keyType);
                 }
                 if ( auto valueType = decl->secondType ) {
@@ -169,10 +157,6 @@ namespace das {
                     }
                     if ( !valueType->isLocal() ) {
                         error("table value has to be 'local', " + valueType->describe(),
-                              valueType->at,CompilationError::invalid_type);
-                    }
-                    if ( valueType->isTempType() && valueType->temporary ) {
-                        error("table value can't be temporary value, " + decl->describe(),
                               valueType->at,CompilationError::invalid_type);
                     }
                     verifyType(valueType);
@@ -196,10 +180,6 @@ namespace das {
                 for ( auto & argType : decl->argTypes ) {
                     if ( argType->ref ) {
                         error("tuple element can't be ref, " + argType->describe(),
-                              argType->at,CompilationError::invalid_type);
-                    }
-                    if ( argType->isTempType() && argType->temporary ) {
-                        error("tuple element can't be temporary value, " + decl->describe(),
                               argType->at,CompilationError::invalid_type);
                     }
                     verifyType(argType);
@@ -508,8 +488,12 @@ namespace das {
                 return TypeDecl::inferGenericType(passType, argType) != nullptr;
             }
             // compare types which don't need inference
-            if (passType && ((argType->isRef() && !passType->isRef()) ||
-                    !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))) {
+            auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
+            if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, tempMatters) ) {
+                return false;
+            }
+            // can't pass non-ref to ref
+            if ( argType->isRef() && !passType->isRef() ) {
                 return false;
             }
             // ref types can only add constness
@@ -518,14 +502,6 @@ namespace das {
             }
             // pointer types can only add constant
             if (argType->isPointer() && !argType->constant && passType->constant) {
-                return false;
-            }
-            // temp types can't be passed to regular types
-            if (argType->isTempType() && !argType->temporary && passType->temporary) {
-                return false;
-            }
-            // temp types can't accept !temp explicit types
-            if (argType->isTempType() && argType->temporary && !passType->temporary && passType->isTempExplicitType() ) {
                 return false;
             }
             // all good
@@ -650,9 +626,6 @@ namespace das {
                     if (arg->value->type->isAlias()) {
                         ss << "\t\t" << reportAliasError(arg->value->type) << "\n";
                     }
-                    if ( arg->value->type->isTempType() && !pFn->arguments[fnArgIndex]->type->temporary && arg->value->type->temporary ) {
-                        ss << "\t\t\tcan't pass temporary type to non-temporary input\n";
-                    }
                     return ss.str();
                 }
                 fnArgIndex ++;
@@ -679,9 +652,6 @@ namespace das {
                         << arg->type->describe() << ", passing " << passType->describe() << "\n";
                     if ( passType->isAlias() ) {
                         ss << "\t\t" << reportAliasError(passType) << "\n";
-                    }
-                    if ( arg->type->isTempType() && !arg->type->temporary && passType->temporary ) {
-                        ss << "\t\t\tcan't pass temporary type to non-temporary input\n";
                     }
                 }
             }
@@ -1068,8 +1038,6 @@ namespace das {
                 error("structure field type can't be declared void",decl.at,CompilationError::invalid_structure_field_type);
             } else if ( decl.type->ref ) {
                 error("structure field type can't be declared a reference",decl.at,CompilationError::invalid_structure_field_type);
-            } else if ( decl.type->isTempType() && decl.type->temporary ) {
-                error("structure field can't be temporary value, " + decl.type->describe(), decl.at,CompilationError::invalid_type);
             }
             if ( decl.init ) {
                 if ( decl.init->type ) {
@@ -1270,7 +1238,7 @@ namespace das {
                 error("returning reference requires [unsafe]",
                       func->result->at,CompilationError::invalid_return_type);
             }
-            if ( func->result->isTempType() && func->result->temporary && !func->unsafe ) {
+            if ( func->result->isTemp() && !func->unsafe ) {
                 error("returning temporary value requires [unsafe]",
                       func->result->at,CompilationError::invalid_return_type);
             }
@@ -1626,9 +1594,13 @@ namespace das {
                 auto & passType = expr->arguments[i+1]->type;
                 auto & argType = blockT->argTypes[i];
                 // same type only
-                if ( passType && ((argType->isRef() && !passType->isRef()) ||
-                        !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) ) {
+                if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, TemporaryMatters::yes) ) {
                     error("incomaptible argument " + to_string(i+1) + " (" + passType->describe() + ") vs "
+                          + argType->describe() + ")", expr->at, CompilationError::invalid_argument_type);
+                }
+                // can't pass non-ref to reff
+                if ( argType->isRef() && !passType->isRef() ) {
+                    error("incomaptible argument. can't pass non-ref to ref " + to_string(i+1) + " (" + passType->describe() + ") vs "
                           + argType->describe() + ")", expr->at, CompilationError::invalid_argument_type);
                 }
                 // ref types can only add constness
@@ -2294,7 +2266,7 @@ namespace das {
                     error("returning reference from block requires [unsafe]",
                           block->at,CompilationError::invalid_return_type);
                 }
-                if ( block->returnType && block->returnType->isTempType() && block->returnType->temporary && !func->unsafe ) {
+                if ( block->returnType && block->returnType->isTemp() && !func->unsafe ) {
                     error("returning temporary value requires [unsafe]",
                           block->at,CompilationError::invalid_return_type);
                 }
@@ -2669,8 +2641,8 @@ namespace das {
                 error("this type can't be moved, use clone (:=) instead\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_move);
             } else if ( expr->right->type->constant ) {
                 error("can't move from a constant value\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_move);
-            } else if ( expr->left->type->isPointer() && expr->right->type->temporary ) {
-                error("can't move temporary pointer\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_pass_temporary);
+            } else if ( expr->right->type->isTemp() ) {
+                error("can't move temporary value\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_pass_temporary);
             }
             expr->type = make_shared<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
@@ -2688,8 +2660,8 @@ namespace das {
                 error("can only copy to a reference\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {
                 error("can't write to a constant value\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_write_to_const);
-            } else if ( expr->left->type->isPointer() && expr->right->type->temporary ) {
-                error("can't copy temporary pointer\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_pass_temporary);
+            } else if ( expr->right->type->isTemp() ) {
+                    error("can't copy temporary value\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_pass_temporary);
             }
             if ( !expr->left->type->canCopy() ) {
                 error("this type can't be copied, use move (<-) or clone (:=) instead\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_copy);
@@ -2724,16 +2696,18 @@ namespace das {
                 error("can't write to a constant value", expr->at, CompilationError::cant_write_to_const);
             } else if ( !expr->left->type->canClone() ) {
                 error("this type can't be cloned", expr->at, CompilationError::cant_copy);
-            } else if ( expr->left->type->isPointer() && expr->right->type->temporary ) {
-                error("can't clone temporary pointer", expr->at, CompilationError::cant_pass_temporary);
             } else {
                 auto cloneType = expr->left->type;
                 if ( cloneType->isHandle() ) {
                     expr->type = make_shared<TypeDecl>();  // we return nothing
                     return Visitor::visit(expr);
                 } else if ( cloneType->canCopy() ) {
-                    reportGenericInfer();
-                    return make_shared<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
+                    if ( expr->right->type->isTemp() ) {
+                        error("can't clone (copy) temporary value", expr->at, CompilationError::cant_pass_temporary);
+                    } else {
+                        reportGenericInfer();
+                        return make_shared<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
+                    }
                 } else if ( cloneType->isGoodArrayType() || cloneType->isGoodTableType() ) {
                     reportGenericInfer();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
@@ -2801,7 +2775,7 @@ namespace das {
                 if ( !expr->subexpr ) {
                     error("expecting a return value", expr->at, CompilationError::expecting_return_value);
                 } else {
-                    if ( !resType->isSameType(*expr->subexpr->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                    if ( !resType->isSameType(*expr->subexpr->type,RefMatters::no, ConstMatters::no, TemporaryMatters::yes) ) {
                         error("incompatible return type, expecting "
                               + resType->describe() + ", passing " + expr->subexpr->type->describe(),
                               expr->at, CompilationError::invalid_return_type);
@@ -2815,16 +2789,6 @@ namespace das {
                         error("incompatible return type, constant matters. expecting "
                               + resType->describe() + ", passing " + expr->subexpr->type->describe(),
                               expr->at, CompilationError::invalid_return_type);
-                    }
-                    if ( resType->isTempType() && resType->temporary && !expr->subexpr->type->temporary ) {
-                        error("incompatible return type, can only return temporary value. expecting "
-                              + resType->describe() + ", passing " + expr->subexpr->type->describe(),
-                              expr->at, CompilationError::cant_pass_temporary);
-                    }
-                    if ( resType->isTempType() && !resType->temporary && expr->subexpr->type->temporary ) {
-                        error("incompatible return type, can't return temporary value. expecting "
-                              + resType->describe() + ", passing " + expr->subexpr->type->describe(),
-                              expr->at, CompilationError::cant_pass_temporary);
                     }
                 }
             }
@@ -3365,7 +3329,8 @@ namespace das {
                             auto & passT = types[sz];
                             auto resT = TypeDecl::inferGenericType(argT, passT);
                             DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
-                            resT->ref = false;              // by default no ref
+                            resT->ref = false;                  // by default no ref
+                            resT->implicit = argT->implicit;    // copy implicit on the arguments
                             TypeDecl::applyAutoContracts(resT, argT);
                             if ( resT->isRefType() ) {   // we don't pass boxed type by reference ever
                                 resT->ref = false;

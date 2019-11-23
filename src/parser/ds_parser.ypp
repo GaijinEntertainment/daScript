@@ -1663,6 +1663,10 @@ type_declaration
         $$ = $typeDecl;
         $$->temporary = true;
     }
+    |   type_declaration[typeDecl] '!' {
+        $$ = $typeDecl;
+        $$->implicit = true;
+    }
     |   type_declaration[typeDecl] DAS_DELETE '#' {
         $typeDecl->temporary = false;
         $typeDecl->removeTemporary = true;
