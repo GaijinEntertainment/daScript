@@ -187,6 +187,14 @@ namespace das {
             }
         }
 
+        void propagateTempType ( const TypeDeclPtr & parentType, TypeDeclPtr & subexprType ) {
+            if ( subexprType->isTempType() ) {
+                if ( parentType->temporary ) subexprType->temporary = true;   // array<int?># -> int?#
+            } else {
+                subexprType->temporary = false; // array<int#> -> int
+            }
+        }
+
         // find type alias name, and resolve it to type
         // without one generic function
         const TypeDecl * findFuncAlias ( const FunctionPtr & fptr, const string & name ) const {
@@ -1385,6 +1393,7 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(*expr->subexpr->type->firstType);
                 expr->type->ref = true;
                 expr->type->constant |= expr->subexpr->type->constant;
+                propagateTempType(expr->subexpr->type, expr->type); // deref(Foo#?) is Foo#
             }
             return Visitor::visit(expr);
         }
@@ -1403,6 +1412,7 @@ namespace das {
                 expr->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
                 expr->type->firstType->ref = false;
                 expr->type->constant |= expr->subexpr->type->constant;
+                propagateTempType(expr->subexpr->type, expr->type); // addr(Foo#) is Foo#?#
             }
             return Visitor::visit(expr);
         }
@@ -1417,7 +1427,7 @@ namespace das {
                 error("can only dereference a pointer", expr->at, CompilationError::cant_dereference);
             } else if ( !seT->firstType || seT->firstType->isVoid() ) {
                 error("can only dereference a pointer to something", expr->at, CompilationError::cant_dereference);
-            } else if ( !seT->firstType->isSameType(*dvT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+            } else if ( !seT->firstType->isSameType(*dvT,RefMatters::no, ConstMatters::no, TemporaryMatters::yes) ) {
                 error("default value type mismatch in (" + seT->firstType->describe() + ") vs ("
                       + dvT->describe() + ")", expr->at, CompilationError::cant_dereference);
             } else if ( seT->isRef() && !seT->isConst() && dvT->isConst() ) {
@@ -1426,6 +1436,7 @@ namespace das {
             } else {
                 expr->type = make_shared<TypeDecl>(*dvT);
                 expr->type->constant |= expr->subexpr->type->constant;
+                propagateTempType(expr->subexpr->type, expr->type);
             }
             return Visitor::visit(expr);
         }
@@ -1767,9 +1778,15 @@ namespace das {
                 } else if ( expr->trait=="is_ref_type" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRefType());
-                }else if ( expr->trait=="is_const" ) {
+                } else if ( expr->trait=="is_const" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isConst());
+                } else if ( expr->trait=="is_temp" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isTemp());
+                } else if ( expr->trait=="is_temp_type" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isTempType());
                 } else if ( expr->trait=="is_pointer" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
@@ -2118,10 +2135,13 @@ namespace das {
                     expr->type = make_shared<TypeDecl>(*seT->firstType);
                     expr->type->ref = true;
                     expr->type->constant |= seT->constant;
-                    return Visitor::visit(expr);
                 }
             } else {
-                if ( seT->isVectorType() ) {
+                if ( !ixT->isIndex() ) {
+                    expr->type.reset();
+                    error("index must be int or uint, not " + ixT->describe(), expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
+                } else if ( seT->isVectorType() ) {
                     expr->type = make_shared<TypeDecl>(seT->getVectorBaseType());
                     expr->type->ref = seT->ref;
                     expr->type->constant = seT->constant;
@@ -2131,19 +2151,17 @@ namespace das {
                     expr->type->constant |= seT->constant;
                 } else if ( !seT->isRef() ) {
                     error("can only index a reference type, not " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
+                    return Visitor::visit(expr);
                 } else if ( !seT->dim.size() ) {
                     error("type can't be indexed " + seT->describe(), expr->subexpr->at, CompilationError::cant_index);
+                    return Visitor::visit(expr);
                 } else {
                     expr->type = make_shared<TypeDecl>(*seT);
                     expr->type->ref = true;
                     expr->type->dim.pop_back();
                 }
-                if ( !ixT->isIndex() ) {
-                    expr->type.reset();
-                    error("index must be int or uint, not " + ixT->describe(), expr->index->at, CompilationError::invalid_index_type);
-                    return Visitor::visit(expr);
-                }
             }
+            propagateTempType(expr->subexpr->type, expr->type);
             return Visitor::visit(expr);
         }
     // ExprBlock
@@ -2353,9 +2371,11 @@ namespace das {
             } else if ( !expr->type ) {
                 error("field " + expr->name + " not found in " + expr->value->type->describe(),
                       expr->at, CompilationError::cant_get_field);
+                return Visitor::visit(expr);
             } else {
                 expr->type->constant |= valT->constant;
             }
+            propagateTempType(expr->value->type, expr->type);
             return Visitor::visit(expr);
         }
     // ExprSafeField
@@ -2403,6 +2423,7 @@ namespace das {
                 expr->type->firstType = fieldType;
             }
             expr->type->constant |= valT->constant;
+            propagateTempType(expr->value->type, expr->type);
             return Visitor::visit(expr);
         }
     // ExprVar
@@ -3112,6 +3133,7 @@ namespace das {
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
+                    varT = TypeDecl::inferGenericType(var->type, var->init->type);
                     error("local variable initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
@@ -3311,7 +3333,6 @@ namespace das {
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
             if ( functions.size()>1 || generics.size()>1 ) {
-                generics = findMatchingGenerics(expr->name, types);
                 reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {

@@ -102,7 +102,7 @@ namespace das
                 return make_shared<TypeDecl>(*autoT);
             } else if (autoT->baseType == Type::tBlock || autoT->baseType == Type::tFunction
                 || autoT->baseType == Type::tLambda || autoT->baseType == Type::tTuple) {
-                // ok. if its fancy, we allow two-sided infer
+                /* two-sided infer */
             } else {
                 /*
                 if ( aliases && !autoT->alias.empty() ) {
@@ -142,6 +142,11 @@ namespace das
                     return nullptr;
                 }
             }
+        }
+        // non-implicit temp can't be infered from non-temp, and non-temp from temp
+        if ( autoT->baseType!=autoinfer && !autoT->implicit ) {
+            if ( autoT->temporary != initT->temporary )
+                return nullptr;
         }
         // auto? can't be infered from non-pointer
         if ( autoT->isPointer() && (!initT->isPointer() || !initT->firstType) )
