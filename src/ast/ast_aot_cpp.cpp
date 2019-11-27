@@ -1423,6 +1423,9 @@ namespace das {
                     << field->value->type->getTupleFieldOffset(field->tupleIndex)
                     << ">::get(";
             } else if ( field->value->type->isHandle() ) {
+                if (field->type->isString()) {
+                    ss << "((" << describeCppType(field->type) << ")(";  // c-cast const char * etc string casts to char * or char * const
+                }
                 field->value->type->annotation->aotPreVisitGetField(ss, field->name);
             } else if ( field->value->type->baseType==Type::tPointer ) {
                 if ( field->value->type->firstType->isHandle() ) {
@@ -1442,6 +1445,9 @@ namespace das {
             } else if ( field->value->type->isHandle() ) {
                 field->value->type->annotation->aotVisitGetField(ss, field->name);
                 ss << " /*" << field->name << "*/";
+                if (field->type->isString()) {
+                    ss << "))";
+                }
             } else if ( field->value->type->baseType==Type::tPointer ) {
                 if ( field->value->type->firstType->isHandle() ) {
                     field->value->type->firstType->annotation->aotVisitGetFieldPtr(ss, field->name);
@@ -2233,6 +2239,9 @@ namespace das {
                 ss << "(" << makeLocalTempName(call) << " = (";
             }
             if ( call->func->builtIn ) {
+                if ( call->func->result->isString() ) {
+                    ss << "((" << describeCppType(call->func->result) << ")(";  // c-cast const char * etc string casts to char * or char * const
+                }
                 auto bif = static_cast<BuiltInFunction *>(call->func);
                 if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
                     // c-tor?
@@ -2348,6 +2357,9 @@ namespace das {
                 ss << ",*__context__";
             }
             ss << ")";
+            if ( call->func->builtIn && call->func->result->isString() ) {
+                ss << "))";
+            }
             if ( isCallWithTemp(call) ) {
                 ss << "))";
             }
