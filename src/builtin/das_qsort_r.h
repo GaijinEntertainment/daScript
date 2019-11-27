@@ -35,6 +35,20 @@ namespace das
 /* Minor changes by Rich Felker for integration in musl, 2011-04-27. */
 //modified by Anton Yudintsev, to make inline comparator
 
+/*
+//while we can make it work for 64 bit size_t our arrays size are limited to even 31 bit.
+//so instead just use uint32_t instead of size_t everywhere
+static inline int ntz_64(uint64_t x)
+{
+	static const char debruijn64[64] = {
+		0, 1, 2, 53, 3, 7, 54, 27, 4, 38, 41, 8, 34, 55, 48, 28,
+		62, 5, 39, 46, 44, 42, 22, 9, 24, 35, 59, 56, 49, 18, 29, 11,
+		63, 52, 6, 26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
+		51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12
+	};
+	return debruijn64[(x&-x)*0x022fdd63cc95386dull >> 58];
+}*/
+
 static inline int ntz(unsigned long x)
 {
 	static const char debruijn32[32] = {
@@ -43,18 +57,19 @@ static inline int ntz(unsigned long x)
 	};
 	return debruijn32[(x&-x)*0x076be629 >> 27];
 }
-static inline int pntz(size_t p[2]) {
+
+static inline int pntz(uint32_t p[2]) {
 	int r = ntz(p[0] - 1);
-	if(r != 0 || (r = 8*sizeof(size_t) + ntz(p[1])) != 8*sizeof(size_t)) {
+	if(r != 0 || (r = 8*sizeof(uint32_t) + ntz(p[1])) != 8*sizeof(uint32_t)) {
 		return r;
 	}
 	return 0;
 }
 
-static void cycle(size_t width, unsigned char* ar[], int n)
+static void cycle(uint32_t width, unsigned char* ar[], int n)
 {
 	unsigned char tmp[256];
-	size_t l;
+	uint32_t l;
 	int i;
 
 	if(n < 2) {
@@ -74,35 +89,35 @@ static void cycle(size_t width, unsigned char* ar[], int n)
 }
 
 /* shl() and shr() need n > 0 */
-static inline void shl(size_t p[2], int n)
+static inline void shl(uint32_t p[2], int n)
 {
-	if(n >= 8 * sizeof(size_t)) {
-		n -= 8 * sizeof(size_t);
+	if(n >= 8 * sizeof(uint32_t)) {
+		n -= 8 * sizeof(uint32_t);
 		p[1] = p[0];
 		p[0] = 0;
 	}
 	p[1] <<= n;
-	p[1] |= p[0] >> (sizeof(size_t) * 8 - n);
+	p[1] |= p[0] >> (sizeof(uint32_t) * 8 - n);
 	p[0] <<= n;
 }
 
-static inline void shr(size_t p[2], int n)
+static inline void shr(uint32_t p[2], int n)
 {
-	if(n >= 8 * sizeof(size_t)) {
-		n -= 8 * sizeof(size_t);
+	if(n >= 8 * sizeof(uint32_t)) {
+		n -= 8 * sizeof(uint32_t);
 		p[0] = p[1];
 		p[1] = 0;
 	}
 	p[0] >>= n;
-	p[0] |= p[1] << (sizeof(size_t) * 8 - n);
+	p[0] |= p[1] << (sizeof(uint32_t) * 8 - n);
 	p[1] >>= n;
 }
 
 template <typename Compare>
-static void sift(unsigned char *head, size_t width, Compare cmp, int pshift, size_t lp[])
+static void sift(unsigned char *head, uint32_t width, Compare cmp, int pshift, uint32_t lp[])
 {
 	unsigned char *rt, *lf;
-	unsigned char *ar[14 * sizeof(size_t) + 1];
+	unsigned char *ar[14 * sizeof(uint32_t) + 1];
 	int i = 1;
 
 	ar[0] = head;
@@ -127,12 +142,12 @@ static void sift(unsigned char *head, size_t width, Compare cmp, int pshift, siz
 }
 
 template <typename Compare>
-static void trinkle(unsigned char *head, size_t width, Compare cmp, size_t pp[2], int pshift, int trusty, size_t lp[])
+static void trinkle(unsigned char *head, uint32_t width, Compare cmp, uint32_t pp[2], int pshift, int trusty, uint32_t lp[])
 {
 	unsigned char *stepson,
 	              *rt, *lf;
-	size_t p[2];
-	unsigned char *ar[14 * sizeof(size_t) + 1];
+	uint32_t p[2];
+	unsigned char *ar[14 * sizeof(uint32_t) + 1];
 	int i = 1;
 	int trail;
 
@@ -167,14 +182,14 @@ static void trinkle(unsigned char *head, size_t width, Compare cmp, size_t pp[2]
 }
 
 template <typename Compare>
-inline void das_qsort_r(void *base, size_t nel, size_t width, Compare cmp)
+inline void das_qsort_r(void *base, uint32_t nel, uint32_t width, Compare cmp)
 {
     if (nel <= 1)
       return;
-	size_t lp[12*sizeof(size_t)];
-	size_t i, size = width * nel;
+	uint32_t lp[12*sizeof(uint32_t)];
+	uint32_t i, size = width * nel;
 	unsigned char *head, *high;
-	size_t p[2] = {1, 0};
+	uint32_t p[2] = {1, 0};
 	int pshift = 1;
 	int trail;
 
