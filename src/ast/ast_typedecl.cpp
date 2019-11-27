@@ -606,22 +606,33 @@ namespace das
     }
 
     bool TypeDecl::isLocal() const {
+        set<Structure *> dep;
+        return isLocal(dep);
+    }
+
+    bool TypeDecl::isLocal(set<Structure *> & dep) const {
         if ( isHandle() ) {
             return annotation->isLocal();
         } else if ( isStructure() ) {
-            return structType ? structType->isLocal() : false;
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return true;
+                dep.insert(structType);
+                return structType->isLocal(dep);
+            } else {
+                return true;
+            }
         } else if ( isPointer() ) {
             return true;
         }
-        if ( firstType && !firstType->isLocal() ) {
+        if ( firstType && !firstType->isLocal(dep) ) {
             return false;
         }
-        if ( secondType && !secondType->isLocal() ) {
+        if ( secondType && !secondType->isLocal(dep) ) {
             return false;
         }
         if ( baseType==Type::tTuple ) {
             for ( const auto & arg : argTypes ) {
-                if ( !arg->isLocal() ) {
+                if ( !arg->isLocal(dep) ) {
                     return false;
                 }
             }
@@ -1247,28 +1258,40 @@ namespace das
     }
 
     bool TypeDecl::isTemp( bool topLevel ) const {
+        set<Structure *> dep;
+        return isTemp(topLevel, dep);
+    }
+
+    bool TypeDecl::isTemp( bool topLevel, set<Structure *> & dep ) const {
         if ( topLevel && !isTempType() ) {
             return false;
         } else if ( temporary ) {
             return true;
         } else if ( baseType==Type::tStructure ) {
-            return structType ? structType->isTemp() : false;
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->isTemp(dep);
+            } else {
+                return false;
+            }
+            
         } else if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
-            return firstType ? firstType->isTemp(false) : false;
+            return firstType ? firstType->isTemp(false, dep) : false;
         } else if ( baseType==Type::tArray ) {
-            return firstType ? firstType->isTemp(false) : false;
+            return firstType ? firstType->isTemp(false, dep) : false;
         } else if ( baseType==Type::tTable ) {
-            if ( firstType && firstType->isTemp(false) ) {
+            if ( firstType && firstType->isTemp(false, dep) ) {
                 return true;
-            } else if ( secondType && secondType->isTemp(false) ) {
+            } else if ( secondType && secondType->isTemp(false, dep) ) {
                 return true;
             }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
-            if ( firstType && firstType->isTemp() ) {
+            if ( firstType && firstType->isTemp(true, dep) ) {
                 return true;
             }
             for ( const auto & argT : argTypes ) {
-                if ( argT->isTemp() ) {
+                if ( argT->isTemp(true, dep) ) {
                     return true;
                 }
             }

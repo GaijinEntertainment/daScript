@@ -257,18 +257,18 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
-    bool Structure::isLocal() const {   // &&
+    bool Structure::isLocal(set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
-            if ( fd.type && !fd.type->isLocal() ) {
+            if ( fd.type && !fd.type->isLocal(dep) ) {
                 return false;
             }
         }
         return true;
     }
 
-    bool Structure::isTemp() const {    // ||
+    bool Structure::isTemp(set<Structure *> & dep) const {    // ||
         for ( const auto & fd : fields ) {
-            if ( fd.type && fd.type->isTemp() ) {
+            if ( fd.type && fd.type->isTemp(true, dep) ) {
                 return true;
             }
         }

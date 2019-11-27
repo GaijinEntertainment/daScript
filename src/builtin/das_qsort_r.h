@@ -35,7 +35,7 @@ namespace das
 /* Minor changes by Rich Felker for integration in musl, 2011-04-27. */
 //modified by Anton Yudintsev, to make inline comparator
 
-static inline int ntz(unsigned long x)
+static inline int ntz(size_t x)
 {
 	static const char debruijn32[32] = {
 		0, 1, 23, 2, 29, 24, 19, 3, 30, 27, 25, 11, 20, 8, 4, 13,
@@ -191,7 +191,7 @@ inline void das_qsort_r(void *base, size_t nel, size_t width, Compare cmp)
 			shr(p, 2);
 			pshift += 2;
 		} else {
-			if(lp[pshift - 1] >= high - head) {
+			if(lp[pshift - 1] >= size_t(high - head)) {
 				trinkle(head, width, cmp, p, pshift, 0, lp);
 			} else {
 				sift(head, width, cmp, pshift, lp);

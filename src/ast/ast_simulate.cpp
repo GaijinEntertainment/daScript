@@ -746,9 +746,9 @@ namespace das
     SimNode * ExprConstEnumeration::simulate (Context & context) const {
         auto cfa = enumType->find(text);
         DAS_ASSERTF( cfa.second, "we should not even be here. enumeration value not found. failed to simulate" );
-        vec4f value = v_zero();
-        *((int32_t *)&value) = getConstExprIntOrUInt(cfa.first);
-        return context.code->makeNode<SimNode_ConstValue>(at,value);
+        vec4f envalue = v_zero();
+        *((int32_t *)&envalue) = getConstExprIntOrUInt(cfa.first);
+        return context.code->makeNode<SimNode_ConstValue>(at,envalue);
     }
 
     SimNode * ExprConstString::simulate (Context & context) const {

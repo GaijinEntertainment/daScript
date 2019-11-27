@@ -54,7 +54,8 @@ bool compile ( const string & fn, const string & cppFn ) {
             }
             // AOT time
             TextWriter tw;
-            bool noAot = program->options.getBoolOption("no_aot",false);
+            bool noAotOption = program->options.getBoolOption("no_aot",false);
+            bool noAotModule = false;
             // header
             tw << "#include \"daScript/misc/platform.h\"\n\n";
 
@@ -74,69 +75,72 @@ bool compile ( const string & fn, const string & cppFn ) {
                     }
                     if ( mod->aotRequire(tw)==ModuleAotType::no_aot ) {
                         tw << "  // AOT disabled due to this module\n";
-                        noAot = true;
+                        noAotModule = true;
                     }
                 }
                 return true;
             },"*");
-            tw << "\n";
-            tw << "#if defined(_MSC_VER)\n";
-            tw << "#pragma warning(push)\n";
-            tw << "#pragma warning(disable:4100)   // unreferenced formal parameter\n";
-            tw << "#pragma warning(disable:4189)   // local variable is initialized but not referenced\n";
-            tw << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
-            tw << "#pragma warning(disable:4114)   // same qualifier more than once\n";
-			tw << "#endif\n";
-            tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
-            tw << "#pragma GCC diagnostic push\n";
-            tw << "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n";
-            tw << "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n";
-            tw << "#pragma GCC diagnostic ignored \"-Wunused-function\"\n";
-			tw << "#pragma GCC diagnostic ignored \"-Wwrite-strings\"\n";
-			tw << "#pragma GCC diagnostic ignored \"-Wreturn-local-addr\"\n";
-			tw << "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n";
-			tw << "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n";
-			tw << "#endif\n";
-            tw << "#if defined(__clang__)\n";
-            tw << "#pragma clang diagnostic push\n";
-            tw << "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n";
-            tw << "#pragma clang diagnostic ignored \"-Wwritable-strings\"\n";
-            tw << "#pragma clang diagnostic ignored \"-Wunused-variable\"\n";
-            tw << "#pragma clang diagnostic ignored \"-Wunsequenced\"\n";
-            tw << "#pragma clang diagnostic ignored \"-Wunused-function\"\n";
-            tw << "#endif\n";
-            tw << "\n";
-            tw << "namespace das {\n";
-            tw << "namespace {\n"; // anonymous
-            // AOT actual
-            program->aotCpp(ctx, tw);
-            // list STUFF
-            tw << "struct AotList_impl : AotListBase {\n";
-            tw << "\tvirtual void registerAotFunctions ( AotLibrary & aotLib ) override {\n";
-            program->registerAotCpp(tw, ctx, false);
-            tw << "\t};\n";
-            tw << "};\n";
-            tw << "AotList_impl impl;\n";
-            tw << "}\n";
-            tw << "}\n";
-            tw << "#if defined(_MSC_VER)\n";
-            tw << "#pragma warning(pop)\n";
-			tw << "#endif\n";
-            tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
-            tw << "#pragma GCC diagnostic pop\n";
-			tw << "#endif\n";
-            tw << "#if defined(__clang__)\n";
-            tw << "#pragma clang diagnostic pop\n";
-            tw << "#endif\n";
-            // and save
-            if ( noAot ) {
+            if (noAotOption && !noAotModule) {
                 TextWriter noTw;
-                noTw << "// AOT disabled due to module requirements\n";
+                noTw << "// AOT disabled due to options no_aot=true. there are no modules which require no_aot\n\n";
+                return saveToFile(cppFn, noTw.str());
+            } else if ( noAotOption || noAotModule ) {
+                TextWriter noTw;
+                if (noAotOption) noTw << "// AOT disabled due to options no_aot=true\n";
+                if (noAotModule) noTw << "// AOT disabled due to module requirements\n";
                 noTw << "#if 0\n\n";
                 noTw << tw.str();
                 noTw << "\n#endif\n";
                 return saveToFile(cppFn, noTw.str());
             } else {
+                tw << "\n";
+                tw << "#if defined(_MSC_VER)\n";
+                tw << "#pragma warning(push)\n";
+                tw << "#pragma warning(disable:4100)   // unreferenced formal parameter\n";
+                tw << "#pragma warning(disable:4189)   // local variable is initialized but not referenced\n";
+                tw << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
+                tw << "#pragma warning(disable:4114)   // same qualifier more than once\n";
+                tw << "#endif\n";
+                tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
+                tw << "#pragma GCC diagnostic push\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wunused-function\"\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wwrite-strings\"\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wreturn-local-addr\"\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n";
+                tw << "#endif\n";
+                tw << "#if defined(__clang__)\n";
+                tw << "#pragma clang diagnostic push\n";
+                tw << "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n";
+                tw << "#pragma clang diagnostic ignored \"-Wwritable-strings\"\n";
+                tw << "#pragma clang diagnostic ignored \"-Wunused-variable\"\n";
+                tw << "#pragma clang diagnostic ignored \"-Wunsequenced\"\n";
+                tw << "#pragma clang diagnostic ignored \"-Wunused-function\"\n";
+                tw << "#endif\n";
+                tw << "\n";
+                tw << "namespace das {\n";
+                tw << "namespace {\n"; // anonymous
+                program->aotCpp(ctx, tw);
+                // list STUFF
+                tw << "struct AotList_impl : AotListBase {\n";
+                tw << "\tvirtual void registerAotFunctions ( AotLibrary & aotLib ) override {\n";
+                program->registerAotCpp(tw, ctx, false);
+                tw << "\t};\n";
+                tw << "};\n";
+                tw << "AotList_impl impl;\n";
+                tw << "}\n";
+                tw << "}\n";
+                tw << "#if defined(_MSC_VER)\n";
+                tw << "#pragma warning(pop)\n";
+                tw << "#endif\n";
+                tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
+                tw << "#pragma GCC diagnostic pop\n";
+                tw << "#endif\n";
+                tw << "#if defined(__clang__)\n";
+                tw << "#pragma clang diagnostic pop\n";
+                tw << "#endif\n";
                 return saveToFile(cppFn, tw.str());
             }
         }

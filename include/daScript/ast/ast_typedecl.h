@@ -61,6 +61,7 @@ namespace das {
         bool isRef() const;
         bool isRefType() const;
         bool isTemp( bool topLevel = true ) const;
+        bool isTemp(bool topLevel, set<Structure*> & dep) const;
         bool isTempType() const;
         bool isIndex() const;
         bool isNumeric() const;
@@ -100,6 +101,7 @@ namespace das {
         bool isAuto() const;
         bool isVectorType() const;
         bool isLocal() const;
+        bool isLocal( set<Structure*> & dep ) const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
         bool canInitWithZero() const;

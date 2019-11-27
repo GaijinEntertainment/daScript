@@ -135,8 +135,8 @@ namespace das
         bool isNoHeapType() const;
         bool isPod() const;
         bool isRawPod() const;
-        bool isLocal() const;
-        bool isTemp() const;
+        bool isLocal( set<Structure *> & dep ) const;
+        bool isTemp( set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
