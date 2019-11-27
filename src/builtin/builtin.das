@@ -10,7 +10,7 @@ def reserve(var Arr:array<auto(numT)>;newSize:int)
 def push(var Arr:array<auto(numT)>;value:numT const;at:int=-1)
     Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] = value
 
-def emplace(var Arr:array<auto(numT)>;value:numT;at:int=-1)
+def emplace(var Arr:array<auto(numT)>;var value:numT;at:int=-1)
     Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] <- value
 
 def erase(var Arr:array<auto(numT)>;at:int)
