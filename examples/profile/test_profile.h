@@ -70,12 +70,14 @@ void update10000ks(ObjectArray & objects, das::Context * context);
 
 struct EsAttribute {
     EsAttribute() = default;
-    EsAttribute ( const das::string & n, uint32_t sz, bool rf, vec4f d )
-    : def(d), name(n), size(sz), ref(rf) {}
+    EsAttribute ( const das::string & n, uint32_t sz, bool rf, vec4f d, const char * ds = "" )
+        : def(d), name(n), size(sz), ref(rf), def_s(ds) {}
+    ~EsAttribute() { if(def_s) free((void *)def_s); }
     vec4f       def = v_zero();
-    das::string      name;
+    das::string name;
     uint32_t    size = 0;
     bool        ref;
+    const char *def_s = nullptr;
 };
 
 struct EsAttributeTable {

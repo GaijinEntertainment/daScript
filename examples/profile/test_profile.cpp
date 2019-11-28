@@ -107,15 +107,20 @@ struct EsFunctionAnnotation : FunctionAnnotation {
     void buildAttributeTable ( EsAttributeTable & tab, const vector<VariablePtr> & arguments, string & err  ) {
         for ( const auto & arg : arguments ) {
             vec4f def = v_zero();
+            const char * def_s = nullptr;
             if ( arg->init ) {
                 if ( arg->init->rtti_isConstant() && !arg->init->rtti_isStringConstant() ) {
                     auto pConst = static_pointer_cast<ExprConst>(arg->init);
                     def = pConst->value;
+                } else if ( arg->init->rtti_isConstant() && arg->init->rtti_isStringConstant() ) {
+                    auto pConst = static_pointer_cast<ExprConstString>(arg->init);
+                    def_s = strdup(pConst->text.c_str());
+                    def = cast<char *>::from(def_s);
                 } else {
                     err += "default for " + arg->name + " is not a constant\n";
                 }
             }
-            tab.attributes.emplace_back(arg->name, arg->type->getSizeOf(), arg->type->isRef(), def);
+            tab.attributes.emplace_back(arg->name, arg->type->getSizeOf(), arg->type->isRef(), def, def_s);
         }
     }
     virtual bool apply ( ExprBlock * block, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
@@ -351,8 +356,11 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
             ss << "g_" << table->attributes[a].name << "[i]";
         } else {
             vec4f def = table->attributes[a].def;
+            const char * def_s = table->attributes[a].def_s;
             if ( table->attributes[a].size==4 ) {
                 ss << to_string_ex(v_extract_x(def)) << "f";
+            } else if (def_s) {
+                ss << "\"" << def_s << "\"";
             } else {
                 ss << "v_make_vec4f("
                     << to_string_ex(v_extract_x(def)) << "f," << to_string_ex(v_extract_y(def)) << "f,"
@@ -407,10 +415,10 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
     }
 };
 
-vector<float3>   g_pos ( g_total );
-vector<float3>   g_vel ( g_total );
-vector<float3 *> g_velBoxed ( g_total );
-vector<EsComponent> g_components;
+vector<float3>          g_pos ( g_total );
+vector<float3>          g_vel ( g_total );
+vector<float3 *>        g_velBoxed ( g_total );
+vector<EsComponent>     g_components;
 
 void initEsComponents() {
     // build components
@@ -436,7 +444,7 @@ void verifyEsComponents(Context * context) {
         npos.x = apos.x + avel.x * t;
         npos.y = apos.y + avel.y * t;
         npos.z = apos.z + avel.z * t;
-        if ( g_pos[i].x!=npos.x && g_pos[i].y!=npos.y && g_pos[i].z!=npos.z ) {
+        if ( g_pos[i].x!=npos.x || g_pos[i].y!=npos.y || g_pos[i].z!=npos.z ) {
             TextWriter twrt;
             twrt << "g_pos[" << i << "] (" << g_pos[i] << ") != npos (" << npos << ")\n";
             context->throw_error_ex("verifyEsComponents failed, %s\n", twrt.str().c_str());

@@ -17,6 +17,10 @@ def update2(var pos:float3&;vel:float3 const = float3(1.0f,2.0f,3.0f))   // dere
 def update3(var pos:float3&;vel:float3 const &;dt:float = 1.0f)
     pos += vel * dt
 
+[es (es_pass="ks4")]
+def update4(some_name:string = "no_name")
+	assert(some_name=="no_name")
+
 def queryOne(dt:float=1.0f)
     testProfile::queryEs() <| $ [es] (var pos:float3&;vel:float3 const)
         pos += vel * dt
@@ -65,6 +69,9 @@ def test
     profile(20,"es-update-ref-const") <|
         for i in range(0,100)
             testProfile::testEsUpdate("ks3")
+    profile(20,"es-update-def-string") <|
+        for i in range(0,100)
+            testProfile::testEsUpdate("ks4")
     profile(20,"query-1") <|
         for i in range(0,100)
             queryOne()
