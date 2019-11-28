@@ -1197,11 +1197,21 @@ namespace das {
                     error("undefined type " + var->type->describe(), var->at, CompilationError::type_not_found );
                 }
             }
-            if ( var->type->isAuto() ) {
-                error("unresolved generics are not supported", var->at, CompilationError::cant_infer_generic );
-            }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
+            if (arg->type->isAuto() ) {
+                auto varT = TypeDecl::inferGenericType(arg->type, arg->init->type);
+                if ( !varT ) {
+                    error("generic argument type can't be infered, "
+                        + arg->type->describe() + " = " + arg->init->type->describe(),
+                        arg->at, CompilationError::cant_infer_generic );
+                } else {
+                    TypeDecl::applyAutoContracts(varT, arg->type);
+                    arg->type = varT;
+                    reportGenericInfer();
+                    return Visitor::visitArgumentInit(f, arg, that);
+                }
+            }
             if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
                 error("function argument default value type mismatch (" + arg->type->describe()
                     + ") vs (" + arg->init->type->describe() + ")", arg->init->at);
@@ -1213,6 +1223,9 @@ namespace das {
             return Visitor::visitArgumentInit(f, arg, that);
         }
         virtual VariablePtr visitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            if ( var->type->isAuto() ) {
+                error("unresolved generics are not supported", var->at, CompilationError::cant_infer_generic );
+            }
             if ( var->type->ref && var->type->isRefType() ) {
                 error("can't pass boxed type by reference",var->at,CompilationError::invalid_argument_type);
             }
