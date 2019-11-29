@@ -80,14 +80,16 @@ bool compile ( const string & fn, const string & cppFn ) {
                 }
                 return true;
             },"*");
-            if (noAotOption && !noAotModule) {
+            if (noAotOption) {
                 TextWriter noTw;
-                noTw << "// AOT disabled due to options no_aot=true. there are no modules which require no_aot\n\n";
+                if (!noAotModule)
+                  noTw << "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n";
+                else
+                  noTw << "// AOT disabled due to options no_aot=true. There are also some modules which require no_aot\n\n";
                 return saveToFile(cppFn, noTw.str());
-            } else if ( noAotOption || noAotModule ) {
+            } else if ( noAotModule ) {
                 TextWriter noTw;
-                if (noAotOption) noTw << "// AOT disabled due to options no_aot=true\n";
-                if (noAotModule) noTw << "// AOT disabled due to module requirements\n";
+                noTw << "// AOT disabled due to module requirements\n";
                 noTw << "#if 0\n\n";
                 noTw << tw.str();
                 noTw << "\n#endif\n";

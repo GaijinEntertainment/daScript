@@ -503,6 +503,23 @@ namespace das
         vec4f result;
     };
 
+    class SharedStackGuard {
+    public:
+        SharedStackGuard() = delete;
+        SharedStackGuard(const SharedStackGuard &) = delete;
+        SharedStackGuard & operator = (const SharedStackGuard &) = delete;
+        __forceinline SharedStackGuard(Context & c, StackAllocator & stack) : ctx(c), ST(0) {
+            ctx.stack.acquire(stack, ST);
+        }
+        __forceinline ~SharedStackGuard() {
+            ctx.stack.release(ST);
+            ST.letGo();
+        }
+    protected:
+        Context & ctx;
+        StackAllocator ST;
+    };
+
     struct Iterator {
         virtual ~Iterator() {}
         virtual bool first ( Context & context, char * value ) = 0;

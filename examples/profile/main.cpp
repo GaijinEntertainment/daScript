@@ -29,19 +29,6 @@ MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
 
 TextPrinter tout;
 
-struct SharedStackGuard {
-    SharedStackGuard() = delete;
-    SharedStackGuard(const SharedStackGuard &) = delete;
-    SharedStackGuard & operator = (const SharedStackGuard &) = delete;
-    __forceinline SharedStackGuard(Context & c, StackAllocator & stack) : ctx(c) {
-        ctx.stack.acquire(stack);
-    }
-    __forceinline ~SharedStackGuard() {
-        ctx.stack.release();
-    }
-    Context & ctx;
-};
-
 bool unit_test ( const string & fn, bool useAOT ) {
     // make sure there is no stack
     CodeOfPolicies policies;

@@ -17,27 +17,29 @@ namespace das {
 
         virtual ~StackAllocator() {
             if ( stack ) {
-                DAS_ASSERTF(!acquired, "trying to free acquired stack. release missing?");
                 das_aligned_free16(stack);
                 stack = nullptr;
             }
         }
 
-        __forceinline void acquire( const StackAllocator & owner ) {
-            DAS_ASSERTF(!acquired,"stack is already acquired");
-            DAS_ASSERTF(!stack,"only empty stack should acqure");
-            stack = owner.stack;
-            evalTop = owner.evalTop;
-            stackTop = owner.stackTop;
-            stackSize = owner.stackSize;
-            acquired = true;
+        __forceinline void letGo () {
+            stack = nullptr;
         }
 
-        __forceinline void release() {
-            stack = nullptr;
-            stackSize = 0;
-            acquired = false;
-            reset();
+        __forceinline void copy ( const StackAllocator & src ) {
+            stack = src.stack;
+            evalTop = src.evalTop;
+            stackTop = src.stackTop;
+            stackSize = src.stackSize;
+        }
+
+        __forceinline void acquire( const StackAllocator & owner, StackAllocator & ST ) {
+            ST.copy(*this);
+            copy(owner);
+        }
+
+        __forceinline void release( StackAllocator & ST ) {
+            copy(ST);
         }
 
         __forceinline uint32_t size() const {
@@ -104,7 +106,6 @@ namespace das {
         char *      evalTop = nullptr;
         char *      stackTop = nullptr;
         uint32_t    stackSize = 0;
-        bool        acquired = false;
     };
 
     class HeapAllocator : public MemoryModel {
