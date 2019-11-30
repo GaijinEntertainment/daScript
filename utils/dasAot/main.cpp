@@ -154,7 +154,11 @@ bool compile ( const string & fn, const string & cppFn ) {
 
 void require_project_specific_modules();//link time resolved dependencies
 
-int main(int argc, const char * argv[]) {
+#ifndef MAIN_FUNC_NAME
+  #define MAIN_FUNC_NAME main
+#endif
+
+int MAIN_FUNC_NAME(int argc, const char * argv[]) {
     if ( argc<3 ) {
         tout << "dasAot <in_script.das> <out_script.das.cpp> [-q]\n";
         return -1;
