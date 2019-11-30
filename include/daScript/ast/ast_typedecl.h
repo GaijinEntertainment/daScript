@@ -60,9 +60,9 @@ namespace das {
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
-        bool isTemp( bool topLevel = true ) const;
-        bool isTemp(bool topLevel, set<Structure*> & dep) const;
-        bool isTempType() const;
+        bool isTemp( bool topLevel = true, bool refMatters = true) const;
+        bool isTemp(bool topLevel, bool refMatters, set<Structure*> & dep) const;
+        bool isTempType(bool refMatters = true) const;
         bool isIndex() const;
         bool isNumeric() const;
         bool isNumericComparable() const;

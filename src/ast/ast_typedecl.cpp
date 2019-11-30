@@ -1253,17 +1253,17 @@ namespace das
                 || dim.size();
     }
 
-    bool TypeDecl::isTempType() const {
-        return isRef() || isPointer() || baseType==Type::tIterator;
+    bool TypeDecl::isTempType(bool refMatters) const {
+        return (ref && refMatters) || isRefType() || isPointer() || baseType==Type::tIterator;
     }
 
-    bool TypeDecl::isTemp( bool topLevel ) const {
+    bool TypeDecl::isTemp( bool topLevel, bool refMatters ) const {
         set<Structure *> dep;
-        return isTemp(topLevel, dep);
+        return isTemp(topLevel, refMatters, dep);
     }
 
-    bool TypeDecl::isTemp( bool topLevel, set<Structure *> & dep ) const {
-        if ( topLevel && !isTempType() ) {
+    bool TypeDecl::isTemp( bool topLevel, bool refMatters, set<Structure *> & dep ) const {
+        if ( topLevel && !isTempType(refMatters) ) {
             return false;
         } else if ( temporary ) {
             return true;
@@ -1277,21 +1277,21 @@ namespace das
             }
             
         } else if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
-            return firstType ? firstType->isTemp(false, dep) : false;
+            return firstType ? firstType->isTemp(false, true, dep) : false;
         } else if ( baseType==Type::tArray ) {
-            return firstType ? firstType->isTemp(false, dep) : false;
+            return firstType ? firstType->isTemp(false, true, dep) : false;
         } else if ( baseType==Type::tTable ) {
-            if ( firstType && firstType->isTemp(false, dep) ) {
+            if ( firstType && firstType->isTemp(false, true, dep) ) {
                 return true;
-            } else if ( secondType && secondType->isTemp(false, dep) ) {
+            } else if ( secondType && secondType->isTemp(false, true, dep) ) {
                 return true;
             }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || baseType==Type::tTuple ) {
-            if ( firstType && firstType->isTemp(true, dep) ) {
+            if ( firstType && firstType->isTemp(true, true, dep) ) {
                 return true;
             }
             for ( const auto & argT : argTypes ) {
-                if ( argT->isTemp(true, dep) ) {
+                if ( argT->isTemp(true, true, dep) ) {
                     return true;
                 }
             }

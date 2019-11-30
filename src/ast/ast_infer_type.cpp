@@ -2675,7 +2675,7 @@ namespace das {
                 error("this type can't be moved, use clone (:=) instead\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_move);
             } else if ( expr->right->type->constant ) {
                 error("can't move from a constant value\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_move);
-            } else if ( expr->right->type->isTemp() ) {
+            } else if ( expr->right->type->isTemp(true,false) ) {
                 error("can't move temporary value\n"+moveErrorInfo(expr), expr->at, CompilationError::cant_pass_temporary);
             }
             expr->type = make_shared<TypeDecl>();  // we return nothing
@@ -2694,7 +2694,7 @@ namespace das {
                 error("can only copy to a reference\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {
                 error("can't write to a constant value\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_write_to_const);
-            } else if ( expr->right->type->isTemp() ) {
+            } else if ( expr->right->type->isTemp(true,false) ) {
                     error("can't copy temporary value\n"+copyErrorInfo(expr), expr->at, CompilationError::cant_pass_temporary);
             }
             if ( !expr->left->type->canCopy() ) {
@@ -2736,7 +2736,7 @@ namespace das {
                     expr->type = make_shared<TypeDecl>();  // we return nothing
                     return Visitor::visit(expr);
                 } else if ( cloneType->canCopy() ) {
-                    if ( expr->right->type->isTemp() ) {
+                    if ( expr->right->type->isTemp(true,false) ) {
                         error("can't clone (copy) temporary value", expr->at, CompilationError::cant_pass_temporary);
                     } else {
                         reportGenericInfer();
@@ -3357,11 +3357,35 @@ namespace das {
                         clone->inferStack.emplace_back(expr->at, func);
                         clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
                     }
+                    // we build alias map for the generic
+                    AliasMap aliases;
+                    for ( ;; ) {
+                        bool anyFailed = false;
+                        auto totalAliases = aliases.size();
+                        for ( size_t ai = 0; ai != types.size(); ++ai ) {
+                            auto argType = clone->arguments[ai]->type;
+                            auto passType = types[ai];
+                            if (!isMatchingArgument(clone,argType,passType,true,true,&aliases)) {
+                                anyFailed = true;
+                                continue;
+                            }
+                            TypeDecl::updateAliasMap(argType, passType, aliases);
+                        }
+                        if ( !anyFailed ) break;
+                        if ( totalAliases == aliases.size() ) {
+                            DAS_ASSERTF(0,"we should not be here. function matched arguments!");
+                            break;
+                        }
+                    }
+                    // now, we resolve types given infered aliases
                     for ( size_t sz = 0; sz != types.size(); ++sz ) {
                         auto & argT = clone->arguments[sz]->type;
+                        if ( argT->isAlias() ) {
+                            argT = inferAlias(argT, clone, &aliases);
+                        }
                         if ( argT->isAuto() ) {
                             auto & passT = types[sz];
-                            auto resT = TypeDecl::inferGenericType(argT, passT);
+                            auto resT = TypeDecl::inferGenericType(argT, passT, &aliases);
                             DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                             resT->ref = false;                  // by default no ref
                             resT->implicit = argT->implicit;    // copy implicit on the arguments

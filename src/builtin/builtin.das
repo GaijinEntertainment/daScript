@@ -31,6 +31,10 @@ def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT const?
     return reinterpret<valT const?>(__builtin_table_find(Tab,at))
 
+[unsafe]
+def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT):valT const?#
+    return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
+
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
@@ -93,6 +97,18 @@ def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
 
 def values(a:table<auto(keyT);auto(valT)>) : iterator<valT &>
     return __builtin_table_values(a,typeinfo(sizeof type valT))
+
+// temporal
+
+[unsafe]
+def lock ( Tab : table<auto(keyT);auto(valT)>; blk : block<(t : table<keyT;valT>#):void >  )
+    __builtin_table_lock(Tab)
+    invoke(blk,reinterpret<table<auto(keyT);auto(valT)> const!>(Tab))
+    __builtin_table_unlock(Tab)
+
+[unsafe]
+def lock ( Tab : table<auto(keyT);auto(valT)>#; blk : block<(t : table<keyT;valT>#):void >  )
+    invoke(blk,Tab)
 
 // functional
 

@@ -268,7 +268,7 @@ namespace das {
 
     bool Structure::isTemp(set<Structure *> & dep) const {    // ||
         for ( const auto & fd : fields ) {
-            if ( fd.type && fd.type->isTemp(true, dep) ) {
+            if ( fd.type && fd.type->isTemp(true, true, dep) ) {
                 return true;
             }
         }

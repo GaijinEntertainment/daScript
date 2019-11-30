@@ -18,6 +18,9 @@ namespace  das {
                 if ( arg->type->baseType==Type::fakeContext ) {
                     arg->init = make_shared<ExprFakeContext>(at);
                 }
+                if ( arg->type->isTempType() ) {
+                    arg->type->implicit = true;
+                }
                 this->arguments.push_back(arg);
             }
             // copy on return and move on return
