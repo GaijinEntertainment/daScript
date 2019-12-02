@@ -2507,6 +2507,7 @@ namespace das {
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
+            semH = getInitSemanticHashWithDep(semH);
             logs << "\t\t// [[ init script ]]\n";
             logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";

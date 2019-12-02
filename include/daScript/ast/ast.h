@@ -501,7 +501,7 @@ namespace das
     uint64_t getFunctionHash ( Function * fun, SimNode * node );
 
     uint64_t getFunctionAotHash ( const Function * fun );
-    uint64_t getVariableAotHash ( const Variable * var );
+    uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
 
     class BuiltInFunction : public Function {
     public:
@@ -717,6 +717,7 @@ namespace das
         void allocateStack(TextWriter & logs);
         string dotGraph();
         bool simulate ( Context & context, TextWriter & logs );
+        uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
         void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }

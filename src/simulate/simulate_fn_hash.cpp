@@ -164,12 +164,15 @@ namespace das {
         return res;
     }
 
-    uint64_t getVariableAotHash ( const Variable * var ) {
+    uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash ) {
         DependencyCollector collector;
-        collector.collect(var);
+        for ( const auto & var : globs ) {
+            collector.collect(var);
+        }
         auto vec = collector.getStableDependencies();
         vector<uint64_t> uvec;
-        uvec.reserve(vec.size());
+        uvec.reserve(vec.size() + 1);
+        uvec.push_back(initHash);
         for ( const auto & fn : vec ) {
             uvec.push_back(fn->hash);
         }

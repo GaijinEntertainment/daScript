@@ -2124,8 +2124,22 @@ namespace das
         return errors.size() == 0;
     }
 
+    uint64_t Program::getInitSemanticHashWithDep( uint64_t initHash ) const {
+        vector<const Variable *> globs;
+        globs.reserve(totalVariables);
+        for (auto & pm : library.modules) {
+            for (auto & var : pm->globalsInOrder) {
+                if (var->used) {
+                    globs.push_back(var.get());
+                }
+            }
+        }
+        uint64_t res = getVariableListAotHash(globs, initHash);
+        return res;
+    }
+
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
-        bool logIt = options.getBoolOption("log_aot",true);
+        bool logIt = options.getBoolOption("log_aot",false);
 
         // make list of functions
         vector<Function *> fnn; fnn.reserve(totalFunctions);
@@ -2148,7 +2162,7 @@ namespace das
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
             if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
-                uint64_t semHash = getFunctionAotHash(fnn[fni]);
+                uint64_t semHash = fnn[fni]->aotHash = getFunctionAotHash(fnn[fni]);
                 auto it = aotLib.find(semHash);
                 if ( it != aotLib.end() ) {
                     fn.code = (it->second)(context);
@@ -2161,6 +2175,7 @@ namespace das
         }
         if ( context.totalVariables ) {
             uint64_t semHash = context.getInitSemanticHash();
+            semHash = getInitSemanticHashWithDep(semHash);
             auto it = aotLib.find(semHash);
             if ( it != aotLib.end() ) {
                 context.aotInitScript = (it->second)(context);
