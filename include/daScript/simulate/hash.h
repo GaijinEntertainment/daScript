@@ -9,6 +9,28 @@ namespace das
 
     // ideas from http://isthe.com/chongo/tech/comp/fnv/
 
+    __forceinline uint64_t hash_block64(const uint8_t * block, uint32_t size) {
+        const uint64_t fnv_prime = 1099511628211ul;
+        uint64_t offset_basis = 14695981039346656037ul;
+        for ( ; size >=4; size-=4 ) {
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+        }
+        if (size & 2u) {
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+        }
+        if (size & 1u) {
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+        }
+        if (offset_basis <= HASH_KILLED32) {
+            return fnv_prime;
+        }
+        return offset_basis;
+    }
+
     __forceinline uint32_t hash_block32(const uint8_t * block, uint32_t size) {
         const uint32_t fnv_prime = 16777619;
         const uint32_t fnv_bias = 2166136261;

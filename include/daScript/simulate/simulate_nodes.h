@@ -47,6 +47,12 @@ namespace das {
             };
         };
         SimSourceType   type;
+        union {
+            struct {
+                bool    isStringConstant : 1;
+            };
+            uint32_t    flags = 0;
+        };
         void visit ( SimVisitor & vis );
         // construct
         __forceinline void setSimNode(SimNode * se) {
@@ -60,6 +66,7 @@ namespace das {
         __forceinline void setConstValuePtr(char * val) {
             type = SimSourceType::sConstValue;
             valuePtr = val;
+            isStringConstant = true;
         }
         __forceinline void setCMResOfs(uint32_t ofs) {
             type = SimSourceType::sCMResOff;

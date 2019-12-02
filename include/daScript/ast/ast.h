@@ -495,9 +495,13 @@ namespace das
         vector<InferHistory> inferStack;
         Function * fromGeneric = nullptr;
         uint64_t hash = 0;
+        uint64_t aotHash = 0;
     };
 
     uint64_t getFunctionHash ( Function * fun, SimNode * node );
+
+    uint64_t getFunctionAotHash ( const Function * fun );
+    uint64_t getVariableAotHash ( const Variable * var );
 
     class BuiltInFunction : public Function {
     public:

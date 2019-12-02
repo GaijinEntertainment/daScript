@@ -2495,7 +2495,7 @@ namespace das {
             if ( fnn[i]->noAot )
                 continue;
             // SimFunction * fn = context.getFunction(i);
-            uint64_t semH = fnn[i]->hash;
+            uint64_t semH = fnn[i]->aotHash;
             logs << "\t\t// " << aotFuncName(fnn[i]) << "\n";
             logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
@@ -2537,6 +2537,18 @@ namespace das {
                 fni++;
             }
         }
+        // compute AOT hash for each used function
+        // its the same as semantic hash, only takes dependencies into account
+        for (auto & pm : library.modules) {
+            for (auto & it : pm->functions) {
+                auto pfun = it.second;
+                if (pfun->index < 0 || !pfun->used)
+                    continue;
+                pfun->aotHash = getFunctionAotHash(pfun.get());
+                fni++;
+            }
+        }
+        // now, for that AOT
         setPrintFlags();
         BlockVariableCollector collector;
         visit(collector);

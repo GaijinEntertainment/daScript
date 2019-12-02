@@ -16,7 +16,11 @@ namespace das {
             V_SUB(subexpr);
             break;
         case SimSourceType::sConstValue:
-            V_ARG(value);
+            if ( isStringConstant ) {
+                V_ARG(valuePtr);
+            } else {
+                V_ARG(value);
+            }
             break;
         case SimSourceType::sCMResOff:
             V_ARG(offset);

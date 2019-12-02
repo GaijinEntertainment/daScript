@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
+#include "daScript/simulate/hash.h"
 
 namespace das {
 
@@ -8,6 +9,12 @@ namespace das {
 #define debug_hash  sizeof
 #else
 #define debug_hash  printf
+#endif
+
+#if 1
+#define debug_aot_hash  sizeof
+#else
+#define debug_aot_hash  printf
 #endif
 
     struct SimFnHashVisitor :  SimVisitor {
@@ -100,5 +107,72 @@ namespace das {
         node->visit(hashV);
         debug_hash("\n");
         return hashV.getHash();
+    }
+
+    struct DependencyCollector {
+        void collect ( const Function * fun ) {
+            if ( functions.find(fun) != functions.end() ) return;
+            functions.insert(fun);
+            for ( const auto & depF : fun->useFunctions ) {
+                collect(depF);
+            }
+            for ( const auto & depV : fun->useGlobalVariables ) {
+                collect(depV);
+            }
+        }
+        void collect ( const Variable * var ) {
+            if ( variables.find(var) != variables.end() ) return;
+            variables.insert(var);
+            for ( const auto & depF : var->useFunctions ) {
+                collect(depF);
+            }
+            for ( const auto & depV : var->useGlobalVariables ) {
+                collect(depV);
+            }
+        }
+        vector<const Function *> getStableDependencies() {
+            vector<const Function *> vec;
+            vec.reserve(functions.size());
+            for ( const auto & it : functions ) {
+                vec.push_back(it);
+            }
+            stable_sort(vec.begin(), vec.end(), [&](const Function * a, const Function * b){
+                auto aNa = a->getMangledName();
+                auto bNa = b->getMangledName();
+                return aNa < bNa;
+            });
+            return vec;
+        }
+        set<const Function *> functions;
+        set<const Variable *> variables;
+    };
+
+    uint64_t getFunctionAotHash ( const Function * fun ) {
+        DependencyCollector collector;
+        collector.collect(fun);
+        auto vec = collector.getStableDependencies();
+        vector<uint64_t> uvec;
+        uvec.reserve(vec.size() + 1);
+        debug_aot_hash("HASH %s %llx\n", fun->getMangledName().c_str(), fun->hash);
+        uvec.push_back(fun->hash);
+        for ( const auto & fn : vec ) {
+            uvec.push_back(fn->hash);
+            debug_aot_hash("\t%s %llx\n", fn->getMangledName().c_str(), fn->hash);
+        }
+        uint64_t res = hash_block64((const uint8_t *)uvec.data(), uvec.size()*sizeof(uint64_t));
+        debug_aot_hash("AOT HASH %llx\n", res);
+        return res;
+    }
+
+    uint64_t getVariableAotHash ( const Variable * var ) {
+        DependencyCollector collector;
+        collector.collect(var);
+        auto vec = collector.getStableDependencies();
+        vector<uint64_t> uvec;
+        uvec.reserve(vec.size());
+        for ( const auto & fn : vec ) {
+            uvec.push_back(fn->hash);
+        }
+        return hash_block64((const uint8_t *)uvec.data(), uvec.size()*sizeof(uint64_t));
     }
 }
