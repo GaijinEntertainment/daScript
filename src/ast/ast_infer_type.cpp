@@ -2783,6 +2783,13 @@ namespace das {
         bool inferReturnType ( TypeDeclPtr & resType, ExprReturn * expr ) {
             if ( resType->isAuto() ) {
                 if ( expr->subexpr ) {
+                    if (!expr->subexpr->type) {
+                        error("subexpresion type is not resolved yet", expr->at);
+                        return false;
+                    } else if (expr->subexpr->type->isAuto() || expr->subexpr->type->isAlias()) {
+                        error("subexpresion type is not fully resolved yet", expr->at);
+                        return true;
+                    }
                     auto resT = TypeDecl::inferGenericType(resType, expr->subexpr->type);
                     if ( !resT ) {
                         error("type can't be infered, "
