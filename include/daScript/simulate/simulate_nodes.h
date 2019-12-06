@@ -438,27 +438,27 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <int nElem>
     struct EvalBlock { static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
-            for (int i = 0; i != nElem && !context.stopFlags; ++i)
+            for (int i = 0; i != nElem; ++i)
                 argValues[i] = arguments[i]->eval(context);
     }};
     template <>    struct EvalBlock<0> { static __forceinline void eval(Context &, SimNode **, vec4f *) {} };
     template <> struct EvalBlock<1> {    static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
-                                    argValues[0] = arguments[0]->eval(context);
+    argValues[0] = arguments[0]->eval(context);
     }};
     template <> struct EvalBlock<2> {    static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
-                                    argValues[0] = arguments[0]->eval(context);
-            if (!context.stopFlags) argValues[1] = arguments[1]->eval(context);
+            argValues[0] = arguments[0]->eval(context);
+            argValues[1] = arguments[1]->eval(context);
     }};
     template <> struct EvalBlock<3> {    static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
-                                    argValues[0] = arguments[0]->eval(context);
-            if (!context.stopFlags) argValues[1] = arguments[1]->eval(context);
-            if (!context.stopFlags) argValues[2] = arguments[2]->eval(context);
+            argValues[0] = arguments[0]->eval(context);
+            argValues[1] = arguments[1]->eval(context);
+            argValues[2] = arguments[2]->eval(context);
     }};
     template <> struct EvalBlock<4> {    static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
-                                    argValues[0] = arguments[0]->eval(context);
-            if (!context.stopFlags) argValues[1] = arguments[1]->eval(context);
-            if (!context.stopFlags) argValues[2] = arguments[2]->eval(context);
-            if (!context.stopFlags) argValues[3] = arguments[3]->eval(context);
+            argValues[0] = arguments[0]->eval(context);
+            argValues[1] = arguments[1]->eval(context);
+            argValues[2] = arguments[2]->eval(context);
+            argValues[3] = arguments[3]->eval(context);
     }};
 
     // FUNCTION CALL via FASTCALL convention
