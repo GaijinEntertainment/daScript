@@ -30,9 +30,9 @@ namespace das
         }
         virtual vec4f eval(Context & context) override {
             DAS_PROFILE_NODE
-            vec4f argValues[2];
-            evalArgs(context, argValues);
-            auto X = cast<TT>::to(argValues[0]);
+            vec4f argValue;
+            evalArgs(context, &argValue);
+            auto X = cast<TT>::to(argValue);
             return Policy::setXYZW(X, X, X, X);
         }
     };
