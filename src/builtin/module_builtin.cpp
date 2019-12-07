@@ -1,11 +1,15 @@
 #include "daScript/misc/platform.h"
 
+#include <float.h>
+#include <limits.h>
+
 #include "module_builtin.h"
 
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/sim_policy.h"
 
 #include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_policy_types.h"
 
 namespace das
@@ -67,17 +71,25 @@ namespace das
     IMPLEMENT_OP2_POLICY(BoolXor, Bool, bool);
 
 #define ADD_NUMERIC_CASTS(TYPE,CTYPE)                                                                               \
-addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false) );                                 \
+    addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false) );                             \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib,#CTYPE,false) );          \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib,#CTYPE,false) );        \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib,#CTYPE,false) );    \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int8_t>,CTYPE,int8_t>>(#TYPE,lib,#CTYPE,false) );      \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint8_t>,CTYPE,uint8_t>>(#TYPE,lib,#CTYPE,false) );    \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int8_t>,CTYPE,int8_t>>(#TYPE,lib,#CTYPE,false) );        \
+    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint8_t>,CTYPE,uint8_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int16_t>,CTYPE,int16_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint16_t>,CTYPE,uint16_t>>(#TYPE,lib,#CTYPE,false) );    \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib,#CTYPE,false) );
+
+
+#define ADD_NUMERIC_LIMITS(TYPENAME,CTYPE)  \
+    addConstant(*this, #TYPENAME "_MIN", (CTYPE)TYPENAME##_MIN); \
+    addConstant(*this, #TYPENAME "_MAX", (CTYPE)TYPENAME##_MAX);
+
+#define ADD_NUMERIC_LIMITS_UNSIGNED(TYPENAME,CTYPE)  \
+    addConstant(*this, #TYPENAME "_MAX", (CTYPE)TYPENAME##_MAX);
 
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
@@ -99,6 +111,7 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunctionOrdered<int32_t>(*this,lib);
         addFunctionBit<int32_t>(*this,lib);
         ADD_NUMERIC_CASTS(int, int32_t);
+        ADD_NUMERIC_LIMITS(INT, int32_t);
         // uint32
         addFunctionBasic<uint32_t>(*this,lib);
         addFunctionNumericWithMod<uint32_t>(*this,lib);
@@ -106,8 +119,11 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunctionOrdered<uint32_t>(*this,lib);
         addFunctionBit<uint32_t>(*this,lib);
         ADD_NUMERIC_CASTS(uint, uint32_t);
+        ADD_NUMERIC_LIMITS_UNSIGNED(UINT, uint32_t);
         ADD_NUMERIC_CASTS(int64, int64_t);
+        ADD_NUMERIC_LIMITS(LONG, int64_t);
         ADD_NUMERIC_CASTS(uint64, uint64_t);
+        ADD_NUMERIC_LIMITS_UNSIGNED(ULONG, uint64_t);
         // int64
         addFunctionBasic<int64_t>(*this,lib);
         addFunctionNumericWithMod<int64_t>(*this,lib);
@@ -125,13 +141,15 @@ addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false)
         addFunctionNumericWithMod<float>(*this,lib);
         addFunctionIncDec<float>(*this,lib);
         addFunctionOrdered<float>(*this,lib);
-        ADD_NUMERIC_CASTS(float, float)
+        ADD_NUMERIC_CASTS(float, float);
+        ADD_NUMERIC_LIMITS(FLT, float);
         // double
         addFunctionBasic<double>(*this,lib);
         addFunctionNumericWithMod<double>(*this,lib);
         addFunctionIncDec<double>(*this,lib);
         addFunctionOrdered<double>(*this,lib);
-        ADD_NUMERIC_CASTS(double, double)
+        ADD_NUMERIC_CASTS(double, double);
+        ADD_NUMERIC_LIMITS(DBL, double);
         // misc types
         addMiscTypes(lib);
         // VECTOR & MATRIX TYPES
