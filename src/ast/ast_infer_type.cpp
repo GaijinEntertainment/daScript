@@ -1831,6 +1831,9 @@ namespace das {
                 } else if ( expr->trait=="is_struct" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isStructure());
+                } else if ( expr->trait=="is_handle" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isHandle());
                 } else if ( expr->trait=="is_ref" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRef());
