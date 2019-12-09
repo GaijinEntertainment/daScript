@@ -1867,7 +1867,7 @@ namespace das {
                 } else if ( expr->trait=="can_move" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
-                } else if ( expr->trait=="has_field" ) {
+                } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportGenericInfer();
                         return make_shared<ExprConstBool>(expr->at, expr->typeexpr->structType->findField(expr->subtrait));
@@ -1876,9 +1876,13 @@ namespace das {
                         auto ft = expr->typeexpr->annotation->makeFieldType(expr->subtrait);
                         return make_shared<ExprConstBool>(expr->at, ft!=nullptr);
                     } else {
-                        error("typeinfo(has_field<" + expr->subtrait
-                              + "> ...) is only defined for structures and handled types, "
-                                + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
+                        if ( expr->trait=="safe_has_field" ) {
+                            return make_shared<ExprConstBool>(expr->at, false);
+                        } else {
+                            error("typeinfo(has_field<" + expr->subtrait
+                                  + "> ...) is only defined for structures and handled types, "
+                                    + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
+                        }
                     }
                 } else if ( expr->trait=="offsetof" ) {
                     if ( expr->typeexpr->isStructure() ) {
