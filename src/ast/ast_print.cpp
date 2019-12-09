@@ -748,6 +748,11 @@ namespace das {
             ss << ")";
             return Visitor::visit(expr);
         }
+    // is
+        virtual void preVisitType ( ExprIs * expr, TypeDecl * decl ) override {
+            Visitor::preVisit(expr);
+            ss << " is " << decl->describe(false,true);
+        }
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {
             Visitor::preVisit(expr);

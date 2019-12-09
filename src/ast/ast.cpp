@@ -711,6 +711,26 @@ namespace das {
         return cexpr;
     }
 
+    // ExprIs
+
+    ExpressionPtr ExprIs::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        vis.preVisitType(this, typeexpr.get());
+        vis.preVisit(typeexpr.get());
+        typeexpr = typeexpr->visit(vis);
+        typeexpr = vis.visit(typeexpr.get());
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprIs::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprTypeInfo>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->typeexpr = make_shared<TypeDecl>(*typeexpr);
+        return cexpr;
+    }
+
     // ExprTypeInfo
 
     ExpressionPtr ExprTypeInfo::visit(Visitor & vis) {

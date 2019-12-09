@@ -726,6 +726,17 @@ namespace das
         string          subtrait;
     };
 
+    struct ExprIs : Expression {
+        ExprIs () = default;
+        ExprIs ( const LineInfo & a, const ExpressionPtr & s, const TypeDeclPtr & t )
+            : Expression(a), subexpr(s), typeexpr(t) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual SimNode * simulate (Context & context) const override;
+        ExpressionPtr   subexpr;
+        TypeDeclPtr     typeexpr;
+    };
+
     struct ExprAscend : Expression {
         ExprAscend() = default;
         ExprAscend( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & as = nullptr )

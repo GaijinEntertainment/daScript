@@ -1716,6 +1716,52 @@ namespace das {
             valueType->constant = true;
             return Visitor::visit(expr);
         }
+    // ExprIs
+        virtual ExpressionPtr visit ( ExprIs * expr ) override {
+            if ( expr->typeexpr->isExprType() ) {
+                return Visitor::visit(expr);
+            }
+            if ( !expr->subexpr->type ) {
+                return Visitor::visit(expr);
+            }
+            // verify
+            if ( !isFullyResolvedType(expr->typeexpr) ) {
+                error("is " + (expr->typeexpr ? expr->typeexpr->describe() : "...") + " can't be infered",
+                      expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
+            auto nErrors = program->errors.size();
+            if ( expr->typeexpr->isAlias() ) {
+                if ( auto eT = inferAlias(expr->typeexpr) ) {
+                    expr->typeexpr = eT;
+                    reportGenericInfer();
+                    return Visitor::visit(expr);
+                } else {
+                    error("udefined type " + expr->typeexpr->describe(),
+                          expr->at, CompilationError::type_not_found);
+                    return Visitor::visit(expr);
+                }
+            }
+            if ( expr->typeexpr->isAuto() ) {
+                error("is ... auto is undefined, " + expr->typeexpr->describe(),
+                      expr->at, CompilationError::typeinfo_auto);
+                return Visitor::visit(expr);
+            }
+            if ( !isFullySealedType(expr->typeexpr) ) {
+                error("is " + (expr->typeexpr ? expr->typeexpr->describe() : "...") + " can't be fully infered",
+                      expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
+            verifyType(expr->typeexpr);
+            if ( nErrors==program->errors.size() ) {
+                reportGenericInfer();
+                bool isSame = expr->subexpr->type->isSameType(*expr->typeexpr, RefMatters::no, ConstMatters::no, TemporaryMatters::no);
+                return make_shared<ExprConstBool>(expr->at, isSame);
+            }
+            // infer
+            return Visitor::visit(expr);
+        }
+
     // ExprTypeInfo
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             if ( expr->typeexpr && expr->typeexpr->isExprType() ) {

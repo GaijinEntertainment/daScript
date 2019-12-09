@@ -877,6 +877,12 @@ namespace das
         }
     }
 
+    SimNode * ExprIs::simulate (Context & context) const {
+        DAS_ASSERTF(0, "we should not even be here. 'is' should resolve to const during infer pass.");
+        context.thisProgram->error("internal compilation error, generating 'is'", at);
+        return nullptr;
+    }
+
     SimNode * ExprTypeInfo::simulate (Context & context) const {
         DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");
         context.thisProgram->error("internal compilation error, generating typeinfo(...)", at);
