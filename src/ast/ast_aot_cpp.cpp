@@ -718,6 +718,7 @@ namespace das {
     public:
         CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl ) : program(prog), collector(cl) {
             helper.rtti = program->options.getBoolOption("rtti",false);
+            prologue = program->options.getBoolOption("aot_prologue",false);
         }
         string str() const {
             return "\n" + helper.str() + sti.str()  + stg.str() + ss.str();
@@ -733,6 +734,7 @@ namespace das {
         BlockVariableCollector &    collector;
         set<string>                 aotPrefix;
         vector<ExprBlock *>         scopes;
+        bool                        prologue = false;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -889,8 +891,9 @@ namespace das {
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
-            if ( fn->aotNeedPrologue ) {
-                ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize << ",__LINE__);\n";
+            if ( fn->aotNeedPrologue || prologue ) {
+                ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize
+                    << ",\"" << fn->name << " \" __FILE__,__LINE__);\n";
             } else {
                 ss << " )\n";
             }
@@ -917,7 +920,7 @@ namespace das {
             return Visitor::visitArgument(fn, that, last);
         }
         virtual FunctionPtr visit ( Function * fn ) override {
-            if ( fn->aotNeedPrologue ) {
+            if ( fn->aotNeedPrologue || prologue ) {
                 ss << "}\n";
             } else {
                 ss << "\n";

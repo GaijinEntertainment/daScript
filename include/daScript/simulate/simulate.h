@@ -91,7 +91,10 @@ namespace das
     struct Prologue {
         union {
             struct {
-                vec4f *     arguments;
+                union {
+                    vec4f *         arguments;
+                    const char *    fileName;
+                };
                 FuncInfo *  info;
                 int32_t     line;
             };

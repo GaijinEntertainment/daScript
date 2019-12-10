@@ -697,19 +697,21 @@ namespace das
         char * sp = stack.sp();
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
-            if ( pp->line ) {
+            if ( !pp->info ) {
+                ssw << pp->fileName << ", AOT at line " << pp->line << " (sp=" << (stack.top() - sp) << ")\n";
+            } else if ( pp->line ) {
                 ssw << pp->info->name << " at line " << pp->line << " (sp=" << (stack.top() - sp) << ")\n";
             } else {
                 ssw << pp->info->name << "(sp=" << (stack.top() - sp) << ")\n";
             }
-            if ( args ) {
+            if ( args && pp->info ) {
                 for ( uint32_t i = 0; i != pp->info->count; ++i ) {
                     ssw << "\t" << pp->info->fields[i]->name
                         << " : " << debug_type(pp->info->fields[i])
                         << " = \t" << debug_value(pp->arguments[i], pp->info->fields[i], PrintFlags::stackwalker) << "\n";
                 }
             }
-            sp += pp->info->stackSize;
+            sp += pp->info ? pp->info->stackSize : sizeof(Prologue);
         }
         ssw << "\n";
     #else

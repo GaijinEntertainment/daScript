@@ -156,8 +156,10 @@ namespace das {
         debug_aot_hash("HASH %s %llx\n", fun->getMangledName().c_str(), fun->hash);
         uvec.push_back(fun->hash);
         for ( const auto & fn : vec ) {
-            uvec.push_back(fn->hash);
-            debug_aot_hash("\t%s %llx\n", fn->getMangledName().c_str(), fn->hash);
+            if ( !fn->noAot ) {
+                uvec.push_back(fn->hash);
+                debug_aot_hash("\t%s %llx\n", fn->getMangledName().c_str(), fn->hash);
+            }
         }
         uint64_t res = hash_block64((const uint8_t *)uvec.data(), uvec.size()*sizeof(uint64_t));
         debug_aot_hash("AOT HASH %llx\n", res);
@@ -174,7 +176,9 @@ namespace das {
         uvec.reserve(vec.size() + 1);
         uvec.push_back(initHash);
         for ( const auto & fn : vec ) {
-            uvec.push_back(fn->hash);
+            if ( !fn->noAot ) {
+                uvec.push_back(fn->hash);
+            }
         }
         return hash_block64((const uint8_t *)uvec.data(), uvec.size()*sizeof(uint64_t));
     }

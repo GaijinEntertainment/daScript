@@ -963,14 +963,14 @@ namespace das {
     }
 
     struct das_stack_prologue {
-        __forceinline das_stack_prologue ( Context * __context__, uint32_t stackSize, int32_t line )
+        __forceinline das_stack_prologue ( Context * __context__, uint32_t stackSize, const char * fn, int32_t line )
             : context(__context__) {
             if (!context->stack.push(stackSize, EP, SP)) {
                 context->throw_error("stack overflow");
             }
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)context->stack.sp();
-            pp->arguments = nullptr;    // arguments
+            pp->fileName = fn;
             pp->info = nullptr;         // FunctionDebugInfo
             pp->line = line;
 #endif
