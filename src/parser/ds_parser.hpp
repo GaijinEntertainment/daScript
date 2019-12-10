@@ -1,8 +1,9 @@
-/* A Bison parser, made by GNU Bison 3.2.1.  */
+/* A Bison parser, made by GNU Bison 3.4.1.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -51,7 +52,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "ds_parser.ypp" /* yacc.c:1912  */
+#line 2 "ds_parser.ypp"
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -99,7 +100,7 @@ extern int das_yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 103 "ds_parser.hpp" /* yacc.c:1912  */
+#line 104 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -155,98 +156,98 @@ extern int das_yydebug;
     DAS_PUBLIC = 304,
     DAS_LABEL = 305,
     DAS_GOTO = 306,
-    DAS_TBOOL = 307,
-    DAS_TVOID = 308,
-    DAS_TSTRING = 309,
-    DAS_TAUTO = 310,
-    DAS_TINT = 311,
-    DAS_TINT2 = 312,
-    DAS_TINT3 = 313,
-    DAS_TINT4 = 314,
-    DAS_TUINT = 315,
-    DAS_TUINT2 = 316,
-    DAS_TUINT3 = 317,
-    DAS_TUINT4 = 318,
-    DAS_TFLOAT = 319,
-    DAS_TFLOAT2 = 320,
-    DAS_TFLOAT3 = 321,
-    DAS_TFLOAT4 = 322,
-    DAS_TRANGE = 323,
-    DAS_TURANGE = 324,
-    DAS_TBLOCK = 325,
-    DAS_TINT64 = 326,
-    DAS_TUINT64 = 327,
-    DAS_TDOUBLE = 328,
-    DAS_TFUNCTION = 329,
-    DAS_TLAMBDA = 330,
-    DAS_TINT8 = 331,
-    DAS_TUINT8 = 332,
-    DAS_TINT16 = 333,
-    DAS_TUINT16 = 334,
-    DAS_TTUPLE = 335,
-    ADDEQU = 336,
-    SUBEQU = 337,
-    DIVEQU = 338,
-    MULEQU = 339,
-    MODEQU = 340,
-    ANDEQU = 341,
-    OREQU = 342,
-    XOREQU = 343,
-    SHL = 344,
-    SHR = 345,
-    ADDADD = 346,
-    SUBSUB = 347,
-    LEEQU = 348,
-    SHLEQU = 349,
-    SHREQU = 350,
-    GREQU = 351,
-    EQUEQU = 352,
-    NOTEQU = 353,
-    RARROW = 354,
-    LARROW = 355,
-    QQ = 356,
-    QDOT = 357,
-    LPIPE = 358,
-    LBPIPE = 359,
-    RPIPE = 360,
-    CLONEEQU = 361,
-    ROTL = 362,
-    ROTR = 363,
-    ROTLEQU = 364,
-    ROTREQU = 365,
-    MAPTO = 366,
-    BRABRAB = 367,
-    BRACBRB = 368,
-    CBRCBRB = 369,
-    INTEGER = 370,
-    LONG_INTEGER = 371,
-    UNSIGNED_INTEGER = 372,
-    UNSIGNED_LONG_INTEGER = 373,
-    FLOAT = 374,
-    DOUBLE = 375,
-    NAME = 376,
-    BEGIN_STRING = 377,
-    STRING_CHARACTER = 378,
-    END_STRING = 379,
-    BEGIN_STRING_EXPR = 380,
-    END_STRING_EXPR = 381,
-    UNARY_MINUS = 382,
-    UNARY_PLUS = 383,
-    PRE_INC = 384,
-    PRE_DEC = 385,
-    POST_INC = 386,
-    POST_DEC = 387,
-    DEREF = 388,
-    COLCOL = 389
+    DAS_IMPLICIT = 307,
+    DAS_TBOOL = 308,
+    DAS_TVOID = 309,
+    DAS_TSTRING = 310,
+    DAS_TAUTO = 311,
+    DAS_TINT = 312,
+    DAS_TINT2 = 313,
+    DAS_TINT3 = 314,
+    DAS_TINT4 = 315,
+    DAS_TUINT = 316,
+    DAS_TUINT2 = 317,
+    DAS_TUINT3 = 318,
+    DAS_TUINT4 = 319,
+    DAS_TFLOAT = 320,
+    DAS_TFLOAT2 = 321,
+    DAS_TFLOAT3 = 322,
+    DAS_TFLOAT4 = 323,
+    DAS_TRANGE = 324,
+    DAS_TURANGE = 325,
+    DAS_TBLOCK = 326,
+    DAS_TINT64 = 327,
+    DAS_TUINT64 = 328,
+    DAS_TDOUBLE = 329,
+    DAS_TFUNCTION = 330,
+    DAS_TLAMBDA = 331,
+    DAS_TINT8 = 332,
+    DAS_TUINT8 = 333,
+    DAS_TINT16 = 334,
+    DAS_TUINT16 = 335,
+    DAS_TTUPLE = 336,
+    ADDEQU = 337,
+    SUBEQU = 338,
+    DIVEQU = 339,
+    MULEQU = 340,
+    MODEQU = 341,
+    ANDEQU = 342,
+    OREQU = 343,
+    XOREQU = 344,
+    SHL = 345,
+    SHR = 346,
+    ADDADD = 347,
+    SUBSUB = 348,
+    LEEQU = 349,
+    SHLEQU = 350,
+    SHREQU = 351,
+    GREQU = 352,
+    EQUEQU = 353,
+    NOTEQU = 354,
+    RARROW = 355,
+    LARROW = 356,
+    QQ = 357,
+    QDOT = 358,
+    LPIPE = 359,
+    LBPIPE = 360,
+    RPIPE = 361,
+    CLONEEQU = 362,
+    ROTL = 363,
+    ROTR = 364,
+    ROTLEQU = 365,
+    ROTREQU = 366,
+    MAPTO = 367,
+    BRABRAB = 368,
+    BRACBRB = 369,
+    CBRCBRB = 370,
+    INTEGER = 371,
+    LONG_INTEGER = 372,
+    UNSIGNED_INTEGER = 373,
+    UNSIGNED_LONG_INTEGER = 374,
+    FLOAT = 375,
+    DOUBLE = 376,
+    NAME = 377,
+    BEGIN_STRING = 378,
+    STRING_CHARACTER = 379,
+    END_STRING = 380,
+    BEGIN_STRING_EXPR = 381,
+    END_STRING_EXPR = 382,
+    UNARY_MINUS = 383,
+    UNARY_PLUS = 384,
+    PRE_INC = 385,
+    PRE_DEC = 386,
+    POST_INC = 387,
+    POST_DEC = 388,
+    DEREF = 389,
+    COLCOL = 390
   };
 #endif
 
 /* Value type.  */
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
-
 union DAS_YYSTYPE
 {
-#line 76 "ds_parser.ypp" /* yacc.c:1912  */
+#line 76 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -271,9 +272,9 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 275 "ds_parser.hpp" /* yacc.c:1912  */
-};
+#line 276 "ds_parser.hpp"
 
+};
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
 # define DAS_YYSTYPE_IS_TRIVIAL 1
 # define DAS_YYSTYPE_IS_DECLARED 1

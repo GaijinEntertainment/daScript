@@ -162,6 +162,7 @@
 %token  DAS_PUBLIC          "public"
 %token  DAS_LABEL           "label"
 %token  DAS_GOTO            "goto"
+%token  DAS_IMPLICIT        "implicit"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -1668,7 +1669,7 @@ type_declaration
         $$ = $typeDecl;
         $$->temporary = true;
     }
-    |   type_declaration[typeDecl] '!' {
+    |   type_declaration[typeDecl] DAS_IMPLICIT {
         $$ = $typeDecl;
         $$->implicit = true;
     }
