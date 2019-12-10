@@ -10,11 +10,11 @@ def test
     var aV : Foo
     let t : int
 
-    if aC is Foo
+    if aC is type Foo
         print("aC is Foo\n")
-    if aV is Foo
+    if aV is type Foo
         print("aV is Foo\n")
-    if t is Foo
+    if t is type Foo
         print("t is Foo\n")
     return true
 
