@@ -1968,7 +1968,7 @@ namespace das
         }
         auto tab = buildLookup(htab, context.tabMnMask, context.tabMnRot);
         context.tabMnSize = uint32_t(tab.size());
-        if ( options.getBoolOption("logMNHash",false) ) {
+        if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
                 << "tabMnLookup:" << context.tabMnSize << "\n"
@@ -1991,7 +1991,7 @@ namespace das
             context.tabAdSize = uint32_t(tab.size());
             context.tabAdLookup = (uint64_t *) context.code->allocate(context.tabAdSize * sizeof(uint64_t));
             memcpy ( context.tabAdLookup, tab.data(), context.tabAdSize * sizeof(uint64_t));
-            if ( options.getBoolOption("logAdHash",false) ) {
+            if ( options.getBoolOption("log_ad_hash",false) ) {
                 logs
                 << "tabAdLookup:" << context.tabAdSize << "\n"
                 << "tabAdMask:" << context.tabAdMask << "\n"

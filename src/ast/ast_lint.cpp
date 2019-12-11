@@ -173,6 +173,54 @@ namespace das {
         ProgramPtr program;
     };
 
+    struct Option {
+        const char *    name;
+        Type            type;
+    } g_allOptions [] = {
+    // lint
+        "lint",                         Type::tBool,
+        "only_fast_aot",                Type::tBool,
+        "aot_order_side_effects",       Type::tBool,
+        "no_global_heap",               Type::tBool,
+        "no_global_variables",          Type::tBool,
+    // memory
+        "heap",                         Type::tInt,
+        "string_heap",                  Type::tInt,
+    // aot
+        "no_aot",                       Type::tBool,
+        "aot_prologue",                 Type::tBool,
+    // plotting
+        "plot",                         Type::tBool,
+        "plot_read_write",              Type::tBool,
+    // logging
+        "log",                          Type::tBool,
+        "log_optimization_passes",      Type::tBool,
+        "log_stack",                    Type::tBool,
+        "log_nodes",                    Type::tBool,
+        "log_mem",                      Type::tBool,
+        "log_cpp",                      Type::tBool,
+        "log_aot",                      Type::tBool,
+        "log_infer_passes",             Type::tBool,
+        "log_compile_time",             Type::tBool,
+        "log_generics",                 Type::tBool,
+        "log_mn_hash",                  Type::tBool,
+        "log_ad_hash",                  Type::tBool,
+        "print_ref",                    Type::tBool,
+        "print_var_access",             Type::tBool,
+    // rtti
+        "rtti",                         Type::tBool,
+    // optimization
+        "optimize",                     Type::tBool,
+        "fusion",                       Type::tBool,
+        "remove_unused_symbols",        Type::tBool,
+    // language
+        "always_export_initializer",    Type::tBool,
+        "infer_time_folding",           Type::tBool,
+        "disable_run",                  Type::tBool,
+        "max_infer_passes",             Type::tInt,
+        "indenting",                    Type::tInt
+    };
+
     void Program::lint() {
         if (!options.getBoolOption("lint", true)) {
             return;
@@ -191,6 +239,23 @@ namespace das {
                     error("not all control paths return value", fn->at,
                           CompilationError::not_all_paths_return_value);
                 }
+            }
+        }
+        // check for invalid options
+        map<string,Type> ao;
+        for ( const auto & opt : g_allOptions ) {
+            ao[opt.name] = opt.type;
+        }
+        for ( const auto & opt : options ) {
+            auto it = ao.find(opt.name);
+            if ( it != ao.end() ) {
+                if ( it->second != opt.type ) {
+                    error("invalid option type for " + opt.name + ", expecting " + das_to_string(opt.type), LineInfo(),
+                          CompilationError::not_all_paths_return_value);
+                }
+            } else {
+                error("invalid option " + opt.name, LineInfo(),
+                      CompilationError::not_all_paths_return_value);
             }
         }
     }

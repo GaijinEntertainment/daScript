@@ -45,6 +45,7 @@ namespace das
     ,   invalid_loop                            =   30119       //  for x, y in a etc
     ,   invalid_label                           =   30120       //  label not found etc
     ,   invalid_enumeration                     =   30121       //  enum foo = "blah" etc
+    ,   invalid_option                          =   30122       //  option wtf = wth
 
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)

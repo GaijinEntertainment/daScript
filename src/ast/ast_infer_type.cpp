@@ -32,7 +32,7 @@ namespace das {
     class InferTypes : public FoldingVisitor {
     public:
         InferTypes( const ProgramPtr & prog ) : FoldingVisitor(prog ) {
-            enableInferTimeFolding = prog->options.getBoolOption("inferTimeFolding",true);
+            enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding",true);
         }
         bool finished() const { return !needRestart; }
     protected:
@@ -3897,7 +3897,7 @@ namespace das {
     void Program::inferTypes(TextWriter & logs) {
         const bool log = options.getBoolOption("log_infer_passes",false);
         int pass = 0, maxPasses = 50;
-        if (auto maxP = options.find("maxInferPasses", Type::tInt)) {
+        if (auto maxP = options.find("max_infer_passes", Type::tInt)) {
             maxPasses = maxP->iValue;
         }
         if ( log ) {
