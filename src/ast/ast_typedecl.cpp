@@ -314,7 +314,7 @@ namespace das
             stream << "#";
         }
         if ( implicit ) {
-            stream << "!";
+            stream << " implicit";
         }
         if (contracts) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {

@@ -162,6 +162,7 @@
 %token  DAS_PUBLIC          "public"
 %token  DAS_LABEL           "label"
 %token  DAS_GOTO            "goto"
+%token  DAS_IMPLICIT        "implicit"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -1163,7 +1164,7 @@ expr
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
         }
-    |   expr[subexpr] DAS_IS[loc] type_declaration[decl] {
+    |   expr[subexpr] DAS_IS[loc] DAS_TYPE type_declaration[decl] {
         $$ = new ExprIs(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
     |   expr_type_info[subexpr]                 { $$ = $subexpr; }
@@ -1668,7 +1669,7 @@ type_declaration
         $$ = $typeDecl;
         $$->temporary = true;
     }
-    |   type_declaration[typeDecl] '!' {
+    |   type_declaration[typeDecl] DAS_IMPLICIT {
         $$ = $typeDecl;
         $$->implicit = true;
     }
