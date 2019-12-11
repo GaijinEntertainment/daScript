@@ -421,6 +421,7 @@ namespace das
     ,   userScenario =      (1<<1)
     ,   modifyExternal =    (1<<2)
     ,   modifyArgument =    (1<<3)
+    ,   modifyArgumentAndExternal   = modifyArgument | modifyExternal
     ,   accessGlobal =      (1<<4)
     ,   invoke =            (1<<5)
     ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)

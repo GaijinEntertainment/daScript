@@ -385,7 +385,7 @@ namespace das
         addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
                 SideEffects::modifyExternal, "string_heap_report");
         // binary serializer
-        addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgument, "_builtin_binary_load");
+        addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgumentAndExternal, "_builtin_binary_load");
         addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal, "_builtin_binary_save");
         // function-like expresions
         addCall<ExprAssert>         ("assert",false);
@@ -398,10 +398,10 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none, "builtin_table_size");
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none, "builtin_table_capacity");
-        addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgument, "builtin_table_lock");
-        addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock", SideEffects::modifyArgument, "builtin_table_unlock");
-        addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys", SideEffects::modifyArgument, "builtin_table_keys");
-        addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values", SideEffects::modifyArgument, "builtin_table_values");
+        addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgumentAndExternal, "builtin_table_lock");
+        addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock", SideEffects::modifyArgumentAndExternal, "builtin_table_unlock");
+        addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys", SideEffects::modifyArgumentAndExternal, "builtin_table_keys");
+        addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values", SideEffects::modifyArgumentAndExternal, "builtin_table_values");
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");

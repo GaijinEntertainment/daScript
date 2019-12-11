@@ -71,7 +71,7 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve", SideEffects::modifyArgument, "builtin_array_reserve");
         addExtern<DAS_BIND_FUN(builtin_array_push)>(*this, lib, "__builtin_array_push", SideEffects::modifyArgument, "builtin_array_push");
         addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase", SideEffects::modifyArgument, "builtin_array_erase");
-        addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock", SideEffects::modifyArgument, "builtin_array_lock");
-        addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock", SideEffects::modifyArgument, "builtin_array_unlock");
+        addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock", SideEffects::modifyArgumentAndExternal, "builtin_array_lock");
+        addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock", SideEffects::modifyArgumentAndExternal, "builtin_array_unlock");
     }
 }

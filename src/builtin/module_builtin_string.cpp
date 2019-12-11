@@ -257,7 +257,7 @@ namespace das
             SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
         addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
             SideEffects::modifyExternal, "builtin_write_string");
-        addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::none, "write_string_char");
+        addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::modifyExternal, "write_string_char");
         addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");

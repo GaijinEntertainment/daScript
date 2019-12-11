@@ -207,6 +207,22 @@ namespace das {
 
     bool Module::addFunction ( const FunctionPtr & fn, bool canFail ) {
         auto mangledName = fn->getMangledName();
+        if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::none) && fn->result->isVoid() ) {
+            DAS_FATAL_LOG("can't add function %s to module %s; it has no side effects and no return type\n", mangledName.c_str(), name.c_str() );
+            DAS_FATAL_ERROR;
+        }
+        if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::modifyArgument)  ) {
+            bool anyRW = false;
+            for ( const auto & arg : fn->arguments ) {
+                if ( arg->type->isRef() && !arg->type->isConst() ) {
+                    anyRW = true;
+                }
+            }
+            if ( !anyRW ) {
+                DAS_FATAL_LOG("can't add function %s to module %s; modify argument requires non-const ref argument\n", mangledName.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
+        }
         if ( functions.insert(make_pair(mangledName, fn)).second ) {
             functionsByName[fn->name].push_back(fn);
             fn->module = this;
