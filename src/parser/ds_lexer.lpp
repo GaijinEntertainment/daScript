@@ -131,7 +131,9 @@
     das_yylval.ch = *yytext;
     return STRING_CHARACTER;
 }
-<indent>[ \t\r]*\n		/* skip empty line */
+<indent>[ \t\r]*\n		/* skip empty line */ {
+    das_current_line_indent = 0;
+}
 <indent>" "             { 
 	das_current_line_indent++; 
 	#ifdef FLEX_DEBUG
