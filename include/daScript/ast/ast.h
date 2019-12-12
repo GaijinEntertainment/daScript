@@ -420,6 +420,7 @@ namespace das
     ,   unsafe =            (1<<0)
     ,   userScenario =      (1<<1)
     ,   modifyExternal =    (1<<2)
+    ,   accessExternal =    modifyExternal
     ,   modifyArgument =    (1<<3)
     ,   modifyArgumentAndExternal   = modifyArgument | modifyExternal
     ,   accessGlobal =      (1<<4)
