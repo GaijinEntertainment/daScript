@@ -26,6 +26,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(randomUnitVector  )>(*this, lib, "random_unit_vector",   SideEffects::modifyArgument, "randomUnitVector");
             addExtern<DAS_BIND_FUN(randomInUnitSphere)>(*this, lib, "random_in_unit_sphere", SideEffects::modifyArgument, "randomInUnitSphere");
             addExtern<DAS_BIND_FUN(randomInUnitDisk  )>(*this, lib, "random_in_unit_disk",   SideEffects::modifyArgument, "randomInUnitDisk");
+            // lets verify all names
+            uint32_t verifyFlags = VerifyBuiltinFlags::verifyAll;
+            verifyBuiltinNames(verifyFlags);
             // and now its AOT ready
             verifyAotReady();
         }

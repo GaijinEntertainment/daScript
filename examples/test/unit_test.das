@@ -5,13 +5,13 @@ def interval(t1,t2:clock):float
 
 def testTimeAndAdd:bool
     let(a1,a2:clock;dt:float)
-        a1 = getClock()
+        a1 = get_clock()
         print(string(a1)+"\n")
         for z in range(0,30000) // ~1 sec on my laptop
             let(a,b:int[1000])
                 for x,y in a,b
                     x += y
-        a2 = getClock()
+        a2 = get_clock()
         assert(a1 <= a2)
         dt = interval(a1,a2)
         print("dt = " + string(dt) + "\n")

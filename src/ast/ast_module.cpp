@@ -333,6 +333,111 @@ namespace das {
         }
     }
 
+    bool isValidBuiltinName ( const string & name, bool canPunkt ) {
+        bool hasPunkt = false;
+        bool hasAlNum = false;
+        for ( auto ch : name ) {
+            if ( isalpha(ch) ) {
+                hasAlNum = true;
+                if ( isupper(ch) ) {
+                    return false;
+                }
+            } else if ( isdigit(ch) || ch=='_' ) {
+                hasAlNum = true;
+            } else if ( ispunct(ch) ) {
+                if ( canPunkt ) {
+                    hasPunkt = true;
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        return hasPunkt ^ hasAlNum; // has punkt, or alnum, but never both
+    }
+
+    void Module::verifyBuiltinNames(uint32_t flags) {
+        bool failed = false;
+        if ( flags & VerifyBuiltinFlags::verifyAliasTypes ) {
+            for ( auto & it : aliasTypes ) {
+                if ( !isValidBuiltinName(it.first) ) {
+                    DAS_FATAL_LOG("%s - alias type has incorrect name. expecting snake_case\n", it.first.c_str());
+                    failed = true;
+                }
+            }
+        }
+        if ( flags & VerifyBuiltinFlags::verifyHandleTypes ) {
+            for ( auto & it : handleTypes ) {
+                if ( !isValidBuiltinName(it.first) ) {
+                    DAS_FATAL_LOG("%s - annotation has incorrect name. expecting snake_case\n", it.first.c_str());
+                    failed = true;
+                }
+            }
+        }
+        if ( flags & VerifyBuiltinFlags::verifyGlobals ) {
+            for ( auto & var : globalsInOrder ) {
+                if ( !isValidBuiltinName(var->name) ) {
+                    DAS_FATAL_LOG("%s - global variable has incorrect name. expecting snake_case\n", var->name.c_str());
+                    failed = true;
+                }
+            }
+        }
+        if ( flags & VerifyBuiltinFlags::verifyFunctions ) {
+            for ( auto & it : functions ) {
+                auto fun = it.second.get();
+                if ( !isValidBuiltinName(fun->name, true) ) {
+                    DAS_FATAL_LOG("%s - function has incorrect name. expecting snake_case\n", fun->name.c_str());
+                    failed = true;
+                }
+            }
+        }
+        if ( flags & VerifyBuiltinFlags::verifyGenerics ) {
+            for ( auto & it : generics ) {
+                auto fun = it.second.get();
+                if ( !isValidBuiltinName(fun->name) ) {
+                    DAS_FATAL_LOG("%s - generic function has incorrect name. expecting snake_case\n", fun->name.c_str());
+                    failed = true;
+                }
+            }
+        }
+        if ( flags & VerifyBuiltinFlags::verifyStructures ) {
+            for ( auto & it : structures ) {
+                auto st = it.second;
+                if ( !isValidBuiltinName(st->name) ) {
+                    DAS_FATAL_LOG("%s - structure has incorrect name. expecting snake_case\n", st->name.c_str());
+                    failed = true;
+                }
+                if ( flags & VerifyBuiltinFlags::verifyStructureFields ) {
+                    for ( auto & fd : st->fields ) {
+                        if ( !isValidBuiltinName(fd.name) ) {
+                            DAS_FATAL_LOG("%s.%s - structure field has incorrect name. expecting snake_case\n", st->name.c_str(), fd.name.c_str());
+                            failed = true;
+                        }
+                    }
+                }
+            }
+        }
+        if ( flags & VerifyBuiltinFlags::verifyEnums ) {
+            for ( auto & it : enumerations ) {
+                auto en = it.second;
+                if ( !isValidBuiltinName(en->name) ) {
+                    DAS_FATAL_LOG("%s - enumeration has incorrect name. expecting snake_case\n", en->name.c_str());
+                    failed = true;
+                }
+                if ( flags & VerifyBuiltinFlags::verifyEnumFields ) {
+                    for ( auto & fd : en->list ) {
+                        if ( !isValidBuiltinName(fd.first) ) {
+                            DAS_FATAL_LOG("%s.%s - structure field has incorrect name. expecting snake_case\n", en->name.c_str(), fd.first.c_str());
+                            failed = true;
+                        }
+                    }
+                }
+            }
+        }
+        DAS_VERIFYF(!failed, "verifyBuiltinNames failed");
+    }
+
     void Module::verifyAotReady() {
         bool failed = false;
         for ( auto & it : functions ) {

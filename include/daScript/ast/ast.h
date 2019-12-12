@@ -528,6 +528,21 @@ namespace das
         cpp
     };
 
+    enum VerifyBuiltinFlags {
+        verifyAliasTypes = (1<<0),
+        verifyHandleTypes = (1<<1),
+        verifyGlobals = (1<<2),
+        verifyFunctions = (1<<3),
+        verifyGenerics = (1<<4),
+        verifyStructures = (1<<5),
+        verifyStructureFields = (1<<6),
+        verifyEnums = (1<<7),
+        verifyEnumFields = (1<<8),
+        verifyAll = 0xffffffff
+    };
+
+    bool isValidBuiltinName ( const string & name, bool canPunkt = false );
+
     class Module {
     public:
         Module ( const string & n = "" );
@@ -556,6 +571,7 @@ namespace das
         static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
         void verifyAotReady();
+        void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
     public:
         template <typename TT, typename ...TARG>

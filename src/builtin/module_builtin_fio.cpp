@@ -49,7 +49,7 @@ namespace das {
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
         addFunction( make_shared<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib,"Sub"));
-        addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "getClock", SideEffects::modifyExternal, "builtin_clock");
+        addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
     }
 }
 
@@ -365,6 +365,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
+            // lets verify all names
+            uint32_t verifyFlags = VerifyBuiltinFlags::verifyAll;
+            verifyFlags &= ~VerifyBuiltinFlags::verifyHandleTypes;  // we skip annotatins due to FILE and FStat
+            verifyBuiltinNames(verifyFlags);
             // and now its aot ready
             verifyAotReady();
         }

@@ -364,8 +364,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal, "builtin_stackwalk");
         addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
         // profiler
-        addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "resetProfiler", SideEffects::modifyExternal, "resetProfiler");
-        addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dumpProfileInfo", SideEffects::modifyExternal, "dumpProfileInfo");
+        addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "reset_profiler", SideEffects::modifyExternal, "resetProfiler");
+        addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info", SideEffects::modifyExternal, "dumpProfileInfo");
         // heap
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
                 SideEffects::modifyExternal, "heap_bytes_allocated");

@@ -91,6 +91,8 @@ namespace das
 #define ADD_NUMERIC_LIMITS_UNSIGNED(TYPENAME,CTYPE)  \
     addConstant(*this, #TYPENAME "_MAX", (CTYPE)TYPENAME##_MAX);
 
+    void verifyOptions();
+
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         ModuleLibrary lib;
         lib.addModule(this);
@@ -165,6 +167,13 @@ namespace das
         addTime(lib);
         // NOW, for the builtin module
         appendCompiledFunctions();
+        // lets verify options (it is here because its the builtin module)
+        verifyOptions();
+        // lets verify all names
+        uint32_t verifyFlags = VerifyBuiltinFlags::verifyAll;
+        verifyFlags &= ~VerifyBuiltinFlags::verifyGlobals;      // we skip globals due to INT_MAX etc
+        verifyFlags &= ~VerifyBuiltinFlags::verifyHandleTypes;  // we skip annotatins due to StringBuilderWriter
+        verifyBuiltinNames(verifyFlags);
         // lets make sure its all aot ready
         verifyAotReady();
     }

@@ -221,6 +221,17 @@ namespace das {
         "indenting",                    Type::tInt
     };
 
+    void verifyOptions() {
+        bool failed = false;
+        for ( const auto & opt : g_allOptions ) {
+            if ( !isValidBuiltinName(opt.name) ) {
+                DAS_FATAL_LOG("%s - invalid option. expecting snake_case\n", opt.name);
+                failed = true;
+            }
+        }
+        DAS_VERIFYF(!failed, "verifyOptions failed");
+    }
+
     void Program::lint() {
         if (!options.getBoolOption("lint", true)) {
             return;
