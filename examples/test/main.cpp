@@ -248,7 +248,7 @@ int main() {
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_Random);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/circular_module_dependency.das",true);
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/string_eof.das",true);
     Module::Shutdown();
     return 0;
 #endif

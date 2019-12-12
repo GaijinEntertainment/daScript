@@ -2531,20 +2531,46 @@ YY_RULE_SETUP
     }
 }
 	YY_BREAK
+case YY_STATE_EOF(normal):
+#line 480 "ds_lexer.lpp"
+{
+    if ( g_FileAccessStack.size()==1 ) {
+        das_yycolumn = 1;
+        if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
+            bool ns = (das_current_line_indent!=0) && das_need_oxford_comma;
+            das_current_line_indent = 0;
+            das_need_oxford_comma = true;
+            BEGIN(indent);
+            #ifdef FLEX_DEBUG
+            printf("emit ;\n");
+            #endif
+            if ( ns ) {
+                return ';';
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        yypop_buffer_state();
+        g_FileAccessStack.pop_back();
+        yylineno = das_line_no.back();
+        das_line_no.pop_back();
+    }
+}
+	YY_BREAK
 case 169:
 YY_RULE_SETUP
-#line 480 "ds_lexer.lpp"
+#line 504 "ds_lexer.lpp"
 return *yytext;
 	YY_BREAK
 case 170:
 YY_RULE_SETUP
-#line 482 "ds_lexer.lpp"
+#line 506 "ds_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 2544 "ds_lexer.cpp"
+#line 2571 "ds_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(include):
-case YY_STATE_EOF(normal):
 	yyterminate();
 
 	case YY_END_OF_BUFFER:
@@ -3561,7 +3587,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 482 "ds_lexer.lpp"
+#line 506 "ds_lexer.lpp"
 
 
 extern int das_yydebug;

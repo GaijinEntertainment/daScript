@@ -477,6 +477,30 @@
             return ';';
     }
 }
+<normal><<EOF>>         {
+    if ( g_FileAccessStack.size()==1 ) {
+        das_yycolumn = 1;
+        if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
+            bool ns = (das_current_line_indent!=0) && das_need_oxford_comma;
+            das_current_line_indent = 0;
+            das_need_oxford_comma = true;
+            BEGIN(indent);
+            #ifdef FLEX_DEBUG
+            printf("emit ;\n");
+            #endif
+            if ( ns ) {
+                return ';';
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        yypop_buffer_state();
+        g_FileAccessStack.pop_back();
+        yylineno = das_line_no.back();
+        das_line_no.pop_back();
+    }
+}
 <normal>.                                   return *yytext;
 
 %%
