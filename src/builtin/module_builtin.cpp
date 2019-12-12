@@ -170,7 +170,7 @@ namespace das
         // lets verify options (it is here because its the builtin module)
         verifyOptions();
         // lets verify all names
-        uint32_t verifyFlags = VerifyBuiltinFlags::verifyAll;
+        uint32_t verifyFlags = uint32_t(VerifyBuiltinFlags::verifyAll);
         verifyFlags &= ~VerifyBuiltinFlags::verifyGlobals;      // we skip globals due to INT_MAX etc
         verifyFlags &= ~VerifyBuiltinFlags::verifyHandleTypes;  // we skip annotatins due to StringBuilderWriter
         verifyBuiltinNames(verifyFlags);

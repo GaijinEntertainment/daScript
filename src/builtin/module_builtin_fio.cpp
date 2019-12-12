@@ -366,7 +366,7 @@ namespace das {
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names
-            uint32_t verifyFlags = VerifyBuiltinFlags::verifyAll;
+            uint32_t verifyFlags = uint32_t(VerifyBuiltinFlags::verifyAll);
             verifyFlags &= ~VerifyBuiltinFlags::verifyHandleTypes;  // we skip annotatins due to FILE and FStat
             verifyBuiltinNames(verifyFlags);
             // and now its aot ready
