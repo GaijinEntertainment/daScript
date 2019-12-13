@@ -155,6 +155,7 @@ namespace das
     struct Variable : public enable_shared_from_this<Variable> {
         VariablePtr clone() const;
         string getMangledName() const;
+        bool isAccessUnused() const;
         string          name;
         TypeDeclPtr     type;
         ExpressionPtr   init;

@@ -161,6 +161,7 @@ namespace das {
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
             ss << "let\n\t";
+            if ( var->isAccessUnused() ) ss << " /*unsued*/ ";
             if ( printVarAccess && !var->access_ref ) ss << "$";
             if ( printVarAccess && !var->access_pass ) ss << "%";
             ss << var->name << " : " << var->type->describe();
@@ -217,6 +218,7 @@ namespace das {
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
             if ( !arg->type->isConst() ) ss << "var ";
+            if ( arg->isAccessUnused() ) ss << " /*unsued*/ ";
             if ( printVarAccess && !arg->access_ref ) ss << "$";
             if ( printVarAccess && !arg->access_pass ) ss << "%";
             ss << arg->name << ":" << arg->type->describe();
@@ -330,6 +332,7 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
+            if ( var->isAccessUnused() ) ss << " /*unsued*/ ";
             if ( printVarAccess && !var->access_ref ) ss << "$";
             if ( printVarAccess && !var->access_pass ) ss << "%";
             ss << var->name << ":" << var->type->describe();

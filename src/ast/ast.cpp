@@ -296,6 +296,10 @@ namespace das {
         return mn + " " + type->getMangledName();
     }
 
+    bool Variable::isAccessUnused() const {
+        return !(access_get || access_init || access_pass || access_ref);
+    }
+
     // function
 
     FunctionPtr Function::clone() const {

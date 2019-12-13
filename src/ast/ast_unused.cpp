@@ -250,6 +250,15 @@ namespace das {
         //  at some point we should do better data trackng for this type of aliasing
         propagateWrite(expr);
     }
+    // source in the For loop
+    virtual void preVisitForSource ( ExprFor * expr, Expression * subexpr, bool last ) override {
+        Visitor::preVisitForSource(expr, subexpr, last);
+        if (subexpr->type->isConst()) {
+            propagateRead(subexpr);
+        } else {
+            propagateWrite(subexpr);    // we really don't know, but we assume that it will write
+        }
+    }
     // ExprField
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);
