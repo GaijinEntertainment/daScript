@@ -124,6 +124,18 @@ namespace das
         }
     };
 
+    struct MarkUsedFunctionAnnotation : MarkFunctionAnnotation {
+        MarkUsedFunctionAnnotation() : MarkFunctionAnnotation("unused_argument") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
+            for ( auto & fnArg : func->arguments ) {
+                if ( auto optArg = args.find(fnArg->name, Type::tBool) ) {
+                    fnArg->marked_used = optArg->bValue;
+                }
+            }
+            return true;
+        };
+    };
+
     // totally dummy annotation, needed for comments
     struct CommentAnnotation : StructureAnnotation {
         CommentAnnotation() : StructureAnnotation("comment") {}
@@ -342,6 +354,7 @@ namespace das
         addAnnotation(make_shared<InitFunctionAnnotation>());
         addAnnotation(make_shared<HybridFunctionAnnotation>());
         addAnnotation(make_shared<UnsafeDerefFunctionAnnotation>());
+        addAnnotation(make_shared<MarkUsedFunctionAnnotation>());
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first", SideEffects::modifyExternal, "builtin_iterator_first");
         addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",  SideEffects::modifyExternal, "builtin_iterator_next");

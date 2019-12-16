@@ -43,12 +43,14 @@ namespace das {
         bool checkAotSideEffects;
         bool checkNoGlobalHeap;
         bool checkNoGlobalVariables;
+        bool checkUnusedArgument;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
             checkAotSideEffects = program->options.getBoolOption("aot_order_side_effects", program->policies.aot_order_side_effects);
             checkNoGlobalHeap = program->options.getBoolOption("no_global_heap", program->policies.no_global_heap);
             checkNoGlobalVariables = program->options.getBoolOption("no_global_variables", program->policies.no_global_variables);
+            checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
         }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             program->error(err,at,cerr);
@@ -169,6 +171,16 @@ namespace das {
                       CompilationError::assert_with_side_effects);
             }
         }
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn, var, lastArg);
+            if ( checkUnusedArgument ) {
+                if ( !var->marked_used && var->isAccessUnused() ) {
+                    error("unused function argument " + var->name +
+                          "; use [unused_argument(" + var->name + ")] if intentional", var->at,
+                            CompilationError::unused_function_argument);
+                }
+            }
+        }
     protected:
         ProgramPtr program;
     };
@@ -183,6 +195,7 @@ namespace das {
         "aot_order_side_effects",       Type::tBool,
         "no_global_heap",               Type::tBool,
         "no_global_variables",          Type::tBool,
+        "no_unused_function_arguments", Type::tBool,
     // memory
         "heap",                         Type::tInt,
         "string_heap",                  Type::tInt,

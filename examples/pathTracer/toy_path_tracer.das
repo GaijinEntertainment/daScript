@@ -237,7 +237,7 @@ def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array
             backbufferIdx ++
     return rayCount
 
-def draw(time:float;frameCount,screenWidth,screenHeight,ymin,ymax:int;var backbuffer:array<float3>;var outRayCount:int&)
+def draw(frameCount,screenWidth,screenHeight,ymin,ymax:int;var backbuffer:array<float3>;var outRayCount:int&)
     var rayCount = 0
     let lookfrom = float3(0,2,3)
     let lookat = float3(0)
@@ -256,7 +256,7 @@ def prepare
 def job(var backbuffer:array<float3>;frameCount,width,height,ymin,ymax:int)
     prepare()
     var totalRayCount = 0
-    draw(0., frameCount, width, height, ymin, ymax, backbuffer, totalRayCount)
+    draw(frameCount, width, height, ymin, ymax, backbuffer, totalRayCount)
 	return totalRayCount
 	
 
@@ -268,12 +268,11 @@ def test
     let kFrameCount = 16
     var backbuffer : array<float3>
     resize(backbuffer,width*height)
-    var s = 0.
     print("\ntracing...\n")
 	var i = 0
 	profile(kFrameCount,"ray-trace frame") <|
         var rayCount = 0
-		draw(s, i, width, height, 0, height, backbuffer, rayCount)
+		draw(i, width, height, 0, height, backbuffer, rayCount)
 		i ++
     saveTga("path_tracer.tga",backbuffer,width,height)
     return true

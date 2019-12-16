@@ -126,6 +126,7 @@ namespace das
     ,   aot_side_effects                        =   40203       // eval(a++,b++,a+b)
     ,   no_global_heap                          =   40204       // let a = {{ }}
     ,   no_global_variables                     =   40205       // var a = ...
+    ,   unused_function_argument                =   40206       // def foo ( a ) ..... /* no a here */
 
     ,   too_many_infer_passes                   =   41000
 

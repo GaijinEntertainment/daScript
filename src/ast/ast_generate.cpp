@@ -172,6 +172,7 @@ namespace das {
         pFunc->arguments.push_back(cTHIS);
         for ( auto & arg : block->arguments ) {
             auto cA = arg->clone();
+            cA->marked_used = true;             // to avoid 'unsued argument' error
             pFunc->arguments.push_back(cA);
         }
         return pFunc;

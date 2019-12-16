@@ -4,7 +4,7 @@ struct Foo
 var
 	ds : das_string?
 
-[sideeffects]
+[sideeffects, unused_argument(obj,name)]
 def get_ecs_string(obj,name) : das_string?
 	return ds
 

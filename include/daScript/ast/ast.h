@@ -173,6 +173,7 @@ namespace das
                 bool    init_via_clone : 1;
                 bool    used : 1;
                 bool    aliasCMRES : 1;
+                bool    marked_used : 1;
             };
             uint32_t flags = 0;
         };
@@ -700,6 +701,7 @@ namespace das
         bool aot_order_side_effects = false;
         bool private_generics = true;
         bool private_clones = true;
+        bool no_unused_function_arguments = true;
     };
 
     class Program : public enable_shared_from_this<Program> {

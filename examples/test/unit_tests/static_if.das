@@ -1,3 +1,5 @@
+options no_unused_function_arguments = false
+
 struct Foo
     a,b : int
 

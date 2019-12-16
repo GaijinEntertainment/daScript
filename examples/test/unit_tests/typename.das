@@ -1,5 +1,7 @@
 // options log=true,log_infer_passes=false,optimize=true
 
+options no_unused_function_arguments = false
+
 struct Foo
     bar : int
 

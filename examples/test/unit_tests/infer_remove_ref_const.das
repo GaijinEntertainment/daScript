@@ -1,5 +1,7 @@
 // options log=true, log_generics=false, optimize=true
 
+options no_unused_function_arguments = false
+
 def logT(x:auto(numT)&)
     return typeinfo(typename type numT)
 

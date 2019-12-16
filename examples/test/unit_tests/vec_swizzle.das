@@ -1,3 +1,5 @@
+options no_unused_function_arguments = false
+
 def test_vec2(a:auto(vec2) delete const&)
     var f2_x  = vec2(1,2)
     let x : auto(numT) = f2_x[0]

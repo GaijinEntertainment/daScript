@@ -1,6 +1,7 @@
 // note: don't enable optimize on the math runtime tests
 // functions bellow optimizes to literally nothing otherwise
 options log=false, optimize=false
+options no_unused_function_arguments = false
 
 def test_vec2(a:auto(vec2) delete const&)
     let f2_0  = vec2()

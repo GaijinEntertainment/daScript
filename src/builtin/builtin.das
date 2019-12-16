@@ -16,6 +16,7 @@ def emplace(var Arr:array<auto(numT)>;var value:numT;at:int=-1)
 def erase(var Arr:array<auto(numT)>;at:int)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type numT))
 
+[unused_argument(a)]
 def length(a:auto[]):int
     return typeinfo(dim a)
 

@@ -575,6 +575,7 @@ annotation_argument
     |   NAME[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value)); delete $name; }
     |   NAME[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true); delete $name; }
     |   NAME[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false); delete $name; }
+    |   NAME[name]                              { $$ = new AnnotationArgument(*$name,true); delete $name; }
     ;
 
 annotation_argument_list
