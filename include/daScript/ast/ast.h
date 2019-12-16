@@ -553,6 +553,7 @@ namespace das
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
+        virtual Type getOptionType ( const string & name ) const { return Type::none; }
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
         bool addStructure ( const StructurePtr & st, bool canFail = false );
@@ -573,6 +574,7 @@ namespace das
         static Module * require ( const string & name );
         static void Shutdown();
         static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
+        static Type findOption ( const string & name );
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);

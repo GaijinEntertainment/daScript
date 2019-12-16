@@ -271,15 +271,21 @@ namespace das {
             ao[opt.name] = opt.type;
         }
         for ( const auto & opt : options ) {
+            Type optT = Type::none;
             auto it = ao.find(opt.name);
             if ( it != ao.end() ) {
-                if ( it->second != opt.type ) {
-                    error("invalid option type for " + opt.name + ", expecting " + das_to_string(opt.type), LineInfo(),
-                          CompilationError::not_all_paths_return_value);
-                }
+                optT = it->second;
             } else {
+                optT = Module::findOption(opt.name);
+            }
+            if ( optT!=Type::none && optT!=opt.type ) {
+                error("invalid option type for " + opt.name
+                      + ", unexpected " + das_to_string(opt.type)
+                      + ", expecting " + das_to_string(optT),
+                        LineInfo(), CompilationError::invalid_option);
+            } else if ( optT==Type::none ){
                 error("invalid option " + opt.name, LineInfo(),
-                      CompilationError::not_all_paths_return_value);
+                      CompilationError::invalid_option);
             }
         }
     }

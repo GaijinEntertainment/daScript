@@ -99,6 +99,18 @@ namespace das {
         return nullptr;
     }
 
+    Type Module::findOption ( const string & name ) {
+        Type optT = Type::none;
+        for ( auto m = modules; m != nullptr; m = m->next ) {
+            auto tt = m->getOptionType(name);
+            if ( tt != Type::none ) {
+                DAS_VERIFYF(optT==Type::none, "duplicate module option %s", name.c_str());
+                optT = tt;
+            }
+        }
+        return optT;
+    }
+
     Module::Module ( const string & n ) : name(n) {
         if ( !name.empty() ) {
             next = modules;

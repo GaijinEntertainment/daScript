@@ -376,6 +376,11 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     verifyAotReady();
 }
 
+Type Module_UnitTest::getOptionType ( const string & name ) const {
+    if ( name=="unit_test" ) return Type::tFloat;   
+    return Type::none;
+}
+
 ModuleAotType Module_UnitTest::aotRequire ( TextWriter & tw ) const {
     tw << "#include \"unitTest.h\"\n";
     return ModuleAotType::cpp;

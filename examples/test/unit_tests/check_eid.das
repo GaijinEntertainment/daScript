@@ -1,3 +1,5 @@
+options unit_test = 1.23 // this is here to test custom option
+
 require UnitTest
 
 [sideeffects]
