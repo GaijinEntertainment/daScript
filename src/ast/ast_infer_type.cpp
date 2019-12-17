@@ -2116,7 +2116,7 @@ namespace das {
             expr->func = nullptr;
             if ( expr->typeexpr->ref ) {
                 error("can't new a reference", expr->at, CompilationError::invalid_new_type);
-            } if ( expr->typeexpr->baseType==Type::tStructure ) {
+            } else if ( expr->typeexpr->baseType==Type::tStructure ) {
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
                 expr->type->firstType->dim.clear();
