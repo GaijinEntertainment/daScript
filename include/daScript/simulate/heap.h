@@ -123,7 +123,7 @@ namespace das {
 
     class StringAllocator : public HeapAllocator {
     public:
-        StringAllocator() : HeapAllocator() { alignMask = 0; }
+        StringAllocator() : HeapAllocator() { alignMask = 3; }
         virtual void setInitialSize ( uint32_t size );
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {

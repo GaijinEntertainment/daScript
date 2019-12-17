@@ -113,6 +113,7 @@ namespace das
 
     template <>
     __forceinline uint32_t hash_function ( Context & ctx, char * str ) {
+        if ( !str ) return 16777619;
         char * hptr = (char *) ( str - sizeof(StringHeader) );
         if ( ctx.stringHeap.isOwnPtr(hptr) || ctx.constStringHeap->isOwnPtr(hptr) ) {
             auto header = (StringHeader *) hptr;
@@ -122,7 +123,7 @@ namespace das
             }
             return hh;
         } else {
-            return str ? hash_blockz32((uint8_t *)str) : 16777619;
+            return hash_blockz32((uint8_t *)str);
         }
     }
 

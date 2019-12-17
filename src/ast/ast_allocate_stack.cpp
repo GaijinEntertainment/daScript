@@ -493,8 +493,9 @@ namespace das {
     public:
         void allocateString ( const string & message ) {
             if ( !message.empty() ) {
-                bytesTotal += uint32_t(sizeof(StringHeader));
-                bytesTotal += uint32_t(message.length()) + 1;
+                uint32_t allocSize = uint32_t(sizeof(StringHeader)) + uint32_t(message.length()) + 1;
+                allocSize = (allocSize + 3) & ~3;
+                bytesTotal += allocSize;
             }
         }
         virtual void preVisit ( ExprConstString * expr ) override {

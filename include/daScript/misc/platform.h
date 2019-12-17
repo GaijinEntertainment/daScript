@@ -66,6 +66,16 @@
     #define __forceinline inline __attribute__((always_inline))
 #endif
 
+#if defined(__has_feature)
+    #if __has_feature(address_sanitizer)
+        #define DAS_SUPRESS_UB  __attribute__((no_sanitize("undefined")))
+    #endif
+#endif
+
+#ifndef DAS_SUPRESS_UB
+#define DAS_SUPRESS_UB
+#endif
+
 #if defined(_MSC_VER) && !defined(__clang__)
 __forceinline uint32_t __builtin_clz(uint32_t x) {
     unsigned long r = 0;
@@ -75,13 +85,11 @@ __forceinline uint32_t __builtin_clz(uint32_t x) {
 #endif
 
 __forceinline uint32_t rotl_c(uint32_t a, uint32_t b) {
-    b &= 31;
-    return (a << b) | (a >> (32 - b));
+    return (a << (b & 31)) | (a >> ((32 - b) & 31));
 }
 
 __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
-    b &= 31;
-    return (a >> b) | (a << (32 - b));
+    return (a >> (b &31)) | (a << ((32 - b) & 31));
 }
 
 #include "daScript/misc/hal.h"

@@ -863,7 +863,7 @@ namespace das {
             using Indices = make_index_sequence<nargs>;
             // TODO: sort out interop
             vec4f * aa = context.abiArg;
-            vec4f stub[1];
+            vec4f stub[1] = { v_zero() };
             if ( !aa ) context.abiArg = stub;
             auto res = ImplAotStaticFunction<Result>::template
                 call<FuncT,Arguments>(*fn, context, Indices());
@@ -885,8 +885,8 @@ namespace das {
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
             vec4f * aa = context.abiArg;
-            vec4f stub[1];
-            if ( !aa ) context.abiArg = stub;
+            vec4f stub[1] = { v_zero() };
+            if ( !aa ) { context.abiArg = stub; }
             using ResultValue = typename remove_const<Result>::type;
             *((ResultValue *)context.abiCMRES) = ImplAotStaticFunctionCMRES<Result>::template
                 call<FuncT,Arguments>(*fn, context, Indices());
@@ -1225,7 +1225,9 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->callOrFastcall(simFunc, nullptr, 0);
+            vec4f arguments[1];
+            arguments[0] = cast<Lambda>::from(blk);
+            vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
             return cast<ResType>::to(result);
         }
         template <typename ...ArgType>
@@ -1244,7 +1246,9 @@ namespace das {
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
             typename remove_const<ResType>::type result;
-            __context__->callWithCopyOnReturn(simFunc, nullptr, &result, 0);
+            vec4f arguments[1];
+            arguments[0] = cast<Lambda>::from(blk);
+            __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
             return result;
         }
         template <typename ...ArgType>
@@ -1267,7 +1271,9 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->callOrFastcall(simFunc, nullptr, 0);
+            vec4f arguments[1];
+            arguments[0] = cast<Lambda>::from(blk);
+            __context__->callOrFastcall(simFunc, arguments, 0);
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
