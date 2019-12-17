@@ -14,7 +14,7 @@ namespace das {
         return *((int4 *)&res);
     }
 
-    __forceinline int32_t randomInt ( int4 & seed ) {
+    __forceinline DAS_SUPRESS_UB int32_t randomInt ( int4 & seed ) {
         seed.x = 214013*seed.x+2531011;
         return (seed.x>>16) & LCG_RAND_MAX;
     }
