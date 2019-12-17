@@ -76,6 +76,12 @@
 #define DAS_SUPRESS_UB
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+    #define DAS_NORETURN  __attribute__((noreturn))
+#else
+    #define DAS_NORETURN
+#endif
+
 #if defined(_MSC_VER) && !defined(__clang__)
 __forceinline uint32_t __builtin_clz(uint32_t x) {
     unsigned long r = 0;
