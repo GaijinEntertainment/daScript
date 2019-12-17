@@ -633,6 +633,7 @@ namespace das
             abiArg = args;
             abiCMRES = nullptr;
             aotInitScript->eval(*this);
+            abiArg = nullptr;
         } else {
 
 #if DAS_ENABLE_STACK_WALK
