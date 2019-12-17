@@ -818,6 +818,7 @@ namespace das
             return v_zero();
         }
         throwBuf = JB;
+        return v_zero();
 #endif
     }
 
