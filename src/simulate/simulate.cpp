@@ -633,6 +633,7 @@ namespace das
             abiArg = args;
             abiCMRES = nullptr;
             aotInitScript->eval(*this);
+            abiArg = nullptr;
         } else {
 
 #if DAS_ENABLE_STACK_WALK
@@ -818,6 +819,7 @@ namespace das
             return v_zero();
         }
         throwBuf = JB;
+        return v_zero();
 #endif
     }
 
@@ -894,6 +896,7 @@ namespace das
             return v_zero();
         }
         throwBuf = JB;
+        return v_zero();
 #endif
     }
 

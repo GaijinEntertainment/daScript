@@ -108,11 +108,7 @@ namespace das
 
     template <typename TT>
     __forceinline uint32_t hash_function ( Context &, const TT x ) {
-        uint32_t res = hash_block32((const uint8_t *)&x, sizeof(x));
-        if (res <= HASH_KILLED32) {
-            return 16777619;
-        }
-        return res;
+        return hash_block32((const uint8_t *)&x, sizeof(x));
     }
 
     template <>
