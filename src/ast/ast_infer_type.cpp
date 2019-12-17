@@ -325,7 +325,7 @@ namespace das {
                     resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                     if ( !resT->firstType ) return nullptr;
                 }
-            } if ( decl->baseType==Type::tIterator ) {
+            } else if ( decl->baseType==Type::tIterator ) {
                 if ( decl->firstType ) {
                     resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                     if ( !resT->firstType ) return nullptr;
