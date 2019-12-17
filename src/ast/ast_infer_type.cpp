@@ -2178,6 +2178,11 @@ namespace das {
                           ixT->describe() + ")", expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
+                if ( seT->isConst() ) {
+                    error("can't index in the constant table, use find instead",
+                        expr->index->at, CompilationError::invalid_table_type);
+                    return Visitor::visit(expr);
+                }
                 expr->type = make_shared<TypeDecl>(*seT->secondType);
                 expr->type->ref = true;
                 expr->type->constant |= seT->constant;

@@ -1,11 +1,13 @@
 require UnitTest
 
 expect 30102:1    // invalid_return_type
-expect 30303:5    // operator_not_found
+expect 30106
+expect 30303:4    // operator_not_found
 expect 30304:2    // function_not_found
 expect 30504:6    // cant_write_to_const
 expect 30505:2    // cant_move_to_const
 expect 30507      // cant_copy
+
 
 def const_iter(var a:table<string;int>)
     for k,v in keys(a),values(a)
@@ -63,7 +65,7 @@ def test
         var a:table<string;int>
         var b:table<string;int> const
         a["key"]++
-        b["key"]++      // no matching operator             (30303)
+        b["key"]++      // 30106: can't index in the constant table, use find instead
     if true
         var a:int?
         var b:int const?

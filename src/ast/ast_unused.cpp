@@ -149,6 +149,9 @@ namespace das {
             } else if ( expr->rtti_isPtr2Ref() ) {
                 auto rr = (ExprPtr2Ref *)expr;
                 propagateRead(rr->subexpr.get());
+            } else if ( expr->rtti_isR2V() ) {
+                auto rr = (ExprRef2Value *)expr;
+                propagateRead(rr->subexpr.get());
             }
             // TODO:
             //  propagate read to call or expr-like-call???
@@ -163,8 +166,12 @@ namespace das {
                 }
             } else if ( expr->rtti_isField() || expr->rtti_isSafeField() ) {
                 auto field = (ExprField *) expr;
-                field->write = true;
-                propagateWrite(field->value.get());
+                //if ( !field->value->type->isPointer() ) {
+                    field->write = true;
+                    propagateWrite(field->value.get());
+                //} else {
+                //    propagateRead(field->value.get());
+                //}
             } else if ( expr->rtti_isSwizzle() ) {
                 auto swiz = (ExprSwizzle *) expr;
                 swiz->write = true;
@@ -189,6 +196,9 @@ namespace das {
                 propagateWrite(rr->subexpr.get());
             } else if ( expr->rtti_isPtr2Ref() ) {
                 auto rr = (ExprPtr2Ref *)expr;
+                propagateWrite(rr->subexpr.get());
+            } else if ( expr->rtti_isR2V() ) {
+                auto rr = (ExprRef2Value *)expr;
                 propagateWrite(rr->subexpr.get());
             }
             // TODO:
@@ -419,6 +429,12 @@ namespace das {
             Visitor::preVisit(expr);
             if ( func ) {
                 func->sideEffectFlags |= uint32_t(SideEffects::invoke);
+            }
+            for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
+                const auto & argT = expr->arguments[ai]->type;
+                if ( argT->isRef() && !argT->isConst() ) {  // should we propagate const?
+                    propagateWrite(expr->arguments[ai].get());
+                }
             }
         }
     // Debug
