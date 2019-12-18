@@ -235,9 +235,9 @@ namespace das
         vec4f evalWithCatch ( SimNode * node );
         bool  runWithCatch ( const function<void()> & subexpr );
 
-        void throw_error ( const char * message ) DAS_NORETURN;
-        void throw_error_ex ( const char * message, ... ) DAS_NORETURN;
-        void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN;
+        DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX;
 
         __forceinline SimFunction * getFunction ( int index ) const {
             return (index>=0 && index<totalFunctions) ? functions + index : nullptr;

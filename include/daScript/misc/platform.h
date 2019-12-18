@@ -77,9 +77,14 @@
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-    #define DAS_NORETURN  __attribute__((noreturn))
+    #define DAS_NORETURN_PREFIX
+    #define DAS_NORETURN_SUFFIX  __attribute__((noreturn))
+#elif defined(_MSC_VER)
+    #define DAS_NORETURN_PREFIX  __declspec(noreturn)
+    #define DAS_NORETURN_SUFFIX
 #else
-    #define DAS_NORETURN
+    #define DAS_NORETURN_PREFIX
+    #define DAS_NORETURN_SUFFIX
 #endif
 
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -90,6 +95,18 @@ __forceinline uint32_t __builtin_clz(uint32_t x) {
 }
 #endif
 
+#ifdef _MSC_VER
+
+__forceinline uint32_t rotl_c(uint32_t a, uint32_t b) {
+    return _rotl(a, b);
+}
+
+__forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
+    return _rotr(a, b);
+}
+
+#else
+
 __forceinline uint32_t rotl_c(uint32_t a, uint32_t b) {
     return (a << (b & 31)) | (a >> ((32 - b) & 31));
 }
@@ -97,6 +114,8 @@ __forceinline uint32_t rotl_c(uint32_t a, uint32_t b) {
 __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
     return (a >> (b &31)) | (a << ((32 - b) & 31));
 }
+
+#endif
 
 #include "daScript/misc/hal.h"
 
