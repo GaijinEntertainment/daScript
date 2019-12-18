@@ -553,7 +553,7 @@ namespace das
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
-        virtual Type getOptionType ( const string & name ) const { return Type::none; }
+        virtual Type getOptionType ( const string & ) const { return Type::none; }
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
         bool addStructure ( const StructurePtr & st, bool canFail = false );
