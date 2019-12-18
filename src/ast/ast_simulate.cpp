@@ -719,7 +719,7 @@ namespace das
         assert(func->index>=0 && "how, we specified in the unused");
         Func fn; fn.index = func->index + 1;
         vec4f cval = v_zero();
-        *(Func *)&cval = fn;
+		memcpy (&cval, &fn, sizeof(Func));
         return context.code->makeNode<SimNode_ConstValue>(at,cval);
     }
 
@@ -747,7 +747,8 @@ namespace das
         auto cfa = enumType->find(text);
         DAS_ASSERTF( cfa.second, "we should not even be here. enumeration value not found. failed to simulate" );
         vec4f envalue = v_zero();
-        *((int32_t *)&envalue) = getConstExprIntOrUInt(cfa.first);
+        int32_t iou = getConstExprIntOrUInt(cfa.first);
+		memcpy ( &envalue, &iou, sizeof(int32_t) );
         return context.code->makeNode<SimNode_ConstValue>(at,envalue);
     }
 

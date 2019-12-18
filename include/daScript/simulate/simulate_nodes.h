@@ -640,7 +640,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            int32_t * funIndex = *(int32_t **)(argValues);
+            int32_t * funIndex = prune_from_vec<int32_t *>(argValues[0]);
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");
             SimFunction * simFunc = context.getFunction(*funIndex-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
@@ -651,9 +651,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            int32_t * funIndex = *(int32_t **)(argValues);                                       \
-            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");               \
-            SimFunction * simFunc = context.getFunction(*funIndex-1);                            \
+            int32_t * funIndex = prune_from_vec<int32_t *>(argValues[0]);                       \
+            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
+            SimFunction * simFunc = context.getFunction(*funIndex-1);                           \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
             return cast<CTYPE>::to(context.call(simFunc, argValues, debugInfo.line));           \
         }

@@ -91,7 +91,7 @@ static void cycle(uint32_t width, unsigned char* ar[], int n)
 /* shl() and shr() need n > 0 */
 static inline void shl(uint32_t p[2], int n)
 {
-	if(n >= 8 * sizeof(uint32_t)) {
+	if(n >= int(8 * sizeof(uint32_t))) {
 		n -= 8 * sizeof(uint32_t);
 		p[1] = p[0];
 		p[0] = 0;
@@ -103,7 +103,7 @@ static inline void shl(uint32_t p[2], int n)
 
 static inline void shr(uint32_t p[2], int n)
 {
-	if(n >= 8 * sizeof(uint32_t)) {
+	if(n >= int(8 * sizeof(uint32_t))) {
 		n -= 8 * sizeof(uint32_t);
 		p[0] = p[1];
 		p[1] = 0;

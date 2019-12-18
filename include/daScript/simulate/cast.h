@@ -8,6 +8,30 @@ namespace das
 {
     template <typename TT>
     struct das_alias;
+	
+	template <typename TT>
+	__forceinline TT prune_from_vec ( vec4f v ) {
+		static_assert(sizeof(TT)<=sizeof(vec4f),"type too big to be pruned");
+#ifdef _MSC_VER
+		return * reinterpret_cast<TT *>(&v);
+#else
+		TT r;
+		memcpy ( &r, &v, sizeof(TT) );
+		return r;
+#endif
+	}
+	
+	template <typename TT, typename PT>
+	__forceinline TT prune ( const PT & v ) {
+		static_assert(sizeof(TT)<=sizeof(PT),"type too big to be pruned");
+#ifdef _MSC_VER
+		return * reinterpret_cast<TT *>(&v);
+#else
+		TT r;
+		memcpy ( &r, &v, sizeof(TT) );
+		return r;
+#endif
+	}
 
     template <typename PT, typename VT>
     struct das_alias_ref {
@@ -15,13 +39,13 @@ namespace das
             return *((VT *)&value);
         }
         static __forceinline VT from ( const PT & value ) {
-            return *((VT *)&value);
+            return prune<VT,PT>(value);
         }
         static __forceinline PT & to ( VT & value ) {
             return *((PT *)&value);
         }
         static __forceinline PT to ( const VT & value ) {
-            return *((PT *)&value);
+            return prune<VT,PT>(value);
         }
     };
 
@@ -31,7 +55,7 @@ namespace das
             return *((PT *)&value);
         }
         static __forceinline PT to ( vec4f value ) {
-            return *((PT *)&value);
+            return prune_from_vec<PT>(value);
         }
     };
 
@@ -157,7 +181,7 @@ namespace das
     template <typename TT>
     struct cast_fVec {
         static __forceinline TT to ( vec4f x ) {
-            return *((TT *)&x);
+            return prune_from_vec<TT>(x);
         }
         static __forceinline vec4f from ( const TT & x )       {
             return v_ldu((const float*)&x);
@@ -167,7 +191,7 @@ namespace das
     template <typename TT>
     struct cast_fVec_half {
         static __forceinline TT to ( vec4f x ) {
-            return *((TT *)&x);
+            return prune_from_vec<TT>(x);
         }
         static __forceinline vec4f from ( const TT & x )       {
             return v_ldu_half((const float*)&x);
@@ -181,7 +205,7 @@ namespace das
     template <typename TT>
     struct cast_iVec {
         static __forceinline TT to ( vec4f x ) {
-            return *((TT *)&x);
+            return prune_from_vec<TT>(x);
         }
         static __forceinline vec4f from ( const TT & x ) {
             return  v_cast_vec4f(v_ldu_w((const int*)&x));
@@ -191,7 +215,7 @@ namespace das
     template <typename TT>
     struct cast_iVec_half {
         static __forceinline TT to ( vec4f x ) {
-            return *((TT *)&x);
+            return prune_from_vec<TT>(x);
         }
         static __forceinline vec4f from ( const TT & x ) {
             return  v_cast_vec4f(v_ldu_half_w((const int*)&x));

@@ -406,7 +406,10 @@ namespace das
     template <typename TT, typename ExprConstExt>
     struct ExprConstT : ExprConst {
         ExprConstT ( TT val, Type bt ) : ExprConst(bt) { value = cast<TT>::from(val); }
-        ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) { value = v_zero(); *((TT *)&value) = val; }
+        ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) { 
+			value = v_zero();
+			memcpy(&value, &val, sizeof(TT));
+		}
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
             auto cexpr = clonePtr<ExprConstExt>(expr);
             Expression::clone(cexpr);

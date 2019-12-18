@@ -10,32 +10,31 @@
 #pragma warning(disable:4800)    // forcing value to bool 'true' or 'false' (performance warning)
 #pragma warning(disable:4127)    // conditional expression is constant
 #pragma warning(disable:4702)    // unreachable code (due to exceptions)
-
 #pragma warning(disable:4316)    // '__m128': object allocated on the heap may not be aligned 16
+#endif
 
 #ifdef __clang__
-// CLANG for windows
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #pragma clang diagnostic ignored "-Wunused-value"
-#endif
-
-#endif
-
-#ifdef __clang__
 #pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
 #pragma clang diagnostic ignored "-Wnested-anon-types"
 #pragma clang diagnostic ignored "-Wmissing-braces"
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#pragma clang diagnostic ignored "-Wextra-semi"
+#pragma clang diagnostic ignored "-Winvalid-offsetof"
+#pragma clang diagnostic ignored "-Wignored-qualifiers"
 #endif
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma GCC diagnostic ignored "-Wmissing-braces"
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 #pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-value"
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #pragma GCC diagnostic ignored "-Wsequence-point"
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
 
 #include <assert.h>
