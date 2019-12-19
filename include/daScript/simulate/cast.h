@@ -12,8 +12,8 @@ namespace das
 	template <typename TT>
 	__forceinline TT prune_from_vec ( vec4f v ) {
 		static_assert(sizeof(TT)<=sizeof(vec4f),"type too big to be pruned");
-#ifdef _MSC_VER
-		return * reinterpret_cast<TT *>(&v);
+#if defined(_MSC_VER) && !defined(__clang__)
+		return *(TT*)(&v);
 #else
 		TT r;
 		memcpy ( &r, &v, sizeof(TT) );
@@ -24,8 +24,8 @@ namespace das
 	template <typename TT>
 	__forceinline TT prune_from_veci ( vec4i v ) {
 		static_assert(sizeof(TT)<=sizeof(vec4i),"type too big to be pruned");
-#ifdef _MSC_VER
-		return * reinterpret_cast<TT *>(&v);
+#if defined(_MSC_VER) && !defined(__clang__)
+		return *(TT*)(&v);
 #else
 		TT r;
 		memcpy ( &r, &v, sizeof(TT) );
@@ -36,8 +36,8 @@ namespace das
 	template <typename TT, typename PT>
 	__forceinline TT prune ( const PT & v ) {
 		static_assert(sizeof(TT)<=sizeof(PT),"type too big to be pruned");
-#ifdef _MSC_VER
-		return * reinterpret_cast<TT *>(&v);
+#if defined(_MSC_VER) && !defined(__clang__)
+		return *(TT *)(&v);
 #else
 		TT r;
 		memcpy ( &r, &v, sizeof(TT) );
