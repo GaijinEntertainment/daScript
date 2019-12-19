@@ -259,6 +259,49 @@ namespace das {
                 return nullptr;
             }
         }
+		
+        template < template <int TT> class NodeType, typename... Params>
+        SimNode * makeNodeUnrollNZ(int count, Params... args) {
+            switch (count) {
+            case  1: return makeNode<NodeType< 1>>(args...);
+            case  2: return makeNode<NodeType< 2>>(args...);
+            case  3: return makeNode<NodeType< 3>>(args...);
+            case  4: return makeNode<NodeType< 4>>(args...);
+            case  5: return makeNode<NodeType< 5>>(args...);
+            case  6: return makeNode<NodeType< 6>>(args...);
+            case  7: return makeNode<NodeType< 7>>(args...);
+            case  8: return makeNode<NodeType< 8>>(args...);
+            case  9: return makeNode<NodeType< 9>>(args...);
+            case 10: return makeNode<NodeType<10>>(args...);
+            case 11: return makeNode<NodeType<11>>(args...);
+            case 12: return makeNode<NodeType<12>>(args...);
+            case 13: return makeNode<NodeType<13>>(args...);
+            case 14: return makeNode<NodeType<14>>(args...);
+            case 15: return makeNode<NodeType<15>>(args...);
+            case 16: return makeNode<NodeType<16>>(args...);
+            case 17: return makeNode<NodeType<17>>(args...);
+            case 18: return makeNode<NodeType<18>>(args...);
+            case 19: return makeNode<NodeType<19>>(args...);
+            case 20: return makeNode<NodeType<20>>(args...);
+            case 21: return makeNode<NodeType<21>>(args...);
+            case 22: return makeNode<NodeType<22>>(args...);
+            case 23: return makeNode<NodeType<23>>(args...);
+            case 24: return makeNode<NodeType<24>>(args...);
+            case 25: return makeNode<NodeType<25>>(args...);
+            case 26: return makeNode<NodeType<26>>(args...);
+            case 27: return makeNode<NodeType<27>>(args...);
+            case 28: return makeNode<NodeType<28>>(args...);
+            case 29: return makeNode<NodeType<29>>(args...);
+            case 30: return makeNode<NodeType<30>>(args...);
+            case 31: return makeNode<NodeType<31>>(args...);
+            case 32: return makeNode<NodeType<32>>(args...);
+            default:
+                DAS_ASSERTF(0, "we should not even be here. we are calling makeNodeUnroll on a large number or a negative number."
+                            "if its negative, there is some issue with the logic of count."
+                            "if its large, bigger specialization for unroll should be added.");
+                return nullptr;
+            }
+        }
     };
 
     class DebugInfoAllocator : public NodeAllocator {

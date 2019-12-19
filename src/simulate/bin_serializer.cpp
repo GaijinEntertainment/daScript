@@ -93,7 +93,7 @@ namespace das {
         virtual void beforeArray ( Array * pa, TypeInfo * ti ) override {
             verify(ti->hash);
             if ( reading ) {
-                uint32_t newSize;
+                uint32_t newSize = 0;
                 load(newSize);
                 array_clear(*context, *pa);
                 array_resize(*context, *pa, newSize, getTypeBaseSize(ti), true);
@@ -114,7 +114,7 @@ namespace das {
         virtual void String ( char * & data ) override {
             DEBUG_BIN_DATA("string\n");
             if ( reading ) {
-                uint32_t length;
+                uint32_t length = 0;
                 load ( length );
                 data = (char *) context->heap.allocate(length + 1);
                 read ( data, length );

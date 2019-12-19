@@ -778,6 +778,7 @@ namespace das
             os_debug_break();
         }
 #endif
+        exit(0);
     }
 
 #ifdef _MSC_VER

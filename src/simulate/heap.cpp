@@ -56,7 +56,7 @@ namespace das {
 
     void StringAllocator::reportAllocations() {
         TextPrinter tout;
-        char buf[32];
+        char buf[33];
         for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
             auto & book = shelf[bi];
             tout << "book " << int(bi) << ": " << book.totalPages << " pages, " << book.pageSize << " bytes each\n";
@@ -86,6 +86,7 @@ namespace das {
                 auto header = (StringHeader *) ch;
                 ch += sizeof(StringHeader);
                 strncpy(buf,ch,32);
+				buf[32] = 0;
                 tout << "\t" << header->length << "\t" << HEX << header->hash << DEC
                     << "\t" << presentStr(buf,ch,32) << "\n";
             }
