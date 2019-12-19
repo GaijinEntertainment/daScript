@@ -211,7 +211,7 @@ namespace das
 
     void StringIterator::close ( Context &, char * _value )  {
         int32_t * value = (int32_t *) _value;
-        value = 0;
+        *value = 0;
     }
 
     vec4f SimNode_StringIterator::eval ( Context & context ) {

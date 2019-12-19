@@ -111,7 +111,7 @@ namespace das {
             return res;
         }
         static __forceinline ResT swizzle ( vec4f valT ) {
-            return swizzle(*((VecT *)&valT));
+            return swizzle(cast<VecT>::to(valT));
         }
     };
 
@@ -125,7 +125,7 @@ namespace das {
             return res;
         }
         static __forceinline ResT swizzle ( vec4f valT ) {
-            return swizzle(*((VecT *)&valT));
+            return swizzle(cast<VecT>::to(valT));
         }
     };
 
@@ -138,7 +138,7 @@ namespace das {
             return res;
         }
         static __forceinline ResT swizzle ( vec4f valT ) {
-            return swizzle(*((VecT *)&valT));
+            return swizzle(cast<VecT>::to(valT));
         }
     };
 

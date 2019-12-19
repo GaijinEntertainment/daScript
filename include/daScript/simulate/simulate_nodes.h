@@ -1956,12 +1956,21 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * subexpr; \
     };
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
+
     IMPLEMENT_PROPERTY(Bool,    bool);
     IMPLEMENT_PROPERTY(Int,     int32_t);
     IMPLEMENT_PROPERTY(UInt,    uint32_t);
     IMPLEMENT_PROPERTY(Int64,   int64_t);
     IMPLEMENT_PROPERTY(UInt64,  uint64_t);
     IMPLEMENT_PROPERTY(Float,   float);
+	
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
     template <typename OT, typename FunT, FunT PROPT, bool SAFET>
     struct SimNode_Property : SimNode_PropertyImpl<OT, FunT, PROPT, SAFET, decltype((((OT *)0)->*PROPT)())> {
