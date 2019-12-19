@@ -21,6 +21,18 @@ namespace das
 #endif
 	}
 	
+	template <typename TT>
+	__forceinline TT prune_from_veci ( vec4i v ) {
+		static_assert(sizeof(TT)<=sizeof(vec4i),"type too big to be pruned");
+#ifdef _MSC_VER
+		return * reinterpret_cast<TT *>(&v);
+#else
+		TT r;
+		memcpy ( &r, &v, sizeof(TT) );
+		return r;
+#endif
+	}
+	
 	template <typename TT, typename PT>
 	__forceinline TT prune ( const PT & v ) {
 		static_assert(sizeof(TT)<=sizeof(PT),"type too big to be pruned");

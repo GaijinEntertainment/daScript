@@ -11,7 +11,7 @@ namespace das {
 
     __forceinline int4 randomSeed ( int32_t seed ) {
         vec4i res = _randomSeed(seed);
-        return *((int4 *)&res);
+        return prune_from_veci<int4>(res);
     }
 
     __forceinline DAS_SUPRESS_UB int32_t randomInt ( int4 & seed ) {
@@ -30,7 +30,7 @@ namespace das {
 
     __forceinline int4 randomInt4 ( int4 & seed ) {
         vec4i res = _randomInt4(seed);
-        return *((int4 *)&res);
+        return prune_from_veci<int4>(res);
     }
 
     __forceinline float randomFloat ( int4 & seed ) {

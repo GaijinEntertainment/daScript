@@ -24,55 +24,67 @@ __forceinline vec4i VECTORCALL v_splats_ptr(const void * a) {
 #endif
 
 __forceinline vec4i v_muli(vec4i a, vec4i b) {
-    vec4i c;
-    int32_t * A = (int32_t *)&a;
-    int32_t * B = (int32_t *)&b;
-    int32_t * C = (int32_t *)&c;
-    C[0] = A[0] * B[0];   C[1] = A[1] * B[1];   C[2] = A[2] * B[2];   C[3] = A[3] * B[3];
-    return c;
+	union {
+		vec4i		v;
+		int32_t		a[4];
+	} A, B, C;
+	A.v = a;
+	B.v = b;
+    C.a[0] = A.a[0] * B.a[0];   C.a[1] = A.a[1] * B.a[1];   C.a[2] = A.a[2] * B.a[2];   C.a[3] = A.a[3] * B.a[3];
+    return C.v;
 }
 
 __forceinline vec4i v_divi(vec4i a, vec4i b) {
-    vec4i c;
-    int32_t * A = (int32_t *)&a;
-    int32_t * B = (int32_t *)&b;
-    int32_t * C = (int32_t *)&c;
-    C[0] = A[0] / B[0];   C[1] = A[1] / B[1];   C[2] = A[2] / B[2];   C[3] = A[3] / B[3];
-    return c;
+	union {
+		vec4i		v;
+		int32_t		a[4];
+	} A, B, C;
+	A.v = a;
+	B.v = b;
+    C.a[0] = A.a[0] / B.a[0];   C.a[1] = A.a[1] / B.a[1];   C.a[2] = A.a[2] / B.a[2];   C.a[3] = A.a[3] / B.a[3];
+    return C.v;
 }
 
 __forceinline vec4i v_modi(vec4i a, vec4i b) {
-    vec4i c;
-    int32_t * A = (int32_t *)&a;
-    int32_t * B = (int32_t *)&b;
-    int32_t * C = (int32_t *)&c;
-    C[0] = A[0] % B[0];   C[1] = A[1] % B[1];   C[2] = A[2] % B[2];   C[3] = A[3] % B[3];
-    return c;
+	union {
+		vec4i		v;
+		int32_t		a[4];
+	} A, B, C;
+	A.v = a;
+	B.v = b;
+    C.a[0] = A.a[0] % B.a[0];   C.a[1] = A.a[1] % B.a[1];   C.a[2] = A.a[2] % B.a[2];   C.a[3] = A.a[3] % B.a[3];
+    return C.v;
 }
 
 __forceinline vec4i v_mulu(vec4i a, vec4i b) {
-    vec4i c;
-    uint32_t * A = (uint32_t *)&a;
-    uint32_t * B = (uint32_t *)&b;
-    uint32_t * C = (uint32_t *)&c;
-    C[0] = A[0] * B[0];   C[1] = A[1] * B[1];   C[2] = A[2] * B[2];   C[3] = A[3] * B[3];
-    return c;
+	union {
+		vec4i		v;
+		uint32_t	a[4];
+	} A, B, C;
+	A.v = a;
+	B.v = b;
+    C.a[0] = A.a[0] * B.a[0];   C.a[1] = A.a[1] * B.a[1];   C.a[2] = A.a[2] * B.a[2];   C.a[3] = A.a[3] * B.a[3];
+    return C.v;
 }
 
 __forceinline vec4i v_divu(vec4i a, vec4i b) {
-    vec4i c;
-    uint32_t * A = (uint32_t *)&a;
-    uint32_t * B = (uint32_t *)&b;
-    uint32_t * C = (uint32_t *)&c;
-    C[0] = A[0] / B[0];   C[1] = A[1] / B[1];   C[2] = A[2] / B[2];   C[3] = A[3] / B[3];
-    return c;
+	union {
+		vec4i		v;
+		uint32_t	a[4];
+	} A, B, C;
+	A.v = a;
+	B.v = b;
+    C.a[0] = A.a[0] / B.a[0];   C.a[1] = A.a[1] / B.a[1];   C.a[2] = A.a[2] / B.a[2];   C.a[3] = A.a[3] / B.a[3];
+    return C.v;
 }
 
 __forceinline vec4i v_modu(vec4i a, vec4i b) {
-    vec4i c;
-    uint32_t * A = (uint32_t *)&a;
-    uint32_t * B = (uint32_t *)&b;
-    uint32_t * C = (uint32_t *)&c;
-    C[0] = A[0] % B[0];   C[1] = A[1] % B[1];   C[2] = A[2] % B[2];   C[3] = A[3] % B[3];
-    return c;
+	union {
+		vec4i		v;
+		uint32_t	a[4];
+	} A, B, C;
+	A.v = a;
+	B.v = b;
+    C.a[0] = A.a[0] % B.a[0];   C.a[1] = A.a[1] % B.a[1];   C.a[2] = A.a[2] % B.a[2];   C.a[3] = A.a[3] % B.a[3];
+    return C.v;
 }

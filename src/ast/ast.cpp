@@ -243,7 +243,7 @@ namespace das {
 
     const Structure * Structure::findFieldParent ( const string & na ) const {
         if ( parent ) {
-            if ( auto pf = parent->findField(na) ) {
+            if ( parent->findField(na) ) {
                 return parent;
             }
         }
