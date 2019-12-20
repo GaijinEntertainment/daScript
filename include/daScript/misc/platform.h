@@ -34,7 +34,9 @@
 #pragma GCC diagnostic ignored "-Wunused-value"
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #pragma GCC diagnostic ignored "-Wsequence-point"
+#if __GNUC__>=9
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
 #endif
 
 #include <assert.h>

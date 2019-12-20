@@ -1,3 +1,5 @@
+options no_unused_function_arguments = true
+
 expect 40206:2
 
 [sideeffects]

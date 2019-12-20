@@ -706,7 +706,7 @@ namespace das
         bool aot_order_side_effects = false;
         bool private_generics = true;
         bool private_clones = true;
-        bool no_unused_function_arguments = true;
+        bool no_unused_function_arguments = false;
     };
 
     class Program : public enable_shared_from_this<Program> {
