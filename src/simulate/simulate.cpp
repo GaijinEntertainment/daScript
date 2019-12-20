@@ -778,7 +778,9 @@ namespace das
             os_debug_break();
         }
 #endif
+#if !defined(_MSC_VER) || (_MSC_VER>1900)
         exit(0);
+#endif
     }
 
 #ifdef _MSC_VER
