@@ -357,10 +357,10 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
         } else {
             vec4f def = table->attributes[a].def;
             const char * def_s = table->attributes[a].def_s;
-            if ( table->attributes[a].size==4 ) {
-                ss << to_string_ex(v_extract_x(def)) << "f";
-            } else if (def_s) {
+            if (def_s) {
                 ss << "\"" << def_s << "\"";
+            } else if ( table->attributes[a].size==4 ) {
+                ss << to_string_ex(v_extract_x(def)) << "f";
             } else {
                 ss << "v_make_vec4f("
                     << to_string_ex(v_extract_x(def)) << "f," << to_string_ex(v_extract_y(def)) << "f,"
