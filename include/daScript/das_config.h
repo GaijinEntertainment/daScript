@@ -1,6 +1,30 @@
 #pragma once
-#include <set>
+
+#ifndef DAS_SKA_HASH
+#define DAS_SKA_HASH    1
+#endif
+
+#if DAS_SKA_HASH
+
+#ifdef _MSC_VER
+#pragma warning(disable:4503)    // decorated name length exceeded, name was truncated
+#endif
+
+#include <flat_hash_map\flat_hash_map.hpp>
+
+template <typename K, typename V>
+using das_map = ska::flat_hash_map<K,V>;
+template <typename K>
+using das_set = ska::flat_hash_set<K>;
+
+#endif
+
 #include <map>
+#include <set>
+
+#include <unordered_map>
+#include <unordered_set>
+
 #include <string>
 #include <memory>
 #include <vector>

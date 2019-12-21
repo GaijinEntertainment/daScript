@@ -18,7 +18,7 @@ namespace das {
         size_t  typeSize;
     };
 
-    typedef map<SimNode *,SimNodeInfo> SimNodeInfoLookup;
+    typedef das_map<SimNode *,SimNodeInfo> SimNodeInfoLookup;
 
     struct FusionPoint {
         FusionPoint () {}
@@ -39,7 +39,7 @@ namespace das {
     };
     typedef shared_ptr<FusionPoint> FusionPointPtr;
 
-    typedef map<string,vector<FusionPointPtr>> FusionEngine;
+    typedef unordered_map<string,vector<FusionPointPtr>> FusionEngine;
     extern unique_ptr<FusionEngine> g_fusionEngine;
 
     const char * getSimSourceName(SimSourceType st);
