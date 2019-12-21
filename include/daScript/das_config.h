@@ -4,17 +4,6 @@
 #define DAS_SKA_HASH    1
 #endif
 
-#if DAS_SKA_HASH
-#ifdef _MSC_VER
-#pragma warning(disable:4503)    // decorated name length exceeded, name was truncated
-#endif
-#include <ska/flat_hash_map.hpp>
-template <typename K, typename V>
-using das_map = ska::flat_hash_map<K,V>;
-template <typename K>
-using das_set = ska::flat_hash_set<K>;
-#endif
-
 #if DAS_USE_EASTL
     #include <EASTL/unordered_map.h>
     #include <EASTL/unordered_set.h>
@@ -30,7 +19,20 @@ using das_set = ska::flat_hash_set<K>;
 #include <initializer_list>
 #include <functional>
 #include <algorithm>
+
 namespace das {using namespace std;}
+
+#if DAS_SKA_HASH
+#ifdef _MSC_VER
+#pragma warning(disable:4503)    // decorated name length exceeded, name was truncated
+#endif
+#include <ska/flat_hash_map.hpp>
+template <typename K, typename V>
+using das_map = ska::flat_hash_map<K,V>;
+template <typename K>
+using das_set = ska::flat_hash_set<K>;
+#endif
+
 #define DAS_STD_HAS_BIND 1
 
 #ifndef DAS_FUSION
