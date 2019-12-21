@@ -161,7 +161,7 @@ namespace das {
                 debug_aot_hash("\t%s %llx\n", fn->getMangledName().c_str(), fn->hash);
             }
         }
-        uint64_t res = hash_block64((const uint8_t *)uvec.data(), uvec.size()*sizeof(uint64_t));
+        uint64_t res = hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));
         debug_aot_hash("AOT HASH %llx\n", res);
         return res;
     }
@@ -180,6 +180,6 @@ namespace das {
                 uvec.push_back(fn->hash);
             }
         }
-        return hash_block64((const uint8_t *)uvec.data(), uvec.size()*sizeof(uint64_t));
+        return hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));
     }
 }

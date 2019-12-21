@@ -203,7 +203,7 @@ inline int8_t log2(size_t value)
 {
 #ifdef _MSC_VER
     unsigned long res;
-    _BitScanReverse(&res, value);
+    _BitScanReverse(&res, (unsigned long)(value));
     return (int8_t)res;
 #elif defined(__GNUC__) || defined(__clang__)
     return 31UL - __builtin_clz(value);
