@@ -59,7 +59,7 @@ void testAdd ( int & a, int b ) {
 }
 
 struct IntFields {
-    map<string,int32_t> fields;
+    das_map<string,int32_t> fields;
 };
 
 struct CheckRange : StructureAnnotation {

@@ -467,11 +467,6 @@ void testEsUpdate ( char * pass, Context * ctx ) {
 uint32_t queryEs (const Block & block, Context * context) {
     return EsRunBlock(*context, block, g_components, g_total);
 }
-#if DAS_USE_EASTL
-#include <EASTL/unordered_map.h>
-#else
-#include <unordered_map>
-#endif
 
 struct dictKeyEqual {
     __forceinline bool operator()( const char * lhs, const char * rhs ) const {

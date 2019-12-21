@@ -1096,7 +1096,7 @@ namespace das
     
     vector<SimNode *> ExprBlock::collectExpressions ( Context & context,
                                                      const vector<ExpressionPtr> & lis,
-                                                     map<int32_t,uint32_t> * ofsmap ) const {
+                                                     unordered_map<int32_t,uint32_t> * ofsmap ) const {
         vector<SimNode *> simlist;
         for ( auto & node : lis ) {
             if ( node->rtti_isLet()) {
@@ -1130,7 +1130,7 @@ namespace das
     }
 
     void ExprBlock::simulateBlock ( Context & context, SimNode_Block * block ) const {
-        map<int32_t,uint32_t> ofsmap;
+        unordered_map<int32_t,uint32_t> ofsmap;
         vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
         block->total = int(simlist.size());
         if ( block->total ) {
@@ -1141,7 +1141,7 @@ namespace das
         simulateLabels(context, block, ofsmap);
     }
 
-    void ExprBlock::simulateLabels ( Context & context, SimNode_Block * block, const map<int32_t,uint32_t> & ofsmap ) const {
+    void ExprBlock::simulateLabels ( Context & context, SimNode_Block * block, const unordered_map<int32_t,uint32_t> & ofsmap ) const {
         if ( maxLabelIndex!=-1 ) {
             block->totalLabels = maxLabelIndex + 1;
             block->labels = (uint32_t *) context.code->allocate(block->totalLabels * sizeof(uint32_t));
@@ -1155,7 +1155,7 @@ namespace das
     }
 
     SimNode * ExprBlock::simulate (Context & context) const {
-        map<int32_t,uint32_t> ofsmap;
+        unordered_map<int32_t,uint32_t> ofsmap;
         vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
         // TODO: what if list size is 0?
         if ( simlist.size()!=1 || isClosure || finalList.size() ) {

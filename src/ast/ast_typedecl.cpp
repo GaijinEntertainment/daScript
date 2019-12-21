@@ -430,11 +430,11 @@ namespace das
     }
 
     bool TypeDecl::canAot() const {
-        set<Structure *> recAot;
+        unordered_set<Structure *> recAot;
         return canAot(recAot);
     }
 
-    bool TypeDecl::canAot( set<Structure *> & recAot) const {
+    bool TypeDecl::canAot( unordered_set<Structure *> & recAot) const {
         if ( annotation && !annotation->canAot(recAot) ) return false;
         if ( firstType && !firstType->canAot(recAot) ) return false;
         if ( secondType && !secondType->canAot(recAot) ) return false;
@@ -606,11 +606,11 @@ namespace das
     }
 
     bool TypeDecl::isLocal() const {
-        set<Structure *> dep;
+        unordered_set<Structure *> dep;
         return isLocal(dep);
     }
 
-    bool TypeDecl::isLocal(set<Structure *> & dep) const {
+    bool TypeDecl::isLocal(unordered_set<Structure *> & dep) const {
         if ( isHandle() ) {
             return annotation->isLocal();
         } else if ( isStructure() ) {
@@ -1258,11 +1258,11 @@ namespace das
     }
 
     bool TypeDecl::isTemp( bool topLevel, bool refMatters ) const {
-        set<Structure *> dep;
+        unordered_set<Structure *> dep;
         return isTemp(topLevel, refMatters, dep);
     }
 
-    bool TypeDecl::isTemp( bool topLevel, bool refMatters, set<Structure *> & dep ) const {
+    bool TypeDecl::isTemp( bool topLevel, bool refMatters, unordered_set<Structure *> & dep ) const {
         if ( topLevel && !isTempType(refMatters) ) {
             return false;
         } else if ( temporary ) {

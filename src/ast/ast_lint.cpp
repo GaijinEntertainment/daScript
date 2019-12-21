@@ -266,7 +266,7 @@ namespace das {
             }
         }
         // check for invalid options
-        map<string,Type> ao;
+        unordered_map<string,Type> ao;
         for ( const auto & opt : g_allOptions ) {
             ao[opt.name] = opt.type;
         }

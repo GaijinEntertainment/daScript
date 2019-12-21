@@ -258,7 +258,7 @@ namespace das
             }
             walker.walk_struct((char *)data, sti);
         }
-        map<string,StructureField> fields;
+        unordered_map<string,StructureField> fields;
         DebugInfoHelper            helpA;
         StructInfo *               sti = nullptr;
         ModuleLibrary *            mlib = nullptr;

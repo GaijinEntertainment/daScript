@@ -131,12 +131,12 @@ namespace das
         bool canCopy() const;
         bool canClone() const;
         bool canAot() const;
-        bool canAot( set<Structure *> & recAot ) const;
+        bool canAot( unordered_set<Structure *> & recAot ) const;
         bool isNoHeapType() const;
         bool isPod() const;
         bool isRawPod() const;
-        bool isLocal( set<Structure *> & dep ) const;
-        bool isTemp( set<Structure *> & dep ) const;
+        bool isLocal( unordered_set<Structure *> & dep ) const;
+        bool isTemp( unordered_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
@@ -164,8 +164,8 @@ namespace das
         int             index = -1;
         uint32_t        stackTop = 0;
         Module *        module = nullptr;
-        set<Function *> useFunctions;
-        set<Variable *> useGlobalVariables;
+        unordered_set<Function *> useFunctions;
+        unordered_set<Variable *> useGlobalVariables;
         uint32_t        initStackSize = 0;
         union {
             struct {
@@ -237,7 +237,7 @@ namespace das
             p->cppName = cppName;
             return p;
         }
-        virtual bool canAot(set<Structure *> &) const { return true; }
+        virtual bool canAot(unordered_set<Structure *> &) const { return true; }
         virtual bool canMove() const { return false; }
         virtual bool canCopy() const { return false; }
         virtual bool canClone() const { return false; }
@@ -461,8 +461,8 @@ namespace das
         uint32_t            totalStackSize = 0;
         LineInfo            at;
         Module *            module = nullptr;
-        set<Function *>     useFunctions;
-        set<Variable *>     useGlobalVariables;
+        unordered_set<Function *>     useFunctions;
+        unordered_set<Variable *>     useGlobalVariables;
         union {
             struct {
                 bool    builtIn : 1;
@@ -594,20 +594,20 @@ namespace das
             };
         }
     public:
-        map<string, TypeDeclPtr>                aliasTypes;
-        map<string, AnnotationPtr>              handleTypes;
-        map<string, StructurePtr>               structures;
+        unordered_map<string, TypeDeclPtr>                aliasTypes;
+        unordered_map<string, AnnotationPtr>              handleTypes;
+        unordered_map<string, StructurePtr>               structures;
         vector<StructurePtr>                    structuresInOrder;
-        map<string, EnumerationPtr>             enumerations;
-        map<string, VariablePtr>                globals;
+        unordered_map<string, EnumerationPtr>             enumerations;
+        unordered_map<string, VariablePtr>                globals;
         vector<VariablePtr>                     globalsInOrder;
-        map<string, FunctionPtr>                functions;          // mangled name 2 function name
-        map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
-        map<string, FunctionPtr>                generics;           // mangled name 2 generic name
-        map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
-        mutable map<string, ExprCallFactory>    callThis;
-        map<uint32_t, uint64_t>                 annotationData;
-        map<Module *,bool>                      requireModule;      // visibility modules
+        unordered_map<string, FunctionPtr>                functions;          // mangled name 2 function name
+        unordered_map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
+        unordered_map<string, FunctionPtr>                generics;           // mangled name 2 generic name
+        unordered_map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
+        mutable unordered_map<string, ExprCallFactory>    callThis;
+        unordered_map<uint32_t, uint64_t>                 annotationData;
+        unordered_map<Module *,bool>                      requireModule;      // visibility modules
         string  name;
         bool    builtIn = false;
     private:
@@ -667,7 +667,7 @@ namespace das
         ModuleGroupUserData * getUserData ( const string & dataName ) const;
         bool setUserData ( ModuleGroupUserData * data );
     protected:
-        map<string,ModuleGroupUserDataPtr>  userData;
+        unordered_map<string,ModuleGroupUserDataPtr>  userData;
     };
 
     class DebugInfoHelper {
@@ -685,11 +685,11 @@ namespace das
         shared_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;
     protected:
-        map<string,StructInfo *>        smn2s;
-        map<string,TypeInfo *>          tmn2t;
-        map<string,VarInfo *>           vmn2v;
-        map<string,FuncInfo *>          fmn2f;
-        map<string,EnumInfo *>          emn2e;
+        unordered_map<string,StructInfo *>        smn2s;
+        unordered_map<string,TypeInfo *>          tmn2t;
+        unordered_map<string,VarInfo *>           vmn2v;
+        unordered_map<string,FuncInfo *>          fmn2f;
+        unordered_map<string,EnumInfo *>          emn2e;
     };
 
     struct CodeOfPolicies {
@@ -784,7 +784,7 @@ namespace das
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
     public:
-        map<CompilationError,int>   expectErrors;
+        unordered_map<CompilationError,int>   expectErrors;
     public:
         AnnotationArgumentList      options;
     public:

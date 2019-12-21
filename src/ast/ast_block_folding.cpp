@@ -86,7 +86,7 @@ namespace das {
 
     class BlockFolding : public OptVisitor {
     protected:
-        set<int32_t> labels;
+        unordered_set<int32_t> labels;
         bool allLabels = false;
     protected:
         void collect ( vector<ExpressionPtr> & list, vector<ExpressionPtr> & blockList ) {

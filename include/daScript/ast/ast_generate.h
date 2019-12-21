@@ -34,7 +34,7 @@ namespace das {
         capture_field_1
         capture_field_2
      */
-    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block, const set<VariablePtr> & capt );
+    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block, const unordered_set<VariablePtr> & capt );
 
     /*
         lambda function, i.e.
@@ -47,7 +47,7 @@ namespace das {
     /*
          [[__lambda_at_line_xxx THIS=@__lambda_function_at_line_xxx; ba1=ba1; ba2=ba2; ... ]]
      */
-    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const set<VariablePtr> & capt );
+    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const unordered_set<VariablePtr> & capt );
 
     /*
          array comprehension [[ for x in src; x_expr; where x_expr ]]

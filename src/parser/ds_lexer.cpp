@@ -1131,7 +1131,7 @@ char *yytext;
     bool das_need_oxford_comma = true;
     bool das_in_normal = false;
     vector<int> das_line_no;
-    set<string> das_already_include;
+    unordered_set<string> das_already_include;
     
     #define YY_USER_ACTION \
         das_yylloc.first_line = das_yylloc.last_line = yylineno; \

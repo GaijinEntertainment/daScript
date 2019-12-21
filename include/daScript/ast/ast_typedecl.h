@@ -20,7 +20,7 @@ namespace das {
     struct Expression;
     typedef shared_ptr<Expression> ExpressionPtr;
 
-    typedef map<string,TypeDeclPtr> AliasMap;
+    typedef unordered_map<string,TypeDeclPtr> AliasMap;
 
     class Visitor;
 
@@ -43,7 +43,7 @@ namespace das {
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
         bool canAot() const;
-        bool canAot( set<Structure *> & recAot ) const;
+        bool canAot( unordered_set<Structure *> & recAot ) const;
         bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel = true ) const;
         bool isExprType() const;
         bool isIteratorType ( const TypeDecl & decl ) const;
@@ -61,7 +61,7 @@ namespace das {
         bool isRef() const;
         bool isRefType() const;
         bool isTemp( bool topLevel = true, bool refMatters = true) const;
-        bool isTemp(bool topLevel, bool refMatters, set<Structure*> & dep) const;
+        bool isTemp(bool topLevel, bool refMatters, unordered_set<Structure*> & dep) const;
         bool isTempType(bool refMatters = true) const;
         bool isIndex() const;
         bool isNumeric() const;
@@ -101,7 +101,7 @@ namespace das {
         bool isAuto() const;
         bool isVectorType() const;
         bool isLocal() const;
-        bool isLocal( set<Structure*> & dep ) const;
+        bool isLocal( unordered_set<Structure*> & dep ) const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
         bool canInitWithZero() const;
