@@ -244,7 +244,7 @@ include/dag_noise/dag_uint_noise.h
 SOURCE_GROUP_FILES("dag_noise" DAGOR_NOISE_SRC)
 
 SET(FLAT_HASH_MAP_SRC
-include/flat_hash_map/flat_hash_map.hpp
+include/ska/flat_hash_map.hpp
 )
 SOURCE_GROUP_FILES("flat_hash_map" FLAT_HASH_MAP_SRC)
 
