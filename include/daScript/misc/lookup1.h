@@ -2,7 +2,7 @@
 
 namespace das {
     template <typename TT>
-    vector<TT> buildLookup ( const map<uint32_t,TT> & a2b, uint32_t & tab_mask, uint32_t & tab_rot ) {
+    vector<TT> buildLookup ( const das_map<uint32_t,TT> & a2b, uint32_t & tab_mask, uint32_t & tab_rot ) {
         vector<TT> tab;
         // now, lets build this table
         for ( size_t ts = 1; ; ts *= 2 ) {

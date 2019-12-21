@@ -178,4 +178,17 @@ inline void das_aligned_free16(void *ptr) {
     free(ptr);
 #endif
 }
+
+#ifndef DAS_CUSTOM_SKA
+#define DAS_CUSTOM_SKA  0
+#include <flat_hash_map\flat_hash_map.hpp>
+
+template <typename K, typename V>
+using das_map = ska::flat_hash_map<K,V>;
+
+template <typename K>
+using das_set = ska::flat_hash_set<K>;
+
+#endif
+
 #endif

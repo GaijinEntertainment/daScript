@@ -376,8 +376,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     verifyAotReady();
 }
 
-Type Module_UnitTest::getOptionType ( const string & name ) const {
-    if ( name=="unit_test" ) return Type::tFloat;   
+Type Module_UnitTest::getOptionType ( const string & optName ) const {
+    if ( optName=="unit_test" ) return Type::tFloat;   
     return Type::none;
 }
 

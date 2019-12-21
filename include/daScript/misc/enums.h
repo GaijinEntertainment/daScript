@@ -34,7 +34,7 @@ namespace das
             return fail;
         }
     private:
-        map<string, EE>     name2enum;
-        map<EE, string>     enum2name;
+        das_map<string, EE>     name2enum;
+        das_map<EE, string>     enum2name;
     };
 }

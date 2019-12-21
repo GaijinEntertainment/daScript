@@ -913,7 +913,7 @@ namespace das
         TextPrinter tout;
 #if DAS_ENABLE_PROFILER
         uint64_t totalGoo = 0;
-        set<FileInfo *> allFiles;
+        das_set<FileInfo *> allFiles;
         for ( auto & it : profileData ) {
             totalGoo += it.second;
             auto info = it.first.fileInfo;

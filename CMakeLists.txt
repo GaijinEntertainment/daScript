@@ -238,6 +238,16 @@ src/simulate/fs_file_info.cpp
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
+SET(DAGOR_NOISE_SRC
+include/dag_noise/dag_uint_noise.h
+)
+SOURCE_GROUP_FILES("dag_noise" DAGOR_NOISE_SRC)
+
+SET(FLAT_HASH_MAP_SRC
+include/flat_hash_map/flat_hash_map.hpp
+)
+SOURCE_GROUP_FILES("flat_hash_map" FLAT_HASH_MAP_SRC)
+
 SET(MAIN_SRC
 include/daScript/daScript.h
 include/daScript/daScriptModule.h
@@ -247,7 +257,8 @@ SOURCE_GROUP_FILES("main" MAIN_SRC)
 
 include_directories(include)
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
-    ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC})
+    ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
+	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC})
 SETUP_CPP11(libDaScript)
 
 # AOT compiler

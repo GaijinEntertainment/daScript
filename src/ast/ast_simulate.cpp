@@ -1957,7 +1957,7 @@ namespace das
     }
 
     void Program::buildMNLookup ( Context & context, TextWriter & logs ) {
-        map<uint32_t, uint32_t> htab;
+        das_map<uint32_t, uint32_t> htab;
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             auto mnh = context.functions[i].mangledNameHash;
             if ( htab[mnh] ) {
@@ -1981,7 +1981,7 @@ namespace das
     }
 
     void Program::buildADLookup ( Context & context, TextWriter & logs ) {
-        map<uint32_t,uint64_t>  tabAd;
+        das_map<uint32_t,uint64_t>  tabAd;
         for (auto & pm : library.modules ) {
             for(auto s2d : pm->annotationData ) {
                 tabAd[s2d.first] = s2d.second;

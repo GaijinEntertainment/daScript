@@ -4,7 +4,7 @@
 
 namespace das {
     typedef function<SimNode * (Context &)> AotFactory;
-    typedef map<uint64_t,AotFactory> AotLibrary;
+    typedef das_map<uint64_t,AotFactory> AotLibrary;
 
     struct AotListBase {
         AotListBase();

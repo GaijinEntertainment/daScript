@@ -125,6 +125,6 @@ namespace das {
         uint32_t                maxAllocated;
         uint32_t                initial_page_count = 16;
         vector<Book>            shelf;
-        map<char *,uint32_t>    bigStuff;
+        das_map<char *,uint32_t>bigStuff;
     };
 }

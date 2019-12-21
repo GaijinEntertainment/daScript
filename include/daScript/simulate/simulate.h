@@ -453,7 +453,7 @@ namespace das
 
 
 #if DAS_ENABLE_PROFILER
-        map<LineInfo,uint64_t,cmpLineInfoWithoutColumn>  profileData;
+        das_map<LineInfo,uint64_t,cmpLineInfoWithoutColumn>  profileData;
 #endif
 
         void resetProfiler();
