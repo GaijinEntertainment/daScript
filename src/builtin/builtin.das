@@ -111,6 +111,11 @@ def lock ( Tab : table<auto(keyT);auto(valT)>; blk : block<(t : table<keyT;valT>
 def lock ( Tab : table<auto(keyT);auto(valT)>#; blk : block<(t : table<keyT;valT>#):void >  )
     invoke(blk,Tab)
 
+[unsafe]
+def lock_forever ( var Tab : table<auto(keyT);auto(valT)> ) : table<keyT;valT> #
+	__builtin_table_lock(Tab)
+	return <- reinterpret<table<keyT;valT> #>(Tab)
+
 // functional
 
 [generic]
