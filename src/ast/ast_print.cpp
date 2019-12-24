@@ -121,8 +121,33 @@ namespace das {
             return Visitor::visitEnumerationValue(enu, name, value, last);
         }
     // strcuture
+        void logAnnotations(const AnnotationList & annList) {
+            if (!annList.empty()) {
+                ss << "[";
+                for (const auto & ann : annList) {
+                    ss << ann->annotation->name;
+                    if (!ann->arguments.empty()) {
+                        ss << "(";
+                        bool first = true;
+                        for (const auto & aarg : ann->arguments) {
+                            if (first) first = false; else ss << ",";
+                            ss << aarg.name << "=";
+                            switch (aarg.type) {
+                            case Type::tInt:    ss << aarg.iValue; break;
+                            case Type::tFloat:  ss << aarg.fValue; break;
+                            case Type::tBool:   ss << aarg.bValue; break;
+                            case Type::tString: ss << "\"" << aarg.sValue << "\""; break;
+                            }
+                        }
+                        ss << ")";
+                    }
+                }
+                ss << "]\n";
+            }
+        }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
+            logAnnotations(that->annotations);
             ss << "struct " << that->name << "\n";
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
@@ -206,6 +231,7 @@ namespace das {
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->privateFunction ) { ss << "[private]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
+            logAnnotations(fn->annotations);
             ss << "def " << fn->name;
             if ( fn->arguments.size() ) ss << " ( ";
         }

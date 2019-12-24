@@ -28,6 +28,8 @@ namespace das
     struct Expression;
     typedef shared_ptr<Expression> ExpressionPtr;
 
+    struct AnnotationArgumentList;
+
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
     struct AnnotationArgument {
@@ -38,6 +40,7 @@ namespace das
             bool    bValue;
             int     iValue;
             float   fValue;
+            AnnotationArgumentList * aList; // only used during parsing
         };
         AnnotationArgument () : type(Type::tVoid), iValue(0) {}
         //explicit copy is required to avoid copying union as float and cause FPE
@@ -51,6 +54,8 @@ namespace das
             : type(Type::tInt), name(n), iValue(i) {}
         AnnotationArgument ( const string & n, float f )
             : type(Type::tFloat), name(n), fValue(f) {}
+        AnnotationArgument ( const string & n, AnnotationArgumentList * al )
+            : type(Type::none), name(n), aList(al) {}
     };
 
     typedef vector<AnnotationArgument> AnnotationArguments;

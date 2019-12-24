@@ -1,17 +1,10 @@
 options log = true
-options print_ref = true
-options print_var_access = true
 
-[sideeffects]
-def foo(var src;z:int)
-	var t = 0
-	for x in src
-		t += x
-	return t
+[comment(message="yes",track=(one,2,3.14))]
+struct Foo
+	a : int
 
 [export]
 def test
-	var src = [[int[] 1;2;3;4;5]]
-	let res = foo(src,0)
-	print("res={res}\n")
+	print("ok\n")
     return true

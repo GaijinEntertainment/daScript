@@ -270,7 +270,9 @@
 %type <s>               optional_structure_parent
 %type <s>               require_module_name
 %type <aa>              annotation_argument
+%type <aa>				annotation_argument_value
 %type <aaList>          annotation_argument_list
+%type <aaList>          annotation_argument_value_list
 %type <aaList>          optional_field_annotation
 %type <fa>              annotation_declaration
 %type <faList>          annotation_list
@@ -568,6 +570,28 @@ expression_with
     }
     ;
 
+annotation_argument_value
+    :   string_constant[value]   { $$ = new AnnotationArgument("",*$value); delete $value; }
+    |   NAME[value]              { $$ = new AnnotationArgument("",*$value); delete $value; }
+    |   INTEGER[value]           { $$ = new AnnotationArgument("",$value); }
+    |   FLOAT[value]             { $$ = new AnnotationArgument("",float($value)); }
+    |   DAS_TRUE                 { $$ = new AnnotationArgument("",true); }
+    |   DAS_FALSE                { $$ = new AnnotationArgument("",false); }
+	;
+
+annotation_argument_value_list
+	:	annotation_argument_value[arg] {
+        $$ = new AnnotationArgumentList();
+        $$->push_back(*$arg);
+        delete $arg;
+	}
+	|	annotation_argument_value_list[argL] ',' annotation_argument_value[arg] {
+            $$ = $argL;
+            $$->push_back(*$arg);
+            delete $arg;
+    }
+	;
+
 annotation_argument
     :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value); delete $value; delete $name; }
     |   NAME[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value); delete $value; delete $name; }
@@ -576,17 +600,36 @@ annotation_argument
     |   NAME[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true); delete $name; }
     |   NAME[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false); delete $name; }
     |   NAME[name]                              { $$ = new AnnotationArgument(*$name,true); delete $name; }
+	|	NAME[name] '=' '(' annotation_argument_value_list[values] ')' {
+		{ $$ = new AnnotationArgument(*$name,$values); delete $name; }
+	}
     ;
 
 annotation_argument_list
     :   annotation_argument[arg]  {
         $$ = new AnnotationArgumentList();
-        $$->push_back(*$arg);
+		if ( $arg->type==Type::none ) {
+			for ( auto & sarg : *($arg->aList) ) {
+				sarg.name = $arg->name;
+				$$->push_back(sarg);
+			}
+			delete $arg->aList;
+		} else {
+			$$->push_back(*$arg);
+		}
         delete $arg;
     }
     |   annotation_argument_list[argL] ',' annotation_argument[arg] {
             $$ = $argL;
-            $$->push_back(*$arg);
+			if ( $arg->type==Type::none ) {
+				for ( auto & sarg : *($arg->aList) ) {
+					sarg.name = $arg->name;
+					$$->push_back(sarg);
+				}
+				delete $arg->aList;
+			} else {
+				$$->push_back(*$arg);
+			}
             delete $arg;
     }
     ;
