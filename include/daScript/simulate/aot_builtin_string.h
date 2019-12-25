@@ -29,6 +29,8 @@ namespace das {
     void set_das_string(string & str, const char * bs);
     void peek_das_string(const string & str, const TBlock<void,const char *> & block, Context * context);
     char * string_repeat ( const char * str, int count, Context * context );
+    char * to_string_char(int ch, Context * context);
+    void write_string_char(StringBuilderWriter & writer, int32_t ch);
 
     __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
 
@@ -55,10 +57,6 @@ namespace das {
     char * builtin_build_string_T ( TT && block, Context * context ) {
         StringBuilderWriter writer(context->stringHeap);
         block(writer);
-        auto pStr = writer.c_str();
-        if ( !pStr ) {
-            context->throw_error("can't allocate string builder result, out of heap");
-        }
-        return pStr;
+        return writer.c_str();
     }
 }

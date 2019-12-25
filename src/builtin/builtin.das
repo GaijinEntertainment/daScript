@@ -236,3 +236,20 @@ def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
         __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a), cmp )
     __builtin_array_unlock(a)
 
+def join(it; separator:string)
+	if !typeinfo(is_iterable it)
+		static_assert(false,"can't join non-iterable type")
+		return ""
+	else
+		let st = build_string() <| $ (var writer)
+			var skip_first = true
+			for elem in it
+				if skip_first
+					skip_first = false
+				else
+					write(writer, separator)
+				if typeinfo(is_string it)
+					write_char(writer, elem)
+				else
+					write(writer, elem)
+		return st

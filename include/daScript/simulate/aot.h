@@ -1369,6 +1369,14 @@ namespace das {
         Iterator * that = nullptr;
     };
 
+    template <>
+    struct das_iterator <Iterator * const> : das_iterator<Iterator *> {
+        __forceinline das_iterator(Iterator * const r) 
+            : das_iterator<Iterator *>(r) {
+        }
+    };
+
+
     template <typename TK, typename TV, typename TKey>
     TV * __builtin_table_find ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;

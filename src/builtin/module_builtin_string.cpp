@@ -207,11 +207,7 @@ namespace das
         vec4f args[1];
         args[0] = cast<StringBuilderWriter *>::from(&writer);
         context->invoke(block, args, nullptr);
-        auto pStr = writer.c_str();
-        if ( !pStr ) {
-            context->throw_error("can't allocate string builder result, out of heap");
-        }
-        return pStr;
+        return writer.c_str();
     }
 
     vec4f builtin_write_string ( Context &, SimNode_CallBase * call, vec4f * args ) {

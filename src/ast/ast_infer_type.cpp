@@ -1855,6 +1855,26 @@ namespace das {
                 } else if ( expr->trait=="is_string" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isString());
+                } else if ( expr->trait=="is_iterator" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isGoodIteratorType());
+                } else if ( expr->trait=="is_iterable" ) {
+                    reportGenericInfer();
+                    bool iterable = false;
+                    if ( expr->typeexpr->dim.size() ) {
+                        iterable = true;
+                    } else if ( expr->typeexpr->isGoodIteratorType() ) {
+                        iterable = true;
+                    } else if ( expr->typeexpr->isGoodArrayType() ) {
+                        iterable = true;
+                    } else if ( expr->typeexpr->isRange() ) {
+                        iterable = true;
+                    } else if ( expr->typeexpr->isString() ) {
+                        iterable = true;
+                    } else if ( expr->typeexpr->isHandle() && expr->typeexpr->annotation->isIterable() ) {
+                        iterable = true;
+                    } 
+                    return make_shared<ExprConstBool>(expr->at, iterable);
                 } else if ( expr->trait=="is_numeric" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumeric());

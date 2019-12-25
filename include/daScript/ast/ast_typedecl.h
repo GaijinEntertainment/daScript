@@ -46,7 +46,6 @@ namespace das {
         bool canAot( unordered_set<Structure *> & recAot ) const;
         bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel = true ) const;
         bool isExprType() const;
-        bool isIteratorType ( const TypeDecl & decl ) const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
         bool isArray() const;

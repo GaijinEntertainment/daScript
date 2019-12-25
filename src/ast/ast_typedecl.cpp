@@ -907,18 +907,6 @@ namespace das
         return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
     }
 
-    bool TypeDecl::isIteratorType ( const TypeDecl & decl ) const {
-        if ( baseType!=decl.baseType )
-            return false;
-        if ( baseType==Type::tStructure && structType!=decl.structType )
-            return false;
-        if ( decl.dim.size() )
-            return false;
-        if ( !decl.isRef() )
-            return false;
-        return true;
-    }
-
     bool TypeDecl::isVoid() const {
         return (baseType==Type::tVoid) && (dim.size()==0);
     }
