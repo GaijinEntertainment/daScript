@@ -2813,6 +2813,11 @@ namespace das {
                 if ( cloneType->isHandle() ) {
                     expr->type = make_shared<TypeDecl>();  // we return nothing
                     return Visitor::visit(expr);
+                } else if ( cloneType->isString() && expr->right->type->isTemp() ) {
+                    reportGenericInfer();
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone_string");
+                    cloneFn->arguments.push_back(expr->right->clone());
+                    return make_shared<ExprCopy>(expr->at, expr->left->clone(), cloneFn);
                 } else if ( cloneType->canCopy() ) {
                     if ( expr->right->type->isTemp(true,false) ) {
                         error("can't clone (copy) temporary value", expr->at, CompilationError::cant_pass_temporary);
@@ -3140,6 +3145,7 @@ namespace das {
                     return;
                 }
                 pVar->type->constant |= src->type->isConst();
+                pVar->type->temporary |= src->type->isTemp();
                 pVar->source = src;
                 local.push_back(pVar);
                 expr->iteratorVariables.push_back(pVar);

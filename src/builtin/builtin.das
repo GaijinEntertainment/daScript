@@ -65,19 +65,36 @@ def clone_to_move(clone_src:auto(TT)) : TT delete const
     clone_dest := clone_src
     return <- clone_dest
 
-def clone_dim(var a;b:auto implicit)
+def clone_dim(var a;b:auto)
 	if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
 		for aV,bV in a,b
 			aV := bV
 	else
 		static_assert(false,"can't clone this array")
 
-def clone(var a:array<auto(TT)>;b:array<TT> implicit)
+def clone_dim(var a;b:auto#)
+    if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
+        for aV,bV in a,b
+            aV := bV
+    else
+        static_assert(false,"can't clone this array")
+
+def clone(var a:array<auto(TT)>;b:array<TT>)
     resize(a,length(b))
     for aV,bV in a,b
         aV := bV
 
-def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT> implicit)
+def clone(var a:array<auto(TT)>;b:array<TT>#)
+    resize(a,length(b))
+    for aV,bV in a,b
+        aV := bV
+
+def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>)
+    clear(a)
+    for k,v in keys(b),values(b)
+        a[k] := v
+
+def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>#)
     clear(a)
     for k,v in keys(b),values(b)
         a[k] := v
@@ -253,3 +270,13 @@ def join(it; separator:string)
 				else
 					write(writer, elem)
 		return st
+
+def split ( text, delim : string; blk : block< (arg:array<string>#) > )
+    builtin_string_split ( text, delim, blk )
+
+def split ( text, delim : string ) : array<string>
+    var res : array<string>
+    builtin_string_split(text, delim) <| $ ( arr : array<string># ) : void
+        res := arr
+    return <- res
+

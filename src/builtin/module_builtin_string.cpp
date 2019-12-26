@@ -246,6 +246,44 @@ namespace das
         context->invoke(block, args, nullptr);
     }
 
+    void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context ) {
+        if ( !str ) str = "";
+        if ( !delim ) delim = "";
+        char * dstr = strdup(str);
+        char * ch = dstr;
+        vector<char *> tokens;
+        while ( *ch ) {
+            while ( *ch && strchr(delim,*ch) ) ch++;
+            if ( *ch ) {
+                char * tok = ch ++;
+                while ( *ch && !strchr(delim,*ch) ) ch ++;
+                if ( *ch==0 ) {
+                    tokens.push_back(tok);
+                    break;
+                } else {
+                    *ch ++ = 0;
+                    tokens.push_back(tok);
+                }
+            }
+        }
+        Array arr;
+        arr.data = (char *) tokens.data();
+        arr.size = tokens.size();
+        arr.capacity = tokens.size();
+        arr.lock = 1;
+        vec4f args[1];
+        args[0] = cast<Array *>::from(&arr);
+        context->invoke(block, args, nullptr);
+        free(dstr);
+    }
+
+    char * builtin_string_clone ( const char *str, Context * context ) {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if (!strLen)
+            return nullptr;
+        return context->stringHeap.allocateString(str, strLen);
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_shared<StringBuilderWriterAnnotation>(lib));
@@ -283,6 +321,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
         addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
         addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
+        addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split", SideEffects::modifyExternal, "builtin_string_split");
+        addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string", SideEffects::none, "builtin_string_clone");
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");

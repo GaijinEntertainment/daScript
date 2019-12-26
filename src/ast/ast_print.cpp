@@ -137,6 +137,10 @@ namespace das {
                             case Type::tFloat:  ss << aarg.fValue; break;
                             case Type::tBool:   ss << aarg.bValue; break;
                             case Type::tString: ss << "\"" << aarg.sValue << "\""; break;
+                            default:
+                                    DAS_ASSERT(0 && "we should not even be here. "
+                                               "somehow annotation has unsupported argument type");
+                                break;
                             }
                         }
                         ss << ")";

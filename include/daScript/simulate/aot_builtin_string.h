@@ -31,6 +31,8 @@ namespace das {
     char * string_repeat ( const char * str, int count, Context * context );
     char * to_string_char(int ch, Context * context);
     void write_string_char(StringBuilderWriter & writer, int32_t ch);
+    void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context );
+    char * builtin_string_clone ( const char *str, Context * context );
 
     __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
 
