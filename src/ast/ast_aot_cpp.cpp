@@ -509,7 +509,7 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
 
-    bool g_config_no_local_vec_substitute = false;
+    bool g_config_no_local_vec_substitute = true;
 
     void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
         if ( isLocalVec(vtype) && !g_config_no_local_vec_substitute ) {

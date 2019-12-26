@@ -164,7 +164,7 @@ namespace das {
 
 int MAIN_FUNC_NAME(int argc, const char * argv[]) {
     if ( argc<3 ) {
-        tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-nlvs]\n";
+        tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-nlvs|-lvs]\n";
         return -1;
     }
     if ( argc>3  ) {
@@ -173,6 +173,8 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
                 quiet = true;
             } else if ( strcmp(argv[ai], "-nlvs")==0 ) {
                 das::g_config_no_local_vec_substitute = true;
+            } else if ( strcmp(argv[ai], "-lvs")==0 ) {
+                das::g_config_no_local_vec_substitute = false;
             } else {
                 tout << "unsupported option " << argv[ai];
                 return -1;
