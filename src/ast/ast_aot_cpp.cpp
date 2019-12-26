@@ -509,8 +509,10 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
 
+    bool g_config_no_local_vec_substitute = false;
+
     void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
-        if ( isLocalVec(vtype) ) {
+        if ( isLocalVec(vtype) && !g_config_no_local_vec_substitute ) {
             if ( vtype->constant ) ss << "const ";
             ss << "vec4f /*" << describeCppType(vtype,substituteRef) << "*/";
         } else {
@@ -519,7 +521,7 @@ namespace das {
     }
 
     void describeVarLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
-        if ( isLocalVec(vtype) ) {
+        if ( isLocalVec(vtype) && !g_config_no_local_vec_substitute ) {
             if ( vtype->constant ) ss << "const ";
             ss << "vec4f /*" << describeCppType(vtype,substituteRef) << "*/";
         } else {

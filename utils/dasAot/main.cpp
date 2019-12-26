@@ -158,13 +158,26 @@ void require_project_specific_modules();//link time resolved dependencies
   #define MAIN_FUNC_NAME main
 #endif
 
+namespace das {
+    extern bool g_config_no_local_vec_substitute;
+}
+
 int MAIN_FUNC_NAME(int argc, const char * argv[]) {
     if ( argc<3 ) {
-        tout << "dasAot <in_script.das> <out_script.das.cpp> [-q]\n";
+        tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-nlvs]\n";
         return -1;
     }
-    if ( argc>3 && strcmp(argv[3], "-q")==0 ) {
-        quiet = true;
+    if ( argc>3  ) {
+        for (int ai = 3; ai != argc; ++ai) {
+            if ( strcmp(argv[ai],"-q")==0 ) {
+                quiet = true;
+            } else if ( strcmp(argv[ai], "-nlvs")==0 ) {
+                das::g_config_no_local_vec_substitute = true;
+            } else {
+                tout << "unsupported option " << argv[ai];
+                return -1;
+            }
+        }
     }
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
