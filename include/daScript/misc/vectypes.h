@@ -28,6 +28,13 @@ namespace das
         static __forceinline uint32_t w ( vec4f t ) { return v_extract_wi(v_cast_vec4i(t)); }
     };
 
+    __forceinline vec4f vec_loadu(const float *v) {return v_ldu(v);}
+    __forceinline vec4f vec_loadu(const int *v) {return v_cast_vec4f(v_ldu_w(v));}
+    __forceinline vec4f vec_loadu(const unsigned int *v) {return vec_loadu((const int *)v);}
+    __forceinline vec4f vec_loadu_half(const float *v) {return v_ldu_half(v);}
+    __forceinline vec4f vec_loadu_half(const int *v) {return v_cast_vec4f(v_ldu_half_w(v));}
+    __forceinline vec4f vec_loadu_half(const unsigned int *v) {return vec_loadu_half((const int *)v);}
+
     template <typename TT>
     struct vec2 {
         TT   x, y;
@@ -47,7 +54,7 @@ namespace das
         __forceinline vec2(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)) {}
         __forceinline vec2(TT X, TT Y) : x(X), y(Y) {}
         __forceinline vec2(TT t) : x(t), y(t) {}
-        __forceinline operator vec4f() const { return v_ldu_half((float *)this); };
+         __forceinline operator vec4f() const { return vec_loadu_half(&x); };
     };
 
     template <typename TT>
@@ -69,7 +76,7 @@ namespace das
         __forceinline vec3(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)), z(vec_extract<TT>::z(t)) {}
         __forceinline vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
         __forceinline vec3(TT t) : x(t), y(t), z(t) {}
-        __forceinline operator vec4f() const { return v_ldu((float *)this); };
+        __forceinline operator vec4f() const { return vec_loadu(&x); };
 
     };
 
@@ -92,7 +99,7 @@ namespace das
         __forceinline vec4(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)), z(vec_extract<TT>::z(t)), w(vec_extract<TT>::w(t)) {}
         __forceinline vec4(TT X, TT Y, TT Z, TT W) : x(X), y(Y), z(Z), w(W) {}
         __forceinline vec4(TT t) : x(t), y(t), z(t), w(t) {}
-        __forceinline operator vec4f() const { return v_ldu((float *)this); };
+        __forceinline operator vec4f() const { return vec_loadu(&x); };
     };
 
     typedef vec2<float> float2;
