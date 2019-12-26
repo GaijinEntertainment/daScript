@@ -509,6 +509,16 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
 
+	/*
+		why this option exists?
+		1.
+			substituting vectors for vec4f is safe with current aot setup.
+			it also happens to be an optimization under MSVC 64-bit (and 32-bit)
+		2.
+			CLANG 9.0.0 32-bit windows generates incorrect code, when local vector substitue is enabled.
+			long story short, lambda captures vec4f, but does not align it on the stack
+			this addresses the issue, since there is no vec4f to capture
+	*/
     bool g_config_no_local_vec_substitute = true;
 
     void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
