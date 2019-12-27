@@ -468,6 +468,12 @@ uint32_t queryEs (const Block & block, Context * context) {
     return EsRunBlock(*context, block, g_components, g_total);
 }
 
+#if DAS_USE_EASTL
+#include <EASTL/unordered_map.h>
+#else
+#include <unordered_map>
+#endif
+
 struct dictKeyEqual {
     __forceinline bool operator()( const char * lhs, const char * rhs ) const {
         return ( lhs==rhs ) ? true : strcmp(lhs,rhs)==0;
@@ -485,7 +491,7 @@ struct dictKeyHash {
     }
 };
 
-typedef ska::flat_hash_map<char *, int32_t, dictKeyHash, dictKeyEqual> dict_hash_map;
+typedef unordered_map<char *, int32_t, dictKeyHash, dictKeyEqual> dict_hash_map;
 
  int testDict(Array & arr) {
     dict_hash_map tab;
