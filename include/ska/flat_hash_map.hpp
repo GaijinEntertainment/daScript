@@ -309,18 +309,18 @@ public:
         : sherwood_v3_table(first, last, bucket_count, hash, ArgumentEqual(), alloc)
     {
     }
-    sherwood_v3_table(das::initializer_list<T> il, size_type bucket_count = 0, const ArgumentHash & hash = ArgumentHash(), const ArgumentEqual & equal = ArgumentEqual(), const ArgumentAlloc & alloc = ArgumentAlloc())
+    sherwood_v3_table(std::initializer_list<T> il, size_type bucket_count = 0, const ArgumentHash & hash = ArgumentHash(), const ArgumentEqual & equal = ArgumentEqual(), const ArgumentAlloc & alloc = ArgumentAlloc())
         : sherwood_v3_table(bucket_count, hash, equal, alloc)
     {
         if (bucket_count == 0)
             rehash(il.size());
         insert(il.begin(), il.end());
     }
-    sherwood_v3_table(das::initializer_list<T> il, size_type bucket_count, const ArgumentAlloc & alloc)
+    sherwood_v3_table(std::initializer_list<T> il, size_type bucket_count, const ArgumentAlloc & alloc)
         : sherwood_v3_table(il, bucket_count, ArgumentHash(), ArgumentEqual(), alloc)
     {
     }
-    sherwood_v3_table(das::initializer_list<T> il, size_type bucket_count, const ArgumentHash & hash, const ArgumentAlloc & alloc)
+    sherwood_v3_table(std::initializer_list<T> il, size_type bucket_count, const ArgumentHash & hash, const ArgumentAlloc & alloc)
         : sherwood_v3_table(il, bucket_count, hash, ArgumentEqual(), alloc)
     {
     }
@@ -592,7 +592,7 @@ public:
             emplace(*begin);
         }
     }
-    void insert(das::initializer_list<value_type> il)
+    void insert(std::initializer_list<value_type> il)
     {
         insert(il.begin(), il.end());
     }
