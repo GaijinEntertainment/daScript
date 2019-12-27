@@ -5,11 +5,23 @@
 #endif
 
 #if DAS_USE_EASTL
-    #include <EASTL/unordered_map.h>
-    #include <EASTL/unordered_set.h>
+#include <EASTL/das_map.h>
+#include <EASTL/das_set.h>
+namespace das {
+template <typename K, typename V>
+using das_map = eastl::unordered_map<K,V>;
+template <typename K>
+using das_set = eastl::unordered_set<K>;
+}
 #else
-    #include <unordered_map>
-    #include <unordered_set>
+#include <unordered_map>
+#include <unordered_set>
+namespace das {
+template <typename K, typename V>
+using das_map = std::unordered_map<K,V>;
+template <typename K>
+using das_set = std::unordered_set<K>;
+}
 #endif
 
 #include <string>
@@ -28,9 +40,9 @@ namespace das {using namespace std;}
 #endif
 #include <ska/flat_hash_map.hpp>
 template <typename K, typename V>
-using das_map = ska::flat_hash_map<K,V>;
+using das_hash_map = ska::flat_hash_map<K,V>;
 template <typename K>
-using das_set = ska::flat_hash_set<K>;
+using das_hash_set = ska::flat_hash_set<K>;
 #endif
 
 #define DAS_STD_HAS_BIND 1

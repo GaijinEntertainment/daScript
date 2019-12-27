@@ -312,6 +312,6 @@ namespace das {
             pageSize = 1024;
         }
         virtual uint32_t growPages(uint32_t pages) const override { return pages; }
-        das_map<uint32_t,TypeInfo *>    lookup;
+        das_hash_map<uint32_t,TypeInfo *>    lookup;
     };
 }

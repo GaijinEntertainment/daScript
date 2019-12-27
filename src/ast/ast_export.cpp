@@ -54,8 +54,8 @@ namespace das {
             }, "*");
         }
         void RemoveUnusedSymbols ( Module & mod ) {
-            unordered_map<string,FunctionPtr> functions;
-            unordered_map<string,VariablePtr> globals;
+            das_map<string,FunctionPtr> functions;
+            das_map<string,VariablePtr> globals;
             vector<VariablePtr> globalsInOrder;
             swap(functions,mod.functions);
             swap(globals,mod.globals);

@@ -143,8 +143,8 @@ namespace das {
             });
             return vec;
         }
-        das_set<const Function *> functions;
-        das_set<const Variable *> variables;
+        das_hash_set<const Function *> functions;
+        das_hash_set<const Variable *> variables;
     };
 
     uint64_t getFunctionAotHash ( const Function * fun ) {

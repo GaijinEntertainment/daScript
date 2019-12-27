@@ -178,7 +178,7 @@ namespace das {
         return pFunc;
     }
 
-    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block, const unordered_set<VariablePtr> & capt ) {
+    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block, const das_set<VariablePtr> & capt ) {
         auto lsn = lambdaName;
         auto pStruct = make_shared<Structure>(lsn);
         auto btd = block->makeBlockType();
@@ -196,7 +196,7 @@ namespace das {
         return pStruct;
     }
 
-    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const unordered_set<VariablePtr> & capt ) {
+    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const das_set<VariablePtr> & capt ) {
         auto asc = new ExprAscend();
         asc->needTypeInfo = true;
         auto makeS = make_shared<ExprMakeStructure>();

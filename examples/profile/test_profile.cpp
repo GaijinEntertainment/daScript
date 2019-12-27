@@ -485,7 +485,7 @@ struct dictKeyHash {
     }
 };
 
-typedef unordered_map<char *, int32_t, dictKeyHash, dictKeyEqual> dict_hash_map;
+typedef ska::flat_hash_map<char *, int32_t, dictKeyHash, dictKeyEqual> dict_hash_map;
 
  int testDict(Array & arr) {
     dict_hash_map tab;

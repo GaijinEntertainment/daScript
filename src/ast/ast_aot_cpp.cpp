@@ -687,11 +687,11 @@ namespace das {
         }
     public:
         vector<ExprBlock *>                     stack;
-        unordered_map<ExprBlock *,vector<Variable *>>     variables;
-        unordered_map<ExprBlock *,vector<Expression *>>   localTemps;
+        das_map<ExprBlock *,vector<Variable *>>     variables;
+        das_map<ExprBlock *,vector<Expression *>>   localTemps;
     protected:
-        unordered_map<Variable *,string>              rename;
-        unordered_set<Variable *>                     moved;
+        das_map<Variable *,string>              rename;
+        das_set<Variable *>                     moved;
     };
 
     string describeCppFunc ( Function * fn, BlockVariableCollector * collector, bool needName = true, bool needInline = true ) {
@@ -744,7 +744,7 @@ namespace das {
         AotDebugInfoHelper          helper;
         ProgramPtr                  program;
         BlockVariableCollector &    collector;
-        unordered_set<string>       aotPrefix;
+        das_set<string>       aotPrefix;
         vector<ExprBlock *>         scopes;
         bool                        prologue = false;
     protected:

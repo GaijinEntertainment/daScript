@@ -164,7 +164,7 @@ namespace das {
         return true;
     }
 
-    bool Structure::canAot( unordered_set<Structure *> & recAot ) const {
+    bool Structure::canAot( das_set<Structure *> & recAot ) const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->canAot(recAot) )
                 return false;
@@ -173,7 +173,7 @@ namespace das {
     }
 
     bool Structure::canAot() const {
-        unordered_set<Structure *> recAot;
+        das_set<Structure *> recAot;
         return canAot(recAot);
     }
 
@@ -257,7 +257,7 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
-    bool Structure::isLocal(unordered_set<Structure *> & dep) const {   // &&
+    bool Structure::isLocal(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->isLocal(dep) ) {
                 return false;
@@ -266,7 +266,7 @@ namespace das {
         return true;
     }
 
-    bool Structure::isTemp(unordered_set<Structure *> & dep) const {    // ||
+    bool Structure::isTemp(das_set<Structure *> & dep) const {    // ||
         for ( const auto & fd : fields ) {
             if ( fd.type && fd.type->isTemp(true, true, dep) ) {
                 return true;

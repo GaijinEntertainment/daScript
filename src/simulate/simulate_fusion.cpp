@@ -147,12 +147,12 @@ namespace das {
             info[thisNode] = ni;
 
         }
-        das_map<SimNode *,SimNodeInfo>  info;
+        das_hash_map<SimNode *,SimNodeInfo>  info;
         SimNode * thisNode = nullptr;
     };
 
     struct SimFusion : SimVisitor {
-        SimFusion ( Context * ctx, TextWriter & wr,  das_map<SimNode *,SimNodeInfo> && ni )
+        SimFusion ( Context * ctx, TextWriter & wr,  das_hash_map<SimNode *,SimNodeInfo> && ni )
             : context(ctx), ss(wr), info(ni) {
                 createFusionEngine();
         }
@@ -174,7 +174,7 @@ namespace das {
         Context * context = nullptr;
         TextWriter & ss;
         bool fused = false;
-        das_map<SimNode *,SimNodeInfo> & info;
+        das_hash_map<SimNode *,SimNodeInfo> & info;
     };
 
     void Program::fusion ( Context & context, TextWriter & logs ) {

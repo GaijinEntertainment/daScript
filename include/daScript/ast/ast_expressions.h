@@ -118,10 +118,10 @@ namespace das
         virtual bool rtti_isBlock() const override { return true; }
         VariablePtr findArgument(const string & name);
         vector<SimNode *> collectExpressions ( Context & context,
-                const vector<ExpressionPtr> & list, unordered_map<int32_t,uint32_t> * ofsmap = nullptr ) const;
+                const vector<ExpressionPtr> & list, das_map<int32_t,uint32_t> * ofsmap = nullptr ) const;
         void simulateFinal ( Context & context, SimNode_Final * sim ) const;
         void simulateBlock ( Context & context, SimNode_Block * sim ) const;
-        void simulateLabels ( Context & context, SimNode_Block * sim, const unordered_map<int32_t,uint32_t> & ofsmap ) const;
+        void simulateLabels ( Context & context, SimNode_Block * sim, const das_map<int32_t,uint32_t> & ofsmap ) const;
         string getMangledName(bool includeName = false, bool includeResult = false) const;
         TypeDeclPtr makeBlockType () const;
         vector<ExpressionPtr>   list;

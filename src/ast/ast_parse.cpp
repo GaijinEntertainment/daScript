@@ -97,7 +97,7 @@ namespace das {
                           const FileAccessPtr & access,
                           vector<string> & req,
                           vector<string> & missing,
-                          unordered_set<string> & dependencies,
+                          das_set<string> & dependencies,
                           ModuleGroup & libGroup) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
@@ -217,7 +217,7 @@ namespace das {
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
         vector<string> req, missing;
-        unordered_set<string> dependencies;
+        das_set<string> dependencies;
         if ( getPrerequisits(fileName, access, req, missing, dependencies, libGroup) ) {
             for ( auto & mod : req ) {
                 auto modName = getModuleName(mod);

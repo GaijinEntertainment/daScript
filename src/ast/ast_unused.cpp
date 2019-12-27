@@ -91,7 +91,7 @@ namespace das {
     //  a[b]=3  ->  #a#[b]=3
     class TrackFieldAndAtFlags : public Visitor {
         TextWriter &            logs;
-        unordered_set<const Function *>   asked;
+        das_set<const Function *>   asked;
         FunctionPtr             func;
     public:
         TrackFieldAndAtFlags ( TextWriter & l ) : logs(l) {

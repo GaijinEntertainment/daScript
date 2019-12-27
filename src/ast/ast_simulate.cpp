@@ -1096,7 +1096,7 @@ namespace das
     
     vector<SimNode *> ExprBlock::collectExpressions ( Context & context,
                                                      const vector<ExpressionPtr> & lis,
-                                                     unordered_map<int32_t,uint32_t> * ofsmap ) const {
+                                                     das_map<int32_t,uint32_t> * ofsmap ) const {
         vector<SimNode *> simlist;
         for ( auto & node : lis ) {
             if ( node->rtti_isLet()) {
@@ -1130,7 +1130,7 @@ namespace das
     }
 
     void ExprBlock::simulateBlock ( Context & context, SimNode_Block * block ) const {
-        unordered_map<int32_t,uint32_t> ofsmap;
+        das_map<int32_t,uint32_t> ofsmap;
         vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
         block->total = int(simlist.size());
         if ( block->total ) {
@@ -1141,7 +1141,7 @@ namespace das
         simulateLabels(context, block, ofsmap);
     }
 
-    void ExprBlock::simulateLabels ( Context & context, SimNode_Block * block, const unordered_map<int32_t,uint32_t> & ofsmap ) const {
+    void ExprBlock::simulateLabels ( Context & context, SimNode_Block * block, const das_map<int32_t,uint32_t> & ofsmap ) const {
         if ( maxLabelIndex!=-1 ) {
             block->totalLabels = maxLabelIndex + 1;
             block->labels = (uint32_t *) context.code->allocate(block->totalLabels * sizeof(uint32_t));
@@ -1155,7 +1155,7 @@ namespace das
     }
 
     SimNode * ExprBlock::simulate (Context & context) const {
-        unordered_map<int32_t,uint32_t> ofsmap;
+        das_map<int32_t,uint32_t> ofsmap;
         vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
         // TODO: what if list size is 0?
         if ( simlist.size()!=1 || isClosure || finalList.size() ) {
@@ -1957,7 +1957,7 @@ namespace das
     }
 
     void Program::buildMNLookup ( Context & context, TextWriter & logs ) {
-        das_map<uint32_t, uint32_t> htab;
+        das_hash_map<uint32_t, uint32_t> htab;
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             auto mnh = context.functions[i].mangledNameHash;
             if ( htab[mnh] ) {
@@ -1981,7 +1981,7 @@ namespace das
     }
 
     void Program::buildADLookup ( Context & context, TextWriter & logs ) {
-        das_map<uint32_t,uint64_t>  tabAd;
+        das_hash_map<uint32_t,uint64_t>  tabAd;
         for (auto & pm : library.modules ) {
             for(auto s2d : pm->annotationData ) {
                 tabAd[s2d.first] = s2d.second;

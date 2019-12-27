@@ -93,7 +93,7 @@ namespace das
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
-        unordered_map<string, FileInfoPtr>    files;
+        das_map<string, FileInfoPtr>    files;
     };
     typedef shared_ptr<FileAccess> FileAccessPtr;
 

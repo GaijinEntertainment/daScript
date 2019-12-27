@@ -21,8 +21,8 @@ namespace das {
                 }
             }
         }
-        unordered_set<VariablePtr>    scope;
-        unordered_set<VariablePtr>    capt;
+        das_set<VariablePtr>    scope;
+        das_set<VariablePtr>    capt;
         bool                fail = false;
     };
 
@@ -43,7 +43,7 @@ namespace das {
         vector<ExprBlock *>     scopes;
         vector<ExprWith *>      with;
         vector<size_t>          varStack;
-        unordered_map<int32_t,int32_t>    labels;
+        das_map<int32_t,int32_t>    labels;
         size_t                  fieldOffset = 0;
         bool                    cppLayout = false;
         bool                    cppLayoutPod = false;
@@ -231,7 +231,7 @@ namespace das {
         }
 
         // type chain is fully resolved, and not aliased \ auto
-        bool isFullySealedType(const TypeDeclPtr & ptr, unordered_set<const TypeDecl *> & all ) {
+        bool isFullySealedType(const TypeDeclPtr & ptr, das_set<const TypeDecl *> & all ) {
             if (!ptr) return false;
             if ( ptr->baseType==Type::tStructure || ptr->baseType==Type::tTuple ) {
                 auto thisType = ptr.get();
@@ -256,7 +256,7 @@ namespace das {
             return true;
         }
         bool isFullySealedType(const TypeDeclPtr & ptr) {
-            unordered_set<const TypeDecl *> all;
+            das_set<const TypeDecl *> all;
             return isFullySealedType(ptr, all);
         }
 
