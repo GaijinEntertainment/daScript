@@ -95,7 +95,7 @@ namespace das {
 
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
-                          vector<string> & req,
+                          vector<pair<string,string>> & req,
                           vector<string> & missing,
                           vector<string> & circular,
                           das_set<string> & dependencies,
@@ -105,7 +105,10 @@ namespace das {
             for ( auto & mod : ownReq ) {
                 auto module = Module::require(mod); // try native with that name
                 if ( !module ) {
-                    if ( find(req.begin(), req.end(), mod)==req.end() ) {
+                    auto it_r = find_if(req.begin(), req.end(), [&] ( const pair<string,string> & reqM ) {
+                        return reqM.first == mod;
+                    });
+                    if ( it_r==req.end() ) {
                         if ( dependencies.find(mod) != dependencies.end() ) {
                             // circular dependency
                             circular.push_back(mod);
@@ -122,7 +125,7 @@ namespace das {
                         if ( !getPrerequisits(info.second, access, req, missing, circular, dependencies, libGroup) ) {
                             return false;
                         }
-                        req.push_back(mod);
+                        req.push_back(info);
                     }
                 } else {
                     libGroup.addModule(module);
@@ -220,19 +223,18 @@ namespace das {
                                 ModuleGroup & libGroup,
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
-        vector<string> req, missing, circular;
+        vector<pair<string,string>> req;
+        vector<string> missing, circular;
         das_set<string> dependencies;
         if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup) ) {
             for ( auto & mod : req ) {
-                auto info = access->getModuleInfo(mod, fileName);
-                DAS_VERIFY(!info.first.empty() && "somehow missing or circular dependency");
-                if ( !libGroup.findModule(info.first) ) {
-                    auto program = parseDaScript(info.second, access, logs, libGroup, true, policies);
+                if ( !libGroup.findModule(mod.first) ) {
+                    auto program = parseDaScript(mod.second, access, logs, libGroup, true, policies);
                     if ( program->failed() ) {
                         return program;
                     }
                     if ( program->thisModule->name.empty() ) {
-                        program->thisModule->name = info.first;
+                        program->thisModule->name = mod.first;
                     }
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {

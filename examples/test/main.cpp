@@ -233,6 +233,56 @@ bool run_exception_tests( const string & path ) {
     return run_tests(path, exception_test, false) && run_tests(path, exception_test, true);
 }
 
+
+bool run_module_test ( const string & path ) {
+    tout << "testing MODULE at " << path << " ";
+    auto mfAccess = make_shared<FsFileAccess>();
+    auto fAccess = make_shared<FsModuleFileAccess>( path + "/project.das_project", mfAccess);
+    ModuleGroup dummyLibGroup;
+    if ( auto program = compileDaScript(path + "/main.das", fAccess, tout, dummyLibGroup) ) {
+        if ( program->failed() ) {
+            tout << "failed to compile\n";
+            for ( auto & err : program->errors ) {
+                tout << reportError(err.at, err.what, err.cerr );
+            }
+            return false;
+        } else {
+            Context ctx(program->policies.stack);
+            if ( !program->simulate(ctx, tout) ) {
+                tout << "failed to simulate\n";
+                for ( auto & err : program->errors ) {
+                    tout << reportError(err.at, err.what, err.cerr );
+                }
+                return false;
+            }
+            if ( auto fnTest = ctx.findFunction("test") ) {
+                if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
+                    tout << "function 'test', call arguments do not match\n";
+                    return false;
+                }
+                ctx.restart();
+                ctx.runInitScript();    // this is here for testing purposes only
+                bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
+                if ( auto ex = ctx.getException() ) {
+                    tout << "exception: " << ex << "\n";
+                    return false;
+                }
+                if ( !result ) {
+                    tout << "failed\n";
+                    return false;
+                }
+                tout << "ok\n";
+                return true;
+            } else {
+                tout << "function 'test' not found\n";
+                return false;
+            }
+        }
+    } else {
+        return false;
+    }
+}
+
 int main() {
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
 #ifdef _MSC_VER
@@ -248,7 +298,7 @@ int main() {
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_Random);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/string_eof.das",true);
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/circular_module_dependency.das",true);
     Module::Shutdown();
     return 0;
 #endif
@@ -265,6 +315,7 @@ int main() {
     ok = run_unit_tests(TEST_PATH "examples/test/unit_tests") && ok;
     ok = run_unit_tests(TEST_PATH "examples/test/optimizations") && ok;
     ok = run_exception_tests(TEST_PATH "examples/test/runtime_errors") && ok;
+    ok = run_module_test(TEST_PATH "examples/test/module") && ok;
     tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();

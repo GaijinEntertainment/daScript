@@ -15,7 +15,9 @@ namespace das {
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.cerr );
                 }
-                DAS_ASSERTF(false,"failed to compile:\n%s", tout.str().c_str());
+                DAS_FATAL_LOG("failed to compile: %s\n", pak.c_str());
+                DAS_FATAL_LOG("%s", tout.str().c_str());
+                DAS_FATAL_ERROR;
             } else {
                 context = new Context();
                 if ( !program->simulate(*context, tout) ) {
@@ -25,17 +27,39 @@ namespace das {
                     }
                     delete context;
                     context = nullptr;
-                    DAS_ASSERTF(false,"failed to simulate:\n%s", tout.str().c_str());
+                    DAS_FATAL_LOG("failed to simulate: %s\n", pak.c_str());
+                    DAS_FATAL_LOG("%s", tout.str().c_str());
+                    DAS_FATAL_ERROR;
                     return;
                 }
                 modGet = context->findFunction("module_get");
-                DAS_ASSERTF(false, "can't find module_get function");
+                DAS_ASSERTF(modGet!=nullptr, "can't find module_get function");
                 // get it ready
                 context->restart();
                 context->runInitScript();
+                // setup pak root
+                int ipr = context->findVariable("DAS_PAK_ROOT");
+                if ( ipr != -1 ) {
+                    // TODO: verify if its string
+                    string pakRoot = ".";
+                    auto np = pak.find_last_of("\\/");
+                    if ( np != string::npos ) {
+                        pakRoot = pak.substr(0,np+1);
+                    }
+                    // set it
+                    char ** gpr = (char **) context->getVariable(ipr);
+                    *gpr = context->stringHeap.allocateString(pakRoot);
+                }
+                // logs
+                auto tostr = tout.str();
+                if ( !tostr.empty() ) {
+                    printf("%s\n", tostr.c_str());
+                }
             }
         } else {
-            DAS_ASSERTF(false, "failed to compile:\n%s", tout.str().c_str());
+            DAS_FATAL_LOG("failed to compile: %s\n", pak.c_str());
+            DAS_FATAL_LOG("%s", tout.str().c_str());
+            DAS_FATAL_ERROR;
         }
     }
 

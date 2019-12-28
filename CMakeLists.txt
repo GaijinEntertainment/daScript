@@ -98,6 +98,7 @@ src/builtin/module_builtin_random.cpp
 src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_fio.cpp
+src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
 src/builtin/fio.das.inc
@@ -442,6 +443,12 @@ file(GLOB MIX_TEST_SRC
 list(SORT MIX_TEST_SRC)
 SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
 
+file(GLOB_RECURSE MODULE_TEST_SRC
+"examples/test/module/*.*"
+)
+list(SORT MODULE_TEST_SRC)
+SOURCE_GROUP_FILES("examples/test/module" MODULE_TEST_SRC)
+
 SET(TEST_MAIN_SRC
 examples/test/main.cpp
 examples/test/unitTest.h
@@ -453,7 +460,7 @@ SET(TEST_GENERATED_SRC)
 DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
-add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC}
+add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC})
 TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest)
 ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest)

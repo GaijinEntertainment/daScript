@@ -476,8 +476,10 @@ namespace das {
                 if ( expr->r2v ) {
                     if ( expr->variable->init ) {
                         if ( expr->variable->init->constexpression ) {
-                            reportFolding();
-                            return expr->variable->init->clone();
+                            if ( !expr->isGlobalVariable() || expr->variable->type->isConst() ) {
+                                reportFolding();
+                                return expr->variable->init->clone();
+                            }
                         }
                     } else {
                         if ( expr->type->isFoldable() && !expr->variable->access_init ) {

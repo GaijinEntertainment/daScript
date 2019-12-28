@@ -1,0 +1,4 @@
+include common.das_project
+include foo/foo.das_module
+
+

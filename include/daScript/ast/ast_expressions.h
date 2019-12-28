@@ -157,6 +157,7 @@ namespace das
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isVar() const override { return true; }
+        bool isGlobalVariable() const { return !local && !argument && !block; }
         string              name;
         VariablePtr         variable;
         weak_ptr<ExprBlock> pBlock;
