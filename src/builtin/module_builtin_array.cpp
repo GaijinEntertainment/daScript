@@ -19,10 +19,12 @@ namespace das {
     }
 
     void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context ) {
+        if ( newSize<0 ) context->throw_error_ex("resizing array to negative size %i", newSize);
         array_resize ( *context, pArray, newSize, stride, true );
     }
 
     void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context ) {
+        if ( newSize<0 ) context->throw_error_ex("reserving array to negative size %i", newSize);
         array_reserve( *context, pArray, newSize, stride );
     }
 

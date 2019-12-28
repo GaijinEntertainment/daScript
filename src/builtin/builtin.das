@@ -10,6 +10,9 @@ def reserve(var Arr:array<auto(numT)>;newSize:int)
 def push(var Arr:array<auto(numT)>;value:numT const;at:int=-1)
     Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] = value
 
+def pop(var Arr:array<auto(numT)>)
+    resize(Arr, length(Arr)-1)  // resize will throw if negative
+
 def emplace(var Arr:array<auto(numT)>;var value:numT;at:int=-1)
     Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] <- value
 
@@ -280,3 +283,36 @@ def split ( text, delim : string ) : array<string>
         res := arr
     return <- res
 
+def find_index ( arr : array<auto(TT)> implicit; key : TT )
+    for i in range(0,length(arr))
+        if arr[i]==key
+            return i
+    return -1
+
+def find_index ( arr : auto(TT)[] implicit; key : TT )
+    for i in range(0,length(arr))
+        if arr[i]==key
+            return i
+    return -1
+
+def find_index_if ( arr : array<auto(TT)> implicit; blk : block<(key:TT):bool> )
+    for i in range(0,length(arr))
+        if invoke(blk,arr[i])
+            return i
+    return -1
+
+def find_index_if ( arr : auto(TT)[] implicit; blk : block<(key:TT):bool> )
+    for i in range(0,length(arr))
+        if invoke(blk,arr[i])
+            return i
+    return -1
+
+def has_value ( a; key )
+    if typeinfo(is_iterable a)
+        for t in a
+            if t == key
+                return true
+        return false
+    else
+        static_assert(false,"can't iterate over source. has_value is meaningless")
+        return false
