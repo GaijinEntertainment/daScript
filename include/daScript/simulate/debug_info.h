@@ -90,6 +90,7 @@ namespace das
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
         FileInfoPtr letGoOfFileInfo ( const string & fileName );
+        virtual pair<string,string> getModuleInfo ( const string & req, const string & from ) const;
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:

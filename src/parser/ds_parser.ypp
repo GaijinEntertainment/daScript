@@ -474,8 +474,8 @@ require_module_name
 
 require_module
     :   require_module_name[name]  is_public_module[pub] {
-        auto modN = getModuleName(*$name);
-        if ( auto mod = g_Program->addModule(modN) ) {
+        auto info = g_Access->getModuleInfo(*$name, g_FileAccessStack.back()->name);
+        if ( auto mod = g_Program->addModule(info.first) ) {
             g_Program->thisModule->addDependency(mod, $pub);
         } else {
             das_yyerror("required module not found " + *$name,tokAt(@name),

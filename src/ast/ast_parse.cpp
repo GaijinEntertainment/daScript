@@ -97,25 +97,29 @@ namespace das {
                           const FileAccessPtr & access,
                           vector<string> & req,
                           vector<string> & missing,
+                          vector<string> & circular,
                           das_set<string> & dependencies,
                           ModuleGroup & libGroup) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
             for ( auto & mod : ownReq ) {
-                auto modName = getModuleName(mod);
-                auto module = Module::require(modName);
+                auto module = Module::require(mod); // try native with that name
                 if ( !module ) {
                     if ( find(req.begin(), req.end(), mod)==req.end() ) {
                         if ( dependencies.find(mod) != dependencies.end() ) {
                             // circular dependency
-                            missing.push_back(mod);
+                            circular.push_back(mod);
                             return false;
                         }
                         dependencies.insert(mod);
                         // module file name
-                        string modFName = getModuleFileName(mod);
-                        string modFn = access->getIncludeFileName(fileName, modFName) + ".das";
-                        if ( !getPrerequisits(modFn, access, req, missing, dependencies, libGroup) ) {
+                        auto info = access->getModuleInfo(mod, fileName);
+                        if ( info.first.empty() ) {
+                            // request can't be translated to module name
+                            missing.push_back(mod);
+                            return false;
+                        }
+                        if ( !getPrerequisits(info.second, access, req, missing, circular, dependencies, libGroup) ) {
                             return false;
                         }
                         req.push_back(mod);
@@ -216,20 +220,19 @@ namespace das {
                                 ModuleGroup & libGroup,
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
-        vector<string> req, missing;
+        vector<string> req, missing, circular;
         das_set<string> dependencies;
-        if ( getPrerequisits(fileName, access, req, missing, dependencies, libGroup) ) {
+        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup) ) {
             for ( auto & mod : req ) {
-                auto modName = getModuleName(mod);
-                if ( !libGroup.findModule(modName) ) {
-                    string modFName = getModuleFileName(mod);
-                    string modFn = access->getIncludeFileName(fileName, modFName) + ".das";
-                    auto program = parseDaScript(modFn, access, logs, libGroup, true, policies);
+                auto info = access->getModuleInfo(mod, fileName);
+                DAS_VERIFY(!info.first.empty() && "somehow missing or circular dependency");
+                if ( !libGroup.findModule(info.first) ) {
+                    auto program = parseDaScript(info.second, access, logs, libGroup, true, policies);
                     if ( program->failed() ) {
                         return program;
                     }
                     if ( program->thisModule->name.empty() ) {
-                        program->thisModule->name = modName;
+                        program->thisModule->name = info.first;
                     }
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {
@@ -248,8 +251,12 @@ namespace das {
             program->policies = policies;
             program->thisModuleGroup = &libGroup;
             for ( auto & mis : missing ) {
-                program->error("missing prerequisit " + mis + ", or circular dependency",
-                               LineInfo(), CompilationError:: module_not_found);
+                program->error("missing prerequisit " + mis, LineInfo(),
+                               CompilationError:: module_not_found);
+            }
+            for ( auto & mis : circular ) {
+                program->error("circular dependency " + mis, LineInfo(),
+                               CompilationError:: module_not_found);
             }
             return program;
         }

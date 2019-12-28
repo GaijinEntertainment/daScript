@@ -434,6 +434,13 @@ namespace das
         }
     }
 
+    pair<string,string> FileAccess::getModuleInfo ( const string & req, const string & from ) const {
+        auto mod = getModuleName(req);
+        string modFName = getModuleFileName(mod);
+        string modFn = getIncludeFileName(from, modFName) + ".das";
+        return pair<string,string>(mod,modFn);
+    }
+
     void FileAccess::freeSourceData() {
         for ( auto & fp : files ) {
             fp.second->freeSourceData();
