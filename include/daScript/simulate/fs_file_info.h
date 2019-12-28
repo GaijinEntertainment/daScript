@@ -14,6 +14,10 @@ namespace das {
     class FsFileAccess : public das::FileAccess {
         virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override;
     };
+
+    class FsModuleFileAccess : public das::ModuleFileAccess {
+        virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override;
+    };
 #endif
 }
 

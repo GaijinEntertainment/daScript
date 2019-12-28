@@ -15,7 +15,7 @@ namespace das {
         }
     }
 
-    das::FileInfo * FsFileAccess::getNewFileInfo(const das::string & fileName) {
+    unique_ptr<FileInfo> getNewFsFileInfo(const das::string & fileName) {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
             auto info = das::make_unique<FsFileInfo>();
             fseek(ff,0,SEEK_END);
@@ -26,10 +26,24 @@ namespace das {
             if (bytesRead == info->sourceLength) {
                 source[info->sourceLength] = 0;
                 info->source = source;
-                return setFileInfo(fileName, move(info));
+                return info;
             } else {
                 return nullptr;
             }
+        }
+        return nullptr;
+    }
+
+    das::FileInfo * FsFileAccess::getNewFileInfo(const das::string & fileName) {
+        if ( auto info = getNewFsFileInfo(fileName) ) {
+            return setFileInfo(fileName, move(info));
+        }
+        return nullptr;
+    }
+
+    das::FileInfo * FsModuleFileAccess::getNewFileInfo(const das::string & fileName) {
+        if ( auto info = getNewFsFileInfo(fileName) ) {
+            return setFileInfo(fileName, move(info));
         }
         return nullptr;
     }

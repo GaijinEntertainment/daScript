@@ -98,6 +98,20 @@ namespace das
     };
     typedef shared_ptr<FileAccess> FileAccessPtr;
 
+    struct SimFunction;
+    class Context;
+
+    class ModuleFileAccess : public FileAccess {
+    public:
+        ModuleFileAccess ( const string & pak, const FileAccessPtr & access );
+        virtual ~ModuleFileAccess();
+        bool failed() const { return !context || !modGet; }
+        virtual pair<string,string> getModuleInfo ( const string & req, const string & from ) const;
+    protected:
+        Context *           context = nullptr;
+        SimFunction *       modGet = nullptr;
+    };
+
     struct LineInfo {
         LineInfo() = default;
         LineInfo(FileInfo * fi, int c, int l)
