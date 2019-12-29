@@ -5,8 +5,8 @@
 #endif
 
 #if DAS_USE_EASTL
-#include <EASTL/das_map.h>
-#include <EASTL/das_set.h>
+#include <EASTL/unordered_map.h>
+#include <EASTL/unordered_set.h>
 namespace das {
 template <typename K, typename V>
 using das_map = eastl::unordered_map<K,V>;
