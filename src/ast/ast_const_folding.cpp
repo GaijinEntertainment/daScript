@@ -658,6 +658,7 @@ namespace das {
                 if ( iscf ) {
                     LineInfo atC = expr->at;
                     if ( func ) {
+                        message += "\nconcept_assert at " + expr->at.describe();
                         message += func->getLocationExtra();
                         atC = func->getConceptLocation(atC);
                     }
