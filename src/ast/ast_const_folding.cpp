@@ -641,6 +641,7 @@ namespace das {
                 result = ((ExprConstBool *)cond.get())->getValue();
             }
             if ( !result ) {
+                bool iscf = expr->name=="concept_assert";
                 string message;
                 if ( expr->arguments.size()==2 ) {
                     bool failed;
@@ -652,12 +653,21 @@ namespace das {
                         message = cast<char *>::to(resM);
                     }
                 } else {
-                    message = "static assert failed";
+                    message = iscf ? "static assert failed" : "concept failed";
                 }
-                if ( func ) {
-                    message += func->getLocationExtra();
+                if ( iscf ) {
+                    LineInfo atC = expr->at;
+                    if ( func ) {
+                        message += func->getLocationExtra();
+                        atC = func->getConceptLocation(atC);
+                    }
+                    program->error(message, atC, CompilationError::concept_failed);
+                } else {
+                    if ( func ) {
+                        message += func->getLocationExtra();
+                    }
+                    program->error(message, expr->at, CompilationError::static_assert_failed);
                 }
-                program->error(message, expr->at, CompilationError::static_assert_failed);
             }
             return cond->constexpression ? nullptr : Visitor::visit(expr);
         }

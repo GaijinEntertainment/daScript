@@ -56,11 +56,11 @@ def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
     return __builtin_table_key_exists(Tab,at)
 
 def binary_save(obj; subexpr:block<(data:array<uint8>):void>)
-    static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
+    concept_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_save(obj,subexpr)
 
 def binary_load(var obj; data:array<uint8>)
-    static_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
+    concept_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_load(obj,data)
 
 def clone_to_move(clone_src:auto(TT)) : TT delete const
@@ -73,14 +73,14 @@ def clone_dim(var a;b:auto)
 		for aV,bV in a,b
 			aV := bV
 	else
-		static_assert(false,"can't clone this array")
+		concept_assert(false,"can't clone this array")
 
 def clone_dim(var a;b:auto#)
     if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
         for aV,bV in a,b
             aV := bV
     else
-        static_assert(false,"can't clone this array")
+        concept_assert(false,"can't clone this array")
 
 def clone(var a:array<auto(TT)>;b:array<TT>)
     resize(a,length(b))
@@ -152,7 +152,7 @@ def each ( a : array<auto(TT)> ) : iterator<TT&>
     return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
 
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT delete &>
-	static_assert(typeinfo(is_ref type argT),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
+	concept_assert(typeinfo(is_ref type argT),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     return _builtin_make_lambda_iterator(lam)
 
 [unsafe]
@@ -193,7 +193,7 @@ def to_array_move(var a:auto(TT)[]) : array<TT delete const>
         resize(arr,length(a))
         reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) <- a
     else
-        static_assert(false,"this array can't be copied or moved")
+        concept_assert(false,"this array can't be copied or moved")
     return <- arr
 
 def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const;valT>
@@ -211,7 +211,7 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete cons
 		for x in a
 			tab[x._0] <- x._1
     else
-        static_assert(false,"this array can't be copied or moved")
+        concept_assert(false,"this array can't be copied or moved")
     return <- tab
 
 [unsafe]
@@ -258,7 +258,7 @@ def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
 
 def join(it; separator:string)
 	if !typeinfo(is_iterable it)
-		static_assert(false,"can't join non-iterable type")
+		concept_assert(false,"can't join non-iterable type")
 		return ""
 	else
 		let st = build_string() <| $ (var writer)
@@ -314,5 +314,5 @@ def has_value ( a; key )
                 return true
         return false
     else
-        static_assert(false,"can't iterate over source. has_value is meaningless")
+        concept_assert(false,"can't iterate over source. has_value is meaningless")
         return false

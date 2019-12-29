@@ -404,6 +404,7 @@ namespace das
         addCall<ExprAssert>         ("assert",false);
         addCall<ExprAssert>         ("verify",true);
         addCall<ExprStaticAssert>   ("static_assert");
+        addCall<ExprStaticAssert>   ("concept_assert");
         addCall<ExprDebug>          ("debug");
         // hash
         addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none, "hash");

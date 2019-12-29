@@ -453,6 +453,7 @@ namespace das
         bool isGeneric() const;
         FunctionPtr clone() const;
         string getLocationExtra() const;
+        LineInfo getConceptLocation(const LineInfo & at) const;
         virtual string getAotBasicName() const { return name; }
         string getAotName(ExprCallFunc * call) const;
         FunctionPtr setAotTemplate();
