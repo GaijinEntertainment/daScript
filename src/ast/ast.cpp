@@ -1968,7 +1968,8 @@ namespace das {
         for ( auto & fn : thisModule->functions ) {
             if ( !fn.second->builtIn ) {
                 if ( vis.canVisitFunction(fn.second.get()) ) {
-                    fn.second = fn.second->visit(vis);
+                    auto res = fn.second->visit(vis);
+                    fn.second = res;
                 }
             }
         }

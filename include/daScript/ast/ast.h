@@ -600,16 +600,16 @@ namespace das
             };
         }
     public:
-        das_map<string, TypeDeclPtr>                aliasTypes;
-        das_map<string, AnnotationPtr>              handleTypes;
-        das_map<string, StructurePtr>               structures;
-        vector<StructurePtr>                    structuresInOrder;
-        das_map<string, EnumerationPtr>             enumerations;
-        das_map<string, VariablePtr>                globals;
-        vector<VariablePtr>                     globalsInOrder;
-        das_map<string, FunctionPtr>                functions;          // mangled name 2 function name
+        das_safe_map<string, TypeDeclPtr>           aliasTypes;
+        das_safe_map<string, AnnotationPtr>         handleTypes;
+        das_safe_map<string, StructurePtr>          structures;
+        vector<StructurePtr>                        structuresInOrder;
+        das_safe_map<string, EnumerationPtr>        enumerations;
+        das_safe_map<string, VariablePtr>           globals;
+        vector<VariablePtr>                         globalsInOrder;
+        das_safe_map<string, FunctionPtr>           functions;          // mangled name 2 function name
         das_map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
-        das_map<string, FunctionPtr>                generics;           // mangled name 2 generic name
+        das_safe_map<string, FunctionPtr>           generics;           // mangled name 2 generic name
         das_map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<uint32_t, uint64_t>                 annotationData;
