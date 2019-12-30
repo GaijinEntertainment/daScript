@@ -321,8 +321,8 @@ namespace das {
         return cfun;
     }
 
-    LineInfo Function::getConceptLocation(const LineInfo & at) const {
-        return inferStack.size() ? inferStack[0].at : at;
+    LineInfo Function::getConceptLocation(const LineInfo & atL) const {
+        return inferStack.size() ? inferStack[0].at : atL;
     }
 
     string Function::getLocationExtra() const {
