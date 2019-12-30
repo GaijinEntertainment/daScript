@@ -28,10 +28,6 @@ namespace das
     #define DAS_ENABLE_EXCEPTIONS   0
     #endif
 
-    #ifndef DAS_ENABLE_PROFILER
-    #define DAS_ENABLE_PROFILER 0
-    #endif
-
     #define MAX_FOR_ITERATORS   32
 
     #if DAS_ENABLE_PROFILER
@@ -451,13 +447,10 @@ namespace das
         uint64_t getSharedMemorySize() const;
         uint64_t getUniqueMemorySize() const;
 
-
-#if DAS_ENABLE_PROFILER
-        das_hash_map<LineInfo,uint64_t,cmpLineInfoWithoutColumn>  profileData;
-#endif
-
         void resetProfiler();
         void dumpProfileInfo();
+
+        vector<FileInfo *> getAllFiles() const;
 
     public:
         uint64_t *                      annotationData = nullptr;
@@ -533,11 +526,16 @@ namespace das
 #if DAS_ENABLE_PROFILER
 
 __forceinline void profileNode ( Context & context, SimNode * node ) {
-    context.profileData[node->debugInfo] ++;
+    if ( auto fi = node->debugInfo.fileInfo ) {
+        auto li = node->debugInfo.line;
+        auto & pdata = fi->profileData;
+        if ( pdata.size() <= li ) pdata.resize ( li + 1 );
+        pdata[li] ++;
+    }
 }
 
 __forceinline void profileNode ( Context * context, SimNode * node ) {
-    context->profileData[node->debugInfo] ++;
+    profileNode(*context, node);
 }
 
 #endif

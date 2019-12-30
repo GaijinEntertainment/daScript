@@ -2,6 +2,11 @@
 
 namespace das
 {
+
+#ifndef DAS_ENABLE_PROFILER
+#define DAS_ENABLE_PROFILER 0
+#endif
+
     enum Type : int32_t {
         none,
         autoinfer,
@@ -76,9 +81,13 @@ namespace das
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
         virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
+        void reserveProfileData();
         string                name;
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
+#if DAS_ENABLE_PROFILER
+        vector<uint64_t>      profileData;
+#endif
     };
     typedef unique_ptr<FileInfo> FileInfoPtr;
 
@@ -122,14 +131,6 @@ namespace das
         string describe() const;
         FileInfo *  fileInfo = nullptr;
         uint32_t    column = 0, line = 0;
-    };
-
-    struct cmpLineInfoWithoutColumn {
-        __forceinline bool operator()( const LineInfo & a, const LineInfo & b) const {
-            if ( a.fileInfo && b.fileInfo && a.fileInfo->name != b.fileInfo->name)
-                return a.fileInfo->name < b.fileInfo->name;
-            return a.line<b.line;
-        }
     };
 
     struct TypeInfo {

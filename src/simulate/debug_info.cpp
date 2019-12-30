@@ -403,6 +403,21 @@ namespace das
         return !(*this == info);
     }
 
+    void FileInfo::reserveProfileData() {
+#if DAS_ENABLE_PROFILER
+        if ( source ) {
+            uint32_t nl = 0;
+            auto se = source + sourceLength;
+            for ( auto si=source; si!=se; ++si ) {
+                if ( *si=='\n' ) {
+                    nl ++;
+                }
+            }
+            profileData.reserve(nl + 2);
+        }
+#endif
+    }
+
     FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
         auto it = files.find(fileName);
         if ( it == files.end() ) return nullptr;
@@ -422,7 +437,9 @@ namespace das
         if ( it != files.end() ) {
             return it->second.get();
         }
-        return getNewFileInfo(fileName);
+        auto ni = getNewFileInfo(fileName);
+        ni->reserveProfileData();
+        return ni;
     }
 
     string FileAccess::getIncludeFileName ( const string & fileName, const string & incFileName ) const {

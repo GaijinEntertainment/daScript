@@ -903,9 +903,42 @@ namespace das
 #endif
     }
 
+    struct FileInfoCollector : SimVisitor {
+        virtual void preVisit ( SimNode * node ) override {
+            SimVisitor::preVisit(node);
+            if ( auto fi = node->debugInfo.fileInfo ) {
+                allFiles.insert(fi);
+            }
+        }
+        das_hash_set<FileInfo *>    allFiles;
+    };
+
+    vector<FileInfo *> Context::getAllFiles() const {
+        vector<FileInfo *> allFiles;
+        FileInfoCollector collector;
+        for ( int gvi=0; gvi!=totalVariables; ++gvi ) {
+            const auto & gv = globalVariables[gvi];
+            if ( gv.init ) gv.init->visit(collector);
+        }
+        for ( int fni=0; fni!=totalFunctions; ++fni ) {
+            const auto & fn = functions[fni];
+            if ( fn.code ) fn.code->visit(collector);
+        }
+        for ( auto & it : collector.allFiles ) {
+            allFiles.push_back(it);
+        }
+        sort ( allFiles.begin(), allFiles.end(), [&]( FileInfo * a, FileInfo * b ){
+            return a->name > b->name;
+        });
+        return allFiles;
+    }
+
     void Context::resetProfiler() {
 #if DAS_ENABLE_PROFILER
-        profileData.clear();
+        auto allFiles = getAllFiles();
+        for ( auto fi : allFiles ) {
+            fi->profileData.clear();
+        }
 #endif
     }
 
@@ -913,20 +946,15 @@ namespace das
         TextPrinter tout;
 #if DAS_ENABLE_PROFILER
         uint64_t totalGoo = 0;
-        das_hash_set<FileInfo *> allFiles;
-        for ( auto & it : profileData ) {
-            totalGoo += it.second;
-            auto info = it.first.fileInfo;
-            if ( info && info->source ) {
-                allFiles.insert(info);
+        auto allFiles = getAllFiles();
+        for ( auto info : allFiles ) {
+            for ( auto counter : info->profileData ) {
+                totalGoo += counter;
             }
         }
         tout << "\nPROFILING RESULTS:\n";
         for ( auto fi : allFiles ) {
             tout << fi->name << "\n";
-            LineInfo info;
-            info.fileInfo = fi;
-            info.column = 0;
             bool newLine = true;
             int  line = 0;
             char txt[2];
@@ -937,11 +965,9 @@ namespace das
                     line ++;
                     col = 0;
                     newLine = false;
-                    info.line = line;
                     char total[20];
-                    auto itI = profileData.find(info);
-                    if ( itI != profileData.end() ) {
-                        uint64_t samples = uint64_t(itI->second);
+                    if ( fi->profileData.size()>size_t(line) && fi->profileData[line] ) {
+                        uint64_t samples = fi->profileData[line];
                         snprintf(total, 20, "%-6.2f", samples*100.1/totalGoo);
                         tout << total;
                     } else {
