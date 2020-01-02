@@ -1887,6 +1887,17 @@ namespace das {
                 } else if ( expr->trait=="can_move" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
+                } else if ( expr->trait=="struct_has_annotation" ) {
+                    reportGenericInfer();
+                    if (!expr->typeexpr->isStructure())
+                        return make_shared<ExprConstBool>(expr->at, false);
+                    else
+                    {
+                      return make_shared<ExprConstBool>(expr->at,
+                        find_if(expr->typeexpr->structType->annotations.begin(), expr->typeexpr->structType->annotations.end(),
+                               [&](auto &an){return an->annotation->describe() == expr->subtrait;}) != expr->typeexpr->structType->annotations.end()
+                        );
+                    }
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportGenericInfer();
