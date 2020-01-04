@@ -51,7 +51,7 @@ namespace das
                 } else if ( result->canMove() ) {
                     copyOnReturn = false;
                     moveOnReturn = true;
-                } else if ( !result->isRef() ) {
+                } else if ( !result->ref ) {
                     DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
                     DAS_FATAL_ERROR;
                 }
@@ -134,6 +134,16 @@ namespace das
     inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string(), QQ && tempFn = QQ() ) {
         auto fnX = make_shared<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncT>>(name, lib, cppName);
+        if ( !SimNodeT<FuncT,fn>::IS_CMRES ) {
+            if ( fnX->result->isRefType() && !fnX->result->ref ) {
+                DAS_FATAL_LOG(
+                    "addExtern(%s)::tempFn failed in module %s\n"
+                    "  this function should be bound with SimNode_ExtFuncCallAndCopyOrMove option\n"
+                    "  likely cast<> is implemented for the return type, and it should not\n",
+                name.c_str(), mod.name.c_str());
+                DAS_FATAL_ERROR;
+            }
+        }
         fnX->setSideEffects(seFlags);
         if ( !tempFn(fnX.get()) ) {
             DAS_FATAL_LOG("addExtern(%s)::tempFn failed in module %s\n", name.c_str(), mod.name.c_str());
@@ -150,6 +160,16 @@ namespace das
     inline auto addExternEx ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string()) {
         auto fnX = make_shared<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncArgT>>(name, lib, cppName);
+        if ( !SimNodeT<FuncT,fn>::IS_CMRES ) {
+            if ( fnX->result->isRefType() && !fnX->result->ref ) {
+                DAS_FATAL_LOG(
+                    "addExtern(%s)::tempFn failed in module %s\n"
+                    "  this function should be bound with SimNode_ExtFuncCallAndCopyOrMove option\n"
+                    "  likely cast<> is implemented for the return type, and it should not\n",
+                name.c_str(), mod.name.c_str());
+                DAS_FATAL_ERROR;
+            }
+        }
         fnX->setSideEffects(seFlags);
         if ( !mod.addFunction(fnX) ) {
             DAS_FATAL_LOG("addExternEx(%s) failed in module %s\n", name.c_str(), mod.name.c_str());

@@ -25,6 +25,15 @@ MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
 
+MAKE_TYPE_FACTORY(SomeDummyType, SomeDummyType)
+
+/*
+namespace das {
+    template <>
+    struct cast<TestObjectFoo> : cast_fVec_half<TestObjectFoo> {};
+}
+*/
+
 struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotLocal> {
     TestObjectNotLocalAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectNotLocal", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
@@ -37,7 +46,9 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
     }
-    virtual bool isLocal() const { return true; }
+    virtual bool isLocal() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    virtual bool canCopy() const override { return true; }
 };
 
 struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
@@ -362,6 +373,11 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::none, "getSamplePoint3");
     addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::none, "doubleSamplePoint3");
     addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr", SideEffects::modifyExternal, "getPtr");
+    /*
+     addExtern<DAS_BIND_FUN(makeDummy)>(*this, lib, "makeDummy", SideEffects::none, "makeDummy");
+     */
+    addExtern<DAS_BIND_FUN(makeDummy), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeDummy", SideEffects::none, "makeDummy");
+    addExtern<DAS_BIND_FUN(takeDummy)>(*this, lib, "takeDummy", SideEffects::none, "takeDummy");
     // register Cpp alignment functions
     addExtern<DAS_BIND_FUN(CppS1Size)>(*this, lib, "CppS1Size", SideEffects::modifyExternal, "CppS1Size");
     addExtern<DAS_BIND_FUN(CppS2Size)>(*this, lib, "CppS2Size", SideEffects::modifyExternal, "CppS2Size");

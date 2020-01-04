@@ -59,6 +59,9 @@ struct TestObjectFoo {
     }
 };
 
+__forceinline TestObjectFoo makeDummy() { TestObjectFoo x; x.fooData = 1; return x; }
+__forceinline int takeDummy ( const TestObjectFoo & x ) { return x.fooData; }
+
 struct TestObjectBar {
     TestObjectFoo * fooPtr;
     float           barData;

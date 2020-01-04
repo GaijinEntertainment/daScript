@@ -107,6 +107,7 @@ namespace das
 
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCall : SimNode_CallBase {
+        enum { IS_CMRES = false };
         const char * extFnName = nullptr;
         SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
             : SimNode_CallBase(at) { extFnName = fnName; }
@@ -150,6 +151,7 @@ namespace das
 
     template <typename FuncT, FuncT fn>
     struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_CallBase {
+        enum { IS_CMRES = true };
         const char * extFnName = nullptr;
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName )
             : SimNode_CallBase(at) { extFnName = fnName; }
