@@ -54,7 +54,7 @@ namespace das {
             return decl->isIndex();
         }
         virtual size_t getAlignOf() const override {
-            return alignof(vec4f);
+            return alignof(VecT);
         }
         virtual size_t getSizeOf() const override {
             return sizeof(ThisMatrix);
