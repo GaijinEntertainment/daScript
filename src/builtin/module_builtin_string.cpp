@@ -268,8 +268,7 @@ namespace das
         }
         Array arr;
         arr.data = (char *) tokens.data();
-        arr.size = tokens.size();
-        arr.capacity = tokens.size();
+        arr.capacity = arr.size = uint32_t(tokens.size());
         arr.lock = 1;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
