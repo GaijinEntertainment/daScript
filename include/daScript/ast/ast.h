@@ -210,7 +210,7 @@ namespace das
         virtual bool finalize ( ExprBlock * block, ModuleGroup & libGroup,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
-        virtual bool verifyCall ( ExprCallFunc * /*call*/, string & /*err*/ ) { return true; }
+        virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/, string & /*err*/ ) { return true; }
         virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) { return nullptr; }
         virtual string aotName ( ExprCallFunc * call );
         virtual void aotPrefix ( TextWriter &, ExprCallFunc * ) { }

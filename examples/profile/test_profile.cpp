@@ -405,7 +405,7 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
         EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
         aotEsRunBlock(ss, table, g_components);
     }
-    virtual bool verifyCall ( ExprCallFunc * call, string & err ) override {
+    virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList &, string & err ) override {
         auto brt = call->arguments[0]->type->firstType;
         if ( !brt->isVoid() ) {
             err = "block can't return values";

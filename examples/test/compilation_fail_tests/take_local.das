@@ -1,4 +1,4 @@
-options log = true
+expect 40102
 
 [local_only (arg)]
 def take_local(arg)
@@ -13,3 +13,4 @@ def test
     take_local([[Foo bar=1]])       // ok
     take_local([[auto 1,2.0,"3"]])  // ok, tuple [[ ]]
     return true
+

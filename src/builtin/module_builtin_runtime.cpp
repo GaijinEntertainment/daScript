@@ -171,6 +171,47 @@ namespace das
         }
     };
 
+struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
+    LocalOnlyFunctionAnnotation() : FunctionAnnotation("local_only") { }
+    virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
+        err = "not a block annotation";
+        return false;
+    }
+    virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &,
+                           const AnnotationArgumentList &, string & err ) override {
+        err = "not a block annotation";
+        return false;
+    }
+    virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        return true;
+    };
+    virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &,
+                           const AnnotationArgumentList &, string & ) override {
+        return true;
+    }
+    // [local_only ()]
+    virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args, string & err ) override {
+        if ( !call->func ) {
+            err = "unknown function";
+            return false;
+        }
+        for ( size_t i=0; i!=call->func->arguments.size(); ++i ) {
+            auto & farg = call->func->arguments[i];
+            if ( auto it = args.find(farg->name, Type::tBool) ) {
+                auto & carg = call->arguments[i];
+                bool isLocalArg = carg->rtti_isMakeLocal() || carg->rtti_isMakeTuple();
+                bool isLocalFArg = it->bValue;
+                if ( isLocalArg != isLocalFArg ) {
+                    err = isLocalFArg ? "expecting [[...]]" : "not expecting [[...]]";
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+};
+
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -355,6 +396,7 @@ namespace das
         addAnnotation(make_shared<HybridFunctionAnnotation>());
         addAnnotation(make_shared<UnsafeDerefFunctionAnnotation>());
         addAnnotation(make_shared<MarkUsedFunctionAnnotation>());
+        addAnnotation(make_shared<LocalOnlyFunctionAnnotation>());
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first", SideEffects::modifyExternal, "builtin_iterator_first");
         addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",  SideEffects::modifyExternal, "builtin_iterator_next");
