@@ -236,8 +236,7 @@ bool run_exception_tests( const string & path ) {
 
 bool run_module_test ( const string & path ) {
     tout << "testing MODULE at " << path << " ";
-    auto mfAccess = make_shared<FsFileAccess>();
-    auto fAccess = make_shared<FsModuleFileAccess>( path + "/project.das_project", mfAccess);
+    auto fAccess = make_shared<FsFileAccess>( path + "/project.das_project", make_shared<FsFileAccess>());
     ModuleGroup dummyLibGroup;
     if ( auto program = compileDaScript(path + "/main.das", fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {

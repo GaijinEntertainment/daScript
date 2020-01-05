@@ -40,13 +40,6 @@ namespace das {
         }
         return nullptr;
     }
-
-    das::FileInfo * FsModuleFileAccess::getNewFileInfo(const das::string & fileName) {
-        if ( auto info = getNewFsFileInfo(fileName) ) {
-            return setFileInfo(fileName, move(info));
-        }
-        return nullptr;
-    }
 #endif
 }
 

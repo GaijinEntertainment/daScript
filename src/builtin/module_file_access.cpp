@@ -3,8 +3,11 @@
 
 namespace das {
 
+    ModuleFileAccess::ModuleFileAccess() {
+    }
+
     ModuleFileAccess::~ModuleFileAccess() {
-        delete context;
+        if (context) delete context;
     }
 
     ModuleFileAccess::ModuleFileAccess ( const string & pak, const FileAccessPtr & access ) {
@@ -64,7 +67,7 @@ namespace das {
     }
 
     pair<string,string> ModuleFileAccess::getModuleInfo ( const string & req, const string & from ) const {
-        if ( failed() ) return make_pair("", "");
+        if (failed()) return FileAccess::getModuleInfo(req, from);
         vec4f args[2];
         args[0] = cast<const char *>::from(req.c_str());
         args[1] = cast<const char *>::from(from.c_str());

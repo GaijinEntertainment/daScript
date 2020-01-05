@@ -11,16 +11,11 @@ namespace das {
         virtual void freeSourceData() override;
     };
 
-    class FsFileAccess : public das::FileAccess {
+    class FsFileAccess : public das::ModuleFileAccess {
     public:
-        virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override;
-    };
-
-    class FsModuleFileAccess : public das::ModuleFileAccess {
-    public:
-        FsModuleFileAccess ( const string & pak, const FileAccessPtr & access )
+        FsFileAccess() : ModuleFileAccess() {}
+        FsFileAccess ( const string & pak, const FileAccessPtr & access )
             : ModuleFileAccess (pak, access) {}
-    protected:
         virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override;
     };
 #endif

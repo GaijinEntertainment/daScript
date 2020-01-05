@@ -112,6 +112,7 @@ namespace das
 
     class ModuleFileAccess : public FileAccess {
     public:
+        ModuleFileAccess();
         ModuleFileAccess ( const string & pak, const FileAccessPtr & access );
         virtual ~ModuleFileAccess();
         bool failed() const { return !context || !modGet; }
