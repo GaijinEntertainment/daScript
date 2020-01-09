@@ -283,6 +283,18 @@ namespace das
         return context->stringHeap.allocateString(str, strLen);
     }
 
+    class StrdupDataWalker : public DataWalker {
+        virtual void String ( char * & str ) {
+            if (str) str = strdup(str);
+        }
+    };
+
+    vec4f builtin_strdup ( Context &, SimNode_CallBase * call, vec4f * args ) {
+        StrdupDataWalker walker;
+        walker.walk(args[0], call->types[0]);
+        return v_zero();
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_shared<StringBuilderWriterAnnotation>(lib));
@@ -297,6 +309,8 @@ namespace das
         addExtern<DAS_BIND_FUN(format_and_write<uint64_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint64_t>");
         addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<float>");
         addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<double>");
+        // dup
+        addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup", SideEffects::modifyArgumentAndExternal, "builtin_strdup");
         // das string binding
         addAnnotation(make_shared<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");
