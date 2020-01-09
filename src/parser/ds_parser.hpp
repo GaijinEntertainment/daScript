@@ -1,9 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.4.1.  */
+/* A Bison parser, made by GNU Bison 3.2.1.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
-   Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -52,7 +51,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "ds_parser.ypp"
+#line 2 "ds_parser.ypp" /* yacc.c:1912  */
 
 	#include "daScript/misc/platform.h"
 	#include "daScript/ast/ast.h"
@@ -100,7 +99,7 @@ extern int das_yydebug;
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 104 "ds_parser.hpp"
+#line 103 "ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -186,68 +185,71 @@ extern int das_yydebug;
     DAS_TINT16 = 334,
     DAS_TUINT16 = 335,
     DAS_TTUPLE = 336,
-    ADDEQU = 337,
-    SUBEQU = 338,
-    DIVEQU = 339,
-    MULEQU = 340,
-    MODEQU = 341,
-    ANDEQU = 342,
-    OREQU = 343,
-    XOREQU = 344,
-    SHL = 345,
-    SHR = 346,
-    ADDADD = 347,
-    SUBSUB = 348,
-    LEEQU = 349,
-    SHLEQU = 350,
-    SHREQU = 351,
-    GREQU = 352,
-    EQUEQU = 353,
-    NOTEQU = 354,
-    RARROW = 355,
-    LARROW = 356,
-    QQ = 357,
-    QDOT = 358,
-    LPIPE = 359,
-    LBPIPE = 360,
-    RPIPE = 361,
-    CLONEEQU = 362,
-    ROTL = 363,
-    ROTR = 364,
-    ROTLEQU = 365,
-    ROTREQU = 366,
-    MAPTO = 367,
-    BRABRAB = 368,
-    BRACBRB = 369,
-    CBRCBRB = 370,
-    INTEGER = 371,
-    LONG_INTEGER = 372,
-    UNSIGNED_INTEGER = 373,
-    UNSIGNED_LONG_INTEGER = 374,
-    FLOAT = 375,
-    DOUBLE = 376,
-    NAME = 377,
-    BEGIN_STRING = 378,
-    STRING_CHARACTER = 379,
-    END_STRING = 380,
-    BEGIN_STRING_EXPR = 381,
-    END_STRING_EXPR = 382,
-    UNARY_MINUS = 383,
-    UNARY_PLUS = 384,
-    PRE_INC = 385,
-    PRE_DEC = 386,
-    POST_INC = 387,
-    POST_DEC = 388,
-    DEREF = 389,
-    COLCOL = 390
+    DAS_GENERATOR = 337,
+    DAS_YIELD = 338,
+    ADDEQU = 339,
+    SUBEQU = 340,
+    DIVEQU = 341,
+    MULEQU = 342,
+    MODEQU = 343,
+    ANDEQU = 344,
+    OREQU = 345,
+    XOREQU = 346,
+    SHL = 347,
+    SHR = 348,
+    ADDADD = 349,
+    SUBSUB = 350,
+    LEEQU = 351,
+    SHLEQU = 352,
+    SHREQU = 353,
+    GREQU = 354,
+    EQUEQU = 355,
+    NOTEQU = 356,
+    RARROW = 357,
+    LARROW = 358,
+    QQ = 359,
+    QDOT = 360,
+    LPIPE = 361,
+    LBPIPE = 362,
+    RPIPE = 363,
+    CLONEEQU = 364,
+    ROTL = 365,
+    ROTR = 366,
+    ROTLEQU = 367,
+    ROTREQU = 368,
+    MAPTO = 369,
+    BRABRAB = 370,
+    BRACBRB = 371,
+    CBRCBRB = 372,
+    INTEGER = 373,
+    LONG_INTEGER = 374,
+    UNSIGNED_INTEGER = 375,
+    UNSIGNED_LONG_INTEGER = 376,
+    FLOAT = 377,
+    DOUBLE = 378,
+    NAME = 379,
+    BEGIN_STRING = 380,
+    STRING_CHARACTER = 381,
+    END_STRING = 382,
+    BEGIN_STRING_EXPR = 383,
+    END_STRING_EXPR = 384,
+    UNARY_MINUS = 385,
+    UNARY_PLUS = 386,
+    PRE_INC = 387,
+    PRE_DEC = 388,
+    POST_INC = 389,
+    POST_DEC = 390,
+    DEREF = 391,
+    COLCOL = 392
   };
 #endif
 
 /* Value type.  */
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
+
 union DAS_YYSTYPE
 {
-#line 76 "ds_parser.ypp"
+#line 76 "ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -272,9 +274,9 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 276 "ds_parser.hpp"
-
+#line 278 "ds_parser.hpp" /* yacc.c:1912  */
 };
+
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
 # define DAS_YYSTYPE_IS_TRIVIAL 1
 # define DAS_YYSTYPE_IS_DECLARED 1

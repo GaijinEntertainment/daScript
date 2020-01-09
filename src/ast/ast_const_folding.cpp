@@ -38,6 +38,12 @@ namespace das {
             expr->noSideEffects = true;
             expr->noNativeSideEffects = true;
         }
+    // make generator
+        virtual void preVisit ( ExprMakeGenerator * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+        }
     // cast
         virtual void preVisit ( ExprCast * expr ) override {
             Visitor::preVisit(expr);

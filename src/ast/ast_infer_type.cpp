@@ -1511,7 +1511,7 @@ namespace das {
                 auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
                 auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
                 if ( auto bT = block->type ) {
-                    if ( bT->isAlias() || bT->isAuto() ) {
+                    if ( !isFullySealedType(bT) ) {
                         error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
                     } else {
                         CaptureLambda cl;
@@ -1534,6 +1534,7 @@ namespace das {
                             if ( program->addStructure(ls) ) {
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls);
                                 if ( program->addFunction(pFn) ) {
+                                    reportGenericInfer();
                                     auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
                                     return ms;
                                 } else {
@@ -1541,6 +1542,57 @@ namespace das {
                                 }
                             } else {
                                 error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
+                            }
+                        }
+                    }
+                }
+            }
+            return Visitor::visit(expr);
+        }
+    // ExprMakeGenerator
+        virtual ExpressionPtr visit ( ExprMakeGenerator * expr ) override {
+            if ( expr->arguments.size()!=1 ) {
+                error("expecting generator(closure)", expr->at, CompilationError::invalid_argument_count);
+            } else if ( !expr->arguments[0]->rtti_isMakeBlock() ) {
+                error("expecting generator(closure)", expr->at, CompilationError::invalid_argument_type);
+            } else {
+                auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
+                auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
+                if ( auto bT = block->type ) {
+                    if ( !isFullySealedType(bT) ) {
+                        error("can't infer generator block type", expr->at, CompilationError::invalid_block);
+                    } else {
+                        CaptureLambda cl;
+                        // we can only capture in-scope variables
+                        // i.e stuff BEFORE the scope
+                        for ( auto & lv : local )
+                            cl.scope.insert(lv);
+                        for ( auto & bls : blocks ) {
+                            for ( auto & blv : bls->arguments ) {
+                                cl.scope.insert(blv);
+                            }
+                        }
+                        block->visit(cl);
+                        if ( !cl.fail ) {
+                            for ( auto ba : block->arguments ) {
+                                cl.capt.erase(ba);
+                            }
+                            string lname = generateNewLambdaName(block->at);
+                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, true);
+                            if ( program->addStructure(ls) ) {
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, true);
+                                if ( program->addFunction(pFn) ) {
+                                    reportGenericInfer();
+                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
+                                    // each ( [[ ]]] )
+                                    auto cEach = make_shared<ExprCall>(block->at, "each");
+                                    cEach->arguments.push_back(ms);
+                                    return cEach;
+                                } else {
+                                    error("generator function name mismatch", expr->at, CompilationError::invalid_block);
+                                }
+                            } else {
+                                error("generator struct name mismatch", expr->at, CompilationError::invalid_block);
                             }
                         }
                     }

@@ -619,6 +619,14 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
 
+    struct ExprMakeGenerator : ExprLooksLikeCall {
+        ExprMakeGenerator () = default;
+        ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b = nullptr );
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+
     struct ExprInvoke : ExprLikeCall<ExprInvoke> {
         ExprInvoke () = default;
         ExprInvoke ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprInvoke>(a,name) {}

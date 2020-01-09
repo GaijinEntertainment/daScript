@@ -243,6 +243,7 @@
 <normal>"block"                                         return DAS_TBLOCK;
 <normal>"function"                                      return DAS_TFUNCTION;
 <normal>"lambda"                                        return DAS_TLAMBDA;
+<normal>"generator"                                     return DAS_GENERATOR;
 <normal>"tuple"                                         return DAS_TTUPLE;
 <normal>"const"                                         return DAS_CONST;
 <normal>"continue"                                      return DAS_CONTINUE;
@@ -264,6 +265,7 @@
 <normal>"scope"                                         return DAS_SCOPE;
 <normal>"null"                                          return DAS_NULL;
 <normal>"return"                                        return DAS_RETURN;
+<normal>"yield"                                         return DAS_YIELD;
 <normal>"break"                                         return DAS_BREAK;
 <normal>"typeinfo"                                      return DAS_TYPEINFO;
 <normal>"type"                                          return DAS_TYPE;

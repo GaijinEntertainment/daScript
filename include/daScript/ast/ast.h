@@ -495,6 +495,7 @@ namespace das
                 bool    aotTemplate : 1;
                 bool    generated : 1;
                 bool    privateFunction : 1;
+                bool    generator : 1;
                 
             };
             uint32_t flags = 0;

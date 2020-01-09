@@ -214,6 +214,7 @@ namespace das {
         VISIT_EXPR(ExprLooksLikeCall)
         VISIT_EXPR(ExprMakeBlock)
         VISIT_EXPR(ExprMakeLambda)
+        VISIT_EXPR(ExprMakeGenerator)
         VISIT_EXPR(ExprTypeInfo)
         VISIT_EXPR(ExprIs)
         VISIT_EXPR(ExprCall)

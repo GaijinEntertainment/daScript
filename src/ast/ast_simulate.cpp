@@ -785,6 +785,12 @@ namespace das
         return nullptr;
     }
 
+    SimNode * ExprMakeGenerator::simulate (Context & context) const {
+        DAS_ASSERTF(0, "we should not be here ever, ExprMakeGenerator should completly fold during type inference.");
+        context.thisProgram->error("internal compilation error, generating node for ExprMakeGenerator", at);
+        return nullptr;
+    }
+
     SimNode * ExprArrayComprehension::simulate (Context & context) const {
         DAS_ASSERTF(0, "we should not be here ever, ExprArrayComprehension should completly fold during type inference.");
         context.thisProgram->error("internal compilation error, generating node for ExprArrayComprehension", at);
