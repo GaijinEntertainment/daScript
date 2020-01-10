@@ -362,6 +362,11 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         virtual void close ( Context &, char * ) override {
             // TODO: release lambda?
         }
+        virtual void walk ( DataWalker & walker ) override {
+            walker.beforeLambda(&lambda, lambda.getTypeInfo());
+            walker.walk(lambda.capture, lambda.getTypeInfo());
+            walker.afterLambda(&lambda, lambda.getTypeInfo());
+        }
         Lambda          lambda;
         SimFunction *   simFunc = nullptr;
     };

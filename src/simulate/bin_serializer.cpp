@@ -198,7 +198,7 @@ namespace das {
         virtual void Null ( TypeInfo * ) override {
             error("binary serialization of null pointers is not supported");
         }
-        virtual void WalkIterator ( struct Iterator * ) override {
+        virtual void beforeIterator ( Iterator *, TypeInfo * ) override {
             error("binary serialization of iterators is not supported");
         }
         virtual void WalkBlock ( Block * ) override {

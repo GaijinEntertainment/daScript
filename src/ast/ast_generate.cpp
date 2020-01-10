@@ -158,6 +158,7 @@ namespace das {
         pFunc->generated = true;
         pFunc->at = block->at;
         pFunc->name = lfn;
+        pFunc->unsafe = true;   // TODO: inherit from parent function
         auto fb = make_shared<ExprBlock>();
         auto with = make_shared<ExprWith>(block->at);
         with->with = make_shared<ExprVar>(block->at, "__this");
