@@ -234,11 +234,13 @@ bool run_exception_tests( const string & path ) {
 }
 
 
-bool run_module_test ( const string & path ) {
+bool run_module_test ( const string & path, const string & main, bool usePak ) {
     tout << "testing MODULE at " << path << " ";
-    auto fAccess = make_shared<FsFileAccess>( path + "/project.das_project", make_shared<FsFileAccess>());
+    auto fAccess = usePak ? 
+            make_shared<FsFileAccess>( path + "/project.das_project", make_shared<FsFileAccess>()) :
+            make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
-    if ( auto program = compileDaScript(path + "/main.das", fAccess, tout, dummyLibGroup) ) {
+    if ( auto program = compileDaScript(path + "/" + main, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -314,7 +316,8 @@ int main() {
     ok = run_unit_tests(TEST_PATH "examples/test/unit_tests") && ok;
     ok = run_unit_tests(TEST_PATH "examples/test/optimizations") && ok;
     ok = run_exception_tests(TEST_PATH "examples/test/runtime_errors") && ok;
-    ok = run_module_test(TEST_PATH "examples/test/module") && ok;
+    ok = run_module_test(TEST_PATH "examples/test/module", "main.das", true) && ok;
+    ok = run_module_test(TEST_PATH "examples/test/module", "main_default.das", false) && ok;
     tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();
