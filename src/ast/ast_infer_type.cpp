@@ -1510,7 +1510,7 @@ namespace das {
             } else {
                 auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
                 auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                if ( auto bT = block->type ) {
+                if ( auto bT = block->makeBlockType() ) {
                     if ( !isFullySealedType(bT) ) {
                         error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
                     } else {
@@ -1558,9 +1558,15 @@ namespace das {
             } else {
                 auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
                 auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                if ( auto bT = block->type ) {
+                if ( auto bT = block->makeBlockType() ) {
                     if ( !isFullySealedType(bT) ) {
                         error("can't infer generator block type", expr->at, CompilationError::invalid_block);
+                    } else if ( !bT->firstType->isSimpleType(Type::tBool) ) {
+                        error("generator must return boolean", expr->at, CompilationError::invalid_argument_type);
+                    } else if ( bT->argTypes.size()!=1 ) {
+                        error("generator must have one argument", expr->at, CompilationError::invalid_argument_type);
+                    } else if ( bT->argTypes[0]->isConst() ) {
+                        error("generator first argument can't be constant", expr->at, CompilationError::invalid_argument_type);
                     } else {
                         CaptureLambda cl;
                         // we can only capture in-scope variables
