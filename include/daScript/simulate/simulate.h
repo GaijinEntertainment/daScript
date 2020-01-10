@@ -516,11 +516,14 @@ namespace das
         StackAllocator ST;
     };
 
+    struct DataWalker;
+
     struct Iterator {
         virtual ~Iterator() {}
         virtual bool first ( Context & context, char * value ) = 0;
         virtual bool next  ( Context & context, char * value ) = 0;
         virtual void close ( Context & context, char * value ) = 0;    // can't throw
+        virtual void walk ( DataWalker & ) { }
     };
 
 #if DAS_ENABLE_PROFILER

@@ -151,16 +151,29 @@ namespace das {
         return fn;
     }
 
-    FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block, const StructurePtr & ls ) {
+    FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
+                                        const StructurePtr & ls, bool needYield ) {
         auto lfn = lambdaName + "__def";
         auto pFunc = make_shared<Function>();
         pFunc->generated = true;
         pFunc->at = block->at;
         pFunc->name = lfn;
+        pFunc->unsafe = true;   // TODO: inherit from parent function
         auto fb = make_shared<ExprBlock>();
         auto with = make_shared<ExprWith>(block->at);
         with->with = make_shared<ExprVar>(block->at, "__this");
         with->body = block->clone();
+        if ( needYield ) {
+            pFunc->generator = true;
+            auto bbl = static_pointer_cast<ExprBlock>(with->body);
+            // goto __yeild
+            auto gvar = make_shared<ExprVar>(block->at, "__yield");
+            auto gexpr = make_shared<ExprGoto>(block->at, gvar);
+            bbl->list.insert(bbl->list.begin(), gexpr);
+            // label 0
+            auto lzero = make_shared<ExprLabel>(block->at, 0);
+            bbl->list.insert(bbl->list.begin() + 1, lzero);
+        }
         auto wb = static_pointer_cast<ExprBlock>(with->body);
         wb->blockFlags = 0;
         fb->list.push_back(with);
@@ -178,7 +191,8 @@ namespace das {
         return pFunc;
     }
 
-    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block, const das_set<VariablePtr> & capt ) {
+    StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block,
+                                       const das_set<VariablePtr> & capt, bool needYield ) {
         auto lsn = lambdaName;
         auto pStruct = make_shared<Structure>(lsn);
         auto btd = block->makeBlockType();
@@ -187,6 +201,10 @@ namespace das {
         auto thisArg = make_shared<TypeDecl>(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
+        if ( needYield ) {
+            auto yt = make_shared<TypeDecl>(Type::tInt);
+            pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
+        }
         for ( auto var : capt ) {
             auto td = make_shared<TypeDecl>(*var->type);
             td->ref = false;

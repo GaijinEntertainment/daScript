@@ -194,6 +194,8 @@
 %token  DAS_TINT16          "int16"
 %token  DAS_TUINT16         "uint16"
 %token  DAS_TTUPLE          "tuple"
+%token  DAS_GENERATOR       "generator"
+%token  DAS_YIELD           "yield"
 
 /* operators */
 %token  ADDEQU              "+="
@@ -1204,6 +1206,8 @@ expr
 	|   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
     |   DAS_TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
+    |   DAS_GENERATOR[loc] '(' ')'                 { $$ = new ExprMakeGenerator(tokAt(@loc)); }
+    |   DAS_GENERATOR[loc] '(' expr[subexpr] ')'   { $$ = new ExprMakeGenerator(tokAt(@loc), ExpressionPtr($subexpr)); }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));

@@ -170,7 +170,6 @@ namespace das {
                 case Type::tDouble:     Double(*((double *)pa)); break;
                 case Type::tRange:      Range(*((range *)pa)); break;
                 case Type::tURange:     URange(*((urange *)pa)); break;
-                case Type::tIterator:   WalkIterator((Iterator *)pa); break;     // TODO: verify
                 case Type::tEnumeration:
                     WalkEnumeration(*((int32_t *)pa), info->enumType);
                     break;
@@ -192,6 +191,13 @@ namespace das {
                         beforeLambda(ll, info);
                         walk ( ll->capture, ll->getTypeInfo() );
                         afterLambda(ll, info);
+                    }
+                    break;
+                case Type::tIterator: {
+                        auto ll = * ((Iterator **) pa);
+                        beforeIterator(ll, info);
+                        ll->walk(*this);
+                        afterIterator(ll, info);
                     }
                     break;
                 case Type::tHandle:

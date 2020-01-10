@@ -673,6 +673,27 @@ namespace das {
         return cexpr;
     }
 
+    // ExprMakeGenerator
+
+    ExprMakeGenerator::ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b )
+    : ExprLooksLikeCall(a, "generator") {
+        if ( b ) {
+            arguments.push_back(b);
+        }
+    }
+
+    ExpressionPtr ExprMakeGenerator::visit(Visitor & vis) {
+        vis.preVisit(this);
+        ExprLooksLikeCall::visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprMakeGenerator::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeGenerator>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprMakeBlock
 
     ExpressionPtr ExprMakeBlock::visit(Visitor & vis) {

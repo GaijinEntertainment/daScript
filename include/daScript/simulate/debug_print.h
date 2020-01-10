@@ -255,8 +255,11 @@ namespace das {
         virtual void URange ( urange & ra ) override {
             ss << ra;
         }
-        virtual void WalkIterator ( struct Iterator * ) override {
-            ss << "iterator";
+        virtual void beforeIterator ( Iterator *, TypeInfo * ) override {
+            ss << "iterator [[";
+        }
+        virtual void afterIterator ( Iterator *, TypeInfo * ) override {
+            ss << "]]";
         }
         virtual void WalkBlock ( struct Block * pa ) override {
             ss << "block 0x" << HEX << intptr_t(pa->body) << DEC;

@@ -856,7 +856,7 @@ namespace das {
         WALK_PROPERTY_RANGE(Range,range,Int);
         WALK_PROPERTY_RANGE(URange,urange,Uint);
         
-        virtual void WalkIterator ( struct Iterator * ) override {
+        virtual void beforeIterator ( Iterator *, TypeInfo * ) override {
             error("can't serialize iterator");
         }
         virtual void WalkBlock ( Block * ) override {

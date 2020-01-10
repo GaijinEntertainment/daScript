@@ -310,7 +310,9 @@ namespace das
         addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<float>");
         addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<double>");
         // dup
-        addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup", SideEffects::modifyArgumentAndExternal, "builtin_strdup");
+        auto bsd = addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
+                                                          SideEffects::modifyArgumentAndExternal, "builtin_strdup");
+        bsd->unsafeOperation = true;
         // das string binding
         addAnnotation(make_shared<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");

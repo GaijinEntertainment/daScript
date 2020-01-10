@@ -59,6 +59,8 @@ namespace das {
         virtual void afterHandle ( char * pa, TypeInfo * ti ) {}
         virtual void beforeLambda ( Lambda *, TypeInfo * ti ) {}
         virtual void afterLambda ( Lambda *, TypeInfo * ti ) {}
+        virtual void beforeIterator ( Iterator *, TypeInfo * ti ) {}
+        virtual void afterIterator ( Iterator *, TypeInfo * ti ) {}
     // types
         virtual void Null ( TypeInfo * ti ) {}
         virtual void Bool ( bool & ) {}
@@ -84,7 +86,6 @@ namespace das {
         virtual void Float4 ( float4 & ) {}
         virtual void Range ( range & ) {}
         virtual void URange ( urange & ) {}
-        virtual void WalkIterator ( struct Iterator * ) {}
         virtual void WalkBlock ( Block * ) {}
         virtual void WalkFunction ( Func * ) {}
         virtual void WalkEnumeration ( int32_t &, EnumInfo * ) {}
