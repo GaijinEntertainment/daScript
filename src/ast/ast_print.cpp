@@ -760,6 +760,12 @@ namespace das {
             ss << "return ";
             if ( expr->moveSemantics ) ss << "<- ";
         }
+    // yield
+        virtual void preVisit ( ExprYield * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "yield ";
+            if ( expr->moveSemantics ) ss << "<- ";
+        }
     // break
         virtual void preVisit ( ExprBreak * that ) override {
             Visitor::preVisit(that);

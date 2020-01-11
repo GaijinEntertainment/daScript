@@ -89,7 +89,22 @@ namespace das {
         das_set<int32_t> labels;
         bool allLabels = false;
     protected:
+        bool hasLabels ( vector<ExpressionPtr> & blockList ) const {
+            for ( auto & expr : blockList ) {
+                if ( !expr ) continue;
+                if ( expr->rtti_isLabel() ) {
+                    return true;
+                } else  if ( expr->rtti_isBlock() ) {
+                    auto pBlock = static_pointer_cast<ExprBlock>(expr);
+                    if ( !pBlock->isClosure ) {
+                        if ( hasLabels(pBlock->list) ) return true;
+                    }
+                }
+            }
+            return false;
+        }
         void collect ( vector<ExpressionPtr> & list, vector<ExpressionPtr> & blockList ) {
+            bool stopAtExit = !hasLabels(blockList);
             bool skipTilLabel = false;
             for ( auto & expr : blockList ) {
                 if ( !expr ) continue;
@@ -108,8 +123,14 @@ namespace das {
                     continue;
                 }
                 if ( expr->rtti_isBreak() || expr->rtti_isReturn() || expr->rtti_isContinue() ) {
-                    list.push_back(expr);
-                    break;
+                    if ( stopAtExit ) {
+                        list.push_back(expr);
+                        break;
+                    } else {
+                        list.push_back(expr);
+                        skipTilLabel = true;
+                        continue;
+                    }
                 }
                 if ( expr->rtti_isBlock() ) {
                     auto pBlock = static_pointer_cast<ExprBlock>(expr);

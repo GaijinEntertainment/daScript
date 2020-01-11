@@ -627,6 +627,21 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
 
+    struct ExprYield : Expression {
+        ExprYield () = default;
+        ExprYield ( const LineInfo & a, const ExpressionPtr & val );
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        ExpressionPtr subexpr;
+        union {
+            struct {
+                bool moveSemantics      : 1;
+            };
+            uint32_t    returnFlags = 0;
+        };
+    };
+
     struct ExprInvoke : ExprLikeCall<ExprInvoke> {
         ExprInvoke () = default;
         ExprInvoke ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprInvoke>(a,name) {}

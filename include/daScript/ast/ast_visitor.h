@@ -184,6 +184,7 @@ namespace das {
         VISIT_EXPR(ExprClone)
         VISIT_EXPR(ExprTryCatch)
         VISIT_EXPR(ExprReturn)
+        VISIT_EXPR(ExprYield)
         VISIT_EXPR(ExprBreak)
         VISIT_EXPR(ExprContinue)
         VISIT_EXPR(ExprConst)

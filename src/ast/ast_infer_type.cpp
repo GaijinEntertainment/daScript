@@ -3042,6 +3042,61 @@ namespace das {
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
+    // ExprYield
+        virtual ExpressionPtr visit ( ExprYield * expr ) override {
+            if ( blocks.size() ) {
+                error("can't yield from inside the block",
+                      expr->at, CompilationError::invalid_yield );
+            } else {
+                if ( !func->generator ) {
+                    error("can't yield from non-generator",
+                          expr->at, CompilationError::invalid_yield );
+                }
+                if ( !expr->subexpr->type ) return Visitor::visit(expr);
+
+                const auto & yarg = func->arguments[1];
+
+                // TODO: verify yield type so that error is 'yield' error, not copy or move error
+
+                // now, replace yield A with
+                //  result = A
+                //  __yield = X
+                //  return true
+                //  label X
+                auto LabelX = func->totalGenLabel ++;
+                auto blk = make_shared<ExprBlock>();
+                blk->at = expr->at;
+                if ( expr->moveSemantics ) {
+                    // result <- a
+                    auto mto = make_shared<ExprVar>(expr->at, yarg->name);
+                    auto mfr = expr->subexpr->clone();
+                    auto mve = make_shared<ExprMove>(expr->at, mto, mfr);
+                    blk->list.push_back(mve);
+                } else {
+                    // result = a
+                    auto cto = make_shared<ExprVar>(expr->at, yarg->name);
+                    auto cfr = expr->subexpr->clone();
+                    auto cpy = make_shared<ExprCopy>(expr->at, cto, cfr);
+                    blk->list.push_back(cpy);
+                }
+                // yield = X
+                auto yyx = make_shared<ExprVar>(expr->at, "__yield");
+                auto clx = make_shared<ExprConstInt>(expr->at, LabelX);
+                auto cpy = make_shared<ExprCopy>(expr->at, yyx, clx);
+                blk->list.push_back(cpy);
+                // return true
+                auto btr = make_shared<ExprConstBool>(expr->at, true);
+                auto rex = make_shared<ExprReturn>(expr->at, btr);
+                blk->list.push_back(rex);
+                auto lbx = make_shared<ExprLabel>(expr->at, LabelX);
+                blk->list.push_back(lbx);
+                reportGenericInfer();
+                return blk;
+            }
+            expr->type = make_shared<TypeDecl>();
+            return Visitor::visit(expr);
+        }
+
     // ExprBreak
         virtual ExpressionPtr visit ( ExprBreak * expr ) override {
             if ( !loop.size() )

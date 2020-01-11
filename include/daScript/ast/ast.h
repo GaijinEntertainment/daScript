@@ -465,6 +465,7 @@ namespace das
         ExpressionPtr       body;
         int                 index = -1;
         uint32_t            totalStackSize = 0;
+        int32_t             totalGenLabel = 0;
         LineInfo            at;
         Module *            module = nullptr;
         das_set<Function *>     useFunctions;

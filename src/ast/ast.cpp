@@ -313,6 +313,7 @@ namespace das {
         cfun->body = body->clone();
         cfun->index = -1;
         cfun->totalStackSize = 0;
+        cfun->totalGenLabel = totalGenLabel;
         cfun->at = at;
         cfun->module = nullptr;
         cfun->flags = flags;
@@ -691,6 +692,26 @@ namespace das {
     ExpressionPtr ExprMakeGenerator::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeGenerator>(expr);
         ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+
+    // ExprYield
+
+    ExprYield::ExprYield ( const LineInfo & a, const ExpressionPtr & b ) : Expression(a) {
+        subexpr = b;
+    }
+
+    ExpressionPtr ExprYield::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprYield::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprYield>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->returnFlags = returnFlags;
         return cexpr;
     }
 

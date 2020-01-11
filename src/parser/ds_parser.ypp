@@ -306,6 +306,7 @@
 %type <pExpression>     expression_continue
 %type <pExpression>     expression_delete
 %type <pExpression>     expression_return
+%type <pExpression>     expression_yield
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
 %type <pExpression>     expression_try_catch
@@ -831,6 +832,7 @@ expression_any
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }
     |   expression_continue[subexpr] ';'    { $$ = $subexpr; }
     |   expression_return[subexpr]          { $$ = $subexpr; }
+    |   expression_yield[subexpr]           { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
     |   expression_label[subexpr] ';'       { $$ = $subexpr; }
@@ -926,6 +928,25 @@ expression_return
     }
     |   DAS_RETURN[loc] LARROW expr_pipe[subexpr] {
         auto pRet = new ExprReturn(tokAt(@loc),ExpressionPtr($subexpr));
+        pRet->moveSemantics = true;
+        $$ = pRet;
+    }
+    ;
+
+expression_yield
+    :   DAS_YIELD[loc] expr[subexpr] ';' {
+        $$ = new ExprYield(tokAt(@loc),ExpressionPtr($subexpr));
+    }
+    |   DAS_YIELD[loc] LARROW expr[subexpr] ';' {
+        auto pRet = new ExprYield(tokAt(@loc),ExpressionPtr($subexpr));
+        pRet->moveSemantics = true;
+        $$ = pRet;
+    }
+    |   DAS_YIELD[loc] expr_pipe[subexpr] {
+        $$ = new ExprYield(tokAt(@loc),ExpressionPtr($subexpr));
+    }
+    |   DAS_YIELD[loc] LARROW expr_pipe[subexpr] {
+        auto pRet = new ExprYield(tokAt(@loc),ExpressionPtr($subexpr));
         pRet->moveSemantics = true;
         $$ = pRet;
     }

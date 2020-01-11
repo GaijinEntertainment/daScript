@@ -170,9 +170,10 @@ namespace das {
             auto gvar = make_shared<ExprVar>(block->at, "__yield");
             auto gexpr = make_shared<ExprGoto>(block->at, gvar);
             bbl->list.insert(bbl->list.begin(), gexpr);
-            // label 0
-            auto lzero = make_shared<ExprLabel>(block->at, 0);
+            // label "0"
+            auto lzero = make_shared<ExprLabel>(block->at, pFunc->totalGenLabel);
             bbl->list.insert(bbl->list.begin() + 1, lzero);
+            pFunc->totalGenLabel ++;
         }
         auto wb = static_pointer_cast<ExprBlock>(with->body);
         wb->blockFlags = 0;
