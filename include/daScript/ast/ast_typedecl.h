@@ -33,6 +33,9 @@ namespace das {
             dimAuto = -1,
             dimConst = -2,
         };
+        enum class DescribeExtra     { no, yes };
+        enum class DescribeContracts { no, yes };
+        enum class DescribeModule    { no, yes };
         TypeDecl() = default;
         TypeDecl(const TypeDecl & decl);
         TypeDecl & operator = (const TypeDecl & decl) = delete;
@@ -78,7 +81,7 @@ namespace das {
         int getTupleSize() const;
         int getTupleAlign() const;
         int getTupleFieldOffset ( int index ) const;
-        string describe ( bool extra = true, bool contracts = true ) const;
+        string describe ( DescribeExtra extra = DescribeExtra::yes, DescribeContracts contracts = DescribeContracts::yes, DescribeModule module = DescribeModule::yes) const;
         bool canCopy() const;
         bool canMove() const;
         bool canClone() const;

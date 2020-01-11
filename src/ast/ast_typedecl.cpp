@@ -212,7 +212,7 @@ namespace das
 
     // TypeDecl
 
-    string TypeDecl::describe ( bool extra, bool contracts ) const {
+    string TypeDecl::describe ( DescribeExtra extra, DescribeContracts contracts, DescribeModule module ) const {
         TextWriter stream;
         if ( baseType==Type::alias ) {
             stream << alias;
@@ -237,7 +237,7 @@ namespace das
             }
         } else if ( baseType==Type::tStructure ) {
             if ( structType ) {
-                if (structType->module && !structType->module->name.empty()) {
+                if (module == DescribeModule::yes && structType->module && !structType->module->name.empty()) {
                     stream << structType->module->name << "::";
                 }
                 stream << structType->name;
@@ -252,7 +252,7 @@ namespace das
             }
         } else if ( baseType==Type::tEnumeration ) {
             if ( enumType ) {
-                if (enumType->module && !enumType->module->name.empty()) {
+                if (module == DescribeModule::yes && enumType->module && !enumType->module->name.empty()) {
                     stream << enumType->module->name << "::";
                 }
                 stream << enumType->describe();
@@ -298,7 +298,7 @@ namespace das
         } else {
             stream << das_to_string(baseType);
         }
-        if ( extra && baseType!=Type::autoinfer && baseType!=Type::alias && !alias.empty() ) {
+        if ( extra==DescribeExtra::yes && baseType!=Type::autoinfer && baseType!=Type::alias && !alias.empty() ) {
             stream << " aka " << alias;
         }
         if ( constant ) {
@@ -316,7 +316,7 @@ namespace das
         if ( implicit ) {
             stream << " implicit";
         }
-        if (contracts) {
+        if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {
                 stream << " delete ";
                 if (removeConstant) {
