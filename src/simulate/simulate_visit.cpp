@@ -217,6 +217,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_MemZero::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(MemZero);
+        V_SUB(subexpr);
+        V_ARG(size);
+        V_END();
+    }
+
     SimNode * SimNode_InitLocal::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(InitLocal);

@@ -676,6 +676,13 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
 
+    struct ExprMemZero : ExprLikeCall<ExprMemZero> {
+        ExprMemZero () = default;
+        ExprMemZero ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprMemZero>(a, name) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+
     template <typename It, typename SimNodeT, bool first>
     struct ExprTableKeysOrValues : ExprLooksLikeCall {
         ExprTableKeysOrValues() = default;

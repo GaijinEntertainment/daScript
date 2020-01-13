@@ -905,6 +905,21 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t  stackTop;
     };
 
+    // ZERO MEMORY
+    struct SimNode_MemZero : SimNode {
+        SimNode_MemZero(const LineInfo & at, SimNode * se, uint32_t sz)
+            : SimNode(at), subexpr(se), size(sz) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            auto refV = subexpr->evalPtr(context);
+            memset(refV, 0, size);
+            return v_zero();
+        }
+        SimNode * subexpr;
+        uint32_t  size;
+    };
+
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE
     struct SimNode_InitLocal : SimNode {
         SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz)

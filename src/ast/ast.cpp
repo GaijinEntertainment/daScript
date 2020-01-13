@@ -653,6 +653,14 @@ namespace das {
         return cexpr;
     }
 
+    // ExprMemZero
+
+    ExpressionPtr ExprMemZero::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMemZero>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprMakeLambda
 
     ExprMakeLambda::ExprMakeLambda ( const LineInfo & a, const ExpressionPtr & b )

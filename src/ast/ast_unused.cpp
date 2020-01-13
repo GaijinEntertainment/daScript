@@ -444,6 +444,11 @@ namespace das {
                 func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             }
         }
+    // MemZero
+        virtual void preVisit ( ExprMemZero * expr ) override {
+            Visitor::preVisit(expr);
+            propagateWrite(expr->arguments[0].get());
+        }
     };
 
 

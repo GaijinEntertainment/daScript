@@ -2113,7 +2113,11 @@ namespace das {
                     ss << ">";
                 }
                 ss << "(__context__,";
-            } else ss << call->name << "(";
+            } else if ( call->name=="memzero" ) {
+                ss << "memset(&(";
+            } else {
+                ss << call->name << "(";
+            }
         }
         virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitLooksLikeCallArg(call, arg, last);
@@ -2151,6 +2155,8 @@ namespace das {
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
             if ( call->name=="assert" || call->name=="verify" || call->name=="debug" ) {
                 ss << "))";
+            } else if ( call->name=="memzero" ) {
+                ss << "), 0, " << call->arguments[0]->type->getSizeOf() << ")";
             } else {
                 ss << ")";
             }

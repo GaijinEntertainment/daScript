@@ -453,6 +453,7 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         addCall<ExprStaticAssert>   ("static_assert");
         addCall<ExprStaticAssert>   ("concept_assert");
         addCall<ExprDebug>          ("debug");
+        addCall<ExprMemZero>        ("memzero");
         // hash
         addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none, "hash");
         // table functions

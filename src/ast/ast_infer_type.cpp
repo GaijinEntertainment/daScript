@@ -1496,9 +1496,27 @@ namespace das {
                 return Visitor::visit(expr);
             }
             // infer
-            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() )
+            if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
                 error("debug comment must be string constant", expr->at, CompilationError::invalid_argument_type);
+            }
             expr->type = make_shared<TypeDecl>(*expr->arguments[0]->type);
+            return Visitor::visit(expr);
+        }
+    // ExprMemZero
+        virtual ExpressionPtr visit ( ExprMemZero * expr ) override {
+            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->arguments.size()!=1 ) {
+                error("memzero(ref expr)", expr->at, CompilationError::invalid_argument_count);
+                return Visitor::visit(expr);
+            }
+            // infer
+            const auto & arg = expr->arguments[0];
+            if ( !arg->type->isRef() ) {
+                error("memzero argument must be reference", expr->at, CompilationError::invalid_argument_type);
+            } else if ( arg->type->isConst() ) {
+                error("memzero argument can't be constant", expr->at, CompilationError::invalid_argument_type);
+            }
+            expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
     // ExprMakeLambda
@@ -3423,6 +3441,47 @@ namespace das {
                 }
                 expr->inScope = false;
                 reportGenericInfer();
+                return Visitor::visit(expr);
+            }
+            if ( func && func->generator ) {
+                for ( auto & var : expr->variables ) {
+                    if ( !isFullySealedType(var->type) ) {
+                        error("type not ready yet", var->at);
+                        return Visitor::visit(expr);
+                    }
+                }
+                auto blk = make_shared<ExprBlock>();
+                blk->at = expr->at;
+                auto capture = func->arguments[0]->type->structType;
+                DAS_ASSERT(capture && "generator first argument is lambda capture");
+                for ( auto & var : expr->variables ) {
+                    capture->fields.emplace_back(
+                            var->name,
+                            make_shared<TypeDecl>(*var->type),
+                            nullptr,
+                            AnnotationArgumentList(),
+                            false,
+                            expr->at);
+                    auto lvar = make_shared<ExprVar>(var->at, var->name);
+                    if ( var->init ) {
+                        auto rini = var->init->clone();
+                        if ( var->init_via_clone ) {
+                            auto cln = make_shared<ExprClone>(var->at, lvar, rini);
+                            blk->list.push_back(cln);
+                        } else if ( var->init_via_move ) {
+                            auto mve = make_shared<ExprMove>(var->at, lvar, rini);
+                            blk->list.push_back(mve);
+                        } else {
+                            auto cpy = make_shared<ExprCopy>(var->at, lvar, rini);
+                            blk->list.push_back(cpy);
+                        }
+                    } else {
+                        auto mz = make_shared<ExprMemZero>(var->at, "memzero");
+                        mz->arguments.push_back(lvar);
+                        blk->list.push_back(mz);
+                    }
+                }
+                return blk;
             }
             return Visitor::visit(expr);
         }

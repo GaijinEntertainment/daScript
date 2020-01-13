@@ -227,6 +227,7 @@ namespace das {
         VISIT_EXPR(ExprMakeArray)
         VISIT_EXPR(ExprMakeTuple)
         VISIT_EXPR(ExprArrayComprehension)
+        VISIT_EXPR(ExprMemZero)
 #undef VISIT_EXPR
     };
 #if defined(_MSC_VER)
