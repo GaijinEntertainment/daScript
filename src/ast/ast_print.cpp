@@ -791,7 +791,7 @@ namespace das {
     // is
         virtual void preVisitType ( ExprIs * expr, TypeDecl * decl ) override {
             Visitor::preVisit(expr);
-            ss << " is type " << decl->describe(false,true);
+            ss << " is type " << decl->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes);
         }
     // make structure
         virtual void preVisit ( ExprMakeStructure * expr ) override {

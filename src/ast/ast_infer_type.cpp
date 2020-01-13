@@ -1894,10 +1894,13 @@ namespace das {
                     }
                 } else if ( expr->trait=="typename" ) {
                     reportGenericInfer();
-                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false,false));
+                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no));
+                } else if ( expr->trait=="undecorated_typename" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::no));
                 } else if ( expr->trait=="fulltypename" ) {
                     reportGenericInfer();
-                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(false,true));
+                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes));
                 } else if ( expr->trait=="is_pod" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPod());
