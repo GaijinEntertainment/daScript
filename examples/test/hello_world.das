@@ -2,8 +2,8 @@ options log = true
 
 [export]
 def test
-    var count = 0
     let gen = generator() <| $(var a:int &) : bool
+        var count = 0
         yield count++
         yield count++
         yield count++
