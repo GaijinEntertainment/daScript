@@ -2438,6 +2438,7 @@ namespace das {
             return Visitor::visitBlockArgumentInit(block, arg, that);
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            // to the rest of it
             popVarStack();
             scopes.pop_back();
             if ( block->isClosure ) {
@@ -3458,9 +3459,20 @@ namespace das {
                 auto capture = func->arguments[0]->type->structType;
                 DAS_ASSERT(capture && "generator first argument is lambda capture");
                 for ( auto & var : expr->variables ) {
+                    auto vtd = make_shared<TypeDecl>(*var->type);
+                    bool isRef = vtd->ref;
+                    if ( isRef ) {
+                        auto pvtd = make_shared<TypeDecl>(Type::tPointer);
+                        pvtd->firstType = vtd;
+                        pvtd->constant = vtd->constant;
+                        vtd->ref = false;
+                        vtd = pvtd;
+                        auto scope = scopes.back();
+                        replaceRef2Ptr(scope->shared_from_this(), var->name);
+                    }
                     capture->fields.emplace_back(
                             var->name,
-                            make_shared<TypeDecl>(*var->type),
+                            vtd,
                             nullptr,
                             AnnotationArgumentList(),
                             false,
@@ -3468,6 +3480,10 @@ namespace das {
                     auto lvar = make_shared<ExprVar>(var->at, var->name);
                     if ( var->init ) {
                         auto rini = var->init->clone();
+                        if ( isRef ) {
+                            auto arini = make_shared<ExprRef2Ptr>(expr->at, rini);
+                            rini = arini;
+                        }
                         if ( var->init_via_clone ) {
                             auto cln = make_shared<ExprClone>(var->at, lvar, rini);
                             blk->list.push_back(cln);
@@ -3484,6 +3500,7 @@ namespace das {
                         blk->list.push_back(mz);
                     }
                 }
+                reportGenericInfer();
                 return blk;
             }
             return Visitor::visit(expr);

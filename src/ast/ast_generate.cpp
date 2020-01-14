@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_visitor.h"
 
 namespace das {
 
@@ -235,6 +236,26 @@ namespace das {
         asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
         asc->ascType->baseType = Type::tLambda;
         return ExpressionPtr(asc);
+    }
+
+    // replace ref to ptr
+
+    class Ref2PtrVisitor : public Visitor {
+    public:
+        Ref2PtrVisitor ( const string & n ) : varName(n) {}
+        virtual ExpressionPtr visit ( ExprVar * expr ) override {
+            if  ( expr->name==varName ) {
+                return make_shared<ExprPtr2Ref>(expr->at, expr->shared_from_this());
+            }
+            return Visitor::visit(expr);
+        }
+    protected:
+        string varName;
+    };
+
+    void replaceRef2Ptr ( const ExpressionPtr & expr, const string & name ) {
+        Ref2PtrVisitor r2ptr(name);
+        expr->visit(r2ptr);
     }
 }
 

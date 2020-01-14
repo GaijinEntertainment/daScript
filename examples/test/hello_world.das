@@ -1,12 +1,14 @@
 options log = true
+options log_infer_passes = true
 
 [export]
 def test
     let gen = generator() <| $(var a:int &) : bool
         var count = 0
-        yield count++
-        yield count++
-        yield count++
+        var rcount : int & = count
+        yield rcount++
+        yield rcount++
+        yield rcount++
         return false
     for x in gen
         debug(x, "x=")

@@ -63,5 +63,15 @@ namespace das {
     */
     struct ExprArrayComprehension;
     ExpressionPtr generateComprehension ( ExprArrayComprehension * expr );
+
+    /*
+        replace reference with pointer
+            var blah & = ....
+            blah
+        onto
+            ...
+            deref(blah)
+     */
+    void replaceRef2Ptr ( const ExpressionPtr & expr, const string & name );
 }
 
