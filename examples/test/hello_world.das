@@ -1,16 +1,16 @@
 options log = true
-options log_infer_passes = true
+options stack = 65536
+
+def stover(count) : int
+	print("count = {count}\n")
+	if count == 1000
+		return 1
+	return stover(count+1)
+
+let
+	qq = stover(1)
 
 [export]
 def test
-    let gen = generator() <| $(var a:int &) : bool
-        var count = 0
-        var rcount : int & = count
-        yield rcount++
-        yield rcount++
-        yield rcount++
-        return false
-    for x in gen
-        debug(x, "x=")
-    debug(gen, "gen=")
+	print("qq = {qq}\n")
     return true

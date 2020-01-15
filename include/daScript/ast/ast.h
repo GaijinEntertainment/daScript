@@ -720,6 +720,7 @@ namespace das
     class Program : public enable_shared_from_this<Program> {
     public:
         Program();
+        int getContextStackSize() const;
         friend TextWriter& operator<< (TextWriter& stream, const Program & program);
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;

@@ -199,6 +199,7 @@ namespace das {
     // memory
         "heap",                         Type::tInt,
         "string_heap",                  Type::tInt,
+        "stack",                        Type::tInt,
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,

@@ -249,7 +249,10 @@ namespace das {
 
     class FoldingVisitor : public OptVisitor {
     public:
-        FoldingVisitor( const ProgramPtr & prog ) : program(prog) {}
+        FoldingVisitor( const ProgramPtr & prog ) 
+            : program(prog)
+            , ctx(prog->getContextStackSize()) {
+        }
     protected:
         Context         ctx;
         ProgramPtr      program;

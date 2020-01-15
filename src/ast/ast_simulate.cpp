@@ -2122,7 +2122,7 @@ namespace das
                 context.runInitScript();
             }
             else {
-                StackAllocator stack(16 * 1024);
+                StackAllocator stack(getContextStackSize());
                 SharedStackGuard guard(context, stack);
                 context.runInitScript();
             }

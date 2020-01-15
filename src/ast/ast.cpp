@@ -1731,6 +1731,10 @@ namespace das {
 
     // program
 
+    int Program::getContextStackSize() const {
+        return options.getIntOption("stack", policies.stack);
+    }
+
     vector<EnumerationPtr> Program::findEnum ( const string & name ) const {
         return library.findEnum(name,thisModule.get());
     }

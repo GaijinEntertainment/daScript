@@ -212,7 +212,7 @@ namespace das
 
     // TypeDecl
 
-    string TypeDecl::describe ( DescribeExtra extra, DescribeContracts contracts, DescribeModule module ) const {
+    string TypeDecl::describe ( DescribeExtra extra, DescribeContracts contracts, DescribeModule dmodule ) const {
         TextWriter stream;
         if ( baseType==Type::alias ) {
             stream << alias;
@@ -237,7 +237,7 @@ namespace das
             }
         } else if ( baseType==Type::tStructure ) {
             if ( structType ) {
-                if (module == DescribeModule::yes && structType->module && !structType->module->name.empty()) {
+                if (dmodule == DescribeModule::yes && structType->module && !structType->module->name.empty()) {
                     stream << structType->module->name << "::";
                 }
                 stream << structType->name;
@@ -252,7 +252,7 @@ namespace das
             }
         } else if ( baseType==Type::tEnumeration ) {
             if ( enumType ) {
-                if (module == DescribeModule::yes && enumType->module && !enumType->module->name.empty()) {
+                if (dmodule == DescribeModule::yes && enumType->module && !enumType->module->name.empty()) {
                     stream << enumType->module->name << "::";
                 }
                 stream << enumType->describe();

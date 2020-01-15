@@ -45,7 +45,7 @@ bool unit_test ( const string & fn ) {
             }
             return false;
         } else {
-            Context ctx(program->policies.stack);
+            Context ctx(program->getContextStackSize());
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
