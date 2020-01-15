@@ -294,7 +294,7 @@ namespace das
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
-                throw_error_ex("stack overflow at line %i",line);
+                throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
                 return v_zero();
             }
             // fill prologue
@@ -327,7 +327,7 @@ namespace das
                 // PUSH
                 char * EP, *SP;
                 if (!stack.push(fn->stackSize, EP, SP)) {
-                    throw_error_ex("stack overflow at line %i",line);
+                    throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
                     return v_zero();
                 }
                 // fill prologue
@@ -353,7 +353,7 @@ namespace das
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
-                throw_error_ex("stack overflow at line %i",line);
+                throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
                 return v_zero();
             }
             // fill prologue
@@ -416,7 +416,7 @@ namespace das
             // PUSH
             char * EP, *SP;
             if(!stack.push(fn->stackSize,EP,SP)) {
-                throw_error_ex("stack overflow at line %i", line);
+                throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
                 return v_zero();
             }
             // fill prologue
