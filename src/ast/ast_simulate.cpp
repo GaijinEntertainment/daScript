@@ -2117,12 +2117,18 @@ namespace das
             }
         }
         // run init script and restart
-        if ( context.stack.size() ) {
-            context.runInitScript();
-        } else {
-            StackAllocator stack(16*1024);
-            SharedStackGuard guard(context, stack);
-            context.runInitScript();
+        if (!context.runWithCatch([&]() {
+            if (context.stack.size()) {
+                context.runInitScript();
+            }
+            else {
+                StackAllocator stack(16 * 1024);
+                SharedStackGuard guard(context, stack);
+                context.runInitScript();
+            }
+        })) {
+            string exc = context.getException();
+            error("exception during init script\n" + exc, LineInfo(), CompilationError::cant_initialize);
         }
         context.restart();
         if (options.getBoolOption("log_mem",false)) {
