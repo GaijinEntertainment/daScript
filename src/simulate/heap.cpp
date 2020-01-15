@@ -64,15 +64,17 @@ namespace das {
                 const auto & page = book.pages[i];
                 if ( page.total ) {
                     tout << "\tpage " << i << ": " << page.total << " of " << page.offset << " bytes\n";
-                    char * ch = book.data + i*book.pageSize;
-                    char * che = ch + page.offset;
-                    while ( ch != che ) {
+                    uint32_t dofs = 0;
+                    while ( dofs != page.offset ) {
+                        char * ch = book.data + i*book.pageSize + dofs;
                         auto header = (StringHeader *) ch;
                         ch += sizeof(StringHeader);
                         tout << "\t\t" << header->length << "\t" << HEX << header->hash << DEC
                             << "\t" << presentStr(buf,ch,32) << "\n";
-                        ch += header->length + 1;
-                        DAS_ASSERT(ch <= che);
+                        uint32_t bytes = sizeof(StringHeader) + header->length + 1;
+                        bytes = (bytes + alignMask) & ~alignMask;
+                        dofs += bytes;
+                        DAS_ASSERT(dofs <= page.offset);
                     }
                 } else {
                     tout << "\tpage " << i << ": empty\n";
