@@ -99,10 +99,14 @@ namespace das {
                           vector<string> & missing,
                           vector<string> & circular,
                           das_set<string> & dependencies,
-                          ModuleGroup & libGroup) {
+                          ModuleGroup & libGroup,
+                          TextWriter & log,
+                          int tab ) {
         if ( auto fi = access->getFileInfo(fileName) ) {
+            log << string(tab,'\t') << "in " << fileName << "\n";
             vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
             for ( auto & mod : ownReq ) {
+                log << string(tab,'\t') << "require " << mod << "\n";
                 auto module = Module::require(mod); // try native with that name
                 if ( !module ) {
                     auto it_r = find_if(req.begin(), req.end(), [&] ( const pair<string,string> & reqM ) {
@@ -111,6 +115,7 @@ namespace das {
                     if ( it_r==req.end() ) {
                         if ( dependencies.find(mod) != dependencies.end() ) {
                             // circular dependency
+                            log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
                             circular.push_back(mod);
                             return false;
                         }
@@ -119,20 +124,26 @@ namespace das {
                         auto info = access->getModuleInfo(mod, fileName);
                         if ( info.first.empty() ) {
                             // request can't be translated to module name
+                            log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
                             missing.push_back(mod);
                             return false;
                         }
-                        if ( !getPrerequisits(info.second, access, req, missing, circular, dependencies, libGroup) ) {
+                        if ( !getPrerequisits(info.second, access, req, missing, circular, dependencies, libGroup, log, tab + 1) ) {
                             return false;
                         }
+                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok, new module\n";
                         req.push_back(info);
+                    } else {
+                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
                     }
                 } else {
+                    log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
                     libGroup.addModule(module);
                 }
             }
             return true;
         } else {
+            log << string(tab,'\t') << "in " << fileName << " - NOT FOUND\n";
             missing.push_back(fileName);
             return false;
         }
@@ -226,7 +237,8 @@ namespace das {
         vector<pair<string,string>> req;
         vector<string> missing, circular;
         das_set<string> dependencies;
-        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup) ) {
+        TextWriter tw;
+        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, tw, 1) ) {
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod.first) ) {
                     auto program = parseDaScript(mod.second, access, logs, libGroup, true, policies);
@@ -252,14 +264,15 @@ namespace das {
             auto program = make_shared<Program>();
             program->policies = policies;
             program->thisModuleGroup = &libGroup;
+            TextWriter err;
             for ( auto & mis : missing ) {
-                program->error("missing prerequisit " + mis, LineInfo(),
-                               CompilationError:: module_not_found);
+                err << "missing prerequisit " << mis << "\n";
             }
             for ( auto & mis : circular ) {
-                program->error("circular dependency " + mis, LineInfo(),
-                               CompilationError:: module_not_found);
+                err << "circular dependency " << mis << "\n";
             }
+            program->error(err.str()  + "module dependency graph:\n" + tw.str(), LineInfo(), 
+                            CompilationError::module_not_found);
             return program;
         }
     }
