@@ -4,7 +4,8 @@
 
 // this is pretty much original code, with prime hash policy removed, and faster log2
 // this also relies on das:: to hold all necessary std:: definitions, so its stl agnostic
-// and can use EASTL instead
+// and can use EASTL instead. namespace has been renamed to das_ska, to avoild collisions
+// with other ska implementations in the projects
 
 #pragma once
 
@@ -14,7 +15,7 @@
 #define SKA_NOINLINE(...) __VA_ARGS__ __attribute__((noinline))
 #endif
 
-namespace ska
+namespace das_ska
 {
 struct power_of_two_hash_policy;
 struct fibonacci_hash_policy;
@@ -1152,7 +1153,7 @@ public:
 template<typename T>
 struct power_of_two_std_hash : das::hash<T>
 {
-    typedef ska::power_of_two_hash_policy hash_policy;
+    typedef das_ska::power_of_two_hash_policy hash_policy;
 };
 
 } // end namespace ska

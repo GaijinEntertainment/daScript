@@ -25,13 +25,13 @@ namespace das {using namespace std;}
 #include <ska/flat_hash_map.hpp>
 namespace das {
 template <typename K, typename V>
-using das_map = ska::flat_hash_map<K,V>;
+using das_map = das_ska::flat_hash_map<K,V>;
 template <typename K>
-using das_set = ska::flat_hash_set<K>;
+using das_set = das_ska::flat_hash_set<K>;
 template <typename K, typename V>
-using das_hash_map = ska::flat_hash_map<K,V>;
+using das_hash_map = das_ska::flat_hash_map<K,V>;
 template <typename K>
-using das_hash_set = ska::flat_hash_set<K>;
+using das_hash_set = das_ska::flat_hash_set<K>;
 template <typename K, typename V>
 using das_safe_map = std::map<K,V>;
 }
