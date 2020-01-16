@@ -254,8 +254,8 @@ namespace das {
             , ctx(prog->getContextStackSize()) {
         }
     protected:
-        Context         ctx;
         ProgramPtr      program;
+        Context         ctx;
     protected:
         vec4f eval ( Expression * expr, bool & failed );
         ExpressionPtr evalAndFold ( Expression * expr );
