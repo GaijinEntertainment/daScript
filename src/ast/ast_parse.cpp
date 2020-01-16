@@ -131,7 +131,7 @@ namespace das {
                         if ( !getPrerequisits(info.second, access, req, missing, circular, dependencies, libGroup, log, tab + 1) ) {
                             return false;
                         }
-                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok, new module\n";
+                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok, new module " << info.first << " at " << info.second << "\n";
                         req.push_back(info);
                     } else {
                         log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
@@ -259,7 +259,11 @@ namespace das {
                     }, "*");
                 }
             }
-            return parseDaScript(fileName, access, logs, libGroup, exportAll, policies);
+            auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, policies);
+            if ( res->options.getBoolOption("log_require",true) ) {
+                logs << "module dependency graph:\n" << tw.str();
+            }
+            return res;
         } else {
             auto program = make_shared<Program>();
             program->policies = policies;
