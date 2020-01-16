@@ -1227,7 +1227,7 @@ namespace das {
                 error("unresolved generics are not supported", var->at, CompilationError::cant_infer_generic );
             }
             if ( var->type->ref && var->type->isRefType() ) {
-                error("can't pass boxed type by reference",var->at,CompilationError::invalid_argument_type);
+                error("can't pass boxed type by reference\n\tremove & from the type declaration",var->at,CompilationError::invalid_argument_type);
             }
             verifyType(var->type);
             return Visitor::visitArgument(fn, var, lastArg);
@@ -2408,7 +2408,7 @@ namespace das {
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
             if ( var->type->ref && var->type->isRefType() ) {
-                error("can't pass boxed type by reference",var->at,CompilationError::invalid_argument_type);
+                error("can't pass boxed type by reference\n\tremove & from the type declaration",var->at,CompilationError::invalid_argument_type);
             }
             verifyType(var->type);
         }

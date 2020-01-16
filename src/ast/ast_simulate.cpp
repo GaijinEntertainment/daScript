@@ -2120,9 +2120,9 @@ namespace das
         if (!context.runWithCatch([&]() {
             if (context.stack.size()) {
                 context.runInitScript();
-            }
-            else {
-                StackAllocator stack(getContextStackSize());
+            } else {
+                auto ssz = getContextStackSize();
+                StackAllocator stack(ssz ? ssz : 16384);    // at least some stack
                 SharedStackGuard guard(context, stack);
                 context.runInitScript();
             }

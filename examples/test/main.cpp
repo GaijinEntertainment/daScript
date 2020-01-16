@@ -97,7 +97,7 @@ bool unit_test ( const string & fn, bool useAot ) {
             }
             return false;
         } else {
-            Context ctx(program->policies.stack);
+            Context ctx(program->getContextStackSize());
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
@@ -151,7 +151,7 @@ bool exception_test ( const string & fn, bool useAot ) {
             }
             return false;
         } else {
-            Context ctx(program->policies.stack);
+            Context ctx(program->getContextStackSize());
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
@@ -248,7 +248,7 @@ bool run_module_test ( const string & path, const string & main, bool usePak ) {
             }
             return false;
         } else {
-            Context ctx(program->policies.stack);
+            Context ctx(program->getContextStackSize());
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {

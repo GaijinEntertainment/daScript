@@ -3,6 +3,9 @@
 
 using namespace das;
 
+void require_project_specific_modules();//link time resolved dependencies
+das::FileAccessPtr get_file_access();//link time resolved dependencies
+
 #if !defined(DAS_GLOBAL_NEW) && defined(_MSC_VER) && !defined(_WIN64)
 
 void * operator new(std::size_t n) throw(std::bad_alloc)
@@ -34,7 +37,7 @@ bool saveToFile ( const string & fname, const string & str ) {
 }
 
 bool compile ( const string & fn, const string & cppFn ) {
-    auto access = make_shared<FsFileAccess>();
+    auto access = get_file_access();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {
@@ -151,8 +154,6 @@ bool compile ( const string & fn, const string & cppFn ) {
         return false;
     }
 }
-
-void require_project_specific_modules();//link time resolved dependencies
 
 #ifndef MAIN_FUNC_NAME
   #define MAIN_FUNC_NAME main
