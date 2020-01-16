@@ -84,7 +84,7 @@ namespace das {
         if ( !bigStuff.empty() ) {
             tout << "big stuff:\n";
             for ( auto it : bigStuff ) {
-                char * ch = it.first;
+                char * ch = (char *)it.first;
                 auto header = (StringHeader *) ch;
                 ch += sizeof(StringHeader);
                 strncpy(buf,ch,32);
