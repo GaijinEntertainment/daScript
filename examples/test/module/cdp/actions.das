@@ -1,5 +1,3 @@
-require jsonrpc
-require logger
 require common.metalink
 require common.action_utils
 
