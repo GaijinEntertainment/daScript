@@ -312,15 +312,13 @@ int main() {
     return 0;
 #endif
     bool ok = true;
-    /*
     ok = run_compilation_fail_tests(TEST_PATH "examples/test/compilation_fail_tests") && ok;
     ok = run_unit_tests(TEST_PATH "examples/test/unit_tests") && ok;
     ok = run_unit_tests(TEST_PATH "examples/test/optimizations") && ok;
     ok = run_exception_tests(TEST_PATH "examples/test/runtime_errors") && ok;
     ok = run_module_test(TEST_PATH "examples/test/module", "main.das", true) && ok;
     ok = run_module_test(TEST_PATH "examples/test/module", "main_default.das", false) && ok;
-    */
-    ok = run_module_test(TEST_PATH "examples/test/module/cdp", "main.das", false) && ok;
+    ok = run_module_test(TEST_PATH "examples/test/module/cdp", "main.das", true) && ok;
     tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown
     Module::Shutdown();

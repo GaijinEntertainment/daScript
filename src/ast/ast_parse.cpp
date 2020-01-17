@@ -109,6 +109,11 @@ namespace das {
                 log << string(tab,'\t') << "require " << mod << "\n";
                 auto module = Module::require(mod); // try native with that name
                 if ( !module ) {
+                    auto info = access->getModuleInfo(mod, fileName);
+                    if ( !info.first.empty() ) {
+                        mod = info.first;
+                        log << string(tab,'\t') << " resolved as " << mod << "\n";
+                    }
                     auto it_r = find_if(req.begin(), req.end(), [&] ( const pair<string,string> & reqM ) {
                         return reqM.first == mod;
                     });
@@ -121,7 +126,6 @@ namespace das {
                         }
                         dependencies.insert(mod);
                         // module file name
-                        auto info = access->getModuleInfo(mod, fileName);
                         if ( info.first.empty() ) {
                             // request can't be translated to module name
                             log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
@@ -260,7 +264,7 @@ namespace das {
                 }
             }
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, policies);
-            if ( res->options.getBoolOption("log_require",true) ) {
+            if ( res->options.getBoolOption("log_require",false) ) {
                 logs << "module dependency graph:\n" << tw.str();
             }
             return res;
