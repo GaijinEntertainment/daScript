@@ -743,10 +743,12 @@ namespace das
 
     struct ExprTypeInfo : Expression {
         ExprTypeInfo () = default;
-        ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s, const string & stt="" )
-            : Expression(a), trait(tr), subexpr(s), subtrait(stt) {}
-        ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d, const string & stt="" )
-            : Expression(a), trait(tr), typeexpr(d), subtrait(stt) {}
+        ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s,
+                      const string & stt="", const string & ett="" )
+            : Expression(a), trait(tr), subexpr(s), subtrait(stt), extratrait(ett) {}
+        ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d,
+                      const string & stt="", const string & ett="" )
+            : Expression(a), trait(tr), typeexpr(d), subtrait(stt), extratrait(ett) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
@@ -754,6 +756,7 @@ namespace das
         ExpressionPtr   subexpr;
         TypeDeclPtr     typeexpr;
         string          subtrait;
+        string          extratrait;
     };
 
     struct ExprIs : Expression {

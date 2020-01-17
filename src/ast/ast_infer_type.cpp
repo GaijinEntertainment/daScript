@@ -1966,17 +1966,6 @@ namespace das {
                 } else if ( expr->trait=="can_move" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
-                } else if ( expr->trait=="struct_has_annotation" ) {
-                    reportGenericInfer();
-                    if (!expr->typeexpr->isStructure())
-                        return make_shared<ExprConstBool>(expr->at, false);
-                    else
-                    {
-                      return make_shared<ExprConstBool>(expr->at,
-                        find_if(expr->typeexpr->structType->annotations.begin(), expr->typeexpr->structType->annotations.end(),
-                               [&](auto &an){return an->annotation->describe() == expr->subtrait;}) != expr->typeexpr->structType->annotations.end()
-                        );
-                    }
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportGenericInfer();
@@ -1993,6 +1982,99 @@ namespace das {
                                   + "> ...) is only defined for structures and handled types, "
                                     + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
                         }
+                    }
+                } else if ( expr->trait=="struct_has_annotation" || expr->trait=="struct_safe_has_annotation" ) {
+                    if ( expr->typeexpr->isStructure() ) {
+                        reportGenericInfer();
+                        const auto & ann = expr->typeexpr->structType->annotations;
+                        auto it = find_if ( ann.begin(), ann.end(), [&](const AnnotationDeclarationPtr & pa){
+                            return pa->annotation->name == expr->subtrait;
+                        });
+                        return make_shared<ExprConstBool>(expr->at, it!=ann.end());
+                    } else {
+                        if ( expr->trait=="struct_safe_has_annotation" ) {
+                            return make_shared<ExprConstBool>(expr->at, false);
+                        } else {
+                            error("typeinfo(struct_has_annotation<" + expr->subtrait
+                                  + "> ...) is only defined for structures, "
+                                    + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
+                        }
+                    }
+                } else if ( expr->trait=="struct_has_annotation_argument" || expr->trait=="struct_safe_has_annotation_argument" ) {
+                    if ( expr->typeexpr->isStructure() ) {
+                        const auto & ann = expr->typeexpr->structType->annotations;
+                        auto it = find_if ( ann.begin(), ann.end(), [&](const AnnotationDeclarationPtr & pa){
+                            return pa->annotation->name == expr->subtrait;
+                        });
+                        if ( it == ann.end() ) {
+                            if ( expr->trait=="struct_safe_has_annotation_argument" ) {
+                                return make_shared<ExprConstBool>(expr->at, false);
+                            } else {
+                                error("typeinfo(struct_has_annotation_argument<" + expr->subtrait
+                                      + ";"  + expr->extratrait + "> ...) annotation not found ",
+                                      expr->at, CompilationError::typeinfo_undefined);
+                            }
+                        } else {
+                            reportGenericInfer();
+                            const auto & args = (*it)->arguments;
+                            auto ita = find_if ( args.begin(), args.end(), [&](const AnnotationArgument & arg){
+                                return arg.name == expr->extratrait;
+                            });
+                            return make_shared<ExprConstBool>(expr->at, ita!=args.end());
+                        }
+                    } else {
+                        if ( expr->trait=="struct_safe_has_annotation_argument" ) {
+                            return make_shared<ExprConstBool>(expr->at, false);
+                        } else {
+                            error("typeinfo(struct_has_annotation_argument<" + expr->subtrait
+                                  + "> ...) is only defined for structures, "
+                                    + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
+                        }
+                    }
+                } else if ( expr->trait=="struct_get_annotation_argument" ) {
+                    if ( expr->typeexpr->isStructure() ) {
+                        const auto & ann = expr->typeexpr->structType->annotations;
+                        auto it = find_if ( ann.begin(), ann.end(), [&](const AnnotationDeclarationPtr & pa){
+                            return pa->annotation->name == expr->subtrait;
+                        });
+                        if ( it == ann.end() ) {
+                                error("typeinfo(struct_get_annotation_argument<" + expr->subtrait
+                                      + ";"  + expr->extratrait + "> ...) annotation not found ",
+                                  expr->at, CompilationError::typeinfo_undefined);
+                        } else {
+                            const auto & args = (*it)->arguments;
+                            auto ita = find_if ( args.begin(), args.end(), [&](const AnnotationArgument & arg){
+                                return arg.name == expr->extratrait;
+                            });
+                            if ( ita == args.end() ) {
+                                error("typeinfo(struct_get_annotation_argument<" + expr->subtrait
+                                      + ";"  + expr->extratrait + "> ...) annotation argument not found ",
+                                  expr->at, CompilationError::typeinfo_undefined);
+                            } else {
+                                switch ( ita->type ) {
+                                    case Type::tBool:
+                                        reportGenericInfer();
+                                        return make_shared<ExprConstBool>(expr->at, ita->bValue);
+                                    case Type::tInt:
+                                        reportGenericInfer();
+                                        return make_shared<ExprConstInt>(expr->at, ita->iValue);
+                                    case Type::tFloat:
+                                        reportGenericInfer();
+                                        return make_shared<ExprConstFloat>(expr->at, ita->fValue);
+                                    case Type::tString:
+                                        reportGenericInfer();
+                                        return make_shared<ExprConstString>(expr->at, ita->sValue);
+                                    default:
+                                        error("typeinfo(struct_get_annotation_argument<" + expr->subtrait
+                                              + ";"  + expr->extratrait + "> ...) unsupported annotation argument type ",
+                                          expr->at, CompilationError::typeinfo_undefined);
+                                }
+                            }
+                        }
+                    } else {
+                        error("typeinfo(struct_get_annotation_argument<" + expr->subtrait
+                              + "> ...) is only defined for structures, "
+                                + expr->typeexpr->describe(), expr->at, CompilationError::typeinfo_undefined);
                     }
                 } else if ( expr->trait=="offsetof" ) {
                     if ( expr->typeexpr->isStructure() ) {

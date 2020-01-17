@@ -1027,14 +1027,26 @@ expr_type_info
             delete $trait;
             delete $subtrait;
     }
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' expr[subexpr] ')' {
+            $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr),*$subtrait,*$extratrait);
+            delete $trait;
+            delete $subtrait;
+            delete $extratrait;
+    }
     |   DAS_TYPEINFO[loc] '(' NAME[trait] DAS_TYPE type_declaration[decl] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl));
             delete $trait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>'DAS_TYPE type_declaration[decl] ')' {
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' DAS_TYPE type_declaration[decl] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait);
             delete $trait;
             delete $subtrait;
+    }
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' DAS_TYPE type_declaration[decl] ')' {
+            $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait,*$extratrait);
+            delete $trait;
+            delete $subtrait;
+            delete $extratrait;
     }
     ;
 

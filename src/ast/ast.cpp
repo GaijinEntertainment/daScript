@@ -809,6 +809,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->trait = trait;
         cexpr->subtrait = subtrait;
+        cexpr->extratrait = extratrait;
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         if ( typeexpr )
