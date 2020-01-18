@@ -79,11 +79,13 @@ namespace das {
             if ( program ) {
                 printRef = program->options.getBoolOption("print_ref");
                 printVarAccess = program->options.getBoolOption("print_var_access");
+                printCStyle = program->options.getBoolOption("print_c_style");
             }
         }
         string str() const { return ss.str(); };
         bool printRef = true;
         bool printVarAccess = true;
+        bool printCStyle = false;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -277,10 +279,11 @@ namespace das {
     // block
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockExpression(block, expr);
-            if ( !block->isClosure ) ss << string(tab,'\t');
+            ss << string(tab,'\t');
         }
         virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * that ) override {
-            if ( block->isClosure ) ss << ";"; else newLine();
+            if ( printCStyle || block->isClosure ) ss << ";";
+            newLine();
             return Visitor::visitBlockExpression(block, that);
         }
         virtual void preVisit ( ExprBlock * block ) override {
@@ -297,30 +300,32 @@ namespace das {
                     if ( block->returnType ) {
                         ss << ":" << block->returnType->describe();
                     }
+                    ss << "\n";
                 }
-                ss << "{";
-            } else {
-                tab ++;
             }
+            if ( printCStyle || block->isClosure ) ss << string(tab,'\t') << "{\n";
+            tab ++;
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            if ( block->isClosure ) ss << "}"; else tab --;
+            tab --;
+            if ( printCStyle || block->isClosure ) ss << string(tab,'\t') << "}";
             return Visitor::visit(block);
         }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);
-            if ( block->isClosure ) {
-                ss << "} finally {";
+            if ( printCStyle || block->isClosure ) {
+                ss << string(tab-1,'\t') << "} finally {\n";
             } else {
                 ss << string(tab-1,'\t') << "finally\n";
             }
         }
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockFinalExpression(block, expr);
-            if ( !block->isClosure ) ss << string(tab,'\t');
+            ss << string(tab,'\t');
         }
         virtual ExpressionPtr visitBlockFinalExpression ( ExprBlock * block, Expression * that ) override {
-            if ( block->isClosure ) ss << ";"; else newLine();
+            if ( printCStyle || block->isClosure ) ss << ";";
+            newLine();
             return Visitor::visitBlockFinalExpression(block, that);
         }
     // string builder

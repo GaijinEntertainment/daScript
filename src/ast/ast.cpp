@@ -917,6 +917,42 @@ namespace das {
 
     // ExprBlock
 
+    bool ExprBlock::collapse() {
+        bool any = false;
+        if ( !list.empty() ) {
+            vector<ExpressionPtr> lst;
+            collapse(lst, list);
+            if ( lst != list ) {
+                swap ( list, lst );
+                any = true;
+            }
+        }
+        if ( !finalList.empty() ) {
+            vector<ExpressionPtr> flst;
+            collapse(flst, finalList);
+            if ( flst != finalList ) {
+                swap ( finalList, flst );
+                any = true;
+            }
+        }
+        return any;
+    }
+
+    void ExprBlock::collapse ( vector<ExpressionPtr> & res, const vector<ExpressionPtr> & lst ) {
+        for ( const auto & ex :lst ) {
+            if ( ex->rtti_isBlock() ) {
+                auto blk = static_pointer_cast<ExprBlock>(ex);
+                if ( blk->isCollapseable && blk->finalList.empty() ) {
+                    collapse(res, blk->list);
+                } else {
+                    res.push_back(ex);
+                }
+            } else {
+                res.push_back(ex);
+            }
+        }
+    }
+
     string ExprBlock::getMangledName(bool includeName, bool includeResult) const {
         TextWriter ss;
         if ( includeResult ) {

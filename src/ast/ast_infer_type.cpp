@@ -2557,6 +2557,10 @@ namespace das {
                     verifyType(block->returnType);
                 }
             }
+            if ( block->needCollapse ) {
+                block->needCollapse = false;
+                if ( block->collapse() ) reportGenericInfer();
+            }
             return Visitor::visit(block);
         }
     // Swizzle
@@ -3169,6 +3173,7 @@ namespace das {
                 //  label X
                 auto LabelX = func->totalGenLabel ++;
                 auto blk = make_shared<ExprBlock>();
+                blk->isCollapseable = true;
                 blk->at = expr->at;
                 if ( expr->moveSemantics ) {
                     // result <- a
@@ -3194,6 +3199,7 @@ namespace das {
                 blk->list.push_back(rex);
                 auto lbx = make_shared<ExprLabel>(expr->at, LabelX);
                 blk->list.push_back(lbx);
+                scopes.back()->needCollapse = true;
                 reportGenericInfer();
                 return blk;
             }
@@ -3530,6 +3536,12 @@ namespace das {
                 return Visitor::visit(expr);
             }
             if ( func && func->generator ) {
+                // only topmost
+                //  which in case of generator is 2, due to
+                //  def GENERATOR { with LAMBDA { ...collapse here... } }
+                if ( !blocks.empty() || scopes.size()!=2 ) {
+                    return Visitor::visit(expr);
+                }
                 for ( auto & var : expr->variables ) {
                     if ( !isFullySealedType(var->type) ) {
                         error("type not ready yet", var->at);
@@ -3538,6 +3550,7 @@ namespace das {
                 }
                 auto blk = make_shared<ExprBlock>();
                 blk->at = expr->at;
+                blk->isCollapseable = true;
                 auto capture = func->arguments[0]->type->structType;
                 DAS_ASSERT(capture && "generator first argument is lambda capture");
                 for ( auto & var : expr->variables ) {
@@ -3582,6 +3595,7 @@ namespace das {
                         blk->list.push_back(mz);
                     }
                 }
+                scopes.back()->needCollapse = true;
                 reportGenericInfer();
                 return blk;
             }

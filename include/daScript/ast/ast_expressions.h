@@ -123,6 +123,8 @@ namespace das
         void simulateBlock ( Context & context, SimNode_Block * sim ) const;
         void simulateLabels ( Context & context, SimNode_Block * sim, const das_map<int32_t,uint32_t> & ofsmap ) const;
         string getMangledName(bool includeName = false, bool includeResult = false) const;
+        bool collapse();
+        static void collapse ( vector<ExpressionPtr> & res, const vector<ExpressionPtr> & lst );
         TypeDeclPtr makeBlockType () const;
         vector<ExpressionPtr>   list;
         vector<ExpressionPtr>   finalList;
@@ -144,6 +146,8 @@ namespace das
                 bool            finallyDisabled : 1;
                 bool            aotSkipMakeBlock : 1;
                 bool            aotDoNotSkipAnnotationData : 1;
+                bool            isCollapseable : 1;         // generated block which needs to be flattened
+                bool            needCollapse : 1;           // if this block needs collapse at all
             };
             uint32_t            blockFlags = 0;
         };

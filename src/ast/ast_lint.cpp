@@ -222,6 +222,7 @@ namespace das {
         "log_ad_hash",                  Type::tBool,
         "print_ref",                    Type::tBool,
         "print_var_access",             Type::tBool,
+        "print_c_style",                Type::tBool,
     // rtti
         "rtti",                         Type::tBool,
     // optimization
