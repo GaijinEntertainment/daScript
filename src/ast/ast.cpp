@@ -510,7 +510,9 @@ namespace das {
         auto cexpr = clonePtr<ExprGoto>(expr);
         Expression::clone(cexpr);
         cexpr->label = label;
-        cexpr->subexpr = subexpr->clone();
+        if ( subexpr ) {
+            cexpr->subexpr = subexpr->clone();
+        }
         return cexpr;
     }
 
@@ -1338,6 +1340,7 @@ namespace das {
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         cexpr->moveSemantics = moveSemantics;
+        cexpr->fromYield = fromYield;
         return cexpr;
     }
 

@@ -763,6 +763,7 @@ namespace das {
         virtual void preVisit ( ExprReturn * expr ) override {
             Visitor::preVisit(expr);
             ss << "return ";
+            if ( expr->fromYield ) ss << "/*yield*/ ";
             if ( expr->moveSemantics ) ss << "<- ";
         }
     // yield

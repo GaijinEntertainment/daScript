@@ -365,7 +365,11 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForReturn; }
+        virtual uint32_t getEvalFlags() const override {
+            uint32_t ef = EvalFlags::stopForReturn;
+            if ( fromYield ) ef |= EvalFlags::yield;
+            return ef;
+        }
         virtual bool rtti_isReturn() const override { return true; }
         ExpressionPtr subexpr;
         union {
@@ -376,6 +380,7 @@ namespace das
                 bool takeOverRightStack : 1;
                 bool returnCallCMRES    : 1;
                 bool returnCMRES        : 1;
+                bool fromYield          : 1;
             };
             uint32_t    returnFlags = 0;
         };
@@ -637,6 +642,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual uint32_t getEvalFlags() const override { return EvalFlags::yield; }
         ExpressionPtr subexpr;
         union {
             struct {

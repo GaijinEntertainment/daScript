@@ -73,5 +73,11 @@ namespace das {
             deref(blah)
      */
     void replaceRef2Ptr ( const ExpressionPtr & expr, const string & name );
+
+    /*
+        give variables in the scope of 'expr' block unique names
+        only for the top-level block
+     */
+    void giveBlockVariablesUniqueNames  ( const ExpressionPtr & expr );
 }
 

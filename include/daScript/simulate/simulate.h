@@ -109,6 +109,7 @@ namespace das
     ,   stopForReturn       = 1 << 1
     ,   stopForContinue     = 1 << 2
     ,   jumpToLabel         = 1 << 3
+    ,   yield               = 1 << 4
     };
 
 #define DAS_PROCESS_LOOP_FLAGS(howtocontinue) \

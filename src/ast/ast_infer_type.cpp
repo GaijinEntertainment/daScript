@@ -3161,11 +3161,8 @@ namespace das {
                           expr->at, CompilationError::invalid_yield );
                 }
                 if ( !expr->subexpr->type ) return Visitor::visit(expr);
-
                 const auto & yarg = func->arguments[1];
-
                 // TODO: verify yield type so that error is 'yield' error, not copy or move error
-
                 // now, replace yield A with
                 //  result = A
                 //  __yield = X
@@ -3196,6 +3193,7 @@ namespace das {
                 // return true
                 auto btr = make_shared<ExprConstBool>(expr->at, true);
                 auto rex = make_shared<ExprReturn>(expr->at, btr);
+                rex->fromYield = true;
                 blk->list.push_back(rex);
                 auto lbx = make_shared<ExprLabel>(expr->at, LabelX);
                 blk->list.push_back(lbx);
@@ -3251,7 +3249,6 @@ namespace das {
             }
             return nullptr;
         }
-
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( !expr->cond->type ) {
                 return Visitor::visit(expr);
@@ -3274,6 +3271,102 @@ namespace das {
                     } else {
                         return expr->if_false;
                     }
+                }
+            }
+            // now, to unwrap the generator
+            if ( func && func->generator ) {
+                // only topmost
+                //  which in case of generator is 2, due to
+                //  def GENERATOR { with LAMBDA { ...collapse here... } }
+                if ( !blocks.empty() || scopes.size()!=2 ) {
+                    return Visitor::visit(expr);
+                }
+                uint32_t tf = expr->if_true->getEvalFlags();
+                uint32_t ff = expr->if_false ? expr->if_false->getEvalFlags() : 0;
+                if ( (tf|ff) & EvalFlags::yield ) { // only unwrap if it has "yield"
+                    auto blk = make_shared<ExprBlock>();
+                    blk->at = expr->at;
+                    blk->isCollapseable = true;
+                    if ( expr->if_false ) {
+                        /*
+                         if ( !cond ) goto else_label;
+                         if_true;
+                         goto end_label;
+                         else_label:
+                         if_false;
+                         end_label:
+                         */
+                        auto else_label = func->totalGenLabel ++;
+                        auto end_label = func->totalGenLabel ++;
+                        auto gtel = make_shared<ExprGoto>(expr->at, else_label);
+                        auto btel = make_shared<ExprBlock>();
+                        btel->at = expr->at;
+                        btel->list.push_back(gtel);
+                        auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
+                        auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
+                        blk->list.push_back(ifnc);
+                        auto ift = expr->if_true->clone();
+                        if ( ift->rtti_isBlock() ){
+                            auto iftb = static_pointer_cast<ExprBlock>(ift);
+                            if ( !iftb->finalList.empty() ) {
+                                error("can't have final section in the if-then-else inside generator yet",
+                                      expr->at, CompilationError::invalid_yield);
+                                return Visitor::visit(expr);
+                            }
+                            iftb->isCollapseable = true;
+                            giveBlockVariablesUniqueNames(ift);
+                        }
+                        blk->list.push_back(ift);
+                        auto gten = make_shared<ExprGoto>(expr->at, end_label);
+                        blk->list.push_back(gten);
+                        auto elsel = make_shared<ExprLabel>(expr->at, else_label);
+                        blk->list.push_back(elsel);
+                        auto iff = expr->if_false->clone();
+                        if ( iff->rtti_isBlock() ){
+                            auto iffb = static_pointer_cast<ExprBlock>(iff);
+                            if ( !iffb->finalList.empty() ) {
+                                error("can't have final section in the if-then-else inside generator yet",
+                                      expr->at, CompilationError::invalid_yield);
+                                return Visitor::visit(expr);
+                            }
+                            iffb->isCollapseable = true;
+                            giveBlockVariablesUniqueNames(iff);
+                        }
+                        blk->list.push_back(iff);
+                        auto enddl = make_shared<ExprLabel>(expr->at, end_label);
+                        blk->list.push_back(enddl);
+                    } else {
+                        /*
+                         if ( !cond ) goto end_label;
+                         if_true;
+                         end_label:
+                         */
+                        auto end_label = func->totalGenLabel ++;
+                        auto gtel = make_shared<ExprGoto>(expr->at, end_label);
+                        auto btel = make_shared<ExprBlock>();
+                        btel->at = expr->at;
+                        btel->list.push_back(gtel);
+                        auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
+                        auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
+                        blk->list.push_back(ifnc);
+                        auto ift = expr->if_true->clone();
+                        if ( ift->rtti_isBlock() ){
+                            auto iftb = static_pointer_cast<ExprBlock>(ift);
+                            if ( !iftb->finalList.empty() ) {
+                                error("can't have final section in the if-then-else inside generator yet",
+                                      expr->at, CompilationError::invalid_yield);
+                                return Visitor::visit(expr);
+                            }
+                            iftb->isCollapseable = true;
+                            giveBlockVariablesUniqueNames(ift);
+                        }
+                        blk->list.push_back(ift);
+                        auto enddl = make_shared<ExprLabel>(expr->at, end_label);
+                        blk->list.push_back(enddl);
+                    }
+                    scopes.back()->needCollapse = true;
+                    reportGenericInfer();
+                    return blk;
                 }
             }
             return Visitor::visit(expr);

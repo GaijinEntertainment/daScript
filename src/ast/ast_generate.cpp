@@ -238,6 +238,45 @@ namespace das {
         return ExpressionPtr(asc);
     }
 
+    // rename variable to unique name variable
+
+    class RenameVar : public Visitor {
+    public:
+
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            scopes.push_back(block);
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            return Visitor::visit(block);
+        }
+        virtual void preVisit ( ExprLet * expr ) override {
+            Visitor::preVisit(expr);
+            if ( scopes.size()==1 ) {   // only top level block
+                for ( auto & var : expr->variables ) {
+                    string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
+                    rename[var->name] = newName;
+                    var->name = newName;
+                }
+            }
+        }
+        virtual void preVisit ( ExprVar * expr ) override {
+            if ( !scopes.size() ) return;
+            auto it = rename.find(expr->name);
+            if ( it != rename.end() ) {
+                expr->name = it->second;
+            }
+        }
+    protected:
+        vector<ExprBlock *> scopes;
+        das_map<string,string> rename;
+    };
+
+    void giveBlockVariablesUniqueNames  ( const ExpressionPtr & expr ) {
+        RenameVar rename;
+        expr->visit(rename);
+    }
+
     // replace ref to ptr
 
     class Ref2PtrVisitor : public Visitor {
