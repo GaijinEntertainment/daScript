@@ -79,5 +79,11 @@ namespace das {
         only for the top-level block
      */
     void giveBlockVariablesUniqueNames  ( const ExpressionPtr & expr );
+
+    /*
+        replace break and continue of a particular loop
+        with 'goto label bg' and 'goto label cg' accordingly
+     */
+    void replaceBreakAndContinue ( Expression * expr, int32_t bg, int32_t cg );
 }
 

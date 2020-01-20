@@ -6,20 +6,22 @@ options log = true
 def test
     let gen = generator() <| $(var a:int &) : bool
         var count = 0
-        var rcount : int & = count
-        yield rcount++
-        yield rcount++
-        if rcount > 0
-            var zount = count++
-            yield zount
-        if count < 0
-            var zount = rcount++
-            yield zount
-        else
-            yield -1
-        if count > 0
-            if count > 1
-                yield count
+        var total = 0
+        while count < 10
+            yield count ++
+            if count > 5
+                break
+            if count > 4
+                continue
+            var j = 0
+            while j < 3
+                yield 1000 + j++
+                var k = 0
+                while k < 2
+                    yield 2000 + j*10 + k++
+            total ++
+        finally
+            yield total
         return false
     print("gen = {gen}\n")
     for x in gen

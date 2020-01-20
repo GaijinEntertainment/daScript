@@ -3195,7 +3195,8 @@ namespace das {
                 auto rex = make_shared<ExprReturn>(expr->at, btr);
                 rex->fromYield = true;
                 blk->list.push_back(rex);
-                auto lbx = make_shared<ExprLabel>(expr->at, LabelX);
+                auto lbx = make_shared<ExprLabel>(expr->at, LabelX,
+                                                  "yield at line " + to_string(expr->at.line));
                 blk->list.push_back(lbx);
                 scopes.back()->needCollapse = true;
                 reportGenericInfer();
@@ -3278,7 +3279,7 @@ namespace das {
                 // only topmost
                 //  which in case of generator is 2, due to
                 //  def GENERATOR { with LAMBDA { ...collapse here... } }
-                if ( !blocks.empty() || scopes.size()!=2 ) {
+                if ( !blocks.empty() /* || scopes.size()!=2 */ ) {
                     return Visitor::visit(expr);
                 }
                 uint32_t tf = expr->if_true->getEvalFlags();
@@ -3319,7 +3320,8 @@ namespace das {
                         blk->list.push_back(ift);
                         auto gten = make_shared<ExprGoto>(expr->at, end_label);
                         blk->list.push_back(gten);
-                        auto elsel = make_shared<ExprLabel>(expr->at, else_label);
+                        auto elsel = make_shared<ExprLabel>(expr->at, else_label,
+                                                            "else if at line " + to_string(expr->at.line));
                         blk->list.push_back(elsel);
                         auto iff = expr->if_false->clone();
                         if ( iff->rtti_isBlock() ){
@@ -3333,7 +3335,8 @@ namespace das {
                             giveBlockVariablesUniqueNames(iff);
                         }
                         blk->list.push_back(iff);
-                        auto enddl = make_shared<ExprLabel>(expr->at, end_label);
+                        auto enddl = make_shared<ExprLabel>(expr->at, end_label,
+                                                            "end if at line " + to_string(expr->at.line));
                         blk->list.push_back(enddl);
                     } else {
                         /*
@@ -3361,7 +3364,8 @@ namespace das {
                             giveBlockVariablesUniqueNames(ift);
                         }
                         blk->list.push_back(ift);
-                        auto enddl = make_shared<ExprLabel>(expr->at, end_label);
+                        auto enddl = make_shared<ExprLabel>(expr->at, end_label,
+                                                            "end if at line " + to_string(expr->at.line));
                         blk->list.push_back(enddl);
                     }
                     scopes.back()->needCollapse = true;
@@ -3419,6 +3423,67 @@ namespace das {
             }
             if ( expr->cond->type->isRef() ) {
                 expr->cond = Expression::autoDereference(expr->cond);
+            }
+            // now, to unwrap the generator
+            if ( func && func->generator ) {
+                // only topmost
+                //  which in case of generator is 2, due to
+                //  def GENERATOR { with LAMBDA { ...collapse here... } }
+                if ( !blocks.empty() /* || scopes.size()!=2 */ ) {
+                    return Visitor::visit(expr);
+                }
+                uint32_t tf = expr->body->getEvalFlags();
+                if ( tf & EvalFlags::yield ) { // only unwrap if it has "yield"
+                    auto begin_loop_label = func->totalGenLabel ++;
+                    auto end_loop_label = func->totalGenLabel ++;
+                    shared_ptr<ExprBlock> bodyBlock;
+                    if ( expr->body->rtti_isBlock() ) {
+                        bodyBlock = static_pointer_cast<ExprBlock>(expr->body->clone());
+                        giveBlockVariablesUniqueNames(bodyBlock);
+                        replaceBreakAndContinue(bodyBlock.get(), end_loop_label, begin_loop_label);
+                    }
+                    /*
+                        label beginloop                 continue -> goto beginloop
+                        if ! cond goto endloop          break -> goto endloop
+                        body
+                        goto beginloop
+                        label endloop
+                        finally
+                    */
+                    auto blk = make_shared<ExprBlock>();
+                    blk->at = expr->at;
+                    blk->isCollapseable = true;
+                    auto bll = make_shared<ExprLabel>(expr->at, begin_loop_label,
+                                                      "begin while at line " + to_string(expr->at.line));
+                    blk->list.push_back(bll);
+                    auto gtel = make_shared<ExprGoto>(expr->at, end_loop_label);
+                    auto btel = make_shared<ExprBlock>();
+                    btel->at = expr->at;
+                    btel->list.push_back(gtel);
+                    auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
+                    auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
+                    blk->list.push_back(ifnc);
+                   if ( bodyBlock ) {
+                        for ( auto & bse : bodyBlock->list ) {
+                            blk->list.push_back(bse->clone());
+                        }
+                    } else {
+                        blk->list.push_back(expr->body->clone());
+                    }
+                    auto gbeg = make_shared<ExprGoto>(expr->at, begin_loop_label);
+                    blk->list.push_back(gbeg);
+                    auto ell = make_shared<ExprLabel>(expr->at, end_loop_label,
+                                                      "end while at line " + to_string(expr->at.line));
+                    blk->list.push_back(ell);
+                    if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
+                        for ( auto & fse : bodyBlock->finalList ) {
+                            blk->list.push_back(fse->clone());
+                        }
+                    }
+                    scopes.back()->needCollapse = true;
+                    reportGenericInfer();
+                    return blk;
+                }
             }
             return Visitor::visit(expr);
         }

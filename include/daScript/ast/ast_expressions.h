@@ -6,12 +6,14 @@ namespace das
 {
     struct ExprLabel : Expression {
         ExprLabel () = default;
-        ExprLabel ( const LineInfo & a, int32_t s ) : Expression(a), label(s) {}
+        ExprLabel ( const LineInfo & a, int32_t s, const string & cm = string() )
+            : Expression(a), label(s), comment(cm) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isLabel() const override { return true; }
         int32_t  label = -1;
+        string   comment;
     };
 
     struct ExprGoto : Expression {

@@ -242,12 +242,12 @@ namespace das {
 
     class RenameVar : public Visitor {
     public:
-
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
             scopes.push_back(block);
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            scopes.pop_back();
             return Visitor::visit(block);
         }
         virtual void preVisit ( ExprLet * expr ) override {
@@ -295,6 +295,48 @@ namespace das {
     void replaceRef2Ptr ( const ExpressionPtr & expr, const string & name ) {
         Ref2PtrVisitor r2ptr(name);
         expr->visit(r2ptr);
+    }
+
+    // replace break and continue with 'goto label' for the specific loop
+
+    class BreakAndContinueVisitor : public Visitor {
+    public:
+        BreakAndContinueVisitor ( int32_t bg, int32_t cg )
+            : breakGoto(bg), continueGoto(cg) {
+        }
+        virtual void preVisit ( ExprWhile * expr ) override {
+            Visitor::preVisit(expr);
+            depth ++;
+        }
+        virtual ExpressionPtr visit(ExprWhile *expr) override {
+            depth --;
+            return Visitor::visit(expr);
+        }
+        virtual void preVisit ( ExprFor * expr ) override {
+            Visitor::preVisit(expr);
+            depth ++;
+        }
+        virtual ExpressionPtr visit(ExprFor *expr) override {
+            depth --;
+            return Visitor::visit(expr);
+        }
+        virtual ExpressionPtr visit(ExprBreak *expr) override {
+            if ( depth ) return Visitor::visit(expr);
+            return make_shared<ExprGoto>(expr->at, breakGoto);
+        }
+        virtual ExpressionPtr visit(ExprContinue *expr) override {
+            if ( depth ) return Visitor::visit(expr);
+            return make_shared<ExprGoto>(expr->at, continueGoto);
+        }
+    protected:
+        int32_t breakGoto;
+        int32_t continueGoto;
+        int     depth = 0;
+    };
+
+    void replaceBreakAndContinue ( Expression * expr, int32_t bg, int32_t cg ) {
+        BreakAndContinueVisitor rbnc(bg, cg);
+        expr->visit(rbnc);
     }
 }
 

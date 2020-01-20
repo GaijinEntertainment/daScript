@@ -493,6 +493,7 @@ namespace das {
         auto cexpr = clonePtr<ExprLabel>(expr);
         Expression::clone(cexpr);
         cexpr->label = label;
+        cexpr->comment = comment;
         return cexpr;
     }
 
