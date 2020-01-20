@@ -254,9 +254,11 @@ namespace das {
             Visitor::preVisit(expr);
             if ( scopes.size()==1 ) {   // only top level block
                 for ( auto & var : expr->variables ) {
-                    string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
-                    rename[var->name] = newName;
-                    var->name = newName;
+                    if ( var->name[0]!='_' || var->name[1]!='_' ) {
+                        string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
+                        rename[var->name] = newName;
+                        var->name = newName;
+                    }
                 }
             }
         }
