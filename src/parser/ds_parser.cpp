@@ -3786,7 +3786,7 @@ yyreduce:
         pFor->iterators = *(yyvsp[-4].pNameList);
         delete (yyvsp[-4].pNameList);
         pFor->sources = sequenceToList((yyvsp[-2].pExpression));
-        pFor->subexpr = ExpressionPtr((yyvsp[0].pExpression));
+        pFor->body = ExpressionPtr((yyvsp[0].pExpression));
         ((ExprBlock *)(yyvsp[0].pExpression))->inTheLoop = true;
         (yyval.pExpression) = pFor;
     }

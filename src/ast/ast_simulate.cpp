@@ -1789,14 +1789,14 @@ namespace das
                 }
                 result->stackTop[t] = iteratorVariables[t]->stackTop;
             }
-            ExprWhile::simulateFinal(context, subexpr, result);
+            ExprWhile::simulateFinal(context, body, result);
             return result;
         } else {
-            auto flagsE = subexpr->getEvalFlags();
+            auto flagsE = body->getEvalFlags();
             bool NF = flagsE == 0;
             SimNode_ForBase * result;
-            assert(subexpr->rtti_isBlock() && "there would be internal error otherwise");
-            auto subB = static_pointer_cast<ExprBlock>(subexpr);
+            assert(body->rtti_isBlock() && "there would be internal error otherwise");
+            auto subB = static_pointer_cast<ExprBlock>(body);
             bool loop1 = (subB->list.size() == 1);
             if ( dynamicArrays ) {
                 if (loop1) {
@@ -1840,7 +1840,7 @@ namespace das
                 result->stackTop[t] = iteratorVariables[t]->stackTop;
             }
             result->size = fixedSize;
-            ExprWhile::simulateFinal(context, subexpr, result);
+            ExprWhile::simulateFinal(context, body, result);
             return result;
         }
     }

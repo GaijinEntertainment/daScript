@@ -561,7 +561,6 @@ namespace das
         static vector<SimNode *> simulateInit(Context & context, const ExprLet * pLet);
         virtual bool rtti_isLet() const override { return true; }
         vector<VariablePtr>     variables;
-        vector<bool>            inScopeVar;
         bool                    inScope = false;
     };
 
@@ -578,7 +577,7 @@ namespace das
         vector<string>          iterators;
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
-        ExpressionPtr           subexpr;
+        ExpressionPtr           body;
     };
 
     struct ExprWhile : Expression {

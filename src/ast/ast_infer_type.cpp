@@ -3553,6 +3553,197 @@ namespace das {
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             popVarStack();
             loop.pop_back();
+
+            /*
+             [unsafe]
+             def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
+                 var arr : array<TT delete const &>
+                 if typeinfo(is_ref type TT)
+                     var rkey : TT delete const &?
+                     var pkey : void? = reinterpret<void?>(addr(rkey))
+                     var loop = _builtin_iterator_first(it,pkey)
+                     while loop
+                         push(arr,deref(rkey))
+                         loop = _builtin_iterator_next(it,pkey)
+                     _builtin_iterator_close(it,pkey)
+                 else
+                     var rkey : TT
+                     var pkey : void? = reinterpret<void?>(addr(rkey))
+                     var loop = _builtin_iterator_first(it,pkey)
+                     while loop
+                         push(arr,rkey)
+                         loop = _builtin_iterator_next(it,pkey)
+                     _builtin_iterator_close(it,pkey)
+                 return <- arr
+             */
+
+            // now, to unwrap the generator
+            if ( func && func->generator ) {
+                // only fully resolved loop
+                if ( expr->sources.empty() ) {
+                    return Visitor::visit(expr);
+                } else if ( expr->iteratorVariables.size() != expr->sources.size() ) {
+                    return Visitor::visit(expr);
+                }
+                // only topmost
+                //  which in case of generator is 2, due to
+                //  def GENERATOR { with LAMBDA { ...collapse here... } }
+                if ( !blocks.empty() /* || scopes.size()!=2 */ ) {
+                    return Visitor::visit(expr);
+                }
+                uint32_t tf = expr->body->getEvalFlags();
+                if ( tf & EvalFlags::yield ) { // only unwrap if it has "yield"
+                    auto begin_loop_label = func->totalGenLabel ++;
+                    auto end_loop_label = func->totalGenLabel ++;
+                    shared_ptr<ExprBlock> bodyBlock;
+                    if ( expr->body->rtti_isBlock() ) {
+                        bodyBlock = static_pointer_cast<ExprBlock>(expr->body->clone());
+                        giveBlockVariablesUniqueNames(bodyBlock);
+                        replaceBreakAndContinue(bodyBlock.get(), end_loop_label, begin_loop_label);
+                    }
+                    /*
+                        loop = true
+                        loop &= _builtin_iterator_first(it0,src0)
+                         label beginloop
+                        if ! loop goto endloop
+                        body
+                        loop &= _builtin_iterator_next(it0,src0)
+                        goto beginloop
+                        label endloop
+                        finally
+                        _builtin_itersator_close(it0,src0) ...
+                    */
+                    auto blk = make_shared<ExprBlock>();
+                    blk->at = expr->at;
+                    blk->isCollapseable = true;
+                    auto gtel = make_shared<ExprGoto>(expr->at, end_loop_label);
+                    auto btel = make_shared<ExprBlock>();
+                    btel->at = expr->at;
+                    btel->list.push_back(gtel);
+
+                    // names
+                    string loopVar = "_loop_at_" + to_string(expr->at.line);
+                    vector<string> srcNames, pVarNames;
+                    for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+                        srcNames.push_back("_source_" + to_string(si) + "_at_" + to_string(expr->at.line));
+                        pVarNames.push_back("_pvar_" + to_string(si) + "_at_" + to_string(expr->at.line));
+                    }
+
+                    auto leqt = make_shared<ExprLet>();
+                    leqt->at = expr->at;
+                    auto lvar = make_shared<Variable>();
+                    lvar->at = expr->at;
+                    lvar->name = loopVar;
+                    lvar->type = make_shared<TypeDecl>(Type::tBool);
+                    lvar->init = make_shared<ExprConstBool>(expr->at, true);
+                    leqt->variables.push_back(lvar);
+                    blk->list.push_back(leqt);
+
+                    // sources
+                    for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+                        const string & srcName = srcNames[si];
+                        const string & pVarName = pVarNames[si];
+                        const string & srcVarName = expr->iterators[si];
+                        const auto & src = expr->sources[si];
+                        const auto & iterv = expr->iteratorVariables[si];
+                        // let src0 = each(blah) or let src0 = blah if its iterator
+                        auto seqt = make_shared<ExprLet>();
+                        seqt->at = expr->at;
+                        auto svar = make_shared<Variable>();
+                        svar->at = expr->at;
+                        svar->name = srcName;
+                        svar->type = make_shared<TypeDecl>(Type::autoinfer);
+                        auto ceach = make_shared<ExprCall>(expr->at, "each");
+                        ceach->arguments.push_back(src->clone());
+                        svar->init = ceach;
+                        seqt->variables.push_back(svar);
+                        blk->list.push_back(seqt);
+                        // let it0 : type_of_iterable
+                        auto srci = make_shared<ExprLet>();
+                        srci->at = expr->at;
+                        auto srcv = make_shared<Variable>();
+                        srcv->at = expr->at;
+                        srcv->name = srcVarName;
+                        srcv->type = make_shared<TypeDecl>(*iterv->type);   // todo: support ref \ pointer thing
+                        srcv->type->constant = false;
+                        srci->variables.push_back(srcv);
+                        blk->list.push_back(srci);
+                        // let pvar0 = reinterpret_cast<void?>(addr(it0))
+                        auto vit0 = make_shared<ExprVar>(expr->at, srcVarName);
+                        auto adri = make_shared<ExprRef2Ptr>(expr->at, vit0);
+                        auto pvoid = make_shared<TypeDecl>(Type::tPointer);
+                        pvoid->firstType = make_shared<TypeDecl>(Type::tVoid);
+                        auto rein = make_shared<ExprCast>(expr->at, adri, pvoid);
+                        rein->reinterpret = true;
+                        auto veqt = make_shared<ExprLet>();
+                        veqt->at = expr->at;
+                        auto vvar = make_shared<Variable>();
+                        vvar->at = expr->at;
+                        vvar->name = pVarName;
+                        vvar->type = make_shared<TypeDecl>(*pvoid);
+                        vvar->init = rein;
+                        veqt->variables.push_back(vvar);
+                        blk->list.push_back(veqt);
+                        // loop &= _builtin_iterator_first(it0,pvar0)
+                        auto cbif = make_shared<ExprCall>(expr->at, "_builtin_iterator_first");
+                        cbif->arguments.push_back(make_shared<ExprVar>(expr->at, srcName));
+                        cbif->arguments.push_back(make_shared<ExprVar>(expr->at, pVarName));
+                        auto lande = make_shared<ExprOp2>(expr->at,"&=",
+                            make_shared<ExprVar>(expr->at,loopVar),cbif);
+                        blk->list.push_back(lande);
+                    }
+
+                    auto bll = make_shared<ExprLabel>(expr->at, begin_loop_label,
+                                                      "begin for at line " + to_string(expr->at.line));
+                    blk->list.push_back(bll);
+
+                    auto ncnd = make_shared<ExprOp1>(expr->at, "!", make_shared<ExprVar>(expr->at,loopVar));
+                    auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
+                    blk->list.push_back(ifnc);
+                   if ( bodyBlock ) {
+                        for ( auto & bse : bodyBlock->list ) {
+                            blk->list.push_back(bse->clone());
+                        }
+                    } else {
+                        blk->list.push_back(expr->body->clone());
+                    }
+
+                    // loop &= _builtin_iterator_next(it0,pvar0)
+                    for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+                        const string & srcName = srcNames[si];
+                        const string & pVarName = pVarNames[si];
+                        auto cbif = make_shared<ExprCall>(expr->at, "_builtin_iterator_next");
+                        cbif->arguments.push_back(make_shared<ExprVar>(expr->at, srcName));
+                        cbif->arguments.push_back(make_shared<ExprVar>(expr->at, pVarName));
+                        auto lande = make_shared<ExprOp2>(expr->at,"&=",
+                            make_shared<ExprVar>(expr->at,loopVar),cbif);
+                        blk->list.push_back(lande);
+                    }
+
+                    auto gbeg = make_shared<ExprGoto>(expr->at, begin_loop_label);
+                    blk->list.push_back(gbeg);
+                    auto ell = make_shared<ExprLabel>(expr->at, end_loop_label,
+                                                      "end for at line " + to_string(expr->at.line));
+                    blk->list.push_back(ell);
+                    if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
+                        for ( auto & fse : bodyBlock->finalList ) {
+                            blk->list.push_back(fse->clone());
+                        }
+                    }
+                    // loop &= _builtin_iterator_close(it0,pvar0)
+                    for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+                        const string & srcName = srcNames[si];
+                        const string & pVarName = pVarNames[si];
+                        auto cbif = make_shared<ExprCall>(expr->at, "_builtin_iterator_close");
+                        cbif->arguments.push_back(make_shared<ExprVar>(expr->at, srcName));
+                        cbif->arguments.push_back(make_shared<ExprVar>(expr->at, pVarName));
+                        blk->list.push_back(cbif);
+                    }
+                    scopes.back()->needCollapse = true;
+                    reportGenericInfer();
+                    return blk;
+                }
+            }
             return Visitor::visit(expr);
         }
     // ExprLet

@@ -61,7 +61,7 @@ namespace das {
             pForBlock->list.push_back(pPush);
         }
         auto pFor = static_pointer_cast<ExprFor>(expr->exprFor->clone());
-      pFor->subexpr = pForBlock;
+      pFor->body = pForBlock;
         pClosure->list.push_back(pFor);
         // return temp
         auto pVal = make_shared<ExprVar>();

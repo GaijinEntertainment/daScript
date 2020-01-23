@@ -548,7 +548,7 @@ expression_for_loop
         pFor->iterators = *$iters;
         delete $iters;
         pFor->sources = sequenceToList($srcs);
-        pFor->subexpr = ExpressionPtr($block);
+        pFor->body = ExpressionPtr($block);
         ((ExprBlock *)$block)->inTheLoop = true;
         $$ = pFor;
     }

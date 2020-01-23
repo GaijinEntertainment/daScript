@@ -196,7 +196,7 @@ namespace das {
                 case Type::tIterator: {
                         auto ll = * ((Iterator **) pa);
                         beforeIterator(ll, info);
-                        ll->walk(*this);
+                        if ( ll ) ll->walk(*this);
                         afterIterator(ll, info);
                     }
                     break;

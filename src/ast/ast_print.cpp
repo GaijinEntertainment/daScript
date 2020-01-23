@@ -661,7 +661,14 @@ namespace das {
     // cast
         virtual void preVisit ( ExprCast * expr ) override {
             Visitor::preVisit(expr);
-            ss << (expr->upcast ? "upcast" : "cast") << "<" << expr->castType->describe() << "> ";
+            if ( expr->reinterpret ) {
+                ss << "reinterpret";
+            } else if ( expr->upcast ) {
+                ss << "upcast";
+            } else {
+                ss << "cast";
+            }
+            ss << "<" << expr->castType->describe() << "> ";
         }
     // ascend
         virtual void preVisit ( ExprAscend * expr ) override {

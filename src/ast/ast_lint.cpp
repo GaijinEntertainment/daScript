@@ -33,7 +33,7 @@ namespace das {
             return exprReturns(wh->body);
         } else if ( expr->rtti_isFor() ) {
             auto fr = static_pointer_cast<ExprFor>(expr);
-            return exprReturns(fr->subexpr);
+            return exprReturns(fr->body);
         }
         return false;
     }

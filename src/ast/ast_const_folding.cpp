@@ -478,8 +478,8 @@ namespace das {
             return Visitor::visitBlockExpression(block, expr);
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
-            if ( expr->subexpr->rtti_isBlock()) {
-                auto block = static_pointer_cast<ExprBlock>(expr->subexpr);
+            if ( expr->body->rtti_isBlock()) {
+                auto block = static_pointer_cast<ExprBlock>(expr->body);
                 if ( !block->list.size() && !block->finalList.size() ) {
                     bool noSideEffects = true;
                     for ( auto & src : expr->sources ) {

@@ -1455,9 +1455,9 @@ namespace das {
             src = vis.visitForSource(this, src.get(), src==sources.back());
         }
         vis.preVisitForStack(this);
-        if ( subexpr ) {
-            vis.preVisitForBody(this, subexpr.get());
-            subexpr = subexpr->visit(vis);
+        if ( body ) {
+            vis.preVisitForBody(this, body.get());
+            body = body->visit(vis);
         }
         return vis.visit(this);
     }
@@ -1470,8 +1470,8 @@ namespace das {
             cexpr->sources.push_back(src->clone());
         for ( auto & var : iteratorVariables )
             cexpr->iteratorVariables.push_back(var->clone());
-        if ( subexpr ) {
-            cexpr->subexpr = subexpr->clone();
+        if ( body ) {
+            cexpr->body = body->clone();
         }
         return cexpr;
     }
@@ -1486,7 +1486,7 @@ namespace das {
     }
 
     uint32_t ExprFor::getEvalFlags() const {
-        return subexpr->getEvalFlags() & ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+        return body->getEvalFlags() & ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
     }
 
     // ExprLet
