@@ -67,6 +67,13 @@ namespace das
         uint32_t    size;
         uint32_t    capacity;
         uint32_t    lock;
+        union {
+            struct {
+                bool    shared : 1;
+            };
+            uint32_t    flags;
+        };
+        __forceinline bool isLocked() const { return lock; }
     };
 
     class Context;

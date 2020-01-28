@@ -5,34 +5,31 @@
 namespace das
 {
     void table_clear ( Context & context, Table & arr ) {
-        if ( arr.lock ) {
-            context.throw_error("can't clear locked table");
-            return;
-        }
+        if ( arr.isLocked() ) context.throw_error("can't clear locked table");
         memset(arr.hashes, 0, arr.capacity * sizeof(uint32_t));
         arr.size = 0;
     }
 
     void table_lock ( Context & context, Table & arr ) {
+        if ( arr.shared ) return;
         arr.lock ++;
-        if ( arr.lock==0 ) {
-            context.throw_error("table lock overflow");
-        }
+        if ( arr.lock==0 ) context.throw_error("table lock overflow");
     }
 
     void table_unlock ( Context & context, Table & arr ) {
-        if ( arr.lock==0 ) {
-            context.throw_error("table lock underflow");
-        }
+        if ( arr.shared ) return;
+        if ( arr.lock==0 ) context.throw_error("table lock underflow");
         arr.lock --;
     }
 
     // TableIterator
 
     size_t TableIterator::nextValid ( size_t index ) const {
-        for (; index < table->capacity; index++)
-            if (table->hashes[index] > HASH_KILLED32)
+        for (; index < table->capacity; index++) {
+            if (table->hashes[index] > HASH_KILLED32) {
                 break;
+            }
+        }
         return index;
     }
 
@@ -92,7 +89,7 @@ namespace das
         pTable = pTable + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pTable-- ) {
             if ( pTable->data ) {
-                if ( !pTable->lock ) {
+                if ( !pTable->isLocked() ) {
                     uint32_t oldSize = pTable->capacity*(vts_add_kts + sizeof(uint32_t));
                     context.heap.free(pTable->data, oldSize);
                 } else {

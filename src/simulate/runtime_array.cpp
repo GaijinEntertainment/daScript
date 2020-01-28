@@ -5,41 +5,28 @@
 namespace das
 {
     void array_clear ( Context & context, Array & arr ) {
-        if ( arr.lock ) {
-            context.throw_error("can't clear locked array");
-            return;
-        }
+        if ( arr.isLocked() ) context.throw_error("can't clear locked array");
         arr.size = 0;
     }
 
     void array_lock ( Context & context, Array & arr ) {
+        if ( arr.shared ) return;
         arr.lock ++;
-        if ( arr.lock==0 ) {
-            context.throw_error("array lock overflow");
-        }
+        if ( arr.lock==0 ) context.throw_error("array lock overflow");
     }
 
     void array_unlock ( Context & context, Array & arr ) {
-        if ( arr.lock==0 ) {
-            context.throw_error("array lock underflow");
-        }
+        if ( arr.shared ) return;
+        if ( arr.lock==0 ) context.throw_error("array lock underflow");
         arr.lock --;
     }
 
     void array_reserve(Context & context, Array & arr, uint32_t newCapacity, uint32_t stride) {
-        if (arr.lock) {
-            context.throw_error("can't change capacity of a locked array");
-            return;
-        }
-        if (arr.capacity >= newCapacity) {
-            return;
-        }
+        if ( arr.isLocked() ) context.throw_error("can't change capacity of a locked array");
+        if ( arr.capacity >= newCapacity ) return;
         auto newData = (char *)context.heap.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
-        if (!newData) {
-            context.throw_error("out of linear allocator memory");
-            return;
-        }
-        if (newData != arr.data) {
+        if ( !newData ) context.throw_error("out of linear allocator memory");
+        if ( newData != arr.data ) {
             // memcpy(newData, arr.data, arr.capacity);
             arr.data = newData;
         }
@@ -47,17 +34,15 @@ namespace das
     }
 
     void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero ) {
-        if ( arr.lock ) {
-            context.throw_error("can't resize locked array");
-            return;
-        }
+        if ( arr.isLocked() ) context.throw_error("can't resize locked array");
         if ( newSize > arr.capacity ) {
             uint32_t newCapacity = 1 << (32 - __builtin_clz (das::max(newSize,2u) - 1));
             newCapacity = das::max(newCapacity, 16u);
             array_reserve(context, arr, newCapacity, stride);
         }
-        if ( zero && newSize>arr.size )
+        if ( zero && newSize>arr.size ) {
             memset ( arr.data + arr.size*stride, 0, (newSize-arr.size)*stride );
+        }
         arr.size = newSize;
     }
 
@@ -132,7 +117,7 @@ namespace das
         pArray = pArray + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pArray-- ) {
             if ( pArray->data ) {
-                if ( !pArray->lock ) {
+                if ( !pArray->isLocked() ) {
                     uint32_t oldSize = pArray->capacity*stride;
                     context.heap.free(pArray->data, oldSize);
                 } else {

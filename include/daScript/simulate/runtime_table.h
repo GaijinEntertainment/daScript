@@ -98,7 +98,7 @@ namespace das
                 while ( index != lastI ) {
                     auto kh = pHashes[index];
                     if (kh == HASH_EMPTY32 ) {
-                        if ( tab.lock ) context->throw_error("can't insert into locked table");
+                        if ( tab.isLocked() ) context->throw_error("can't insert into locked table");
                         if ( insertI != -1u ) index = insertI;
                         pHashes[index] = hash;
                         pKeys[index] = key;
@@ -153,6 +153,7 @@ namespace das
             newTab.size = tab.size;
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
+            newTab.flags = tab.flags;
             newTab.maxLookups = computeMaxLookups(newCapacity);
             newTab.shift = computeShift(newCapacity);
             memset(newTab.data, 0, newCapacity*valueTypeSize);
