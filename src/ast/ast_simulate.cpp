@@ -1478,10 +1478,18 @@ namespace das
             }
         } else {
             assert(variable->index >= 0 && "using variable which is not used. how?");
-            if ( r2v ) {
-                return context.code->makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->stackTop);
+            if ( variable->global_shared ) {
+                if ( r2v ) {
+                    return context.code->makeValueNode<SimNode_GetSharedR2V>(type->baseType, at, variable->stackTop);
+                } else {
+                    return context.code->makeNode<SimNode_GetShared>(at, variable->stackTop);
+                }
             } else {
-                return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop);
+                if ( r2v ) {
+                    return context.code->makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->stackTop);
+                } else {
+                    return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop);
+                }
             }
         }
     }
@@ -1880,7 +1888,11 @@ namespace das
             if ( var->init && var->init->rtti_isMakeLocal() ) {
                 return var->init->simulate(context);
             } else {
-                get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+                if ( var->global_shared ) {
+                    get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index);
+                } else {
+                    get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+                }
             }
         }
         if ( var->type->ref ) {
@@ -2036,6 +2048,7 @@ namespace das
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;
+        context.sharedSize = 0;
         for (auto & pm : library.modules ) {
             for (auto & pvar : pm->globalsInOrder) {
                 if (!pvar->used)
@@ -2045,11 +2058,20 @@ namespace das
                 gvar.name = context.code->allocateName(pvar->name);
                 gvar.size = pvar->type->getSizeOf();
                 gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
-                gvar.offset = pvar->stackTop = context.globalsSize;
-                context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
+                gvar.flags = 0;
+                if ( pvar->global_shared ) {
+                    gvar.offset = pvar->stackTop = context.sharedSize;
+                    gvar.shared = true;
+                    context.sharedSize = (context.sharedSize + gvar.size + 0xf) & ~0xf;
+                } else {
+                    gvar.offset = pvar->stackTop = context.globalsSize;
+                    context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
+                }
             }
         }
         context.globals = (char *) das_aligned_alloc16(context.globalsSize);
+        context.shared = (char *) das_aligned_alloc16(context.sharedSize);
+        context.sharedOwner = true;
         context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.code->allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
@@ -2077,9 +2099,17 @@ namespace das
                 auto & gvar = context.globalVariables[pvar->index];
                 if ( pvar->init ) {
                     if ( pvar->init->rtti_isMakeLocal() ) {
-                        auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
-                        auto sr = ExprLet::simulateInit(context, pvar, false);
-                        gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
+                        if ( pvar->global_shared ) {
+                            auto sl = context.code->makeNode<SimNode_GetShared>(pvar->init->at, pvar->stackTop);
+                            auto sr = ExprLet::simulateInit(context, pvar, false);
+                            auto gvari = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
+                            auto cndb = context.code->makeNode<SimNode_GetArgument>(pvar->init->at, 1); // arg 1 of init script is "init_globals"
+                            gvar.init = context.code->makeNode<SimNode_IfThen>(pvar->init->at, cndb, gvari);
+                        } else {
+                            auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
+                            auto sr = ExprLet::simulateInit(context, pvar, false);
+                            gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
+                        }
                     } else {
                         gvar.init = ExprLet::simulateInit(context, pvar, false);
                     }
@@ -2133,6 +2163,7 @@ namespace das
         context.restart();
         if (options.getBoolOption("log_mem",false)) {
             logs << "globals       " << context.getGlobalSize() << "\n";
+            logs << "shared        " << context.getSharedSize() << "\n";
             logs << "stack         " << context.stack.size() << "\n";
             logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated() 
                 << " pages (" << context.code->totalAlignedMemoryAllocated() << ")\n";

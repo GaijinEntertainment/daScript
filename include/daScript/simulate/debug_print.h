@@ -104,19 +104,21 @@ namespace das {
         virtual void afterDim ( char *, TypeInfo * ) override {
             ss << "]]";
         }
-        virtual void beforeArray ( Array *, TypeInfo * ti ) override {
+        virtual void beforeArray ( Array * arr, TypeInfo * ti ) override {
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << debug_type(ti);
+                if ( arr->shared ) ss << " /*shared*/ ";
             }
         }
         virtual void afterArray ( Array *, TypeInfo * ) override {
             ss << "]]";
         }
-        virtual void beforeTable ( Table *, TypeInfo * ti ) override {
+        virtual void beforeTable ( Table * tab, TypeInfo * ti ) override {
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << debug_type(ti);
+                if ( tab->shared ) ss << " /*shared*/ ";
             }
         }
         virtual void afterTable ( Table *, TypeInfo * ) override {

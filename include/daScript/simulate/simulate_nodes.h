@@ -21,6 +21,7 @@ namespace das {
         ,   sThisBlockArgument
         ,   sThisBlockArgumentRef
         ,   sGlobal
+        ,   sShared
     };
 
     struct SimSource {
@@ -74,6 +75,10 @@ namespace das {
         }
         __forceinline void setGlobal(uint32_t ofs) {
             type = SimSourceType::sGlobal;
+            offset = ofs;
+        }
+        __forceinline void setShared(uint32_t ofs) {
+            type = SimSourceType::sShared;
             offset = ofs;
         }
         __forceinline void setBlockCMResOfs(uint32_t asp, uint32_t ofs) {
@@ -140,6 +145,9 @@ namespace das {
         }
         __forceinline char * computeGlobal (Context & context) const {
             return context.globals + offset;
+        }
+        __forceinline char * computeShared (Context & context) const {
+            return context.shared + offset;
         }
         __forceinline char * computeLocal ( Context & context ) const {
             return context.stack.sp() + stackTop;
@@ -1178,6 +1186,37 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
         SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o )
             : SimNode_GetGlobal(at,o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *)compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
+    // SHARER VARIABLE "GET"
+    struct SimNode_GetShared : SimNode_SourceBase {
+        DAS_PTR_NODE;
+        SimNode_GetShared ( const LineInfo & at, uint32_t o )
+            : SimNode_SourceBase(at) {
+            subexpr.setShared(o);
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            return subexpr.computeShared(context);
+        }
+    };
+
+    template <typename TT>
+    struct SimNode_GetSharedR2V : SimNode_GetShared {
+        SimNode_GetSharedR2V ( const LineInfo & at, uint32_t o )
+            : SimNode_GetShared(at,o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);

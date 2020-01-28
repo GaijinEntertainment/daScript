@@ -517,6 +517,10 @@ namespace das
         if ( ctx.globals ) {
             globals = (char *) das_aligned_alloc16(globalsSize);
         }
+        // shared
+        sharedSize = ctx.sharedSize;
+        shared = ctx.shared;
+        sharedOwner = false;
         // functoins
         functions = ctx.functions;
         totalFunctions = ctx.totalFunctions;
@@ -537,6 +541,9 @@ namespace das
     Context::~Context() {
         if ( globals ) {
             das_aligned_free16(globals);
+        }
+        if ( shared && sharedOwner ) {
+            das_aligned_free16(shared);
         }
     }
 
@@ -621,38 +628,51 @@ namespace das
         code = rel.newCode;
     }
 
-    void Context::runInitScript ( void ) {
+    class SharedDataWalker : public DataWalker {
+    public:
+        virtual void beforeArray ( Array * pa, TypeInfo * ) override {
+            pa->shared = true;
+        }
+        virtual void beforeTable ( Table * pa, TypeInfo * ) override {
+            pa->shared = true;
+        }
+    };
+
+    void Context::runInitScript ( ) {
         DAS_ASSERTF(insideContext==0,"can't run init script on the locked context");
         char * EP, *SP;
         if(!stack.push(globalInitStackSize,EP,SP)) {
             throw_error("stack overflow in the initialization script");
             return;
         }
+        vec4f args[2] = {
+            cast<void *>::from(this),
+            cast<bool>::from(sharedOwner)   // only init shared if we are the owner
+        };
+        abiArg = args;
+        abiCMRES = nullptr;
         if ( aotInitScript ) {
-            vec4f args[1] = { cast<void *>::from(this) };
-            abiArg = args;
-            abiCMRES = nullptr;
             aotInitScript->eval(*this);
-            abiArg = nullptr;
         } else {
-
 #if DAS_ENABLE_STACK_WALK
             FuncInfo finfo;
             memset(&finfo, 0, sizeof(finfo));
             finfo.name = (char *) "Context::runInitScript";
+            // TODO: init arguments?
 #endif
             for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( pv.init ) {
+                    if ( sharedOwner || !pv.shared ) {
 #if DAS_ENABLE_STACK_WALK
-                    finfo.stackSize = globalInitStackSize;
-
-                    Prologue * pp = (Prologue *)stack.sp();
-                    pp->arguments = nullptr;
-                    pp->info = &finfo;
-                    pp->line = 0;
+                        finfo.stackSize = globalInitStackSize;
+                        Prologue * pp = (Prologue *)stack.sp();
+                        pp->arguments = nullptr;    // TODO: args
+                        pp->info = &finfo;
+                        pp->line = 0;
 #endif
-                    pv.init->eval(*this);
+                        pv.init->eval(*this);
+                    }
                 } else {
                     memset ( globals + pv.offset, 0, pv.size );
                 }
@@ -665,7 +685,18 @@ namespace das
 
             }
         }
+        abiArg = nullptr;
         stack.pop(EP,SP);
+        // now, share the data
+        if ( sharedOwner && shared ) {
+            SharedDataWalker sdw;
+            for ( int i=0; i!=totalVariables; ++i ) {
+                auto & pv = globalVariables[i];
+                if ( pv.init && pv.shared ) {
+                    sdw.walk(shared + pv.offset, pv.debugInfo);
+                }
+            }
+        }
     }
 
     SimFunction * Context::findFunction ( const char * name ) const {

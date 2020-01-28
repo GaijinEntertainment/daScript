@@ -163,6 +163,7 @@
 %token  DAS_LABEL           "label"
 %token  DAS_GOTO            "goto"
 %token  DAS_IMPLICIT        "implicit"
+%token  DAS_SHARED          "shared"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -286,6 +287,7 @@
 %type <b>               optional_override
 %type <b>               kwd_let
 %type <b>               is_public_module
+%type <b>               optional_shared
 
 %type <i>               copy_or_move_or_clone
 
@@ -1434,8 +1436,13 @@ global_variable_declaration_list
     }
     ;
 
+optional_shared
+    :   { $$ = false; }
+    |   DAS_SHARED  { $$ = true; }
+    ;
+
 global_let
-    :   kwd_let '{' global_variable_declaration_list[list] '}' {
+    :   kwd_let optional_shared[glob_shar] '{' global_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -1453,6 +1460,7 @@ global_let
                     } else {
                         pVar->type->removeConstant = true;
                     }
+                    pVar->global_shared = $glob_shar;
                     if ( !g_Program->addVariable(pVar) )
                         das_yyerror("global variable is already declared " + name,pDecl->at,
                             CompilationError::global_variable_already_declared);

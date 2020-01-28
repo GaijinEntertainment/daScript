@@ -47,6 +47,12 @@ namespace das
         SimNode *       init;
         uint32_t        size;
         uint32_t        offset;
+        union {
+            struct {
+                bool    shared : 1;
+            };
+            uint32_t    flags;
+        };
     };
 
     struct SimFunction {
@@ -167,6 +173,8 @@ namespace das
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
+        template <typename TT> friend struct SimNode_GetSharedR2V;
+        friend struct SimNode_GetShared;
         friend struct SimNode_TryCatch;
         friend class Program;
     public:
@@ -179,10 +187,19 @@ namespace das
             return globalsSize;
         }
 
+        uint32_t getSharedSize() const {
+            return sharedSize;
+        }
+
         uint64_t getInitSemanticHash();
 
         __forceinline void * getVariable ( int index ) const {
-            return (uint32_t(index)<uint32_t(totalVariables)) ? (globals + globalVariables[index].offset) : nullptr;
+            if ( uint32_t(index)<uint32_t(totalVariables) ) {
+                const auto & gvar = globalVariables[index];
+                return (gvar.shared ? shared : globals) + gvar.offset;
+            } else {
+                return nullptr;
+            }
         }
 
         __forceinline VarInfo * getVariableInfo( int index ) const {
@@ -269,7 +286,7 @@ namespace das
         int findVariable ( const char * name ) const;
         void stackWalk();
         string getStackWalk( bool args = true );
-        void runInitScript ( void );
+        void runInitScript ();
 
         virtual void to_out ( const char * message );           // output to stdout or equivalent
         virtual void to_err ( const char * message );           // output to stderr or equivalent
@@ -458,6 +475,7 @@ namespace das
         StringAllocator                 stringHeap;
         HeapAllocator                   heap;
         char *                          globals = nullptr;
+        char *                          shared = nullptr;
         shared_ptr<StringAllocator>     constStringHeap;
         shared_ptr<NodeAllocator>       code;
         shared_ptr<DebugInfoAllocator>  debugInfo;
@@ -475,6 +493,8 @@ namespace das
 #endif
     protected:
         GlobalVariable * globalVariables = nullptr;
+        uint32_t sharedSize = 0;
+        bool     sharedOwner = true;
         uint32_t globalsSize = 0;
         uint32_t globalInitStackSize = 0;
         SimFunction * functions = nullptr;

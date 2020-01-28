@@ -1178,6 +1178,13 @@ namespace das {
             if ( var->type->isHandle() && !var->type->annotation->isLocal() )
                 error("can't have a global variable of handled type " + var->type->annotation->name,
                       var->at, CompilationError::invalid_variable_type);
+            if ( !var->type->constant && var->global_shared )
+                error("shared global variable must be constant",
+                      var->at, CompilationError::invalid_variable_type);
+            if ( var->global_shared && !var->init )
+                error("shared global variable must be initialized",
+                      var->at, CompilationError::invalid_variable_type);
+            // TODO: global shared can't be code, i.e. no lambda etc
             verifyType(var->type);
             return Visitor::visitGlobalLet(var);
         }

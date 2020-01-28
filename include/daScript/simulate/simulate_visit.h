@@ -201,6 +201,14 @@ namespace das {
     }
 
     template <typename TT>
+    SimNode * SimNode_GetSharedR2V<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(GetSharedR2V);
+        subexpr.visit(vis);
+        V_END();
+    }
+
+    template <typename TT>
     SimNode * SimNode_Ref2Value<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(Ref2Value);

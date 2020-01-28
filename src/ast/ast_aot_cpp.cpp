@@ -842,7 +842,7 @@ namespace das {
     // global let body
         virtual void preVisitGlobalLetBody ( Program * prog ) override {
             Visitor::preVisitGlobalLetBody(prog);
-            ss << "void __init_script ( Context * __context__ )\n{\n";
+            ss << "void __init_script ( Context * __context__, bool __init_shared )\n{\n";
             tab ++;
             // pre-declare locals
             auto & temps = collector.localTemps[nullptr];
@@ -876,13 +876,21 @@ namespace das {
             Visitor::preVisitGlobalLet(var);
             ss << string(tab,'\t');
             if ( !var->used ) ss << "/* ";
-            ss << (var->init ? "das_global" : "das_global_zero");
+            if ( var->global_shared ) {
+                ss << "if ( __init_shared ) ";
+            }
+            if ( var->global_shared ) {
+                ss << (var->init ? "das_shared" : "das_shared_zero");
+            } else {
+                ss << (var->init ? "das_global" : "das_global_zero");
+            }
             ss << "<" << describeCppType(var->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
                 << "," << int32_t(var->stackTop) << ">(__context__)";
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
+            ss << ";";
             if ( !var->used ) ss << " */";
-            ss << "; /*" << var->name << "*/\n";
+            ss << "/*" << var->name << "*/\n";
 
             return Visitor::visitGlobalLet(var);
         }
@@ -1364,7 +1372,8 @@ namespace das {
             } else if ( var->local || var->block || var->argument ) {
                 ss << collector.getVarName(var->variable);
             } else {
-                ss << "das_global<" << describeCppType(var->variable->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                ss << (var->variable->global_shared ? "das_shared" : "das_global");
+                ss << "<" << describeCppType(var->variable->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
                     << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
             }
             return Visitor::visit(var);
@@ -2482,8 +2491,9 @@ namespace das {
 
     uint64_t Context::getInitSemanticHash() {
         const uint64_t fnv_prime = 1099511628211ul;
-        uint64_t hash = globalsSize;
+        uint64_t hash = globalsSize ^ sharedSize;
         for ( int i=0; i!=totalVariables; ++i ) {
+            hash = (hash ^ (globalVariables[i].shared ? 13 : 17)) * fnv_prime;
             hash = (hash ^ globalVariables[i].offset) * fnv_prime;
             hash = (hash ^ globalVariables[i].size) * fnv_prime;
             if ( globalVariables[i].init ) {
@@ -2532,7 +2542,7 @@ namespace das {
             logs << "\t\t// [[ init script ]]\n";
             logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
-            logs << "<void (*)(Context *),";
+            logs << "<void (*)(Context *, bool),";
             logs << "&__init_script>>();\n\t\t};\n";
         }
         if ( headers ) {

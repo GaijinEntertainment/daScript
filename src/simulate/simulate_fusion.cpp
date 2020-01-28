@@ -87,6 +87,7 @@ namespace das {
         case SimSourceType::sThisBlockArgument:                return "Tbarg";
         case SimSourceType::sThisBlockArgumentRef:             return "Tbargr";
         case SimSourceType::sGlobal:                           return "Glob";
+        case SimSourceType::sShared:                           return "Shared";
         };
         return "???";
     }

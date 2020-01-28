@@ -72,6 +72,16 @@ namespace das {
         memset(__context__->globals + offset, 0, sizeof(TT));
     }
 
+    template <typename TT, int offset>
+    __forceinline TT & das_shared ( Context * __context__ ) {
+        return *(TT *)(__context__->shared + offset);
+    }
+
+    template <typename TT, int offset>
+    __forceinline void das_shared_zero ( Context * __context__ ) {
+        memset(__context__->shared + offset, 0, sizeof(TT));
+    }
+
     template <typename TT>
     struct das_arg {
         static __forceinline TT & pass ( TT && a ) {
