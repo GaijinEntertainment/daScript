@@ -353,7 +353,7 @@
 %left       SHL SHR ROTL ROTR
 %left       '-' '+'
 %left       '*' '/' '%'
-%left       QQ
+%right      QQ
 %right      '@' UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       DAS_IS
 %left       LPIPE RPIPE LBPIPE

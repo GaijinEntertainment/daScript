@@ -11987,6 +11987,7 @@ State 477
     "++"  shift, and go to state 352
     "--"  shift, and go to state 353
     "->"  shift, and go to state 358
+    "??"  shift, and go to state 359
     "?."  shift, and go to state 360
     "<|"  shift, and go to state 361
     "|>"  shift, and go to state 362
