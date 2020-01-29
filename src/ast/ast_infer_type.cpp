@@ -4300,6 +4300,21 @@ namespace das {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visit(expr);
             }
+            // see if there are any duplicate fields
+            bool anyDuplicates = false;
+            for ( auto & st : expr->structs ) {
+                das_set<string> fld;
+                for ( auto & fi : *st ) {
+                    if ( fld.find(fi->name) != fld.end() ) {
+                        error("field " + fi->name + " is already initialized", fi->at,
+                              CompilationError::field_already_initialized);
+                        anyDuplicates = true;
+                    } else {
+                        fld.insert(fi->name);
+                    }
+                }
+            }
+            if ( anyDuplicates ) return Visitor::visit(expr);
             // see if we need to fill in missing fields
             if ( expr->useInitializer && expr->makeType->structType ) {
                 for ( auto & stf : expr->makeType->structType->fields  ) {

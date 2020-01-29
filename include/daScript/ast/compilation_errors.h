@@ -57,6 +57,7 @@ namespace das
     ,   enumeration_already_declared            =   30208       //  enum A; enumA
     ,   enumeration_value_already_declared      =   30209       //  enum A { x; x }
     ,   type_alias_already_declared             =   30210       //  typdef A = b; typedef A = ...;
+    ,   field_already_initialized               =   30211       //  typdef A = b; typedef A = ...;
 
     ,   type_not_found                          =   30301       //  a:wtf
     ,   structure_not_found                     =   30302       //  new wtf
