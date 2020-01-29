@@ -142,6 +142,7 @@ namespace das
         bool isRawPod() const;
         bool isLocal( das_set<Structure *> & dep ) const;
         bool isTemp( das_set<Structure *> & dep ) const;
+        bool isShareable ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
@@ -256,6 +257,7 @@ namespace das
         virtual bool canDeletePtr() const { return false; }
         virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
+        virtual bool isShareable ( ) const { return true; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
         virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }

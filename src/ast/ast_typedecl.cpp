@@ -1263,7 +1263,6 @@ namespace das
             } else {
                 return false;
             }
-            
         } else if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
             return firstType ? firstType->isTemp(false, true, dep) : false;
         } else if ( baseType==Type::tArray ) {
@@ -1285,6 +1284,46 @@ namespace das
             }
         }
         return false;
+    }
+
+    bool TypeDecl::isShareable() const {
+        das_set<Structure *> dep;
+        return isShareable(dep);
+    }
+
+    bool TypeDecl::isShareable( das_set<Structure *> & dep ) const {
+        if ( baseType==Type::tIterator || baseType==Type::tBlock || baseType==Type::tLambda ) {
+            return false;
+        } else if ( baseType==Type::tHandle ) {
+            return annotation ? annotation->isShareable() : true;
+        } else if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return true;
+                dep.insert(structType);
+                return structType->isShareable(dep);
+            } else {
+                return true;
+            }
+        } else if ( baseType==Type::tArray ) {
+            return firstType ? firstType->isShareable(dep) : true;
+        } else if ( baseType==Type::tTable ) {
+            if ( firstType && !firstType->isShareable(dep) ) {
+                return false;
+            } else if ( secondType && !secondType->isShareable(dep) ) {
+                return false;
+            } else {
+                return true;
+            }
+        } else if ( baseType==Type::tTuple ) {
+            for ( const auto & argT : argTypes ) {
+                if ( !argT->isShareable(dep) ) {
+                    return false;
+                }
+            }
+            return true;
+        } else {
+            return true;
+        }
     }
 
     bool TypeDecl::isNumeric() const {

@@ -275,6 +275,15 @@ namespace das {
         return false;
     }
 
+    bool Structure::isShareable(das_set<Structure *> & dep) const {    // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && !fd.type->isShareable(dep) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // variable
 
     VariablePtr Variable::clone() const {
