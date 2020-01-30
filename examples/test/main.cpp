@@ -89,7 +89,9 @@ bool unit_test ( const string & fn, bool useAot ) {
     tout << fn << " ";
     auto fAccess = make_shared<FsFileAccess>();
     ModuleGroup dummyLibGroup;
-    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
+    CodeOfPolicies policies;
+    // policies.no_unsafe = true;
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {

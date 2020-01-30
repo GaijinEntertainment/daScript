@@ -130,6 +130,7 @@ namespace das
     ,   no_global_heap                          =   40204       // let a = {{ }}
     ,   no_global_variables                     =   40205       // var a = ...
     ,   unused_function_argument                =   40206       // def foo ( a ) ..... /* no a here */
+    ,   unsafe_function                         =   40207       // [unsafe] when code of policies prohibits
 
     ,   too_many_infer_passes                   =   41000
 

@@ -44,6 +44,7 @@ namespace das {
         bool checkNoGlobalHeap;
         bool checkNoGlobalVariables;
         bool checkUnusedArgument;
+        bool checkUnsafe;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -51,6 +52,7 @@ namespace das {
             checkNoGlobalHeap = program->options.getBoolOption("no_global_heap", program->policies.no_global_heap);
             checkNoGlobalVariables = program->options.getBoolOption("no_global_variables", program->policies.no_global_variables);
             checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
+            checkUnsafe = program->policies.no_unsafe;
         }
         void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
             program->error(err,at,cerr);
@@ -169,6 +171,19 @@ namespace das {
             if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
                 error("assert expressions can't have side-effects (use verify instead)", expr->at,
                       CompilationError::assert_with_side_effects);
+            }
+        }
+        virtual void preVisit ( Function * fn ) override {
+            Visitor::preVisit(fn);
+            if ( checkUnsafe ) {
+                auto fnMod = fn->fromGeneric ? fn->fromGeneric->module : fn->module;
+                if ( fnMod == program->thisModule.get() ) {
+                    if ( fn->unsafe ) {
+                        error("unsafe function " + fn->getMangledName() +
+                              "\nunsafe functions are prohibited by CodeOfPolicies", fn->at,
+                                CompilationError::unsafe_function);
+                    }
+                }
             }
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {

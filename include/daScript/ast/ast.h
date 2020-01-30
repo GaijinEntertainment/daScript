@@ -711,6 +711,7 @@ namespace das
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language
+        bool no_unsafe = false;
         bool no_global_variables = false;
         bool no_global_heap = false;
         bool only_fast_aot = false;
