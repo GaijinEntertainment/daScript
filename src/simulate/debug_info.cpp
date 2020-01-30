@@ -451,11 +451,14 @@ namespace das
         }
     }
 
-    pair<string,string> FileAccess::getModuleInfo ( const string & req, const string & from ) const {
+    ModuleInfo FileAccess::getModuleInfo ( const string & req, const string & from ) const {
         auto mod = getModuleName(req);
         string modFName = getModuleFileName(req);
         string modFn = getIncludeFileName(from, modFName) + ".das";
-        return pair<string,string>(mod,modFn);
+        ModuleInfo info;
+        info.moduleName = mod;
+        info.fileName = modFn;
+        return info;
     }
 
     void FileAccess::freeSourceData() {

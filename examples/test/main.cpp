@@ -320,6 +320,7 @@ int main() {
     ok = run_exception_tests(TEST_PATH "examples/test/runtime_errors") && ok;
     ok = run_module_test(TEST_PATH "examples/test/module", "main.das", true) && ok;
     ok = run_module_test(TEST_PATH "examples/test/module", "main_default.das", false) && ok;
+    ok = run_module_test(TEST_PATH "examples/test/module/alias", "main.das", true) && ok;
     ok = run_module_test(TEST_PATH "examples/test/module/cdp", "main.das", true) && ok;
     tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
     // shutdown

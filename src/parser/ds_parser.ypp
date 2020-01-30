@@ -12,9 +12,10 @@
     };
     
     namespace das {
-        extern ProgramPtr			g_Program;
-        extern FileAccessPtr        g_Access;
-        extern vector<FileInfo *>	g_FileAccessStack;
+        extern ProgramPtr			    g_Program;
+        extern FileAccessPtr            g_Access;
+        extern vector<FileInfo *>	    g_FileAccessStack;
+        extern das_map<string,string>   das_module_alias;
     }
     using namespace das;
     
@@ -129,6 +130,7 @@
 %token  DAS_TYPE            "type"
 %token  DAS_IN              "in"
 %token  DAS_IS              "is"
+%token  DAS_AS              "as"
 %token  DAS_ELIF            "elif"
 %token  DAS_ARRAY           "array"
 %token  DAS_RETURN          "return"
@@ -377,7 +379,7 @@ program
     ;
 
 module_declaration
-    :   DAS_MODULE  NAME[name] ';' {
+    :   DAS_MODULE  NAME[name] {
         if ( g_Program->thisModule->name.empty() ) {
             g_Program->thisModule->name = *$name;
         } else if ( g_Program->thisModule->name != *$name ){
@@ -480,13 +482,40 @@ require_module_name
 require_module
     :   require_module_name[name]  is_public_module[pub] {
         auto info = g_Access->getModuleInfo(*$name, g_FileAccessStack.back()->name);
-        if ( auto mod = g_Program->addModule(info.first) ) {
+        if ( auto mod = g_Program->addModule(info.moduleName) ) {
             g_Program->thisModule->addDependency(mod, $pub);
+            if ( !info.importName.empty() ) {
+                auto ita = das_module_alias.find(info.importName);
+                if ( ita !=das_module_alias.end() ) {
+                    das_yyerror("module alias already used " + info.importName + " as " + ita->second,tokAt(@name),
+                        CompilationError::module_not_found);
+                } else {
+                    das_module_alias[info.importName] = info.moduleName;
+                }
+            }
         } else {
             das_yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }
         delete $name;
+    }
+    |   require_module_name[name] DAS_AS NAME[modalias] is_public_module[pub] {
+        auto info = g_Access->getModuleInfo(*$name, g_FileAccessStack.back()->name);
+        if ( auto mod = g_Program->addModule(info.moduleName) ) {
+            g_Program->thisModule->addDependency(mod, $pub);
+            auto ita = das_module_alias.find(*$modalias);
+            if ( ita !=das_module_alias.end() ) {
+                das_yyerror("module alias already used " + *$modalias + " as " + ita->second,tokAt(@name),
+                    CompilationError::module_not_found);
+            } else {
+                das_module_alias[*$modalias] = info.moduleName;
+            }
+        } else {
+            das_yyerror("required module not found " + *$name,tokAt(@name),
+                CompilationError::module_not_found);
+        }
+        delete $name;
+        delete $modalias;
     }
     ;
 
@@ -875,7 +904,12 @@ expr_pipe
 name_in_namespace
     :   NAME[name]                             { $$ = $name; }
     |   NAME[namespace] COLCOL NAME[name]      {
-            *$namespace += "::";
+            auto ita = das_module_alias.find(*$namespace);
+            if ( ita == das_module_alias.end() ) {
+                *$namespace += "::";
+            } else {
+                *$namespace = ita->second + "::";
+            }
             *$namespace += *$name;
             delete $name;
             $$ = $namespace;

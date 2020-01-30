@@ -270,7 +270,6 @@ namespace das
         arr.data = (char *) tokens.data();
         arr.capacity = arr.size = uint32_t(tokens.size());
         arr.lock = 1;
-        arr.flags = 0;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(block, args, nullptr);

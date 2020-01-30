@@ -66,7 +66,7 @@ namespace das {
         }
     }
 
-    pair<string,string> ModuleFileAccess::getModuleInfo ( const string & req, const string & from ) const {
+    ModuleInfo ModuleFileAccess::getModuleInfo ( const string & req, const string & from ) const {
         if (failed()) return FileAccess::getModuleInfo(req, from);
         vec4f args[2];
         args[0] = cast<const char *>::from(req.c_str());
@@ -74,10 +74,16 @@ namespace das {
         struct {
             char * modName;
             char * modFileName;
+            char * modImportName;
         } res;
+        memset(&res, 0, sizeof(res));
         context->evalWithCatch(modGet, args, &res);
         auto exc = context->getException();
         DAS_ASSERTF(!exc, "exception failed: %s", exc);
-        return pair<string,string>(res.modName, res.modFileName);
+        ModuleInfo info;
+        info.moduleName = res.modName ? res.modName : "";
+        info.fileName = res.modFileName ? res.modFileName : "";
+        info.importName = res.modImportName ? res.modImportName : "";
+        return info;
     }
 }

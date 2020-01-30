@@ -34,6 +34,10 @@
     bool das_in_normal = false;
     vector<int> das_line_no;
     das_set<string> das_already_include;
+
+    namespace das {
+        das_map<string,string>   das_module_alias;
+    }
     
     #define YY_USER_ACTION \
         das_yylloc.first_line = das_yylloc.last_line = yylineno; \
@@ -235,7 +239,7 @@
 <normal>"typedef"                                       das_need_oxford_comma = false; return DAS_TYPEDEF;
 <normal>"label"                                         return DAS_LABEL;
 <normal>"goto"                                          return DAS_GOTO;
-<normal>"module"                                        das_need_oxford_comma = false; return DAS_MODULE;
+<normal>"module"                                        return DAS_MODULE;
 <normal>"public"                                        return DAS_PUBLIC;
 <normal>"options"                                       return DAS_OPTIONS;
 <normal>"operator"                                      return DAS_OPERATOR;
@@ -260,6 +264,7 @@
 <normal>"in"                                            return DAS_IN;
 <normal>"implicit"                                      return DAS_IMPLICIT;
 <normal>"shared"                                        return DAS_SHARED;
+<normal>"as"                                            return DAS_AS;
 <normal>"is"                                            return DAS_IS;
 <normal>"deref"                                         return DAS_DEREF;
 <normal>"addr"                                          return DAS_ADDR;
@@ -513,6 +518,7 @@
 extern int das_yydebug;
 
 void das_yybegin(const char * str) {
+    das_module_alias.clear();
     das_already_include.clear();
     das_yydebug = 0;
     yylineno = 1;

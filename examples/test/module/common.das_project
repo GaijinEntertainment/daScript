@@ -1,4 +1,4 @@
-typedef module_info = tuple<string;string> const
+typedef module_info = tuple<string;string;string> const
 
 var
     DAS_PAK_ROOT = "./"
@@ -11,13 +11,13 @@ def module_default(req,from:string) : module_info
     var fr <- split(from,"/")
     let mod_name = rs[length(rs)-1]
     if length(fr)==0
-        return [[auto mod_name, req + ".das"]]
+        return [[auto mod_name, req + ".das", ""]]
     else
         pop(fr)
         for se in rs
             push(fr,se)
         let path_name = join(fr,"/") + ".das"
-        return [[auto mod_name, path_name]]
+        return [[auto mod_name, path_name, ""]]
 
 [export]
 def module_get(req,from:string) : module_info

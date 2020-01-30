@@ -95,7 +95,7 @@ namespace das {
 
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
-                          vector<pair<string,string>> & req,
+                          vector<ModuleInfo> & req,
                           vector<string> & missing,
                           vector<string> & circular,
                           das_set<string> & dependencies,
@@ -110,12 +110,12 @@ namespace das {
                 auto module = Module::require(mod); // try native with that name
                 if ( !module ) {
                     auto info = access->getModuleInfo(mod, fileName);
-                    if ( !info.first.empty() ) {
-                        mod = info.first;
+                    if ( !info.moduleName.empty() ) {
+                        mod = info.moduleName;
                         log << string(tab,'\t') << " resolved as " << mod << "\n";
                     }
-                    auto it_r = find_if(req.begin(), req.end(), [&] ( const pair<string,string> & reqM ) {
-                        return reqM.first == mod;
+                    auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
+                        return reqM.moduleName == mod;
                     });
                     if ( it_r==req.end() ) {
                         if ( dependencies.find(mod) != dependencies.end() ) {
@@ -126,16 +126,17 @@ namespace das {
                         }
                         dependencies.insert(mod);
                         // module file name
-                        if ( info.first.empty() ) {
+                        if ( info.moduleName.empty() ) {
                             // request can't be translated to module name
                             log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
                             missing.push_back(mod);
                             return false;
                         }
-                        if ( !getPrerequisits(info.second, access, req, missing, circular, dependencies, libGroup, log, tab + 1) ) {
+                        if ( !getPrerequisits(info.fileName, access, req, missing, circular, dependencies, libGroup, log, tab + 1) ) {
                             return false;
                         }
-                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok, new module " << info.first << " at " << info.second << "\n";
+                        log << string(tab,'\t') << "from " << fileName << " require " << mod
+                            << " - ok, new module " << info.moduleName << " at " << info.fileName << "\n";
                         req.push_back(info);
                     } else {
                         log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
@@ -238,19 +239,19 @@ namespace das {
                                 ModuleGroup & libGroup,
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
-        vector<pair<string,string>> req;
+        vector<ModuleInfo> req;
         vector<string> missing, circular;
         das_set<string> dependencies;
         TextWriter tw;
         if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, tw, 1) ) {
             for ( auto & mod : req ) {
-                if ( !libGroup.findModule(mod.first) ) {
-                    auto program = parseDaScript(mod.second, access, logs, libGroup, true, policies);
+                if ( !libGroup.findModule(mod.moduleName) ) {
+                    auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, policies);
                     if ( program->failed() ) {
                         return program;
                     }
                     if ( program->thisModule->name.empty() ) {
-                        program->thisModule->name = mod.first;
+                        program->thisModule->name = mod.moduleName;
                     }
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {

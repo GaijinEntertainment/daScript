@@ -1,4 +1,4 @@
-module foo ;
+module foo
 
 require foo.random
 

@@ -91,6 +91,12 @@ namespace das
     };
     typedef unique_ptr<FileInfo> FileInfoPtr;
 
+    struct ModuleInfo {
+        string  moduleName;
+        string  fileName;
+        string  importName;
+    };
+
     class FileAccess {
     public:
         virtual ~FileAccess() {}
@@ -99,7 +105,7 @@ namespace das
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
         FileInfoPtr letGoOfFileInfo ( const string & fileName );
-        virtual pair<string,string> getModuleInfo ( const string & req, const string & from ) const;
+        virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
@@ -116,7 +122,7 @@ namespace das
         ModuleFileAccess ( const string & pak, const FileAccessPtr & access );
         virtual ~ModuleFileAccess();
         bool failed() const { return !context || !modGet; }
-        virtual pair<string,string> getModuleInfo ( const string & req, const string & from ) const;
+        virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;
