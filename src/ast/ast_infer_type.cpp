@@ -3673,7 +3673,18 @@ namespace das {
                         auto srcv = make_shared<Variable>();
                         srcv->at = expr->at;
                         srcv->name = srcVarName;
-                        srcv->type = make_shared<TypeDecl>(*iterv->type);   // todo: support ref \ pointer thing
+                        if ( iterv->type->isRef() ) {
+                            srcv->type = make_shared<TypeDecl>(Type::tPointer);
+                            srcv->type->firstType = make_shared<TypeDecl>(*iterv->type);
+                            srcv->type->firstType->ref = false;
+                            if ( bodyBlock ) {
+                                replaceRef2Ptr(bodyBlock, iterv->name);
+                            } else {
+                                replaceRef2Ptr(expr->shared_from_this(), iterv->name);
+                            }
+                        } else {
+                            srcv->type = make_shared<TypeDecl>(*iterv->type);
+                        }
                         srcv->type->constant = false;
                         srci->variables.push_back(srcv);
                         blk->list.push_back(srci);
