@@ -155,6 +155,9 @@ def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT delete &>
 	concept_assert(typeinfo(is_ref type argT),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     return _builtin_make_lambda_iterator(lam)
 
+def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
+    return _builtin_make_lambda_iterator(lam)
+
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>

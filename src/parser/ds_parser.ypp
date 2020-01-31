@@ -1268,15 +1268,23 @@ expr
         $$ = g_Program->makeCall(tokAt(@type),das_to_string($type));
     }
     |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
-            $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
-        }
+        $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
+    }
     |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
 	|   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
     |   DAS_TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
-    |   DAS_GENERATOR[loc] '(' ')'                 { $$ = new ExprMakeGenerator(tokAt(@loc)); }
-    |   DAS_GENERATOR[loc] '(' expr[subexpr] ')'   { $$ = new ExprMakeGenerator(tokAt(@loc), ExpressionPtr($subexpr)); }
+    |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' '(' ')' {
+        auto gen = new ExprMakeGenerator(tokAt(@loc));
+        gen->iterType = TypeDeclPtr($typeDecl);
+        $$ = gen;
+    }
+    |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' '(' expr[subexpr] ')' {
+        auto gen = new ExprMakeGenerator(tokAt(@loc), ExpressionPtr($subexpr));
+        gen->iterType = TypeDeclPtr($typeDecl);
+        $$ = gen;
+    }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));

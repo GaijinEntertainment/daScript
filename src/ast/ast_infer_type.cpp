@@ -1578,6 +1578,25 @@ namespace das {
         }
     // ExprMakeGenerator
         virtual ExpressionPtr visit ( ExprMakeGenerator * expr ) override {
+            if ( expr->iterType && expr->iterType->isExprType() ) {
+                return Visitor::visit(expr);
+            }
+            if ( expr->iterType->isAlias() ) {
+                auto aT = inferAlias(expr->iterType);
+                if ( aT ) {
+                    expr->iterType = aT;
+                    reportGenericInfer();
+                } else {
+                    error("udefined type " + expr->iterType->describe(), expr->at,
+                          CompilationError::type_not_found);
+                    return Visitor::visit(expr);
+                }
+            }
+            if ( expr->iterType->isAuto() ) {
+                error("generator of udefined type " + expr->iterType->describe(), expr->at,
+                      CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()!=1 ) {
                 error("expecting generator(closure)", expr->at, CompilationError::invalid_argument_count);
             } else if ( !expr->arguments[0]->rtti_isMakeBlock() ) {
@@ -1590,11 +1609,10 @@ namespace das {
                         error("can't infer generator block type", expr->at, CompilationError::invalid_block);
                     } else if ( !bT->firstType->isSimpleType(Type::tBool) ) {
                         error("generator must return boolean", expr->at, CompilationError::invalid_argument_type);
-                    } else if ( bT->argTypes.size()!=1 ) {
-                        error("generator must have one argument", expr->at, CompilationError::invalid_argument_type);
-                    } else if ( bT->argTypes[0]->isConst() ) {
-                        error("generator first argument can't be constant", expr->at, CompilationError::invalid_argument_type);
+                    } else if ( !bT->argTypes.empty() ) {
+                        error("generator must have no arguments", expr->at, CompilationError::invalid_argument_type);
                     } else {
+                        // TODO: check validity of the generator type
                         CaptureLambda cl;
                         // we can only capture in-scope variables
                         // i.e stuff BEFORE the scope
@@ -1610,6 +1628,27 @@ namespace das {
                             for ( auto ba : block->arguments ) {
                                 cl.capt.erase(ba);
                             }
+                            // add "yield" argument
+                            bool makeRef = false;
+                            if ( !expr->iterType->isVoid() ) {
+                                auto yva = make_shared<Variable>();
+                                if ( expr->iterType->ref ) {
+                                    yva->type = make_shared<TypeDecl>(Type::tPointer);
+                                    yva->type->firstType = make_shared<TypeDecl>(*expr->iterType);
+                                    yva->type->firstType->ref = false;
+                                    yva->type->constant = false;
+                                    yva->type->ref = true;
+                                    makeRef = true;
+                                } else {
+                                    yva->type = make_shared<TypeDecl>(*expr->iterType);
+                                    yva->type->constant = false;
+                                    yva->type->ref = !expr->iterType->isRefType();
+                                }
+                                yva->name = (makeRef ? "_ryield" : "_yield_") + to_string(block->at.line);
+                                yva->at = block->at;
+                                block->arguments.push_back(yva);
+                            }
+                            // make it all
                             string lname = generateNewLambdaName(block->at);
                             auto ls = generateLambdaStruct(lname, block.get(), cl.capt, true);
                             if ( program->addStructure(ls) ) {
@@ -1618,7 +1657,7 @@ namespace das {
                                     reportGenericInfer();
                                     auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
                                     // each ( [[ ]]] )
-                                    auto cEach = make_shared<ExprCall>(block->at, "each");
+                                    auto cEach = make_shared<ExprCall>(block->at, makeRef ? "each_ref" : "each");
                                     cEach->arguments.push_back(ms);
                                     return cEach;
                                 } else {
@@ -1626,6 +1665,10 @@ namespace das {
                                 }
                             } else {
                                 error("generator struct name mismatch", expr->at, CompilationError::invalid_block);
+                            }
+                            // in case of error
+                            if ( !expr->iterType->isVoid() ) {
+                                block->arguments.pop_back();
                             }
                         }
                     }
@@ -3181,7 +3224,15 @@ namespace das {
                 auto blk = make_shared<ExprBlock>();
                 blk->isCollapseable = true;
                 blk->at = expr->at;
+                bool makeRef = false;
+                if ( func->arguments.size()==2 ) { // starts with _ryield
+                    const auto & argn = func->arguments[1]->name;
+                    if ( argn.length()>=7 ) {
+                        makeRef = memcmp ( argn.c_str(), "_ryield", 7 ) ==  0;
+                    }
+                }
                 if ( expr->moveSemantics ) {
+                    // TODO: error on makeRef + moveSemantics
                     // result <- a
                     auto mto = make_shared<ExprVar>(expr->at, yarg->name);
                     auto mfr = expr->subexpr->clone();
@@ -3191,6 +3242,9 @@ namespace das {
                     // result = a
                     auto cto = make_shared<ExprVar>(expr->at, yarg->name);
                     auto cfr = expr->subexpr->clone();
+                    if ( makeRef ) {
+                        cfr = make_shared<ExprRef2Ptr>(expr->at, cfr);
+                    }
                     auto cpy = make_shared<ExprCopy>(expr->at, cto, cfr);
                     blk->list.push_back(cpy);
                 }

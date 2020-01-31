@@ -635,6 +635,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        TypeDeclPtr iterType;
     };
 
     struct ExprYield : Expression {

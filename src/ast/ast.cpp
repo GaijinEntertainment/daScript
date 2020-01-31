@@ -705,6 +705,11 @@ namespace das {
 
     ExpressionPtr ExprMakeGenerator::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( iterType ) {
+            vis.preVisit(iterType.get());
+            iterType = iterType->visit(vis);
+            iterType = vis.visit(iterType.get());
+        }
         ExprLooksLikeCall::visit(vis);
         return vis.visit(this);
     }
@@ -712,6 +717,9 @@ namespace das {
     ExpressionPtr ExprMakeGenerator::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeGenerator>(expr);
         ExprLooksLikeCall::clone(cexpr);
+        if ( iterType ) {
+            cexpr->iterType = make_shared<TypeDecl>(*iterType);
+        }
         return cexpr;
     }
 

@@ -11,9 +11,9 @@ State 112 conflicts: 1 shift/reduce
 State 231 conflicts: 1 shift/reduce
 State 271 conflicts: 2 shift/reduce
 State 321 conflicts: 6 shift/reduce
-State 430 conflicts: 1 shift/reduce
-State 582 conflicts: 5 shift/reduce
-State 666 conflicts: 29 shift/reduce
+State 429 conflicts: 1 shift/reduce
+State 581 conflicts: 5 shift/reduce
+State 668 conflicts: 29 shift/reduce
 
 
 Grammar
@@ -324,8 +324,8 @@ Grammar
   245     | "addr" '(' expr ')'
   246     | "lambda" '(' ')'
   247     | "lambda" '(' expr ')'
-  248     | "generator" '(' ')'
-  249     | "generator" '(' expr ')'
+  248     | "generator" '<' type_declaration '>' '(' ')'
+  249     | "generator" '<' type_declaration '>' '(' expr ')'
   250     | expr "??" expr
   251     | expr '?' expr ':' expr
   252     | expr "is" "type" type_declaration
@@ -528,11 +528,11 @@ $end (0) 0
 ':' (58) 33 34 74 251 279 280 286 287 288 302
 ';' (59) 11 41 115 117 118 123 124 129 130 131 146 147 148 151 152
     166 169 268 272 275 286 287 289 297 298 351 370 381 385 388 389
-'<' (60) 91 161 162 163 165 166 168 169 221 350 351 352 354 355 357
-    358 360 361 362
+'<' (60) 91 161 162 163 165 166 168 169 221 248 249 350 351 352 354
+    355 357 358 360 361 362
 '=' (61) 52 53 54 55 56 57 59 183 276 283 298 299
-'>' (62) 92 161 162 163 165 166 168 169 222 350 351 352 354 355 357
-    358 360 361 362
+'>' (62) 92 161 162 163 165 166 168 169 222 248 249 350 351 352 354
+    355 357 358 360 361 362
 '?' (63) 251 348
 '@' (64) 238
 '[' (91) 69 198 235 263 337 338 339
@@ -876,9 +876,9 @@ auto_type_declaration <pTypeDecl> (250)
 type_declaration <pTypeDecl> (251)
     on left: 334 335 336 337 338 339 340 341 342 343 344 345 346 347
     348 349 350 351 352 353 354 355 356 357 358 359 360 361 362, on right:
-    74 140 141 142 161 162 163 167 168 169 252 273 279 280 286 287
-    288 299 337 338 339 340 341 342 343 344 345 346 347 348 349 350
-    351 352 354 357 360 371 372 373 374 382 383
+    74 140 141 142 161 162 163 167 168 169 248 249 252 273 279 280
+    286 287 288 299 337 338 339 340 341 342 343 344 345 346 347 348
+    349 350 351 352 354 357 360 371 372 373 374 382 383
 make_decl <pExpression> (252)
     on left: 363 364 365 366, on right: 143 205
 make_struct_fields <pMakeStruct> (253)
@@ -3723,10 +3723,10 @@ State 245
 
 State 246
 
-  248 expr: "generator" . '(' ')'
-  249     | "generator" . '(' expr ')'
+  248 expr: "generator" . '<' type_declaration '>' '(' ')'
+  249     | "generator" . '<' type_declaration '>' '(' expr ')'
 
-    '('  shift, and go to state 330
+    '<'  shift, and go to state 330
 
 
 State 247
@@ -5957,87 +5957,49 @@ State 329
 
 State 330
 
-  248 expr: "generator" '(' . ')'
-  249     | "generator" '(' . expr ')'
+  248 expr: "generator" '<' . type_declaration '>' '(' ')'
+  249     | "generator" '<' . type_declaration '>' '(' expr ')'
 
-    "true"                            shift, and go to state 235
-    "false"                           shift, and go to state 236
-    "new"                             shift, and go to state 237
-    "typeinfo"                        shift, and go to state 238
-    "null"                            shift, and go to state 239
-    "deref"                           shift, and go to state 240
-    "cast"                            shift, and go to state 241
-    "upcast"                          shift, and go to state 242
-    "addr"                            shift, and go to state 243
-    "reinterpret"                     shift, and go to state 244
-    "bool"                            shift, and go to state 89
-    "void"                            shift, and go to state 90
-    "string"                          shift, and go to state 91
-    "int"                             shift, and go to state 93
-    "int2"                            shift, and go to state 94
-    "int3"                            shift, and go to state 95
-    "int4"                            shift, and go to state 96
-    "uint"                            shift, and go to state 97
-    "uint2"                           shift, and go to state 98
-    "uint3"                           shift, and go to state 99
-    "uint4"                           shift, and go to state 100
-    "float"                           shift, and go to state 101
-    "float2"                          shift, and go to state 102
-    "float3"                          shift, and go to state 103
-    "float4"                          shift, and go to state 104
-    "range"                           shift, and go to state 105
-    "urange"                          shift, and go to state 106
-    "int64"                           shift, and go to state 108
-    "uint64"                          shift, and go to state 109
-    "double"                          shift, and go to state 110
-    "lambda"                          shift, and go to state 245
-    "int8"                            shift, and go to state 113
-    "uint8"                           shift, and go to state 114
-    "int16"                           shift, and go to state 115
-    "uint16"                          shift, and go to state 116
-    "generator"                       shift, and go to state 246
-    "++"                              shift, and go to state 247
-    "--"                              shift, and go to state 248
-    "[["                              shift, and go to state 249
-    "[{"                              shift, and go to state 250
-    "{{"                              shift, and go to state 251
-    "integer constant"                shift, and go to state 252
-    "long integer constant"           shift, and go to state 253
-    "unsigned integer constant"       shift, and go to state 254
-    "unsigned long integer constant"  shift, and go to state 255
-    "floating point constant"         shift, and go to state 256
-    "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 37
-    "start of the string"             shift, and go to state 258
-    '-'                               shift, and go to state 259
-    '+'                               shift, and go to state 260
-    '*'                               shift, and go to state 261
-    '@'                               shift, and go to state 262
-    '~'                               shift, and go to state 263
-    '!'                               shift, and go to state 264
-    '('                               shift, and go to state 266
-    ')'                               shift, and go to state 410
-    COLCOL                            shift, and go to state 38
-    '{'                               shift, and go to state 267
-    '$'                               shift, and go to state 268
+    "array"     shift, and go to state 86
+    "table"     shift, and go to state 87
+    "iterator"  shift, and go to state 88
+    "bool"      shift, and go to state 89
+    "void"      shift, and go to state 90
+    "string"    shift, and go to state 91
+    "auto"      shift, and go to state 92
+    "int"       shift, and go to state 93
+    "int2"      shift, and go to state 94
+    "int3"      shift, and go to state 95
+    "int4"      shift, and go to state 96
+    "uint"      shift, and go to state 97
+    "uint2"     shift, and go to state 98
+    "uint3"     shift, and go to state 99
+    "uint4"     shift, and go to state 100
+    "float"     shift, and go to state 101
+    "float2"    shift, and go to state 102
+    "float3"    shift, and go to state 103
+    "float4"    shift, and go to state 104
+    "range"     shift, and go to state 105
+    "urange"    shift, and go to state 106
+    "block"     shift, and go to state 107
+    "int64"     shift, and go to state 108
+    "uint64"    shift, and go to state 109
+    "double"    shift, and go to state 110
+    "function"  shift, and go to state 111
+    "lambda"    shift, and go to state 112
+    "int8"      shift, and go to state 113
+    "uint8"     shift, and go to state 114
+    "int16"     shift, and go to state 115
+    "uint16"    shift, and go to state 116
+    "tuple"     shift, and go to state 117
+    "name"      shift, and go to state 37
+    COLCOL      shift, and go to state 38
 
-    string_builder          go to state 269
-    expression_block        go to state 270
-    name_in_namespace       go to state 271
-    expr_new                go to state 272
-    expr_cast               go to state 273
-    expr_type_info          go to state 274
-    expr_block              go to state 275
-    expr_numeric_const      go to state 276
-    expr_named_call         go to state 277
-    expr_method_call        go to state 278
-    expr                    go to state 411
-    basic_type_declaration  go to state 280
-    make_decl               go to state 281
-    make_struct_decl        go to state 282
-    make_dim_decl           go to state 283
-    make_table_decl         go to state 284
-    array_comprehension     go to state 285
+    name_in_namespace           go to state 118
+    basic_type_declaration      go to state 119
+    structure_type_declaration  go to state 120
+    auto_type_declaration       go to state 121
+    type_declaration            go to state 410
 
 
 State 331
@@ -6140,7 +6102,7 @@ State 333
 
     "name"  shift, and go to state 201
 
-    variable_name_list  go to state 412
+    variable_name_list  go to state 411
 
 
 State 334
@@ -6213,7 +6175,7 @@ State 334
     "unsigned long integer constant"  shift, and go to state 255
     "floating point constant"         shift, and go to state 256
     "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 413
+    "name"                            shift, and go to state 412
     "start of the string"             shift, and go to state 258
     '?'                               shift, and go to state 193
     '&'                               shift, and go to state 194
@@ -6224,7 +6186,7 @@ State 334
     '~'                               shift, and go to state 263
     '!'                               shift, and go to state 264
     '['                               shift, and go to state 195
-    '('                               shift, and go to state 414
+    '('                               shift, and go to state 413
     COLCOL                            shift, and go to state 38
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
@@ -6240,16 +6202,16 @@ State 334
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 415
+    expr                    go to state 414
     basic_type_declaration  go to state 280
     make_decl               go to state 281
-    make_struct_fields      go to state 416
-    make_struct_dim         go to state 417
+    make_struct_fields      go to state 415
+    make_struct_dim         go to state 416
     make_struct_decl        go to state 282
-    make_tuple              go to state 418
-    make_map_tuple          go to state 419
-    make_any_tuple          go to state 420
-    make_dim                go to state 421
+    make_tuple              go to state 417
+    make_map_tuple          go to state 418
+    make_any_tuple          go to state 419
+    make_dim                go to state 420
     make_dim_decl           go to state 283
     make_table_decl         go to state 284
     array_comprehension     go to state 285
@@ -6325,7 +6287,7 @@ State 335
     "unsigned long integer constant"  shift, and go to state 255
     "floating point constant"         shift, and go to state 256
     "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 413
+    "name"                            shift, and go to state 412
     "start of the string"             shift, and go to state 258
     '?'                               shift, and go to state 193
     '&'                               shift, and go to state 194
@@ -6336,7 +6298,7 @@ State 335
     '~'                               shift, and go to state 263
     '!'                               shift, and go to state 264
     '['                               shift, and go to state 195
-    '('                               shift, and go to state 422
+    '('                               shift, and go to state 421
     COLCOL                            shift, and go to state 38
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
@@ -6352,16 +6314,16 @@ State 335
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 415
+    expr                    go to state 414
     basic_type_declaration  go to state 280
     make_decl               go to state 281
-    make_struct_fields      go to state 416
-    make_struct_dim         go to state 423
+    make_struct_fields      go to state 415
+    make_struct_dim         go to state 422
     make_struct_decl        go to state 282
-    make_tuple              go to state 418
-    make_map_tuple          go to state 419
-    make_any_tuple          go to state 420
-    make_dim                go to state 424
+    make_tuple              go to state 417
+    make_map_tuple          go to state 418
+    make_any_tuple          go to state 419
+    make_dim                go to state 423
     make_dim_decl           go to state 283
     make_table_decl         go to state 284
     array_comprehension     go to state 285
@@ -6417,7 +6379,7 @@ State 336
     "|>"   shift, and go to state 364
     "<<<"  shift, and go to state 365
     ">>>"  shift, and go to state 366
-    "=>"   shift, and go to state 425
+    "=>"   shift, and go to state 424
     '?'    shift, and go to state 367
     '|'    shift, and go to state 368
     '^'    shift, and go to state 369
@@ -6445,8 +6407,8 @@ State 338
   385 make_table: make_table . ';' make_map_tuple
   386 make_table_decl: "{{" make_table . '}' '}'
 
-    ';'  shift, and go to state 426
-    '}'  shift, and go to state 427
+    ';'  shift, and go to state 425
+    '}'  shift, and go to state 426
 
 
 State 339
@@ -6456,10 +6418,10 @@ State 339
    19 string_builder: "start of the string" string_builder_body . "end of the string"
 
     STRING_CHARACTER     shift, and go to state 168
-    "end of the string"  shift, and go to state 428
-    "{"                  shift, and go to state 429
+    "end of the string"  shift, and go to state 427
+    "{"                  shift, and go to state 428
 
-    character_sequence  go to state 430
+    character_sequence  go to state 429
 
 
 State 340
@@ -6757,7 +6719,7 @@ State 346
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ')'    shift, and go to state 431
+    ')'    shift, and go to state 430
 
 
 State 347
@@ -6767,31 +6729,31 @@ State 347
   133 expressions: expressions . expression_any
   134            | expressions . error
 
-    error                             shift, and go to state 432
+    error                             shift, and go to state 431
     "let"                             shift, and go to state 3
-    "while"                           shift, and go to state 433
-    "if"                              shift, and go to state 434
-    "for"                             shift, and go to state 435
+    "while"                           shift, and go to state 432
+    "if"                              shift, and go to state 433
+    "for"                             shift, and go to state 434
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
     "new"                             shift, and go to state 237
     "typeinfo"                        shift, and go to state 238
-    "return"                          shift, and go to state 436
+    "return"                          shift, and go to state 435
     "null"                            shift, and go to state 239
-    "break"                           shift, and go to state 437
-    "try"                             shift, and go to state 438
-    "delete"                          shift, and go to state 439
+    "break"                           shift, and go to state 436
+    "try"                             shift, and go to state 437
+    "delete"                          shift, and go to state 438
     "deref"                           shift, and go to state 240
-    "with"                            shift, and go to state 440
+    "with"                            shift, and go to state 439
     "cast"                            shift, and go to state 241
     "upcast"                          shift, and go to state 242
     "var"                             shift, and go to state 9
     "addr"                            shift, and go to state 243
-    "continue"                        shift, and go to state 441
-    "pass"                            shift, and go to state 442
+    "continue"                        shift, and go to state 440
+    "pass"                            shift, and go to state 441
     "reinterpret"                     shift, and go to state 244
-    "label"                           shift, and go to state 443
-    "goto"                            shift, and go to state 444
+    "label"                           shift, and go to state 442
+    "goto"                            shift, and go to state 443
     "bool"                            shift, and go to state 89
     "void"                            shift, and go to state 90
     "string"                          shift, and go to state 91
@@ -6818,7 +6780,7 @@ State 347
     "int16"                           shift, and go to state 115
     "uint16"                          shift, and go to state 116
     "generator"                       shift, and go to state 246
-    "yield"                           shift, and go to state 445
+    "yield"                           shift, and go to state 444
     "++"                              shift, and go to state 247
     "--"                              shift, and go to state 248
     "[["                              shift, and go to state 249
@@ -6840,39 +6802,39 @@ State 347
     '!'                               shift, and go to state 264
     '('                               shift, and go to state 266
     COLCOL                            shift, and go to state 38
-    ';'                               shift, and go to state 446
+    ';'                               shift, and go to state 445
     '{'                               shift, and go to state 267
-    '}'                               shift, and go to state 447
+    '}'                               shift, and go to state 446
     '$'                               shift, and go to state 268
 
     string_builder           go to state 269
-    expression_label         go to state 448
-    expression_goto          go to state 449
-    expression_if_then_else  go to state 450
-    expression_for_loop      go to state 451
-    expression_while_loop    go to state 452
-    expression_with          go to state 453
+    expression_label         go to state 447
+    expression_goto          go to state 448
+    expression_if_then_else  go to state 449
+    expression_for_loop      go to state 450
+    expression_while_loop    go to state 451
+    expression_with          go to state 452
     expression_block         go to state 270
-    expression_any           go to state 454
-    expr_pipe                go to state 455
+    expression_any           go to state 453
+    expr_pipe                go to state 454
     name_in_namespace        go to state 271
-    expression_delete        go to state 456
+    expression_delete        go to state 455
     expr_new                 go to state 272
-    expression_break         go to state 457
-    expression_continue      go to state 458
-    expression_return        go to state 459
-    expression_yield         go to state 460
-    expression_try_catch     go to state 461
-    kwd_let                  go to state 462
-    expression_let           go to state 463
+    expression_break         go to state 456
+    expression_continue      go to state 457
+    expression_return        go to state 458
+    expression_yield         go to state 459
+    expression_try_catch     go to state 460
+    kwd_let                  go to state 461
+    expression_let           go to state 462
     expr_cast                go to state 273
     expr_type_info           go to state 274
     expr_block               go to state 275
     expr_numeric_const       go to state 276
-    expr_assign              go to state 464
+    expr_assign              go to state 463
     expr_named_call          go to state 277
     expr_method_call         go to state 278
-    expr                     go to state 465
+    expr                     go to state 464
     basic_type_declaration   go to state 280
     make_decl                go to state 281
     make_struct_decl         go to state 282
@@ -6889,7 +6851,7 @@ State 348
 
     $default  reduce using rule 70 (optional_function_argument_list)
 
-    optional_function_argument_list  go to state 466
+    optional_function_argument_list  go to state 465
 
 
 State 349
@@ -6960,9 +6922,9 @@ State 350
     '@'                               shift, and go to state 262
     '~'                               shift, and go to state 263
     '!'                               shift, and go to state 264
-    '['                               shift, and go to state 467
+    '['                               shift, and go to state 466
     '('                               shift, and go to state 266
-    ')'                               shift, and go to state 468
+    ')'                               shift, and go to state 467
     COLCOL                            shift, and go to state 38
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
@@ -6973,12 +6935,12 @@ State 350
     expr_new                go to state 272
     expr_cast               go to state 273
     expr_type_info          go to state 274
-    expr_list               go to state 469
+    expr_list               go to state 468
     expr_block              go to state 275
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 470
+    expr                    go to state 469
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -6991,7 +6953,7 @@ State 351
 
   252 expr: expr "is" . "type" type_declaration
 
-    "type"  shift, and go to state 471
+    "type"  shift, and go to state 470
 
 
 State 352
@@ -7068,7 +7030,7 @@ State 352
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 472
+    expr                    go to state 471
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7151,7 +7113,7 @@ State 353
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 473
+    expr                    go to state 472
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7248,7 +7210,7 @@ State 356
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 474
+    expr                    go to state 473
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7331,7 +7293,7 @@ State 357
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 475
+    expr                    go to state 474
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7414,7 +7376,7 @@ State 358
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 476
+    expr                    go to state 475
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7497,7 +7459,7 @@ State 359
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 477
+    expr                    go to state 476
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7511,7 +7473,7 @@ State 360
   199 expr_method_call: expr "->" . "name" '(' ')'
   200                 | expr "->" . "name" '(' expr_list ')'
 
-    "name"  shift, and go to state 478
+    "name"  shift, and go to state 477
 
 
 State 361
@@ -7588,7 +7550,7 @@ State 361
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 479
+    expr                    go to state 478
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7601,7 +7563,7 @@ State 362
 
   237 expr: expr "?." . "name"
 
-    "name"  shift, and go to state 480
+    "name"  shift, and go to state 479
 
 
 State 363
@@ -7678,7 +7640,7 @@ State 363
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 481
+    expr                    go to state 480
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7761,7 +7723,7 @@ State 364
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 482
+    expr                    go to state 481
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7844,7 +7806,7 @@ State 365
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 483
+    expr                    go to state 482
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -7927,7 +7889,7 @@ State 366
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 484
+    expr                    go to state 483
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8010,7 +7972,7 @@ State 367
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 485
+    expr                    go to state 484
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8093,7 +8055,7 @@ State 368
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 486
+    expr                    go to state 485
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8176,7 +8138,7 @@ State 369
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 487
+    expr                    go to state 486
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8259,7 +8221,7 @@ State 370
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 488
+    expr                    go to state 487
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8342,7 +8304,7 @@ State 371
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 489
+    expr                    go to state 488
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8425,7 +8387,7 @@ State 372
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 490
+    expr                    go to state 489
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8508,7 +8470,7 @@ State 373
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 491
+    expr                    go to state 490
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8591,7 +8553,7 @@ State 374
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 492
+    expr                    go to state 491
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8674,7 +8636,7 @@ State 375
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 493
+    expr                    go to state 492
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8757,7 +8719,7 @@ State 376
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 494
+    expr                    go to state 493
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8840,7 +8802,7 @@ State 377
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 495
+    expr                    go to state 494
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -8853,7 +8815,7 @@ State 378
 
   236 expr: expr '.' . "name"
 
-    "name"  shift, and go to state 496
+    "name"  shift, and go to state 495
 
 
 State 379
@@ -8930,7 +8892,7 @@ State 379
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 497
+    expr                    go to state 496
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -9007,7 +8969,7 @@ State 381
     '~'                               shift, and go to state 263
     '!'                               shift, and go to state 264
     '('                               shift, and go to state 266
-    ')'                               shift, and go to state 498
+    ')'                               shift, and go to state 497
     COLCOL                            shift, and go to state 38
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
@@ -9018,12 +8980,12 @@ State 381
     expr_new                go to state 272
     expr_cast               go to state 273
     expr_type_info          go to state 274
-    expr_list               go to state 499
+    expr_list               go to state 498
     expr_block              go to state 275
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 470
+    expr                    go to state 469
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -9038,7 +9000,7 @@ State 382
   263 optional_field_annotation: '[' annotation_argument_list . ']'
 
     ','  shift, and go to state 48
-    ']'  shift, and go to state 500
+    ']'  shift, and go to state 499
 
 
 State 383
@@ -9054,7 +9016,7 @@ State 384
 
     "name"  shift, and go to state 201
 
-    variable_declaration  go to state 501
+    variable_declaration  go to state 500
     variable_name_list    go to state 206
 
 
@@ -9110,7 +9072,7 @@ State 388
 
     $default  reduce using rule 279 (variable_declaration)
 
-    copy_or_move  go to state 502
+    copy_or_move  go to state 501
 
 
 State 389
@@ -9124,7 +9086,7 @@ State 390
 
   135 expr_pipe: expr_assign . " <|" expr_block
 
-    " <|"  shift, and go to state 503
+    " <|"  shift, and go to state 502
 
 
 State 391
@@ -9178,36 +9140,36 @@ State 391
   281 variable_declaration: variable_name_list copy_or_move expr .
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -9255,10 +9217,10 @@ State 392
     '?'         shift, and go to state 193
     '&'         shift, and go to state 194
     '['         shift, and go to state 195
-    ';'         shift, and go to state 519
+    ';'         shift, and go to state 518
     '#'         shift, and go to state 196
 
-    copy_or_move_or_clone  go to state 520
+    copy_or_move_or_clone  go to state 519
 
 
 State 393
@@ -9319,36 +9281,36 @@ State 394
   289 let_variable_declaration: variable_name_list copy_or_move_or_clone expr . ';'
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -9362,7 +9324,7 @@ State 394
     '%'     shift, and go to state 377
     '.'     shift, and go to state 378
     '['     shift, and go to state 379
-    ';'     shift, and go to state 521
+    ';'     shift, and go to state 520
 
     $default  reduce using rule 182 (expr_assign)
 
@@ -9397,7 +9359,7 @@ State 396
     "??"        shift, and go to state 192
     '?'         shift, and go to state 193
     '&'         shift, and go to state 194
-    '>'         shift, and go to state 522
+    '>'         shift, and go to state 521
     '['         shift, and go to state 195
     '#'         shift, and go to state 196
 
@@ -9491,7 +9453,7 @@ State 401
     '~'                               shift, and go to state 263
     '!'                               shift, and go to state 264
     '('                               shift, and go to state 266
-    ')'                               shift, and go to state 523
+    ')'                               shift, and go to state 522
     COLCOL                            shift, and go to state 38
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
@@ -9502,12 +9464,12 @@ State 401
     expr_new                go to state 272
     expr_cast               go to state 273
     expr_type_info          go to state 274
-    expr_list               go to state 524
+    expr_list               go to state 523
     expr_block              go to state 275
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 470
+    expr                    go to state 469
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -9529,7 +9491,7 @@ State 402
     "false"                           shift, and go to state 236
     "new"                             shift, and go to state 237
     "typeinfo"                        shift, and go to state 238
-    "type"                            shift, and go to state 525
+    "type"                            shift, and go to state 524
     "null"                            shift, and go to state 239
     "deref"                           shift, and go to state 240
     "cast"                            shift, and go to state 241
@@ -9575,7 +9537,7 @@ State 402
     "double constant"                 shift, and go to state 257
     "name"                            shift, and go to state 37
     "start of the string"             shift, and go to state 258
-    '<'                               shift, and go to state 526
+    '<'                               shift, and go to state 525
     '-'                               shift, and go to state 259
     '+'                               shift, and go to state 260
     '*'                               shift, and go to state 261
@@ -9597,7 +9559,7 @@ State 402
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 527
+    expr                    go to state 526
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -9669,7 +9631,7 @@ State 403
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ')'    shift, and go to state 528
+    ')'    shift, and go to state 527
 
 
 State 404
@@ -9695,7 +9657,7 @@ State 404
     "??"        shift, and go to state 192
     '?'         shift, and go to state 193
     '&'         shift, and go to state 194
-    '>'         shift, and go to state 529
+    '>'         shift, and go to state 528
     '['         shift, and go to state 195
     '#'         shift, and go to state 196
 
@@ -9723,7 +9685,7 @@ State 405
     "??"        shift, and go to state 192
     '?'         shift, and go to state 193
     '&'         shift, and go to state 194
-    '>'         shift, and go to state 530
+    '>'         shift, and go to state 529
     '['         shift, and go to state 195
     '#'         shift, and go to state 196
 
@@ -9791,7 +9753,7 @@ State 406
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ')'    shift, and go to state 531
+    ')'    shift, and go to state 530
 
 
 State 407
@@ -9817,7 +9779,7 @@ State 407
     "??"        shift, and go to state 192
     '?'         shift, and go to state 193
     '&'         shift, and go to state 194
-    '>'         shift, and go to state 532
+    '>'         shift, and go to state 531
     '['         shift, and go to state 195
     '#'         shift, and go to state 196
 
@@ -9892,92 +9854,48 @@ State 409
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ')'    shift, and go to state 533
+    ')'    shift, and go to state 532
 
 
 State 410
 
-  248 expr: "generator" '(' ')' .
+  248 expr: "generator" '<' type_declaration . '>' '(' ')'
+  249     | "generator" '<' type_declaration . '>' '(' expr ')'
+  337 type_declaration: type_declaration . '[' expr ']'
+  338                 | type_declaration . '[' ']'
+  339                 | type_declaration . "delete" '[' ']'
+  340                 | type_declaration . "const"
+  341                 | type_declaration . "delete" "const"
+  342                 | type_declaration . '&'
+  343                 | type_declaration . "delete" "const" '&'
+  344                 | type_declaration . "delete" '&'
+  345                 | type_declaration . '#'
+  346                 | type_declaration . "implicit"
+  347                 | type_declaration . "delete" '#'
+  348                 | type_declaration . '?'
+  349                 | type_declaration . "??"
 
-    $default  reduce using rule 248 (expr)
+    "const"     shift, and go to state 189
+    "delete"    shift, and go to state 190
+    "implicit"  shift, and go to state 191
+    "??"        shift, and go to state 192
+    '?'         shift, and go to state 193
+    '&'         shift, and go to state 194
+    '>'         shift, and go to state 533
+    '['         shift, and go to state 195
+    '#'         shift, and go to state 196
 
 
 State 411
 
-  199 expr_method_call: expr . "->" "name" '(' ')'
-  200                 | expr . "->" "name" '(' expr_list ')'
-  212 expr: expr . "<<" expr
-  213     | expr . ">>" expr
-  214     | expr . "<<<" expr
-  215     | expr . ">>>" expr
-  216     | expr . '+' expr
-  217     | expr . '-' expr
-  218     | expr . '*' expr
-  219     | expr . '/' expr
-  220     | expr . '%' expr
-  221     | expr . '<' expr
-  222     | expr . '>' expr
-  223     | expr . "==" expr
-  224     | expr . "!=" expr
-  225     | expr . "<=" expr
-  226     | expr . ">=" expr
-  227     | expr . '&' expr
-  228     | expr . '|' expr
-  229     | expr . '^' expr
-  232     | expr . "++"
-  233     | expr . "--"
-  235     | expr . '[' expr ']'
-  236     | expr . '.' "name"
-  237     | expr . "?." "name"
-  249     | "generator" '(' expr . ')'
-  250     | expr . "??" expr
-  251     | expr . '?' expr ':' expr
-  252     | expr . "is" "type" type_declaration
-  259     | expr . "<|" expr
-  260     | expr . "|>" expr
-
-    "is"   shift, and go to state 351
-    "<<"   shift, and go to state 352
-    ">>"   shift, and go to state 353
-    "++"   shift, and go to state 354
-    "--"   shift, and go to state 355
-    "<="   shift, and go to state 356
-    ">="   shift, and go to state 357
-    "=="   shift, and go to state 358
-    "!="   shift, and go to state 359
-    "->"   shift, and go to state 360
-    "??"   shift, and go to state 361
-    "?."   shift, and go to state 362
-    "<|"   shift, and go to state 363
-    "|>"   shift, and go to state 364
-    "<<<"  shift, and go to state 365
-    ">>>"  shift, and go to state 366
-    '?'    shift, and go to state 367
-    '|'    shift, and go to state 368
-    '^'    shift, and go to state 369
-    '&'    shift, and go to state 370
-    '<'    shift, and go to state 371
-    '>'    shift, and go to state 372
-    '-'    shift, and go to state 373
-    '+'    shift, and go to state 374
-    '*'    shift, and go to state 375
-    '/'    shift, and go to state 376
-    '%'    shift, and go to state 377
-    '.'    shift, and go to state 378
-    '['    shift, and go to state 379
-    ')'    shift, and go to state 534
-
-
-State 412
-
   306 variable_name_list: variable_name_list . ',' "name"
   389 array_comprehension: "[[" "for" variable_name_list . "in" expr_list ';' expr array_comprehension_where ']' ']'
 
-    "in"  shift, and go to state 535
+    "in"  shift, and go to state 534
     ','   shift, and go to state 294
 
 
-State 413
+State 412
 
   136 name_in_namespace: "name" .
   137                  | "name" . COLCOL "name"
@@ -9989,10 +9907,10 @@ State 413
 
     $default  reduce using rule 136 (name_in_namespace)
 
-    copy_or_move  go to state 536
+    copy_or_move  go to state 535
 
 
-State 414
+State 413
 
   234 expr: '(' . expr ')'
   372 make_struct_decl: "[[" type_declaration '(' . ')' make_struct_dim ']' ']'
@@ -10053,7 +9971,7 @@ State 414
     '~'                               shift, and go to state 263
     '!'                               shift, and go to state 264
     '('                               shift, and go to state 266
-    ')'                               shift, and go to state 537
+    ')'                               shift, and go to state 536
     COLCOL                            shift, and go to state 38
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
@@ -10077,7 +9995,7 @@ State 414
     array_comprehension     go to state 285
 
 
-State 415
+State 414
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -10128,7 +10046,7 @@ State 415
     "|>"   shift, and go to state 364
     "<<<"  shift, and go to state 365
     ">>>"  shift, and go to state 366
-    "=>"   shift, and go to state 425
+    "=>"   shift, and go to state 424
     '?'    shift, and go to state 367
     '|'    shift, and go to state 368
     '^'    shift, and go to state 369
@@ -10146,59 +10064,59 @@ State 415
     $default  reduce using rule 375 (make_tuple)
 
 
-State 416
+State 415
 
   368 make_struct_fields: make_struct_fields . ',' "name" copy_or_move expr
   369 make_struct_dim: make_struct_fields .
 
-    ','  shift, and go to state 538
+    ','  shift, and go to state 537
 
     $default  reduce using rule 369 (make_struct_dim)
 
 
-State 417
+State 416
 
   370 make_struct_dim: make_struct_dim . ';' make_struct_fields
   371 make_struct_decl: "[[" type_declaration make_struct_dim . ']' ']'
 
-    ']'  shift, and go to state 539
-    ';'  shift, and go to state 540
+    ']'  shift, and go to state 538
+    ';'  shift, and go to state 539
 
 
-State 418
+State 417
 
   376 make_tuple: make_tuple . ',' expr
   378 make_any_tuple: make_tuple .
 
-    ','  shift, and go to state 541
+    ','  shift, and go to state 540
 
     $default  reduce using rule 378 (make_any_tuple)
 
 
-State 419
+State 418
 
   379 make_any_tuple: make_map_tuple .
 
     $default  reduce using rule 379 (make_any_tuple)
 
 
-State 420
+State 419
 
   380 make_dim: make_any_tuple .
 
     $default  reduce using rule 380 (make_dim)
 
 
-State 421
+State 420
 
   381 make_dim: make_dim . ';' make_any_tuple
   382 make_dim_decl: "[[" type_declaration make_dim . ']' ']'
 
-    ']'  shift, and go to state 542
-    ';'  shift, and go to state 543
+    ']'  shift, and go to state 541
+    ';'  shift, and go to state 542
 
 
-State 422
+State 421
 
   234 expr: '(' . expr ')'
   374 make_struct_decl: "[{" type_declaration '(' . ')' make_struct_dim '}' ']'
@@ -10259,7 +10177,7 @@ State 422
     '~'                               shift, and go to state 263
     '!'                               shift, and go to state 264
     '('                               shift, and go to state 266
-    ')'                               shift, and go to state 544
+    ')'                               shift, and go to state 543
     COLCOL                            shift, and go to state 38
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
@@ -10283,25 +10201,25 @@ State 422
     array_comprehension     go to state 285
 
 
-State 423
+State 422
 
   370 make_struct_dim: make_struct_dim . ';' make_struct_fields
   373 make_struct_decl: "[{" type_declaration make_struct_dim . '}' ']'
 
-    ';'  shift, and go to state 540
-    '}'  shift, and go to state 545
+    ';'  shift, and go to state 539
+    '}'  shift, and go to state 544
 
 
-State 424
+State 423
 
   381 make_dim: make_dim . ';' make_any_tuple
   383 make_dim_decl: "[{" type_declaration make_dim . '}' ']'
 
-    ';'  shift, and go to state 543
-    '}'  shift, and go to state 546
+    ';'  shift, and go to state 542
+    '}'  shift, and go to state 545
 
 
-State 425
+State 424
 
   377 make_map_tuple: expr "=>" . expr
 
@@ -10375,7 +10293,7 @@ State 425
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 547
+    expr                    go to state 546
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -10384,7 +10302,7 @@ State 425
     array_comprehension     go to state 285
 
 
-State 426
+State 425
 
   385 make_table: make_table ';' . make_map_tuple
 
@@ -10462,29 +10380,137 @@ State 426
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
-    make_map_tuple          go to state 548
+    make_map_tuple          go to state 547
     make_dim_decl           go to state 283
     make_table_decl         go to state 284
     array_comprehension     go to state 285
 
 
-State 427
+State 426
 
   386 make_table_decl: "{{" make_table '}' . '}'
 
-    '}'  shift, and go to state 549
+    '}'  shift, and go to state 548
 
 
-State 428
+State 427
 
    19 string_builder: "start of the string" string_builder_body "end of the string" .
 
     $default  reduce using rule 19 (string_builder)
 
 
-State 429
+State 428
 
    18 string_builder_body: string_builder_body "{" . expr "}"
+
+    "true"                            shift, and go to state 235
+    "false"                           shift, and go to state 236
+    "new"                             shift, and go to state 237
+    "typeinfo"                        shift, and go to state 238
+    "null"                            shift, and go to state 239
+    "deref"                           shift, and go to state 240
+    "cast"                            shift, and go to state 241
+    "upcast"                          shift, and go to state 242
+    "addr"                            shift, and go to state 243
+    "reinterpret"                     shift, and go to state 244
+    "bool"                            shift, and go to state 89
+    "void"                            shift, and go to state 90
+    "string"                          shift, and go to state 91
+    "int"                             shift, and go to state 93
+    "int2"                            shift, and go to state 94
+    "int3"                            shift, and go to state 95
+    "int4"                            shift, and go to state 96
+    "uint"                            shift, and go to state 97
+    "uint2"                           shift, and go to state 98
+    "uint3"                           shift, and go to state 99
+    "uint4"                           shift, and go to state 100
+    "float"                           shift, and go to state 101
+    "float2"                          shift, and go to state 102
+    "float3"                          shift, and go to state 103
+    "float4"                          shift, and go to state 104
+    "range"                           shift, and go to state 105
+    "urange"                          shift, and go to state 106
+    "int64"                           shift, and go to state 108
+    "uint64"                          shift, and go to state 109
+    "double"                          shift, and go to state 110
+    "lambda"                          shift, and go to state 245
+    "int8"                            shift, and go to state 113
+    "uint8"                           shift, and go to state 114
+    "int16"                           shift, and go to state 115
+    "uint16"                          shift, and go to state 116
+    "generator"                       shift, and go to state 246
+    "++"                              shift, and go to state 247
+    "--"                              shift, and go to state 248
+    "[["                              shift, and go to state 249
+    "[{"                              shift, and go to state 250
+    "{{"                              shift, and go to state 251
+    "integer constant"                shift, and go to state 252
+    "long integer constant"           shift, and go to state 253
+    "unsigned integer constant"       shift, and go to state 254
+    "unsigned long integer constant"  shift, and go to state 255
+    "floating point constant"         shift, and go to state 256
+    "double constant"                 shift, and go to state 257
+    "name"                            shift, and go to state 37
+    "start of the string"             shift, and go to state 258
+    '-'                               shift, and go to state 259
+    '+'                               shift, and go to state 260
+    '*'                               shift, and go to state 261
+    '@'                               shift, and go to state 262
+    '~'                               shift, and go to state 263
+    '!'                               shift, and go to state 264
+    '('                               shift, and go to state 266
+    COLCOL                            shift, and go to state 38
+    '{'                               shift, and go to state 267
+    '$'                               shift, and go to state 268
+
+    string_builder          go to state 269
+    expression_block        go to state 270
+    name_in_namespace       go to state 271
+    expr_new                go to state 272
+    expr_cast               go to state 273
+    expr_type_info          go to state 274
+    expr_block              go to state 275
+    expr_numeric_const      go to state 276
+    expr_named_call         go to state 277
+    expr_method_call        go to state 278
+    expr                    go to state 549
+    basic_type_declaration  go to state 280
+    make_decl               go to state 281
+    make_struct_decl        go to state 282
+    make_dim_decl           go to state 283
+    make_table_decl         go to state 284
+    array_comprehension     go to state 285
+
+
+State 429
+
+   14 character_sequence: character_sequence . STRING_CHARACTER
+   17 string_builder_body: string_builder_body character_sequence .
+
+    STRING_CHARACTER  shift, and go to state 212
+
+    STRING_CHARACTER  [reduce using rule 17 (string_builder_body)]
+    $default          reduce using rule 17 (string_builder_body)
+
+
+State 430
+
+  234 expr: '(' expr ')' .
+
+    $default  reduce using rule 234 (expr)
+
+
+State 431
+
+  134 expressions: expressions error .
+
+    $default  reduce using rule 134 (expressions)
+
+
+State 432
+
+   42 expression_while_loop: "while" . expr expression_block
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -10565,34 +10591,9 @@ State 429
     array_comprehension     go to state 285
 
 
-State 430
-
-   14 character_sequence: character_sequence . STRING_CHARACTER
-   17 string_builder_body: string_builder_body character_sequence .
-
-    STRING_CHARACTER  shift, and go to state 212
-
-    STRING_CHARACTER  [reduce using rule 17 (string_builder_body)]
-    $default          reduce using rule 17 (string_builder_body)
-
-
-State 431
-
-  234 expr: '(' expr ')' .
-
-    $default  reduce using rule 234 (expr)
-
-
-State 432
-
-  134 expressions: expressions error .
-
-    $default  reduce using rule 134 (expressions)
-
-
 State 433
 
-   42 expression_while_loop: "while" . expr expression_block
+   40 expression_if_then_else: "if" . expr expression_block expression_else
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -10675,97 +10676,14 @@ State 433
 
 State 434
 
-   40 expression_if_then_else: "if" . expr expression_block expression_else
-
-    "true"                            shift, and go to state 235
-    "false"                           shift, and go to state 236
-    "new"                             shift, and go to state 237
-    "typeinfo"                        shift, and go to state 238
-    "null"                            shift, and go to state 239
-    "deref"                           shift, and go to state 240
-    "cast"                            shift, and go to state 241
-    "upcast"                          shift, and go to state 242
-    "addr"                            shift, and go to state 243
-    "reinterpret"                     shift, and go to state 244
-    "bool"                            shift, and go to state 89
-    "void"                            shift, and go to state 90
-    "string"                          shift, and go to state 91
-    "int"                             shift, and go to state 93
-    "int2"                            shift, and go to state 94
-    "int3"                            shift, and go to state 95
-    "int4"                            shift, and go to state 96
-    "uint"                            shift, and go to state 97
-    "uint2"                           shift, and go to state 98
-    "uint3"                           shift, and go to state 99
-    "uint4"                           shift, and go to state 100
-    "float"                           shift, and go to state 101
-    "float2"                          shift, and go to state 102
-    "float3"                          shift, and go to state 103
-    "float4"                          shift, and go to state 104
-    "range"                           shift, and go to state 105
-    "urange"                          shift, and go to state 106
-    "int64"                           shift, and go to state 108
-    "uint64"                          shift, and go to state 109
-    "double"                          shift, and go to state 110
-    "lambda"                          shift, and go to state 245
-    "int8"                            shift, and go to state 113
-    "uint8"                           shift, and go to state 114
-    "int16"                           shift, and go to state 115
-    "uint16"                          shift, and go to state 116
-    "generator"                       shift, and go to state 246
-    "++"                              shift, and go to state 247
-    "--"                              shift, and go to state 248
-    "[["                              shift, and go to state 249
-    "[{"                              shift, and go to state 250
-    "{{"                              shift, and go to state 251
-    "integer constant"                shift, and go to state 252
-    "long integer constant"           shift, and go to state 253
-    "unsigned integer constant"       shift, and go to state 254
-    "unsigned long integer constant"  shift, and go to state 255
-    "floating point constant"         shift, and go to state 256
-    "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 37
-    "start of the string"             shift, and go to state 258
-    '-'                               shift, and go to state 259
-    '+'                               shift, and go to state 260
-    '*'                               shift, and go to state 261
-    '@'                               shift, and go to state 262
-    '~'                               shift, and go to state 263
-    '!'                               shift, and go to state 264
-    '('                               shift, and go to state 266
-    COLCOL                            shift, and go to state 38
-    '{'                               shift, and go to state 267
-    '$'                               shift, and go to state 268
-
-    string_builder          go to state 269
-    expression_block        go to state 270
-    name_in_namespace       go to state 271
-    expr_new                go to state 272
-    expr_cast               go to state 273
-    expr_type_info          go to state 274
-    expr_block              go to state 275
-    expr_numeric_const      go to state 276
-    expr_named_call         go to state 277
-    expr_method_call        go to state 278
-    expr                    go to state 552
-    basic_type_declaration  go to state 280
-    make_decl               go to state 281
-    make_struct_decl        go to state 282
-    make_dim_decl           go to state 283
-    make_table_decl         go to state 284
-    array_comprehension     go to state 285
-
-
-State 435
-
    41 expression_for_loop: "for" . variable_name_list "in" expr_list ';' expression_block
 
     "name"  shift, and go to state 201
 
-    variable_name_list  go to state 553
+    variable_name_list  go to state 552
 
 
-State 436
+State 435
 
   146 expression_return: "return" . ';'
   147                  | "return" . expr ';'
@@ -10811,7 +10729,7 @@ State 436
     "generator"                       shift, and go to state 246
     "++"                              shift, and go to state 247
     "--"                              shift, and go to state 248
-    "<-"                              shift, and go to state 554
+    "<-"                              shift, and go to state 553
     "[["                              shift, and go to state 249
     "[{"                              shift, and go to state 250
     "{{"                              shift, and go to state 251
@@ -10831,13 +10749,13 @@ State 436
     '!'                               shift, and go to state 264
     '('                               shift, and go to state 266
     COLCOL                            shift, and go to state 38
-    ';'                               shift, and go to state 555
+    ';'                               shift, and go to state 554
     '{'                               shift, and go to state 267
     '$'                               shift, and go to state 268
 
     string_builder          go to state 269
     expression_block        go to state 270
-    expr_pipe               go to state 556
+    expr_pipe               go to state 555
     name_in_namespace       go to state 271
     expr_new                go to state 272
     expr_cast               go to state 273
@@ -10847,7 +10765,7 @@ State 436
     expr_assign             go to state 390
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 557
+    expr                    go to state 556
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -10856,25 +10774,108 @@ State 436
     array_comprehension     go to state 285
 
 
-State 437
+State 436
 
   144 expression_break: "break" .
 
     $default  reduce using rule 144 (expression_break)
 
 
-State 438
+State 437
 
   155 expression_try_catch: "try" . expression_block "catch" expression_block
 
     '{'  shift, and go to state 267
 
-    expression_block  go to state 558
+    expression_block  go to state 557
+
+
+State 438
+
+  139 expression_delete: "delete" . expr
+
+    "true"                            shift, and go to state 235
+    "false"                           shift, and go to state 236
+    "new"                             shift, and go to state 237
+    "typeinfo"                        shift, and go to state 238
+    "null"                            shift, and go to state 239
+    "deref"                           shift, and go to state 240
+    "cast"                            shift, and go to state 241
+    "upcast"                          shift, and go to state 242
+    "addr"                            shift, and go to state 243
+    "reinterpret"                     shift, and go to state 244
+    "bool"                            shift, and go to state 89
+    "void"                            shift, and go to state 90
+    "string"                          shift, and go to state 91
+    "int"                             shift, and go to state 93
+    "int2"                            shift, and go to state 94
+    "int3"                            shift, and go to state 95
+    "int4"                            shift, and go to state 96
+    "uint"                            shift, and go to state 97
+    "uint2"                           shift, and go to state 98
+    "uint3"                           shift, and go to state 99
+    "uint4"                           shift, and go to state 100
+    "float"                           shift, and go to state 101
+    "float2"                          shift, and go to state 102
+    "float3"                          shift, and go to state 103
+    "float4"                          shift, and go to state 104
+    "range"                           shift, and go to state 105
+    "urange"                          shift, and go to state 106
+    "int64"                           shift, and go to state 108
+    "uint64"                          shift, and go to state 109
+    "double"                          shift, and go to state 110
+    "lambda"                          shift, and go to state 245
+    "int8"                            shift, and go to state 113
+    "uint8"                           shift, and go to state 114
+    "int16"                           shift, and go to state 115
+    "uint16"                          shift, and go to state 116
+    "generator"                       shift, and go to state 246
+    "++"                              shift, and go to state 247
+    "--"                              shift, and go to state 248
+    "[["                              shift, and go to state 249
+    "[{"                              shift, and go to state 250
+    "{{"                              shift, and go to state 251
+    "integer constant"                shift, and go to state 252
+    "long integer constant"           shift, and go to state 253
+    "unsigned integer constant"       shift, and go to state 254
+    "unsigned long integer constant"  shift, and go to state 255
+    "floating point constant"         shift, and go to state 256
+    "double constant"                 shift, and go to state 257
+    "name"                            shift, and go to state 37
+    "start of the string"             shift, and go to state 258
+    '-'                               shift, and go to state 259
+    '+'                               shift, and go to state 260
+    '*'                               shift, and go to state 261
+    '@'                               shift, and go to state 262
+    '~'                               shift, and go to state 263
+    '!'                               shift, and go to state 264
+    '('                               shift, and go to state 266
+    COLCOL                            shift, and go to state 38
+    '{'                               shift, and go to state 267
+    '$'                               shift, and go to state 268
+
+    string_builder          go to state 269
+    expression_block        go to state 270
+    name_in_namespace       go to state 271
+    expr_new                go to state 272
+    expr_cast               go to state 273
+    expr_type_info          go to state 274
+    expr_block              go to state 275
+    expr_numeric_const      go to state 276
+    expr_named_call         go to state 277
+    expr_method_call        go to state 278
+    expr                    go to state 558
+    basic_type_declaration  go to state 280
+    make_decl               go to state 281
+    make_struct_decl        go to state 282
+    make_dim_decl           go to state 283
+    make_table_decl         go to state 284
+    array_comprehension     go to state 285
 
 
 State 439
 
-  139 expression_delete: "delete" . expr
+   43 expression_with: "with" . expr expression_block
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -10957,109 +10958,26 @@ State 439
 
 State 440
 
-   43 expression_with: "with" . expr expression_block
-
-    "true"                            shift, and go to state 235
-    "false"                           shift, and go to state 236
-    "new"                             shift, and go to state 237
-    "typeinfo"                        shift, and go to state 238
-    "null"                            shift, and go to state 239
-    "deref"                           shift, and go to state 240
-    "cast"                            shift, and go to state 241
-    "upcast"                          shift, and go to state 242
-    "addr"                            shift, and go to state 243
-    "reinterpret"                     shift, and go to state 244
-    "bool"                            shift, and go to state 89
-    "void"                            shift, and go to state 90
-    "string"                          shift, and go to state 91
-    "int"                             shift, and go to state 93
-    "int2"                            shift, and go to state 94
-    "int3"                            shift, and go to state 95
-    "int4"                            shift, and go to state 96
-    "uint"                            shift, and go to state 97
-    "uint2"                           shift, and go to state 98
-    "uint3"                           shift, and go to state 99
-    "uint4"                           shift, and go to state 100
-    "float"                           shift, and go to state 101
-    "float2"                          shift, and go to state 102
-    "float3"                          shift, and go to state 103
-    "float4"                          shift, and go to state 104
-    "range"                           shift, and go to state 105
-    "urange"                          shift, and go to state 106
-    "int64"                           shift, and go to state 108
-    "uint64"                          shift, and go to state 109
-    "double"                          shift, and go to state 110
-    "lambda"                          shift, and go to state 245
-    "int8"                            shift, and go to state 113
-    "uint8"                           shift, and go to state 114
-    "int16"                           shift, and go to state 115
-    "uint16"                          shift, and go to state 116
-    "generator"                       shift, and go to state 246
-    "++"                              shift, and go to state 247
-    "--"                              shift, and go to state 248
-    "[["                              shift, and go to state 249
-    "[{"                              shift, and go to state 250
-    "{{"                              shift, and go to state 251
-    "integer constant"                shift, and go to state 252
-    "long integer constant"           shift, and go to state 253
-    "unsigned integer constant"       shift, and go to state 254
-    "unsigned long integer constant"  shift, and go to state 255
-    "floating point constant"         shift, and go to state 256
-    "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 37
-    "start of the string"             shift, and go to state 258
-    '-'                               shift, and go to state 259
-    '+'                               shift, and go to state 260
-    '*'                               shift, and go to state 261
-    '@'                               shift, and go to state 262
-    '~'                               shift, and go to state 263
-    '!'                               shift, and go to state 264
-    '('                               shift, and go to state 266
-    COLCOL                            shift, and go to state 38
-    '{'                               shift, and go to state 267
-    '$'                               shift, and go to state 268
-
-    string_builder          go to state 269
-    expression_block        go to state 270
-    name_in_namespace       go to state 271
-    expr_new                go to state 272
-    expr_cast               go to state 273
-    expr_type_info          go to state 274
-    expr_block              go to state 275
-    expr_numeric_const      go to state 276
-    expr_named_call         go to state 277
-    expr_method_call        go to state 278
-    expr                    go to state 560
-    basic_type_declaration  go to state 280
-    make_decl               go to state 281
-    make_struct_decl        go to state 282
-    make_dim_decl           go to state 283
-    make_table_decl         go to state 284
-    array_comprehension     go to state 285
-
-
-State 441
-
   145 expression_continue: "continue" .
 
     $default  reduce using rule 145 (expression_continue)
 
 
-State 442
+State 441
 
   131 expression_any: "pass" . ';'
 
-    ';'  shift, and go to state 561
+    ';'  shift, and go to state 560
 
 
-State 443
+State 442
 
    34 expression_label: "label" . "integer constant" ':'
 
-    "integer constant"  shift, and go to state 562
+    "integer constant"  shift, and go to state 561
 
 
-State 444
+State 443
 
    35 expression_goto: "goto" . "label" "integer constant"
    36                | "goto" . expr
@@ -11074,7 +10992,7 @@ State 444
     "upcast"                          shift, and go to state 242
     "addr"                            shift, and go to state 243
     "reinterpret"                     shift, and go to state 244
-    "label"                           shift, and go to state 563
+    "label"                           shift, and go to state 562
     "bool"                            shift, and go to state 89
     "void"                            shift, and go to state 90
     "string"                          shift, and go to state 91
@@ -11135,7 +11053,7 @@ State 444
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 564
+    expr                    go to state 563
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -11144,7 +11062,7 @@ State 444
     array_comprehension     go to state 285
 
 
-State 445
+State 444
 
   151 expression_yield: "yield" . expr ';'
   152                 | "yield" . "<-" expr ';'
@@ -11189,7 +11107,7 @@ State 445
     "generator"                       shift, and go to state 246
     "++"                              shift, and go to state 247
     "--"                              shift, and go to state 248
-    "<-"                              shift, and go to state 565
+    "<-"                              shift, and go to state 564
     "[["                              shift, and go to state 249
     "[{"                              shift, and go to state 250
     "{{"                              shift, and go to state 251
@@ -11214,7 +11132,7 @@ State 445
 
     string_builder          go to state 269
     expression_block        go to state 270
-    expr_pipe               go to state 566
+    expr_pipe               go to state 565
     name_in_namespace       go to state 271
     expr_new                go to state 272
     expr_cast               go to state 273
@@ -11224,7 +11142,7 @@ State 445
     expr_assign             go to state 390
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 567
+    expr                    go to state 566
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -11233,149 +11151,149 @@ State 445
     array_comprehension     go to state 285
 
 
-State 446
+State 445
 
   115 expression_any: ';' .
 
     $default  reduce using rule 115 (expression_any)
 
 
-State 447
+State 446
 
   113 expression_block: '{' expressions '}' .
   114                 | '{' expressions '}' . "finally" '{' expressions '}'
 
-    "finally"  shift, and go to state 568
+    "finally"  shift, and go to state 567
 
     $default  reduce using rule 113 (expression_block)
 
 
-State 448
+State 447
 
   129 expression_any: expression_label . ';'
+
+    ';'  shift, and go to state 568
+
+
+State 448
+
+  130 expression_any: expression_goto . ';'
 
     ';'  shift, and go to state 569
 
 
 State 449
 
-  130 expression_any: expression_goto . ';'
-
-    ';'  shift, and go to state 570
-
-
-State 450
-
   127 expression_any: expression_if_then_else .
 
     $default  reduce using rule 127 (expression_any)
 
 
-State 451
+State 450
 
   122 expression_any: expression_for_loop .
 
     $default  reduce using rule 122 (expression_any)
 
 
-State 452
+State 451
 
   120 expression_any: expression_while_loop .
 
     $default  reduce using rule 120 (expression_any)
 
 
-State 453
+State 452
 
   121 expression_any: expression_with .
 
     $default  reduce using rule 121 (expression_any)
 
 
-State 454
+State 453
 
   133 expressions: expressions expression_any .
 
     $default  reduce using rule 133 (expressions)
 
 
-State 455
+State 454
 
   116 expression_any: expr_pipe .
 
     $default  reduce using rule 116 (expression_any)
 
 
-State 456
+State 455
 
   118 expression_any: expression_delete . ';'
+
+    ';'  shift, and go to state 570
+
+
+State 456
+
+  123 expression_any: expression_break . ';'
 
     ';'  shift, and go to state 571
 
 
 State 457
 
-  123 expression_any: expression_break . ';'
+  124 expression_any: expression_continue . ';'
 
     ';'  shift, and go to state 572
 
 
 State 458
 
-  124 expression_any: expression_continue . ';'
-
-    ';'  shift, and go to state 573
-
-
-State 459
-
   125 expression_any: expression_return .
 
     $default  reduce using rule 125 (expression_any)
 
 
-State 460
+State 459
 
   126 expression_any: expression_yield .
 
     $default  reduce using rule 126 (expression_any)
 
 
-State 461
+State 460
 
   128 expression_any: expression_try_catch .
 
     $default  reduce using rule 128 (expression_any)
 
 
-State 462
+State 461
 
   160 expression_let: kwd_let . let_scope let_variable_declaration
 
-    "in"  shift, and go to state 574
+    "in"  shift, and go to state 573
 
     $default  reduce using rule 156 (let_scope)
 
-    let_scope  go to state 575
+    let_scope  go to state 574
 
 
-State 463
+State 462
 
   119 expression_any: expression_let .
 
     $default  reduce using rule 119 (expression_any)
 
 
-State 464
+State 463
 
   117 expression_any: expr_assign . ';'
   135 expr_pipe: expr_assign . " <|" expr_block
 
-    " <|"  shift, and go to state 503
-    ';'    shift, and go to state 576
+    " <|"  shift, and go to state 502
+    ';'    shift, and go to state 575
 
 
-State 465
+State 464
 
   182 expr_assign: expr .
   183            | expr . '=' expr
@@ -11425,36 +11343,36 @@ State 465
   260     | expr . "|>" expr
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -11472,7 +11390,7 @@ State 465
     $default  reduce using rule 182 (expr_assign)
 
 
-State 466
+State 465
 
   175 expr_block: '$' optional_annotation_list optional_function_argument_list . optional_function_type block_or_simple_block
 
@@ -11480,35 +11398,35 @@ State 466
 
     $default  reduce using rule 73 (optional_function_type)
 
-    optional_function_type  go to state 577
+    optional_function_type  go to state 576
 
 
-State 467
+State 466
 
   198 expr_named_call: name_in_namespace '(' '[' . make_struct_fields ']' ')'
 
-    "name"  shift, and go to state 578
+    "name"  shift, and go to state 577
 
-    make_struct_fields  go to state 579
+    make_struct_fields  go to state 578
 
 
-State 468
+State 467
 
   239 expr: name_in_namespace '(' ')' .
 
     $default  reduce using rule 239 (expr)
 
 
-State 469
+State 468
 
   171 expr_list: expr_list . ',' expr
   240 expr: name_in_namespace '(' expr_list . ')'
 
-    ','  shift, and go to state 580
-    ')'  shift, and go to state 581
+    ','  shift, and go to state 579
+    ')'  shift, and go to state 580
 
 
-State 470
+State 469
 
   170 expr_list: expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -11575,7 +11493,7 @@ State 470
     $default  reduce using rule 170 (expr_list)
 
 
-State 471
+State 470
 
   252 expr: expr "is" "type" . type_declaration
 
@@ -11618,10 +11536,10 @@ State 471
     basic_type_declaration      go to state 119
     structure_type_declaration  go to state 120
     auto_type_declaration       go to state 121
-    type_declaration            go to state 582
+    type_declaration            go to state 581
 
 
-State 472
+State 471
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -11674,7 +11592,7 @@ State 472
     $default  reduce using rule 212 (expr)
 
 
-State 473
+State 472
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -11727,7 +11645,7 @@ State 473
     $default  reduce using rule 213 (expr)
 
 
-State 474
+State 473
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -11784,7 +11702,7 @@ State 474
     $default  reduce using rule 225 (expr)
 
 
-State 475
+State 474
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -11841,7 +11759,7 @@ State 475
     $default  reduce using rule 226 (expr)
 
 
-State 476
+State 475
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -11902,7 +11820,7 @@ State 476
     $default  reduce using rule 223 (expr)
 
 
-State 477
+State 476
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -11963,15 +11881,15 @@ State 477
     $default  reduce using rule 224 (expr)
 
 
-State 478
+State 477
 
   199 expr_method_call: expr "->" "name" . '(' ')'
   200                 | expr "->" "name" . '(' expr_list ')'
 
-    '('  shift, and go to state 583
+    '('  shift, and go to state 582
 
 
-State 479
+State 478
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12019,14 +11937,14 @@ State 479
     $default  reduce using rule 250 (expr)
 
 
-State 480
+State 479
 
   237 expr: expr "?." "name" .
 
     $default  reduce using rule 237 (expr)
 
 
-State 481
+State 480
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12068,7 +11986,7 @@ State 481
     $default  reduce using rule 259 (expr)
 
 
-State 482
+State 481
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12110,7 +12028,7 @@ State 482
     $default  reduce using rule 260 (expr)
 
 
-State 483
+State 482
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12163,7 +12081,7 @@ State 483
     $default  reduce using rule 214 (expr)
 
 
-State 484
+State 483
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12216,7 +12134,7 @@ State 484
     $default  reduce using rule 215 (expr)
 
 
-State 485
+State 484
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12267,7 +12185,7 @@ State 485
     "<<<"  shift, and go to state 365
     ">>>"  shift, and go to state 366
     '?'    shift, and go to state 367
-    ':'    shift, and go to state 584
+    ':'    shift, and go to state 583
     '|'    shift, and go to state 368
     '^'    shift, and go to state 369
     '&'    shift, and go to state 370
@@ -12282,7 +12200,7 @@ State 485
     '['    shift, and go to state 379
 
 
-State 486
+State 485
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12347,7 +12265,7 @@ State 486
     $default  reduce using rule 228 (expr)
 
 
-State 487
+State 486
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12411,7 +12329,7 @@ State 487
     $default  reduce using rule 229 (expr)
 
 
-State 488
+State 487
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12474,7 +12392,7 @@ State 488
     $default  reduce using rule 227 (expr)
 
 
-State 489
+State 488
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12531,7 +12449,7 @@ State 489
     $default  reduce using rule 221 (expr)
 
 
-State 490
+State 489
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12588,7 +12506,7 @@ State 490
     $default  reduce using rule 222 (expr)
 
 
-State 491
+State 490
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12639,7 +12557,7 @@ State 491
     $default  reduce using rule 217 (expr)
 
 
-State 492
+State 491
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12690,7 +12608,7 @@ State 492
     $default  reduce using rule 216 (expr)
 
 
-State 493
+State 492
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12738,7 +12656,7 @@ State 493
     $default  reduce using rule 218 (expr)
 
 
-State 494
+State 493
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12786,7 +12704,7 @@ State 494
     $default  reduce using rule 219 (expr)
 
 
-State 495
+State 494
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12834,14 +12752,14 @@ State 495
     $default  reduce using rule 220 (expr)
 
 
-State 496
+State 495
 
   236 expr: expr '.' "name" .
 
     $default  reduce using rule 236 (expr)
 
 
-State 497
+State 496
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -12904,40 +12822,40 @@ State 497
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ']'    shift, and go to state 585
+    ']'    shift, and go to state 584
 
 
-State 498
+State 497
 
   241 expr: basic_type_declaration '(' ')' .
 
     $default  reduce using rule 241 (expr)
 
 
-State 499
+State 498
 
   171 expr_list: expr_list . ',' expr
   242 expr: basic_type_declaration '(' expr_list . ')'
 
-    ','  shift, and go to state 580
-    ')'  shift, and go to state 586
+    ','  shift, and go to state 579
+    ')'  shift, and go to state 585
 
 
-State 500
+State 499
 
   263 optional_field_annotation: '[' annotation_argument_list ']' .
 
     $default  reduce using rule 263 (optional_field_annotation)
 
 
-State 501
+State 500
 
   266 structure_variable_declaration: optional_field_annotation optional_override variable_declaration .
 
     $default  reduce using rule 266 (structure_variable_declaration)
 
 
-State 502
+State 501
 
   280 variable_declaration: variable_name_list ':' type_declaration copy_or_move . expr
 
@@ -13011,7 +12929,7 @@ State 502
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 587
+    expr                    go to state 586
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -13020,7 +12938,7 @@ State 502
     array_comprehension     go to state 285
 
 
-State 503
+State 502
 
   135 expr_pipe: expr_assign " <|" . expr_block
 
@@ -13028,12 +12946,95 @@ State 503
     '$'  shift, and go to state 268
 
     expression_block  go to state 270
-    expr_block        go to state 588
+    expr_block        go to state 587
+
+
+State 503
+
+  189 expr_assign: expr "+=" . expr
+
+    "true"                            shift, and go to state 235
+    "false"                           shift, and go to state 236
+    "new"                             shift, and go to state 237
+    "typeinfo"                        shift, and go to state 238
+    "null"                            shift, and go to state 239
+    "deref"                           shift, and go to state 240
+    "cast"                            shift, and go to state 241
+    "upcast"                          shift, and go to state 242
+    "addr"                            shift, and go to state 243
+    "reinterpret"                     shift, and go to state 244
+    "bool"                            shift, and go to state 89
+    "void"                            shift, and go to state 90
+    "string"                          shift, and go to state 91
+    "int"                             shift, and go to state 93
+    "int2"                            shift, and go to state 94
+    "int3"                            shift, and go to state 95
+    "int4"                            shift, and go to state 96
+    "uint"                            shift, and go to state 97
+    "uint2"                           shift, and go to state 98
+    "uint3"                           shift, and go to state 99
+    "uint4"                           shift, and go to state 100
+    "float"                           shift, and go to state 101
+    "float2"                          shift, and go to state 102
+    "float3"                          shift, and go to state 103
+    "float4"                          shift, and go to state 104
+    "range"                           shift, and go to state 105
+    "urange"                          shift, and go to state 106
+    "int64"                           shift, and go to state 108
+    "uint64"                          shift, and go to state 109
+    "double"                          shift, and go to state 110
+    "lambda"                          shift, and go to state 245
+    "int8"                            shift, and go to state 113
+    "uint8"                           shift, and go to state 114
+    "int16"                           shift, and go to state 115
+    "uint16"                          shift, and go to state 116
+    "generator"                       shift, and go to state 246
+    "++"                              shift, and go to state 247
+    "--"                              shift, and go to state 248
+    "[["                              shift, and go to state 249
+    "[{"                              shift, and go to state 250
+    "{{"                              shift, and go to state 251
+    "integer constant"                shift, and go to state 252
+    "long integer constant"           shift, and go to state 253
+    "unsigned integer constant"       shift, and go to state 254
+    "unsigned long integer constant"  shift, and go to state 255
+    "floating point constant"         shift, and go to state 256
+    "double constant"                 shift, and go to state 257
+    "name"                            shift, and go to state 37
+    "start of the string"             shift, and go to state 258
+    '-'                               shift, and go to state 259
+    '+'                               shift, and go to state 260
+    '*'                               shift, and go to state 261
+    '@'                               shift, and go to state 262
+    '~'                               shift, and go to state 263
+    '!'                               shift, and go to state 264
+    '('                               shift, and go to state 266
+    COLCOL                            shift, and go to state 38
+    '{'                               shift, and go to state 267
+    '$'                               shift, and go to state 268
+
+    string_builder          go to state 269
+    expression_block        go to state 270
+    name_in_namespace       go to state 271
+    expr_new                go to state 272
+    expr_cast               go to state 273
+    expr_type_info          go to state 274
+    expr_block              go to state 275
+    expr_numeric_const      go to state 276
+    expr_named_call         go to state 277
+    expr_method_call        go to state 278
+    expr                    go to state 588
+    basic_type_declaration  go to state 280
+    make_decl               go to state 281
+    make_struct_decl        go to state 282
+    make_dim_decl           go to state 283
+    make_table_decl         go to state 284
+    array_comprehension     go to state 285
 
 
 State 504
 
-  189 expr_assign: expr "+=" . expr
+  190 expr_assign: expr "-=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13116,7 +13117,7 @@ State 504
 
 State 505
 
-  190 expr_assign: expr "-=" . expr
+  192 expr_assign: expr "/=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13199,7 +13200,7 @@ State 505
 
 State 506
 
-  192 expr_assign: expr "/=" . expr
+  191 expr_assign: expr "*=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13282,7 +13283,7 @@ State 506
 
 State 507
 
-  191 expr_assign: expr "*=" . expr
+  193 expr_assign: expr "%=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13365,7 +13366,7 @@ State 507
 
 State 508
 
-  193 expr_assign: expr "%=" . expr
+  186 expr_assign: expr "&=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13448,7 +13449,7 @@ State 508
 
 State 509
 
-  186 expr_assign: expr "&=" . expr
+  187 expr_assign: expr "|=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13531,7 +13532,7 @@ State 509
 
 State 510
 
-  187 expr_assign: expr "|=" . expr
+  188 expr_assign: expr "^=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13614,7 +13615,7 @@ State 510
 
 State 511
 
-  188 expr_assign: expr "^=" . expr
+  194 expr_assign: expr "<<=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13697,7 +13698,7 @@ State 511
 
 State 512
 
-  194 expr_assign: expr "<<=" . expr
+  195 expr_assign: expr ">>=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13780,7 +13781,7 @@ State 512
 
 State 513
 
-  195 expr_assign: expr ">>=" . expr
+  184 expr_assign: expr "<-" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13863,7 +13864,7 @@ State 513
 
 State 514
 
-  184 expr_assign: expr "<-" . expr
+  185 expr_assign: expr ":=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -13946,7 +13947,7 @@ State 514
 
 State 515
 
-  185 expr_assign: expr ":=" . expr
+  196 expr_assign: expr "<<<=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -14029,7 +14030,7 @@ State 515
 
 State 516
 
-  196 expr_assign: expr "<<<=" . expr
+  197 expr_assign: expr ">>>=" . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -14112,7 +14113,7 @@ State 516
 
 State 517
 
-  197 expr_assign: expr ">>>=" . expr
+  183 expr_assign: expr '=' . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -14195,95 +14196,12 @@ State 517
 
 State 518
 
-  183 expr_assign: expr '=' . expr
-
-    "true"                            shift, and go to state 235
-    "false"                           shift, and go to state 236
-    "new"                             shift, and go to state 237
-    "typeinfo"                        shift, and go to state 238
-    "null"                            shift, and go to state 239
-    "deref"                           shift, and go to state 240
-    "cast"                            shift, and go to state 241
-    "upcast"                          shift, and go to state 242
-    "addr"                            shift, and go to state 243
-    "reinterpret"                     shift, and go to state 244
-    "bool"                            shift, and go to state 89
-    "void"                            shift, and go to state 90
-    "string"                          shift, and go to state 91
-    "int"                             shift, and go to state 93
-    "int2"                            shift, and go to state 94
-    "int3"                            shift, and go to state 95
-    "int4"                            shift, and go to state 96
-    "uint"                            shift, and go to state 97
-    "uint2"                           shift, and go to state 98
-    "uint3"                           shift, and go to state 99
-    "uint4"                           shift, and go to state 100
-    "float"                           shift, and go to state 101
-    "float2"                          shift, and go to state 102
-    "float3"                          shift, and go to state 103
-    "float4"                          shift, and go to state 104
-    "range"                           shift, and go to state 105
-    "urange"                          shift, and go to state 106
-    "int64"                           shift, and go to state 108
-    "uint64"                          shift, and go to state 109
-    "double"                          shift, and go to state 110
-    "lambda"                          shift, and go to state 245
-    "int8"                            shift, and go to state 113
-    "uint8"                           shift, and go to state 114
-    "int16"                           shift, and go to state 115
-    "uint16"                          shift, and go to state 116
-    "generator"                       shift, and go to state 246
-    "++"                              shift, and go to state 247
-    "--"                              shift, and go to state 248
-    "[["                              shift, and go to state 249
-    "[{"                              shift, and go to state 250
-    "{{"                              shift, and go to state 251
-    "integer constant"                shift, and go to state 252
-    "long integer constant"           shift, and go to state 253
-    "unsigned integer constant"       shift, and go to state 254
-    "unsigned long integer constant"  shift, and go to state 255
-    "floating point constant"         shift, and go to state 256
-    "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 37
-    "start of the string"             shift, and go to state 258
-    '-'                               shift, and go to state 259
-    '+'                               shift, and go to state 260
-    '*'                               shift, and go to state 261
-    '@'                               shift, and go to state 262
-    '~'                               shift, and go to state 263
-    '!'                               shift, and go to state 264
-    '('                               shift, and go to state 266
-    COLCOL                            shift, and go to state 38
-    '{'                               shift, and go to state 267
-    '$'                               shift, and go to state 268
-
-    string_builder          go to state 269
-    expression_block        go to state 270
-    name_in_namespace       go to state 271
-    expr_new                go to state 272
-    expr_cast               go to state 273
-    expr_type_info          go to state 274
-    expr_block              go to state 275
-    expr_numeric_const      go to state 276
-    expr_named_call         go to state 277
-    expr_method_call        go to state 278
-    expr                    go to state 603
-    basic_type_declaration  go to state 280
-    make_decl               go to state 281
-    make_struct_decl        go to state 282
-    make_dim_decl           go to state 283
-    make_table_decl         go to state 284
-    array_comprehension     go to state 285
-
-
-State 519
-
   286 let_variable_declaration: variable_name_list ':' type_declaration ';' .
 
     $default  reduce using rule 286 (let_variable_declaration)
 
 
-State 520
+State 519
 
   287 let_variable_declaration: variable_name_list ':' type_declaration copy_or_move_or_clone . expr ';'
   288                         | variable_name_list ':' type_declaration copy_or_move_or_clone . expr_pipe
@@ -14350,7 +14268,7 @@ State 520
 
     string_builder          go to state 269
     expression_block        go to state 270
-    expr_pipe               go to state 604
+    expr_pipe               go to state 603
     name_in_namespace       go to state 271
     expr_new                go to state 272
     expr_cast               go to state 273
@@ -14360,7 +14278,7 @@ State 520
     expr_assign             go to state 390
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 605
+    expr                    go to state 604
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -14369,37 +14287,37 @@ State 520
     array_comprehension     go to state 285
 
 
-State 521
+State 520
 
   289 let_variable_declaration: variable_name_list copy_or_move_or_clone expr ';' .
 
     $default  reduce using rule 289 (let_variable_declaration)
 
 
-State 522
+State 521
 
   351 type_declaration: "table" '<' type_declaration ';' type_declaration '>' .
 
     $default  reduce using rule 351 (type_declaration)
 
 
-State 523
+State 522
 
   141 expr_new: "new" type_declaration '(' ')' .
 
     $default  reduce using rule 141 (expr_new)
 
 
-State 524
+State 523
 
   142 expr_new: "new" type_declaration '(' expr_list . ')'
   171 expr_list: expr_list . ',' expr
 
-    ','  shift, and go to state 580
-    ')'  shift, and go to state 606
+    ','  shift, and go to state 579
+    ')'  shift, and go to state 605
 
 
-State 525
+State 524
 
   167 expr_type_info: "typeinfo" '(' "name" "type" . type_declaration ')'
 
@@ -14442,20 +14360,20 @@ State 525
     basic_type_declaration      go to state 119
     structure_type_declaration  go to state 120
     auto_type_declaration       go to state 121
-    type_declaration            go to state 607
+    type_declaration            go to state 606
 
 
-State 526
+State 525
 
   165 expr_type_info: "typeinfo" '(' "name" '<' . "name" '>' expr ')'
   166               | "typeinfo" '(' "name" '<' . "name" ';' "name" '>' expr ')'
   168               | "typeinfo" '(' "name" '<' . "name" '>' "type" type_declaration ')'
   169               | "typeinfo" '(' "name" '<' . "name" ';' "name" '>' "type" type_declaration ')'
 
-    "name"  shift, and go to state 608
+    "name"  shift, and go to state 607
 
 
-State 527
+State 526
 
   164 expr_type_info: "typeinfo" '(' "name" expr . ')'
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -14518,19 +14436,102 @@ State 527
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ')'    shift, and go to state 609
+    ')'    shift, and go to state 608
 
 
-State 528
+State 527
 
   244 expr: "deref" '(' expr ')' .
 
     $default  reduce using rule 244 (expr)
 
 
-State 529
+State 528
 
   161 expr_cast: "cast" '<' type_declaration '>' . expr
+
+    "true"                            shift, and go to state 235
+    "false"                           shift, and go to state 236
+    "new"                             shift, and go to state 237
+    "typeinfo"                        shift, and go to state 238
+    "null"                            shift, and go to state 239
+    "deref"                           shift, and go to state 240
+    "cast"                            shift, and go to state 241
+    "upcast"                          shift, and go to state 242
+    "addr"                            shift, and go to state 243
+    "reinterpret"                     shift, and go to state 244
+    "bool"                            shift, and go to state 89
+    "void"                            shift, and go to state 90
+    "string"                          shift, and go to state 91
+    "int"                             shift, and go to state 93
+    "int2"                            shift, and go to state 94
+    "int3"                            shift, and go to state 95
+    "int4"                            shift, and go to state 96
+    "uint"                            shift, and go to state 97
+    "uint2"                           shift, and go to state 98
+    "uint3"                           shift, and go to state 99
+    "uint4"                           shift, and go to state 100
+    "float"                           shift, and go to state 101
+    "float2"                          shift, and go to state 102
+    "float3"                          shift, and go to state 103
+    "float4"                          shift, and go to state 104
+    "range"                           shift, and go to state 105
+    "urange"                          shift, and go to state 106
+    "int64"                           shift, and go to state 108
+    "uint64"                          shift, and go to state 109
+    "double"                          shift, and go to state 110
+    "lambda"                          shift, and go to state 245
+    "int8"                            shift, and go to state 113
+    "uint8"                           shift, and go to state 114
+    "int16"                           shift, and go to state 115
+    "uint16"                          shift, and go to state 116
+    "generator"                       shift, and go to state 246
+    "++"                              shift, and go to state 247
+    "--"                              shift, and go to state 248
+    "[["                              shift, and go to state 249
+    "[{"                              shift, and go to state 250
+    "{{"                              shift, and go to state 251
+    "integer constant"                shift, and go to state 252
+    "long integer constant"           shift, and go to state 253
+    "unsigned integer constant"       shift, and go to state 254
+    "unsigned long integer constant"  shift, and go to state 255
+    "floating point constant"         shift, and go to state 256
+    "double constant"                 shift, and go to state 257
+    "name"                            shift, and go to state 37
+    "start of the string"             shift, and go to state 258
+    '-'                               shift, and go to state 259
+    '+'                               shift, and go to state 260
+    '*'                               shift, and go to state 261
+    '@'                               shift, and go to state 262
+    '~'                               shift, and go to state 263
+    '!'                               shift, and go to state 264
+    '('                               shift, and go to state 266
+    COLCOL                            shift, and go to state 38
+    '{'                               shift, and go to state 267
+    '$'                               shift, and go to state 268
+
+    string_builder          go to state 269
+    expression_block        go to state 270
+    name_in_namespace       go to state 271
+    expr_new                go to state 272
+    expr_cast               go to state 273
+    expr_type_info          go to state 274
+    expr_block              go to state 275
+    expr_numeric_const      go to state 276
+    expr_named_call         go to state 277
+    expr_method_call        go to state 278
+    expr                    go to state 609
+    basic_type_declaration  go to state 280
+    make_decl               go to state 281
+    make_struct_decl        go to state 282
+    make_dim_decl           go to state 283
+    make_table_decl         go to state 284
+    array_comprehension     go to state 285
+
+
+State 529
+
+  162 expr_cast: "upcast" '<' type_declaration '>' . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -14613,7 +14614,14 @@ State 529
 
 State 530
 
-  162 expr_cast: "upcast" '<' type_declaration '>' . expr
+  245 expr: "addr" '(' expr ')' .
+
+    $default  reduce using rule 245 (expr)
+
+
+State 531
+
+  163 expr_cast: "reinterpret" '<' type_declaration '>' . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -14694,111 +14702,22 @@ State 530
     array_comprehension     go to state 285
 
 
-State 531
-
-  245 expr: "addr" '(' expr ')' .
-
-    $default  reduce using rule 245 (expr)
-
-
 State 532
-
-  163 expr_cast: "reinterpret" '<' type_declaration '>' . expr
-
-    "true"                            shift, and go to state 235
-    "false"                           shift, and go to state 236
-    "new"                             shift, and go to state 237
-    "typeinfo"                        shift, and go to state 238
-    "null"                            shift, and go to state 239
-    "deref"                           shift, and go to state 240
-    "cast"                            shift, and go to state 241
-    "upcast"                          shift, and go to state 242
-    "addr"                            shift, and go to state 243
-    "reinterpret"                     shift, and go to state 244
-    "bool"                            shift, and go to state 89
-    "void"                            shift, and go to state 90
-    "string"                          shift, and go to state 91
-    "int"                             shift, and go to state 93
-    "int2"                            shift, and go to state 94
-    "int3"                            shift, and go to state 95
-    "int4"                            shift, and go to state 96
-    "uint"                            shift, and go to state 97
-    "uint2"                           shift, and go to state 98
-    "uint3"                           shift, and go to state 99
-    "uint4"                           shift, and go to state 100
-    "float"                           shift, and go to state 101
-    "float2"                          shift, and go to state 102
-    "float3"                          shift, and go to state 103
-    "float4"                          shift, and go to state 104
-    "range"                           shift, and go to state 105
-    "urange"                          shift, and go to state 106
-    "int64"                           shift, and go to state 108
-    "uint64"                          shift, and go to state 109
-    "double"                          shift, and go to state 110
-    "lambda"                          shift, and go to state 245
-    "int8"                            shift, and go to state 113
-    "uint8"                           shift, and go to state 114
-    "int16"                           shift, and go to state 115
-    "uint16"                          shift, and go to state 116
-    "generator"                       shift, and go to state 246
-    "++"                              shift, and go to state 247
-    "--"                              shift, and go to state 248
-    "[["                              shift, and go to state 249
-    "[{"                              shift, and go to state 250
-    "{{"                              shift, and go to state 251
-    "integer constant"                shift, and go to state 252
-    "long integer constant"           shift, and go to state 253
-    "unsigned integer constant"       shift, and go to state 254
-    "unsigned long integer constant"  shift, and go to state 255
-    "floating point constant"         shift, and go to state 256
-    "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 37
-    "start of the string"             shift, and go to state 258
-    '-'                               shift, and go to state 259
-    '+'                               shift, and go to state 260
-    '*'                               shift, and go to state 261
-    '@'                               shift, and go to state 262
-    '~'                               shift, and go to state 263
-    '!'                               shift, and go to state 264
-    '('                               shift, and go to state 266
-    COLCOL                            shift, and go to state 38
-    '{'                               shift, and go to state 267
-    '$'                               shift, and go to state 268
-
-    string_builder          go to state 269
-    expression_block        go to state 270
-    name_in_namespace       go to state 271
-    expr_new                go to state 272
-    expr_cast               go to state 273
-    expr_type_info          go to state 274
-    expr_block              go to state 275
-    expr_numeric_const      go to state 276
-    expr_named_call         go to state 277
-    expr_method_call        go to state 278
-    expr                    go to state 612
-    basic_type_declaration  go to state 280
-    make_decl               go to state 281
-    make_struct_decl        go to state 282
-    make_dim_decl           go to state 283
-    make_table_decl         go to state 284
-    array_comprehension     go to state 285
-
-
-State 533
 
   247 expr: "lambda" '(' expr ')' .
 
     $default  reduce using rule 247 (expr)
 
 
+State 533
+
+  248 expr: "generator" '<' type_declaration '>' . '(' ')'
+  249     | "generator" '<' type_declaration '>' . '(' expr ')'
+
+    '('  shift, and go to state 612
+
+
 State 534
-
-  249 expr: "generator" '(' expr ')' .
-
-    $default  reduce using rule 249 (expr)
-
-
-State 535
 
   389 array_comprehension: "[[" "for" variable_name_list "in" . expr_list ';' expr array_comprehension_where ']' ']'
 
@@ -14873,7 +14792,7 @@ State 535
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 470
+    expr                    go to state 469
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -14882,7 +14801,7 @@ State 535
     array_comprehension     go to state 285
 
 
-State 536
+State 535
 
   367 make_struct_fields: "name" copy_or_move . expr
 
@@ -14965,40 +14884,40 @@ State 536
     array_comprehension     go to state 285
 
 
-State 537
+State 536
 
   372 make_struct_decl: "[[" type_declaration '(' ')' . make_struct_dim ']' ']'
 
-    "name"  shift, and go to state 578
+    "name"  shift, and go to state 577
 
-    make_struct_fields  go to state 416
+    make_struct_fields  go to state 415
     make_struct_dim     go to state 615
 
 
-State 538
+State 537
 
   368 make_struct_fields: make_struct_fields ',' . "name" copy_or_move expr
 
     "name"  shift, and go to state 616
 
 
-State 539
+State 538
 
   371 make_struct_decl: "[[" type_declaration make_struct_dim ']' . ']'
 
     ']'  shift, and go to state 617
 
 
-State 540
+State 539
 
   370 make_struct_dim: make_struct_dim ';' . make_struct_fields
 
-    "name"  shift, and go to state 578
+    "name"  shift, and go to state 577
 
     make_struct_fields  go to state 618
 
 
-State 541
+State 540
 
   376 make_tuple: make_tuple ',' . expr
 
@@ -15081,14 +15000,14 @@ State 541
     array_comprehension     go to state 285
 
 
-State 542
+State 541
 
   382 make_dim_decl: "[[" type_declaration make_dim ']' . ']'
 
     ']'  shift, and go to state 620
 
 
-State 543
+State 542
 
   381 make_dim: make_dim ';' . make_any_tuple
 
@@ -15162,43 +15081,43 @@ State 543
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 415
+    expr                    go to state 414
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
-    make_tuple              go to state 418
-    make_map_tuple          go to state 419
+    make_tuple              go to state 417
+    make_map_tuple          go to state 418
     make_any_tuple          go to state 621
     make_dim_decl           go to state 283
     make_table_decl         go to state 284
     array_comprehension     go to state 285
 
 
-State 544
+State 543
 
   374 make_struct_decl: "[{" type_declaration '(' ')' . make_struct_dim '}' ']'
 
-    "name"  shift, and go to state 578
+    "name"  shift, and go to state 577
 
-    make_struct_fields  go to state 416
+    make_struct_fields  go to state 415
     make_struct_dim     go to state 622
 
 
-State 545
+State 544
 
   373 make_struct_decl: "[{" type_declaration make_struct_dim '}' . ']'
 
     ']'  shift, and go to state 623
 
 
-State 546
+State 545
 
   383 make_dim_decl: "[{" type_declaration make_dim '}' . ']'
 
     ']'  shift, and go to state 624
 
 
-State 547
+State 546
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -15265,21 +15184,21 @@ State 547
     $default  reduce using rule 377 (make_map_tuple)
 
 
-State 548
+State 547
 
   385 make_table: make_table ';' make_map_tuple .
 
     $default  reduce using rule 385 (make_table)
 
 
-State 549
+State 548
 
   386 make_table_decl: "{{" make_table '}' '}' .
 
     $default  reduce using rule 386 (make_table_decl)
 
 
-State 550
+State 549
 
    18 string_builder_body: string_builder_body "{" expr . "}"
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -15345,7 +15264,7 @@ State 550
     '['    shift, and go to state 379
 
 
-State 551
+State 550
 
    42 expression_while_loop: "while" expr . expression_block
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -15413,7 +15332,7 @@ State 551
     expression_block  go to state 626
 
 
-State 552
+State 551
 
    40 expression_if_then_else: "if" expr . expression_block expression_else
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -15481,7 +15400,7 @@ State 552
     expression_block  go to state 627
 
 
-State 553
+State 552
 
    41 expression_for_loop: "for" variable_name_list . "in" expr_list ';' expression_block
   306 variable_name_list: variable_name_list . ',' "name"
@@ -15490,7 +15409,7 @@ State 553
     ','   shift, and go to state 294
 
 
-State 554
+State 553
 
   148 expression_return: "return" "<-" . expr ';'
   150                  | "return" "<-" . expr_pipe
@@ -15576,21 +15495,21 @@ State 554
     array_comprehension     go to state 285
 
 
-State 555
+State 554
 
   146 expression_return: "return" ';' .
 
     $default  reduce using rule 146 (expression_return)
 
 
-State 556
+State 555
 
   149 expression_return: "return" expr_pipe .
 
     $default  reduce using rule 149 (expression_return)
 
 
-State 557
+State 556
 
   147 expression_return: "return" expr . ';'
   182 expr_assign: expr .
@@ -15641,36 +15560,36 @@ State 557
   260     | expr . "|>" expr
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -15689,14 +15608,14 @@ State 557
     $default  reduce using rule 182 (expr_assign)
 
 
-State 558
+State 557
 
   155 expression_try_catch: "try" expression_block . "catch" expression_block
 
     "catch"  shift, and go to state 632
 
 
-State 559
+State 558
 
   139 expression_delete: "delete" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -15763,7 +15682,7 @@ State 559
     $default  reduce using rule 139 (expression_delete)
 
 
-State 560
+State 559
 
    43 expression_with: "with" expr . expression_block
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -15831,28 +15750,28 @@ State 560
     expression_block  go to state 633
 
 
-State 561
+State 560
 
   131 expression_any: "pass" ';' .
 
     $default  reduce using rule 131 (expression_any)
 
 
-State 562
+State 561
 
    34 expression_label: "label" "integer constant" . ':'
 
     ':'  shift, and go to state 634
 
 
-State 563
+State 562
 
    35 expression_goto: "goto" "label" . "integer constant"
 
     "integer constant"  shift, and go to state 635
 
 
-State 564
+State 563
 
    36 expression_goto: "goto" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -15919,7 +15838,7 @@ State 564
     $default  reduce using rule 36 (expression_goto)
 
 
-State 565
+State 564
 
   152 expression_yield: "yield" "<-" . expr ';'
   154                 | "yield" "<-" . expr_pipe
@@ -16005,14 +15924,14 @@ State 565
     array_comprehension     go to state 285
 
 
-State 566
+State 565
 
   153 expression_yield: "yield" expr_pipe .
 
     $default  reduce using rule 153 (expression_yield)
 
 
-State 567
+State 566
 
   151 expression_yield: "yield" expr . ';'
   182 expr_assign: expr .
@@ -16063,36 +15982,36 @@ State 567
   260     | expr . "|>" expr
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -16111,56 +16030,56 @@ State 567
     $default  reduce using rule 182 (expr_assign)
 
 
-State 568
+State 567
 
   114 expression_block: '{' expressions '}' "finally" . '{' expressions '}'
 
     '{'  shift, and go to state 639
 
 
-State 569
+State 568
 
   129 expression_any: expression_label ';' .
 
     $default  reduce using rule 129 (expression_any)
 
 
-State 570
+State 569
 
   130 expression_any: expression_goto ';' .
 
     $default  reduce using rule 130 (expression_any)
 
 
-State 571
+State 570
 
   118 expression_any: expression_delete ';' .
 
     $default  reduce using rule 118 (expression_any)
 
 
-State 572
+State 571
 
   123 expression_any: expression_break ';' .
 
     $default  reduce using rule 123 (expression_any)
 
 
-State 573
+State 572
 
   124 expression_any: expression_continue ';' .
 
     $default  reduce using rule 124 (expression_any)
 
 
-State 574
+State 573
 
   157 let_scope: "in" . "scope"
 
     "scope"  shift, and go to state 640
 
 
-State 575
+State 574
 
   160 expression_let: kwd_let let_scope . let_variable_declaration
 
@@ -16170,14 +16089,14 @@ State 575
     variable_name_list        go to state 211
 
 
-State 576
+State 575
 
   117 expression_any: expr_assign ';' .
 
     $default  reduce using rule 117 (expression_any)
 
 
-State 577
+State 576
 
   175 expr_block: '$' optional_annotation_list optional_function_argument_list optional_function_type . block_or_simple_block
 
@@ -16188,26 +16107,26 @@ State 577
     block_or_simple_block  go to state 644
 
 
-State 578
+State 577
 
   367 make_struct_fields: "name" . copy_or_move expr
 
     "<-"  shift, and go to state 293
     '='   shift, and go to state 295
 
-    copy_or_move  go to state 536
+    copy_or_move  go to state 535
 
 
-State 579
+State 578
 
   198 expr_named_call: name_in_namespace '(' '[' make_struct_fields . ']' ')'
   368 make_struct_fields: make_struct_fields . ',' "name" copy_or_move expr
 
-    ','  shift, and go to state 538
+    ','  shift, and go to state 537
     ']'  shift, and go to state 645
 
 
-State 580
+State 579
 
   171 expr_list: expr_list ',' . expr
 
@@ -16290,14 +16209,14 @@ State 580
     array_comprehension     go to state 285
 
 
-State 581
+State 580
 
   240 expr: name_in_namespace '(' expr_list ')' .
 
     $default  reduce using rule 240 (expr)
 
 
-State 582
+State 581
 
   252 expr: expr "is" "type" type_declaration .
   337 type_declaration: type_declaration . '[' expr ']'
@@ -16331,7 +16250,7 @@ State 582
     $default  reduce using rule 252 (expr)
 
 
-State 583
+State 582
 
   199 expr_method_call: expr "->" "name" '(' . ')'
   200                 | expr "->" "name" '(' . expr_list ')'
@@ -16408,7 +16327,7 @@ State 583
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 470
+    expr                    go to state 469
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -16417,7 +16336,7 @@ State 583
     array_comprehension     go to state 285
 
 
-State 584
+State 583
 
   251 expr: expr '?' expr ':' . expr
 
@@ -16500,21 +16419,21 @@ State 584
     array_comprehension     go to state 285
 
 
-State 585
+State 584
 
   235 expr: expr '[' expr ']' .
 
     $default  reduce using rule 235 (expr)
 
 
-State 586
+State 585
 
   242 expr: basic_type_declaration '(' expr_list ')' .
 
     $default  reduce using rule 242 (expr)
 
 
-State 587
+State 586
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -16581,14 +16500,14 @@ State 587
     $default  reduce using rule 280 (variable_declaration)
 
 
-State 588
+State 587
 
   135 expr_pipe: expr_assign " <|" expr_block .
 
     $default  reduce using rule 135 (expr_pipe)
 
 
-State 589
+State 588
 
   189 expr_assign: expr "+=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -16655,7 +16574,7 @@ State 589
     $default  reduce using rule 189 (expr_assign)
 
 
-State 590
+State 589
 
   190 expr_assign: expr "-=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -16722,7 +16641,7 @@ State 590
     $default  reduce using rule 190 (expr_assign)
 
 
-State 591
+State 590
 
   192 expr_assign: expr "/=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -16789,7 +16708,7 @@ State 591
     $default  reduce using rule 192 (expr_assign)
 
 
-State 592
+State 591
 
   191 expr_assign: expr "*=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -16856,7 +16775,7 @@ State 592
     $default  reduce using rule 191 (expr_assign)
 
 
-State 593
+State 592
 
   193 expr_assign: expr "%=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -16923,7 +16842,7 @@ State 593
     $default  reduce using rule 193 (expr_assign)
 
 
-State 594
+State 593
 
   186 expr_assign: expr "&=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -16990,7 +16909,7 @@ State 594
     $default  reduce using rule 186 (expr_assign)
 
 
-State 595
+State 594
 
   187 expr_assign: expr "|=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17057,7 +16976,7 @@ State 595
     $default  reduce using rule 187 (expr_assign)
 
 
-State 596
+State 595
 
   188 expr_assign: expr "^=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17124,7 +17043,7 @@ State 596
     $default  reduce using rule 188 (expr_assign)
 
 
-State 597
+State 596
 
   194 expr_assign: expr "<<=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17191,7 +17110,7 @@ State 597
     $default  reduce using rule 194 (expr_assign)
 
 
-State 598
+State 597
 
   195 expr_assign: expr ">>=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17258,7 +17177,7 @@ State 598
     $default  reduce using rule 195 (expr_assign)
 
 
-State 599
+State 598
 
   184 expr_assign: expr "<-" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17325,7 +17244,7 @@ State 599
     $default  reduce using rule 184 (expr_assign)
 
 
-State 600
+State 599
 
   185 expr_assign: expr ":=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17392,7 +17311,7 @@ State 600
     $default  reduce using rule 185 (expr_assign)
 
 
-State 601
+State 600
 
   196 expr_assign: expr "<<<=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17459,7 +17378,7 @@ State 601
     $default  reduce using rule 196 (expr_assign)
 
 
-State 602
+State 601
 
   197 expr_assign: expr ">>>=" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17526,7 +17445,7 @@ State 602
     $default  reduce using rule 197 (expr_assign)
 
 
-State 603
+State 602
 
   183 expr_assign: expr '=' expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17593,14 +17512,14 @@ State 603
     $default  reduce using rule 183 (expr_assign)
 
 
-State 604
+State 603
 
   288 let_variable_declaration: variable_name_list ':' type_declaration copy_or_move_or_clone expr_pipe .
 
     $default  reduce using rule 288 (let_variable_declaration)
 
 
-State 605
+State 604
 
   182 expr_assign: expr .
   183            | expr . '=' expr
@@ -17651,36 +17570,36 @@ State 605
   287 let_variable_declaration: variable_name_list ':' type_declaration copy_or_move_or_clone expr . ';'
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -17699,14 +17618,14 @@ State 605
     $default  reduce using rule 182 (expr_assign)
 
 
-State 606
+State 605
 
   142 expr_new: "new" type_declaration '(' expr_list ')' .
 
     $default  reduce using rule 142 (expr_new)
 
 
-State 607
+State 606
 
   167 expr_type_info: "typeinfo" '(' "name" "type" type_declaration . ')'
   337 type_declaration: type_declaration . '[' expr ']'
@@ -17734,7 +17653,7 @@ State 607
     '#'         shift, and go to state 196
 
 
-State 608
+State 607
 
   165 expr_type_info: "typeinfo" '(' "name" '<' "name" . '>' expr ')'
   166               | "typeinfo" '(' "name" '<' "name" . ';' "name" '>' expr ')'
@@ -17745,14 +17664,14 @@ State 608
     ';'  shift, and go to state 653
 
 
-State 609
+State 608
 
   164 expr_type_info: "typeinfo" '(' "name" expr ')' .
 
     $default  reduce using rule 164 (expr_type_info)
 
 
-State 610
+State 609
 
   161 expr_cast: "cast" '<' type_declaration '>' expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17809,7 +17728,7 @@ State 610
     $default  reduce using rule 161 (expr_cast)
 
 
-State 611
+State 610
 
   162 expr_cast: "upcast" '<' type_declaration '>' expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17866,7 +17785,7 @@ State 611
     $default  reduce using rule 162 (expr_cast)
 
 
-State 612
+State 611
 
   163 expr_cast: "reinterpret" '<' type_declaration '>' expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -17923,13 +17842,98 @@ State 612
     $default  reduce using rule 163 (expr_cast)
 
 
+State 612
+
+  248 expr: "generator" '<' type_declaration '>' '(' . ')'
+  249     | "generator" '<' type_declaration '>' '(' . expr ')'
+
+    "true"                            shift, and go to state 235
+    "false"                           shift, and go to state 236
+    "new"                             shift, and go to state 237
+    "typeinfo"                        shift, and go to state 238
+    "null"                            shift, and go to state 239
+    "deref"                           shift, and go to state 240
+    "cast"                            shift, and go to state 241
+    "upcast"                          shift, and go to state 242
+    "addr"                            shift, and go to state 243
+    "reinterpret"                     shift, and go to state 244
+    "bool"                            shift, and go to state 89
+    "void"                            shift, and go to state 90
+    "string"                          shift, and go to state 91
+    "int"                             shift, and go to state 93
+    "int2"                            shift, and go to state 94
+    "int3"                            shift, and go to state 95
+    "int4"                            shift, and go to state 96
+    "uint"                            shift, and go to state 97
+    "uint2"                           shift, and go to state 98
+    "uint3"                           shift, and go to state 99
+    "uint4"                           shift, and go to state 100
+    "float"                           shift, and go to state 101
+    "float2"                          shift, and go to state 102
+    "float3"                          shift, and go to state 103
+    "float4"                          shift, and go to state 104
+    "range"                           shift, and go to state 105
+    "urange"                          shift, and go to state 106
+    "int64"                           shift, and go to state 108
+    "uint64"                          shift, and go to state 109
+    "double"                          shift, and go to state 110
+    "lambda"                          shift, and go to state 245
+    "int8"                            shift, and go to state 113
+    "uint8"                           shift, and go to state 114
+    "int16"                           shift, and go to state 115
+    "uint16"                          shift, and go to state 116
+    "generator"                       shift, and go to state 246
+    "++"                              shift, and go to state 247
+    "--"                              shift, and go to state 248
+    "[["                              shift, and go to state 249
+    "[{"                              shift, and go to state 250
+    "{{"                              shift, and go to state 251
+    "integer constant"                shift, and go to state 252
+    "long integer constant"           shift, and go to state 253
+    "unsigned integer constant"       shift, and go to state 254
+    "unsigned long integer constant"  shift, and go to state 255
+    "floating point constant"         shift, and go to state 256
+    "double constant"                 shift, and go to state 257
+    "name"                            shift, and go to state 37
+    "start of the string"             shift, and go to state 258
+    '-'                               shift, and go to state 259
+    '+'                               shift, and go to state 260
+    '*'                               shift, and go to state 261
+    '@'                               shift, and go to state 262
+    '~'                               shift, and go to state 263
+    '!'                               shift, and go to state 264
+    '('                               shift, and go to state 266
+    ')'                               shift, and go to state 654
+    COLCOL                            shift, and go to state 38
+    '{'                               shift, and go to state 267
+    '$'                               shift, and go to state 268
+
+    string_builder          go to state 269
+    expression_block        go to state 270
+    name_in_namespace       go to state 271
+    expr_new                go to state 272
+    expr_cast               go to state 273
+    expr_type_info          go to state 274
+    expr_block              go to state 275
+    expr_numeric_const      go to state 276
+    expr_named_call         go to state 277
+    expr_method_call        go to state 278
+    expr                    go to state 655
+    basic_type_declaration  go to state 280
+    make_decl               go to state 281
+    make_struct_decl        go to state 282
+    make_dim_decl           go to state 283
+    make_table_decl         go to state 284
+    array_comprehension     go to state 285
+
+
 State 613
 
   171 expr_list: expr_list . ',' expr
   389 array_comprehension: "[[" "for" variable_name_list "in" expr_list . ';' expr array_comprehension_where ']' ']'
 
-    ','  shift, and go to state 580
-    ';'  shift, and go to state 654
+    ','  shift, and go to state 579
+    ';'  shift, and go to state 656
 
 
 State 614
@@ -18004,8 +18008,8 @@ State 615
   370 make_struct_dim: make_struct_dim . ';' make_struct_fields
   372 make_struct_decl: "[[" type_declaration '(' ')' make_struct_dim . ']' ']'
 
-    ']'  shift, and go to state 655
-    ';'  shift, and go to state 540
+    ']'  shift, and go to state 657
+    ';'  shift, and go to state 539
 
 
 State 616
@@ -18015,7 +18019,7 @@ State 616
     "<-"  shift, and go to state 293
     '='   shift, and go to state 295
 
-    copy_or_move  go to state 656
+    copy_or_move  go to state 658
 
 
 State 617
@@ -18030,7 +18034,7 @@ State 618
   368 make_struct_fields: make_struct_fields . ',' "name" copy_or_move expr
   370 make_struct_dim: make_struct_dim ';' make_struct_fields .
 
-    ','  shift, and go to state 538
+    ','  shift, and go to state 537
 
     $default  reduce using rule 370 (make_struct_dim)
 
@@ -18121,8 +18125,8 @@ State 622
   370 make_struct_dim: make_struct_dim . ';' make_struct_fields
   374 make_struct_decl: "[{" type_declaration '(' ')' make_struct_dim . '}' ']'
 
-    ';'  shift, and go to state 540
-    '}'  shift, and go to state 657
+    ';'  shift, and go to state 539
+    '}'  shift, and go to state 659
 
 
 State 623
@@ -18157,12 +18161,12 @@ State 627
 
    40 expression_if_then_else: "if" expr expression_block . expression_else
 
-    "else"  shift, and go to state 658
-    "elif"  shift, and go to state 659
+    "else"  shift, and go to state 660
+    "elif"  shift, and go to state 661
 
     $default  reduce using rule 37 (expression_else)
 
-    expression_else  go to state 660
+    expression_else  go to state 662
 
 
 State 628
@@ -18235,12 +18239,12 @@ State 628
     expr_new                go to state 272
     expr_cast               go to state 273
     expr_type_info          go to state 274
-    expr_list               go to state 661
+    expr_list               go to state 663
     expr_block              go to state 275
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 470
+    expr                    go to state 469
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -18307,36 +18311,36 @@ State 630
   260     | expr . "|>" expr
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -18350,7 +18354,7 @@ State 630
     '%'     shift, and go to state 377
     '.'     shift, and go to state 378
     '['     shift, and go to state 379
-    ';'     shift, and go to state 662
+    ';'     shift, and go to state 664
 
     $default  reduce using rule 182 (expr_assign)
 
@@ -18368,7 +18372,7 @@ State 632
 
     '{'  shift, and go to state 267
 
-    expression_block  go to state 663
+    expression_block  go to state 665
 
 
 State 633
@@ -18450,36 +18454,36 @@ State 637
   260     | expr . "|>" expr
 
     "is"    shift, and go to state 351
-    "+="    shift, and go to state 504
-    "-="    shift, and go to state 505
-    "/="    shift, and go to state 506
-    "*="    shift, and go to state 507
-    "%="    shift, and go to state 508
-    "&="    shift, and go to state 509
-    "|="    shift, and go to state 510
-    "^="    shift, and go to state 511
+    "+="    shift, and go to state 503
+    "-="    shift, and go to state 504
+    "/="    shift, and go to state 505
+    "*="    shift, and go to state 506
+    "%="    shift, and go to state 507
+    "&="    shift, and go to state 508
+    "|="    shift, and go to state 509
+    "^="    shift, and go to state 510
     "<<"    shift, and go to state 352
     ">>"    shift, and go to state 353
     "++"    shift, and go to state 354
     "--"    shift, and go to state 355
     "<="    shift, and go to state 356
-    "<<="   shift, and go to state 512
-    ">>="   shift, and go to state 513
+    "<<="   shift, and go to state 511
+    ">>="   shift, and go to state 512
     ">="    shift, and go to state 357
     "=="    shift, and go to state 358
     "!="    shift, and go to state 359
     "->"    shift, and go to state 360
-    "<-"    shift, and go to state 514
+    "<-"    shift, and go to state 513
     "??"    shift, and go to state 361
     "?."    shift, and go to state 362
     "<|"    shift, and go to state 363
     "|>"    shift, and go to state 364
-    ":="    shift, and go to state 515
+    ":="    shift, and go to state 514
     "<<<"   shift, and go to state 365
     ">>>"   shift, and go to state 366
-    "<<<="  shift, and go to state 516
-    ">>>="  shift, and go to state 517
-    '='     shift, and go to state 518
+    "<<<="  shift, and go to state 515
+    ">>>="  shift, and go to state 516
+    '='     shift, and go to state 517
     '?'     shift, and go to state 367
     '|'     shift, and go to state 368
     '^'     shift, and go to state 369
@@ -18493,7 +18497,7 @@ State 637
     '%'     shift, and go to state 377
     '.'     shift, and go to state 378
     '['     shift, and go to state 379
-    ';'     shift, and go to state 664
+    ';'     shift, and go to state 666
 
     $default  reduce using rule 182 (expr_assign)
 
@@ -18511,7 +18515,7 @@ State 639
 
     $default  reduce using rule 132 (expressions)
 
-    expressions  go to state 665
+    expressions  go to state 667
 
 
 State 640
@@ -18602,7 +18606,7 @@ State 642
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 666
+    expr                    go to state 668
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -18629,7 +18633,7 @@ State 645
 
   198 expr_named_call: name_in_namespace '(' '[' make_struct_fields ']' . ')'
 
-    ')'  shift, and go to state 667
+    ')'  shift, and go to state 669
 
 
 State 646
@@ -18711,8 +18715,8 @@ State 648
   171 expr_list: expr_list . ',' expr
   200 expr_method_call: expr "->" "name" '(' expr_list . ')'
 
-    ','  shift, and go to state 580
-    ')'  shift, and go to state 668
+    ','  shift, and go to state 579
+    ')'  shift, and go to state 670
 
 
 State 649
@@ -18805,98 +18809,7 @@ State 652
     "false"                           shift, and go to state 236
     "new"                             shift, and go to state 237
     "typeinfo"                        shift, and go to state 238
-    "type"                            shift, and go to state 669
-    "null"                            shift, and go to state 239
-    "deref"                           shift, and go to state 240
-    "cast"                            shift, and go to state 241
-    "upcast"                          shift, and go to state 242
-    "addr"                            shift, and go to state 243
-    "reinterpret"                     shift, and go to state 244
-    "bool"                            shift, and go to state 89
-    "void"                            shift, and go to state 90
-    "string"                          shift, and go to state 91
-    "int"                             shift, and go to state 93
-    "int2"                            shift, and go to state 94
-    "int3"                            shift, and go to state 95
-    "int4"                            shift, and go to state 96
-    "uint"                            shift, and go to state 97
-    "uint2"                           shift, and go to state 98
-    "uint3"                           shift, and go to state 99
-    "uint4"                           shift, and go to state 100
-    "float"                           shift, and go to state 101
-    "float2"                          shift, and go to state 102
-    "float3"                          shift, and go to state 103
-    "float4"                          shift, and go to state 104
-    "range"                           shift, and go to state 105
-    "urange"                          shift, and go to state 106
-    "int64"                           shift, and go to state 108
-    "uint64"                          shift, and go to state 109
-    "double"                          shift, and go to state 110
-    "lambda"                          shift, and go to state 245
-    "int8"                            shift, and go to state 113
-    "uint8"                           shift, and go to state 114
-    "int16"                           shift, and go to state 115
-    "uint16"                          shift, and go to state 116
-    "generator"                       shift, and go to state 246
-    "++"                              shift, and go to state 247
-    "--"                              shift, and go to state 248
-    "[["                              shift, and go to state 249
-    "[{"                              shift, and go to state 250
-    "{{"                              shift, and go to state 251
-    "integer constant"                shift, and go to state 252
-    "long integer constant"           shift, and go to state 253
-    "unsigned integer constant"       shift, and go to state 254
-    "unsigned long integer constant"  shift, and go to state 255
-    "floating point constant"         shift, and go to state 256
-    "double constant"                 shift, and go to state 257
-    "name"                            shift, and go to state 37
-    "start of the string"             shift, and go to state 258
-    '-'                               shift, and go to state 259
-    '+'                               shift, and go to state 260
-    '*'                               shift, and go to state 261
-    '@'                               shift, and go to state 262
-    '~'                               shift, and go to state 263
-    '!'                               shift, and go to state 264
-    '('                               shift, and go to state 266
-    COLCOL                            shift, and go to state 38
-    '{'                               shift, and go to state 267
-    '$'                               shift, and go to state 268
-
-    string_builder          go to state 269
-    expression_block        go to state 270
-    name_in_namespace       go to state 271
-    expr_new                go to state 272
-    expr_cast               go to state 273
-    expr_type_info          go to state 274
-    expr_block              go to state 275
-    expr_numeric_const      go to state 276
-    expr_named_call         go to state 277
-    expr_method_call        go to state 278
-    expr                    go to state 670
-    basic_type_declaration  go to state 280
-    make_decl               go to state 281
-    make_struct_decl        go to state 282
-    make_dim_decl           go to state 283
-    make_table_decl         go to state 284
-    array_comprehension     go to state 285
-
-
-State 653
-
-  166 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' . "name" '>' expr ')'
-  169               | "typeinfo" '(' "name" '<' "name" ';' . "name" '>' "type" type_declaration ')'
-
-    "name"  shift, and go to state 671
-
-
-State 654
-
-  389 array_comprehension: "[[" "for" variable_name_list "in" expr_list ';' . expr array_comprehension_where ']' ']'
-
-    "true"                            shift, and go to state 235
-    "false"                           shift, and go to state 236
-    "new"                             shift, and go to state 237
-    "typeinfo"                        shift, and go to state 238
+    "type"                            shift, and go to state 671
     "null"                            shift, and go to state 239
     "deref"                           shift, and go to state 240
     "cast"                            shift, and go to state 241
@@ -18972,16 +18885,90 @@ State 654
     array_comprehension     go to state 285
 
 
+State 653
+
+  166 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' . "name" '>' expr ')'
+  169               | "typeinfo" '(' "name" '<' "name" ';' . "name" '>' "type" type_declaration ')'
+
+    "name"  shift, and go to state 673
+
+
+State 654
+
+  248 expr: "generator" '<' type_declaration '>' '(' ')' .
+
+    $default  reduce using rule 248 (expr)
+
+
 State 655
 
-  372 make_struct_decl: "[[" type_declaration '(' ')' make_struct_dim ']' . ']'
+  199 expr_method_call: expr . "->" "name" '(' ')'
+  200                 | expr . "->" "name" '(' expr_list ')'
+  212 expr: expr . "<<" expr
+  213     | expr . ">>" expr
+  214     | expr . "<<<" expr
+  215     | expr . ">>>" expr
+  216     | expr . '+' expr
+  217     | expr . '-' expr
+  218     | expr . '*' expr
+  219     | expr . '/' expr
+  220     | expr . '%' expr
+  221     | expr . '<' expr
+  222     | expr . '>' expr
+  223     | expr . "==" expr
+  224     | expr . "!=" expr
+  225     | expr . "<=" expr
+  226     | expr . ">=" expr
+  227     | expr . '&' expr
+  228     | expr . '|' expr
+  229     | expr . '^' expr
+  232     | expr . "++"
+  233     | expr . "--"
+  235     | expr . '[' expr ']'
+  236     | expr . '.' "name"
+  237     | expr . "?." "name"
+  249     | "generator" '<' type_declaration '>' '(' expr . ')'
+  250     | expr . "??" expr
+  251     | expr . '?' expr ':' expr
+  252     | expr . "is" "type" type_declaration
+  259     | expr . "<|" expr
+  260     | expr . "|>" expr
 
-    ']'  shift, and go to state 673
+    "is"   shift, and go to state 351
+    "<<"   shift, and go to state 352
+    ">>"   shift, and go to state 353
+    "++"   shift, and go to state 354
+    "--"   shift, and go to state 355
+    "<="   shift, and go to state 356
+    ">="   shift, and go to state 357
+    "=="   shift, and go to state 358
+    "!="   shift, and go to state 359
+    "->"   shift, and go to state 360
+    "??"   shift, and go to state 361
+    "?."   shift, and go to state 362
+    "<|"   shift, and go to state 363
+    "|>"   shift, and go to state 364
+    "<<<"  shift, and go to state 365
+    ">>>"  shift, and go to state 366
+    '?'    shift, and go to state 367
+    '|'    shift, and go to state 368
+    '^'    shift, and go to state 369
+    '&'    shift, and go to state 370
+    '<'    shift, and go to state 371
+    '>'    shift, and go to state 372
+    '-'    shift, and go to state 373
+    '+'    shift, and go to state 374
+    '*'    shift, and go to state 375
+    '/'    shift, and go to state 376
+    '%'    shift, and go to state 377
+    '.'    shift, and go to state 378
+    '['    shift, and go to state 379
+    ')'    shift, and go to state 674
 
 
 State 656
 
-  368 make_struct_fields: make_struct_fields ',' "name" copy_or_move . expr
+  389 array_comprehension: "[[" "for" variable_name_list "in" expr_list ';' . expr array_comprehension_where ']' ']'
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -19053,7 +19040,7 @@ State 656
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 674
+    expr                    go to state 675
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -19064,23 +19051,14 @@ State 656
 
 State 657
 
-  374 make_struct_decl: "[{" type_declaration '(' ')' make_struct_dim '}' . ']'
+  372 make_struct_decl: "[[" type_declaration '(' ')' make_struct_dim ']' . ']'
 
-    ']'  shift, and go to state 675
+    ']'  shift, and go to state 676
 
 
 State 658
 
-   38 expression_else: "else" . expression_block
-
-    '{'  shift, and go to state 267
-
-    expression_block  go to state 676
-
-
-State 659
-
-   39 expression_else: "elif" . expr expression_block expression_else
+  368 make_struct_fields: make_struct_fields ',' "name" copy_or_move . expr
 
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
@@ -19161,74 +19139,36 @@ State 659
     array_comprehension     go to state 285
 
 
+State 659
+
+  374 make_struct_decl: "[{" type_declaration '(' ')' make_struct_dim '}' . ']'
+
+    ']'  shift, and go to state 678
+
+
 State 660
 
-   40 expression_if_then_else: "if" expr expression_block expression_else .
+   38 expression_else: "else" . expression_block
 
-    $default  reduce using rule 40 (expression_if_then_else)
+    '{'  shift, and go to state 267
+
+    expression_block  go to state 679
 
 
 State 661
 
-   41 expression_for_loop: "for" variable_name_list "in" expr_list . ';' expression_block
-  171 expr_list: expr_list . ',' expr
+   39 expression_else: "elif" . expr expression_block expression_else
 
-    ','  shift, and go to state 580
-    ';'  shift, and go to state 678
-
-
-State 662
-
-  148 expression_return: "return" "<-" expr ';' .
-
-    $default  reduce using rule 148 (expression_return)
-
-
-State 663
-
-  155 expression_try_catch: "try" expression_block "catch" expression_block .
-
-    $default  reduce using rule 155 (expression_try_catch)
-
-
-State 664
-
-  152 expression_yield: "yield" "<-" expr ';' .
-
-    $default  reduce using rule 152 (expression_yield)
-
-
-State 665
-
-  114 expression_block: '{' expressions '}' "finally" '{' expressions . '}'
-  133 expressions: expressions . expression_any
-  134            | expressions . error
-
-    error                             shift, and go to state 432
-    "let"                             shift, and go to state 3
-    "while"                           shift, and go to state 433
-    "if"                              shift, and go to state 434
-    "for"                             shift, and go to state 435
     "true"                            shift, and go to state 235
     "false"                           shift, and go to state 236
     "new"                             shift, and go to state 237
     "typeinfo"                        shift, and go to state 238
-    "return"                          shift, and go to state 436
     "null"                            shift, and go to state 239
-    "break"                           shift, and go to state 437
-    "try"                             shift, and go to state 438
-    "delete"                          shift, and go to state 439
     "deref"                           shift, and go to state 240
-    "with"                            shift, and go to state 440
     "cast"                            shift, and go to state 241
     "upcast"                          shift, and go to state 242
-    "var"                             shift, and go to state 9
     "addr"                            shift, and go to state 243
-    "continue"                        shift, and go to state 441
-    "pass"                            shift, and go to state 442
     "reinterpret"                     shift, and go to state 244
-    "label"                           shift, and go to state 443
-    "goto"                            shift, and go to state 444
     "bool"                            shift, and go to state 89
     "void"                            shift, and go to state 90
     "string"                          shift, and go to state 91
@@ -19255,7 +19195,6 @@ State 665
     "int16"                           shift, and go to state 115
     "uint16"                          shift, and go to state 116
     "generator"                       shift, and go to state 246
-    "yield"                           shift, and go to state 445
     "++"                              shift, and go to state 247
     "--"                              shift, and go to state 248
     "[["                              shift, and go to state 249
@@ -19277,39 +19216,177 @@ State 665
     '!'                               shift, and go to state 264
     '('                               shift, and go to state 266
     COLCOL                            shift, and go to state 38
-    ';'                               shift, and go to state 446
     '{'                               shift, and go to state 267
-    '}'                               shift, and go to state 679
+    '$'                               shift, and go to state 268
+
+    string_builder          go to state 269
+    expression_block        go to state 270
+    name_in_namespace       go to state 271
+    expr_new                go to state 272
+    expr_cast               go to state 273
+    expr_type_info          go to state 274
+    expr_block              go to state 275
+    expr_numeric_const      go to state 276
+    expr_named_call         go to state 277
+    expr_method_call        go to state 278
+    expr                    go to state 680
+    basic_type_declaration  go to state 280
+    make_decl               go to state 281
+    make_struct_decl        go to state 282
+    make_dim_decl           go to state 283
+    make_table_decl         go to state 284
+    array_comprehension     go to state 285
+
+
+State 662
+
+   40 expression_if_then_else: "if" expr expression_block expression_else .
+
+    $default  reduce using rule 40 (expression_if_then_else)
+
+
+State 663
+
+   41 expression_for_loop: "for" variable_name_list "in" expr_list . ';' expression_block
+  171 expr_list: expr_list . ',' expr
+
+    ','  shift, and go to state 579
+    ';'  shift, and go to state 681
+
+
+State 664
+
+  148 expression_return: "return" "<-" expr ';' .
+
+    $default  reduce using rule 148 (expression_return)
+
+
+State 665
+
+  155 expression_try_catch: "try" expression_block "catch" expression_block .
+
+    $default  reduce using rule 155 (expression_try_catch)
+
+
+State 666
+
+  152 expression_yield: "yield" "<-" expr ';' .
+
+    $default  reduce using rule 152 (expression_yield)
+
+
+State 667
+
+  114 expression_block: '{' expressions '}' "finally" '{' expressions . '}'
+  133 expressions: expressions . expression_any
+  134            | expressions . error
+
+    error                             shift, and go to state 431
+    "let"                             shift, and go to state 3
+    "while"                           shift, and go to state 432
+    "if"                              shift, and go to state 433
+    "for"                             shift, and go to state 434
+    "true"                            shift, and go to state 235
+    "false"                           shift, and go to state 236
+    "new"                             shift, and go to state 237
+    "typeinfo"                        shift, and go to state 238
+    "return"                          shift, and go to state 435
+    "null"                            shift, and go to state 239
+    "break"                           shift, and go to state 436
+    "try"                             shift, and go to state 437
+    "delete"                          shift, and go to state 438
+    "deref"                           shift, and go to state 240
+    "with"                            shift, and go to state 439
+    "cast"                            shift, and go to state 241
+    "upcast"                          shift, and go to state 242
+    "var"                             shift, and go to state 9
+    "addr"                            shift, and go to state 243
+    "continue"                        shift, and go to state 440
+    "pass"                            shift, and go to state 441
+    "reinterpret"                     shift, and go to state 244
+    "label"                           shift, and go to state 442
+    "goto"                            shift, and go to state 443
+    "bool"                            shift, and go to state 89
+    "void"                            shift, and go to state 90
+    "string"                          shift, and go to state 91
+    "int"                             shift, and go to state 93
+    "int2"                            shift, and go to state 94
+    "int3"                            shift, and go to state 95
+    "int4"                            shift, and go to state 96
+    "uint"                            shift, and go to state 97
+    "uint2"                           shift, and go to state 98
+    "uint3"                           shift, and go to state 99
+    "uint4"                           shift, and go to state 100
+    "float"                           shift, and go to state 101
+    "float2"                          shift, and go to state 102
+    "float3"                          shift, and go to state 103
+    "float4"                          shift, and go to state 104
+    "range"                           shift, and go to state 105
+    "urange"                          shift, and go to state 106
+    "int64"                           shift, and go to state 108
+    "uint64"                          shift, and go to state 109
+    "double"                          shift, and go to state 110
+    "lambda"                          shift, and go to state 245
+    "int8"                            shift, and go to state 113
+    "uint8"                           shift, and go to state 114
+    "int16"                           shift, and go to state 115
+    "uint16"                          shift, and go to state 116
+    "generator"                       shift, and go to state 246
+    "yield"                           shift, and go to state 444
+    "++"                              shift, and go to state 247
+    "--"                              shift, and go to state 248
+    "[["                              shift, and go to state 249
+    "[{"                              shift, and go to state 250
+    "{{"                              shift, and go to state 251
+    "integer constant"                shift, and go to state 252
+    "long integer constant"           shift, and go to state 253
+    "unsigned integer constant"       shift, and go to state 254
+    "unsigned long integer constant"  shift, and go to state 255
+    "floating point constant"         shift, and go to state 256
+    "double constant"                 shift, and go to state 257
+    "name"                            shift, and go to state 37
+    "start of the string"             shift, and go to state 258
+    '-'                               shift, and go to state 259
+    '+'                               shift, and go to state 260
+    '*'                               shift, and go to state 261
+    '@'                               shift, and go to state 262
+    '~'                               shift, and go to state 263
+    '!'                               shift, and go to state 264
+    '('                               shift, and go to state 266
+    COLCOL                            shift, and go to state 38
+    ';'                               shift, and go to state 445
+    '{'                               shift, and go to state 267
+    '}'                               shift, and go to state 682
     '$'                               shift, and go to state 268
 
     string_builder           go to state 269
-    expression_label         go to state 448
-    expression_goto          go to state 449
-    expression_if_then_else  go to state 450
-    expression_for_loop      go to state 451
-    expression_while_loop    go to state 452
-    expression_with          go to state 453
+    expression_label         go to state 447
+    expression_goto          go to state 448
+    expression_if_then_else  go to state 449
+    expression_for_loop      go to state 450
+    expression_while_loop    go to state 451
+    expression_with          go to state 452
     expression_block         go to state 270
-    expression_any           go to state 454
-    expr_pipe                go to state 455
+    expression_any           go to state 453
+    expr_pipe                go to state 454
     name_in_namespace        go to state 271
-    expression_delete        go to state 456
+    expression_delete        go to state 455
     expr_new                 go to state 272
-    expression_break         go to state 457
-    expression_continue      go to state 458
-    expression_return        go to state 459
-    expression_yield         go to state 460
-    expression_try_catch     go to state 461
-    kwd_let                  go to state 462
-    expression_let           go to state 463
+    expression_break         go to state 456
+    expression_continue      go to state 457
+    expression_return        go to state 458
+    expression_yield         go to state 459
+    expression_try_catch     go to state 460
+    kwd_let                  go to state 461
+    expression_let           go to state 462
     expr_cast                go to state 273
     expr_type_info           go to state 274
     expr_block               go to state 275
     expr_numeric_const       go to state 276
-    expr_assign              go to state 464
+    expr_assign              go to state 463
     expr_named_call          go to state 277
     expr_method_call         go to state 278
-    expr                     go to state 465
+    expr                     go to state 464
     basic_type_declaration   go to state 280
     make_decl                go to state 281
     make_struct_decl         go to state 282
@@ -19318,7 +19395,7 @@ State 665
     array_comprehension      go to state 285
 
 
-State 666
+State 668
 
   173 block_or_simple_block: "=>" expr .
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -19414,21 +19491,21 @@ State 666
     $default  reduce using rule 173 (block_or_simple_block)
 
 
-State 667
+State 669
 
   198 expr_named_call: name_in_namespace '(' '[' make_struct_fields ']' ')' .
 
     $default  reduce using rule 198 (expr_named_call)
 
 
-State 668
+State 670
 
   200 expr_method_call: expr "->" "name" '(' expr_list ')' .
 
     $default  reduce using rule 200 (expr_method_call)
 
 
-State 669
+State 671
 
   168 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" . type_declaration ')'
 
@@ -19471,10 +19548,10 @@ State 669
     basic_type_declaration      go to state 119
     structure_type_declaration  go to state 120
     auto_type_declaration       go to state 121
-    type_declaration            go to state 680
+    type_declaration            go to state 683
 
 
-State 670
+State 672
 
   165 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' expr . ')'
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -19537,18 +19614,25 @@ State 670
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ')'    shift, and go to state 681
+    ')'    shift, and go to state 684
 
 
-State 671
+State 673
 
   166 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" . '>' expr ')'
   169               | "typeinfo" '(' "name" '<' "name" ';' "name" . '>' "type" type_declaration ')'
 
-    '>'  shift, and go to state 682
+    '>'  shift, and go to state 685
 
 
-State 672
+State 674
+
+  249 expr: "generator" '<' type_declaration '>' '(' expr ')' .
+
+    $default  reduce using rule 249 (expr)
+
+
+State 675
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -19611,21 +19695,21 @@ State 672
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ';'    shift, and go to state 683
+    ';'    shift, and go to state 686
 
     $default  reduce using rule 387 (array_comprehension_where)
 
-    array_comprehension_where  go to state 684
+    array_comprehension_where  go to state 687
 
 
-State 673
+State 676
 
   372 make_struct_decl: "[[" type_declaration '(' ')' make_struct_dim ']' ']' .
 
     $default  reduce using rule 372 (make_struct_decl)
 
 
-State 674
+State 677
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -19692,21 +19776,21 @@ State 674
     $default  reduce using rule 368 (make_struct_fields)
 
 
-State 675
+State 678
 
   374 make_struct_decl: "[{" type_declaration '(' ')' make_struct_dim '}' ']' .
 
     $default  reduce using rule 374 (make_struct_decl)
 
 
-State 676
+State 679
 
    38 expression_else: "else" expression_block .
 
     $default  reduce using rule 38 (expression_else)
 
 
-State 677
+State 680
 
    39 expression_else: "elif" expr . expression_block expression_else
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -19771,26 +19855,26 @@ State 677
     '['    shift, and go to state 379
     '{'    shift, and go to state 267
 
-    expression_block  go to state 685
+    expression_block  go to state 688
 
 
-State 678
+State 681
 
    41 expression_for_loop: "for" variable_name_list "in" expr_list ';' . expression_block
 
     '{'  shift, and go to state 267
 
-    expression_block  go to state 686
+    expression_block  go to state 689
 
 
-State 679
+State 682
 
   114 expression_block: '{' expressions '}' "finally" '{' expressions '}' .
 
     $default  reduce using rule 114 (expression_block)
 
 
-State 680
+State 683
 
   168 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" type_declaration . ')'
   337 type_declaration: type_declaration . '[' expr ']'
@@ -19814,18 +19898,18 @@ State 680
     '?'         shift, and go to state 193
     '&'         shift, and go to state 194
     '['         shift, and go to state 195
-    ')'         shift, and go to state 687
+    ')'         shift, and go to state 690
     '#'         shift, and go to state 196
 
 
-State 681
+State 684
 
   165 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' expr ')' .
 
     $default  reduce using rule 165 (expr_type_info)
 
 
-State 682
+State 685
 
   166 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' . expr ')'
   169               | "typeinfo" '(' "name" '<' "name" ';' "name" '>' . "type" type_declaration ')'
@@ -19834,7 +19918,7 @@ State 682
     "false"                           shift, and go to state 236
     "new"                             shift, and go to state 237
     "typeinfo"                        shift, and go to state 238
-    "type"                            shift, and go to state 688
+    "type"                            shift, and go to state 691
     "null"                            shift, and go to state 239
     "deref"                           shift, and go to state 240
     "cast"                            shift, and go to state 241
@@ -19901,7 +19985,7 @@ State 682
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 689
+    expr                    go to state 692
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -19910,47 +19994,47 @@ State 682
     array_comprehension     go to state 285
 
 
-State 683
+State 686
 
   388 array_comprehension_where: ';' . "where" expr
 
-    "where"  shift, and go to state 690
+    "where"  shift, and go to state 693
 
 
-State 684
+State 687
 
   389 array_comprehension: "[[" "for" variable_name_list "in" expr_list ';' expr array_comprehension_where . ']' ']'
 
-    ']'  shift, and go to state 691
+    ']'  shift, and go to state 694
 
 
-State 685
+State 688
 
    39 expression_else: "elif" expr expression_block . expression_else
 
-    "else"  shift, and go to state 658
-    "elif"  shift, and go to state 659
+    "else"  shift, and go to state 660
+    "elif"  shift, and go to state 661
 
     $default  reduce using rule 37 (expression_else)
 
-    expression_else  go to state 692
+    expression_else  go to state 695
 
 
-State 686
+State 689
 
    41 expression_for_loop: "for" variable_name_list "in" expr_list ';' expression_block .
 
     $default  reduce using rule 41 (expression_for_loop)
 
 
-State 687
+State 690
 
   168 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" type_declaration ')' .
 
     $default  reduce using rule 168 (expr_type_info)
 
 
-State 688
+State 691
 
   169 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" . type_declaration ')'
 
@@ -19993,10 +20077,10 @@ State 688
     basic_type_declaration      go to state 119
     structure_type_declaration  go to state 120
     auto_type_declaration       go to state 121
-    type_declaration            go to state 693
+    type_declaration            go to state 696
 
 
-State 689
+State 692
 
   166 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' expr . ')'
   199 expr_method_call: expr . "->" "name" '(' ')'
@@ -20059,10 +20143,10 @@ State 689
     '%'    shift, and go to state 377
     '.'    shift, and go to state 378
     '['    shift, and go to state 379
-    ')'    shift, and go to state 694
+    ')'    shift, and go to state 697
 
 
-State 690
+State 693
 
   388 array_comprehension_where: ';' "where" . expr
 
@@ -20136,7 +20220,7 @@ State 690
     expr_numeric_const      go to state 276
     expr_named_call         go to state 277
     expr_method_call        go to state 278
-    expr                    go to state 695
+    expr                    go to state 698
     basic_type_declaration  go to state 280
     make_decl               go to state 281
     make_struct_decl        go to state 282
@@ -20145,21 +20229,21 @@ State 690
     array_comprehension     go to state 285
 
 
-State 691
+State 694
 
   389 array_comprehension: "[[" "for" variable_name_list "in" expr_list ';' expr array_comprehension_where ']' . ']'
 
-    ']'  shift, and go to state 696
+    ']'  shift, and go to state 699
 
 
-State 692
+State 695
 
    39 expression_else: "elif" expr expression_block expression_else .
 
     $default  reduce using rule 39 (expression_else)
 
 
-State 693
+State 696
 
   169 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" type_declaration . ')'
   337 type_declaration: type_declaration . '[' expr ']'
@@ -20183,18 +20267,18 @@ State 693
     '?'         shift, and go to state 193
     '&'         shift, and go to state 194
     '['         shift, and go to state 195
-    ')'         shift, and go to state 697
+    ')'         shift, and go to state 700
     '#'         shift, and go to state 196
 
 
-State 694
+State 697
 
   166 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' expr ')' .
 
     $default  reduce using rule 166 (expr_type_info)
 
 
-State 695
+State 698
 
   199 expr_method_call: expr . "->" "name" '(' ')'
   200                 | expr . "->" "name" '(' expr_list ')'
@@ -20261,14 +20345,14 @@ State 695
     $default  reduce using rule 388 (array_comprehension_where)
 
 
-State 696
+State 699
 
   389 array_comprehension: "[[" "for" variable_name_list "in" expr_list ';' expr array_comprehension_where ']' ']' .
 
     $default  reduce using rule 389 (array_comprehension)
 
 
-State 697
+State 700
 
   169 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" type_declaration ')' .
 
