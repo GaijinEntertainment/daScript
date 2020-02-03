@@ -490,12 +490,16 @@ namespace das {
     class AllocateConstString : public Visitor {
     public:
         uint32_t bytesTotal = 0;
+        das_hash_set<string>    uniStr;
     public:
         void allocateString ( const string & message ) {
             if ( !message.empty() ) {
-                uint32_t allocSize = uint32_t(sizeof(StringHeader)) + uint32_t(message.length()) + 1;
-                allocSize = (allocSize + 3) & ~3;
-                bytesTotal += allocSize;
+                if ( uniStr.find(message)==uniStr.end() ) {
+                    uniStr.insert(message);
+                    uint32_t allocSize = uint32_t(sizeof(StringHeader)) + uint32_t(message.length()) + 1;
+                    allocSize = (allocSize + 3) & ~3;
+                    bytesTotal += allocSize;
+                }
             }
         }
         virtual void preVisit ( ExprConstString * expr ) override {

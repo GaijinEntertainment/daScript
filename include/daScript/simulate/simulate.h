@@ -470,6 +470,8 @@ namespace das
 
         vector<FileInfo *> getAllFiles() const;
 
+        char * intern ( const char * str );
+
     public:
         uint64_t *                      annotationData = nullptr;
         StringAllocator                 stringHeap;

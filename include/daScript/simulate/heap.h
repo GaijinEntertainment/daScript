@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/misc/memory_model.h"
+#include "daScript/misc/fnv.h"
 
 namespace das {
 
@@ -121,16 +122,41 @@ namespace das {
     };
     static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
 
+    struct StrEqPred {
+        __forceinline bool operator()(const char * a, const char * b) const {
+            if ( a==b ) return true;
+            if ( !a || !b ) return false;
+            return strcmp(a,b)==0;
+        }
+    };
+
+    struct StrHashPred {
+        __forceinline size_t operator()(const char * a) const {
+            return a ? hash_blockz32((const uint8_t *)a) : 16777619;
+        }
+    };
+
+    typedef das_hash_set<const char *,StrHashPred,StrEqPred> das_string_set;
+
     class StringAllocator : public HeapAllocator {
     public:
         StringAllocator() : HeapAllocator() { alignMask = 3; }
-        virtual void setInitialSize ( uint32_t size );
+        virtual void setInitialSize ( uint32_t size ) override;
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
         }
         void freeString ( char * text, uint32_t length );
+        void setIntern ( bool on );
+        bool isIntern() const { return needIntern; }
         void reportAllocations();
+        virtual void reset() override;
+        virtual void sweep() override;
+        void forEachString ( function<void (const char *)> && fn );
+        char * intern ( const char * str ) const;
+    protected:
+        das_string_set internMap;
+        bool needIntern = false;
     };
 
     struct NodePrefix {

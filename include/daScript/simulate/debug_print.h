@@ -202,6 +202,9 @@ namespace das {
             } else {
                 ss << text;
             }
+            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+                ss << " /*0x" << HEX << intptr_t(str) << DEC << "*/";
+            }
         }
         virtual void Float ( float & f ) override {
             ss << f;

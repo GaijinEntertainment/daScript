@@ -24,8 +24,37 @@ namespace das {
         }
     }
 
+    void StringAllocator::setIntern(bool on) {
+        needIntern = on;
+        if ( !needIntern ) {
+            das_string_set empty;
+            swap ( internMap, empty );
+        }
+    }
+
+    void StringAllocator::reset() {
+        HeapAllocator::reset();
+        das_string_set empty;
+        swap ( internMap, empty );
+    }
+
+    char * StringAllocator::intern(const char * str) const {
+        if ( needIntern ) {
+            auto it = internMap.find(str);
+            return it != internMap.end() ? ((char *)*it) : nullptr;
+        } else {
+            return nullptr;
+        }
+    }
+
     char * StringAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
+            if ( needIntern ) {
+                auto it = internMap.find(text);
+                if ( it != internMap.end() ) {
+                    return (char *) *it;
+                }
+            }
             if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {
                 StringHeader * header = (StringHeader *) str;
                 header->length = length;
@@ -33,6 +62,7 @@ namespace das {
                 str += sizeof(StringHeader);
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
+                if ( needIntern ) internMap.insert(str);
                 return str;
             }
         }
@@ -41,6 +71,7 @@ namespace das {
 
     void StringAllocator::freeString ( char * text, uint32_t length ) {
         DAS_ASSERT( (((StringHeader *)text)-1)->length == length );
+        if ( needIntern ) internMap.erase(text);
         free ( text - sizeof(StringHeader), length + 1 + sizeof(StringHeader) );
     }
 
@@ -52,6 +83,46 @@ namespace das {
         buf[size-2] = '.';
         buf[size-1] = 0;
         return buf;
+    }
+
+    void StringAllocator::forEachString ( function<void (const char *)> && fn ) {
+        for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
+            auto & book = shelf[bi];
+            for ( uint32_t i=0; i!=book.totalPages; ++i ) {
+                const auto & page = book.pages[i];
+                if ( page.total ) {
+                    uint32_t dofs = 0;
+                    while ( dofs != page.offset ) {
+                        char * ch = book.data + i*book.pageSize + dofs;
+                        auto header = (StringHeader *) ch;
+                        ch += sizeof(StringHeader);
+                        fn ( ch );
+                        uint32_t bytes = sizeof(StringHeader) + header->length + 1;
+                        bytes = (bytes + alignMask) & ~alignMask;
+                        dofs += bytes;
+                        DAS_ASSERT(dofs <= page.offset);
+                    }
+                }
+            }
+        }
+        if ( !bigStuff.empty() ) {
+            for ( auto it : bigStuff ) {
+                char * ch = (char *)it.first;
+                ch += sizeof(StringHeader);
+                fn ( ch );
+            }
+        }
+    }
+
+    void StringAllocator::sweep() {
+        HeapAllocator::sweep();
+        if ( needIntern ) {
+            das_string_set empty;
+            swap ( internMap, empty );
+            forEachString([&](const char * str){
+                internMap.insert(str);
+            });
+        }
     }
 
     void StringAllocator::reportAllocations() {

@@ -2036,6 +2036,7 @@ namespace das
         context.constStringHeap = make_shared<StringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
+            context.constStringHeap->setIntern(true);
         }
         if ( auto optHeap = options.getIntOption("heap",policies.heap) ) {
             context.heap.setInitialSize( uint32_t(optHeap) );

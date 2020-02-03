@@ -102,7 +102,7 @@ namespace das {
         virtual void reset();
         virtual void setInitialSize ( uint32_t size );
         virtual uint32_t growPages(uint32_t pages) const { return pages * 2; }
-        void sweep();
+        virtual void sweep();
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );

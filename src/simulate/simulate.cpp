@@ -628,6 +628,13 @@ namespace das
         code = rel.newCode;
     }
 
+    char * Context::intern(const char * str) {
+        if ( !str ) return nullptr;
+        char * ist = constStringHeap->intern(str);
+        if ( !ist ) ist = stringHeap.intern(str);
+        return ist ? ist : stringHeap.allocateString(str,uint32_t(strlen(str)));
+    }
+
     class SharedDataWalker : public DataWalker {
     public:
         virtual void beforeArray ( Array * pa, TypeInfo * ) override {
