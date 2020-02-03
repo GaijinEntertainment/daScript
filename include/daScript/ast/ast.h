@@ -708,6 +708,8 @@ namespace das
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         uint32_t    heap = 0;                           // initial heap size
         uint32_t    string_heap = 0;                    // initial string heap size
+        bool        intern_const_strings = false;       // use string interning lookup for const strings
+        bool        intern_strings = false;             // use string interning lookup for regular string heap
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language

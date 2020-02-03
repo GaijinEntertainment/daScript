@@ -215,6 +215,8 @@ namespace das {
         "heap",                         Type::tInt,
         "string_heap",                  Type::tInt,
         "stack",                        Type::tInt,
+        "intern_const_strings",         Type::tBool,
+        "intern_strings",               Type::tBool,
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,

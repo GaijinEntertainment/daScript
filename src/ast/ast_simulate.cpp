@@ -2130,6 +2130,8 @@ namespace das
         // verify code and string heaps
         DAS_ASSERTF(context.code->pagesAllocated()<=1, "code must come in one page");
         DAS_ASSERTF(context.constStringHeap->pagesAllocated()<=1, "strings must come in one page");
+        context.constStringHeap->setIntern(options.getBoolOption("intern_const_strings", policies.intern_const_strings));
+        context.stringHeap.setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
         // log all functions
         if ( options.getBoolOption("log_nodes",false) ) {
             for ( int i=0; i!=context.totalVariables; ++i ) {
