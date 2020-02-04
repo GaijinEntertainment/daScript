@@ -487,8 +487,10 @@ require_module
             if ( !info.importName.empty() ) {
                 auto ita = das_module_alias.find(info.importName);
                 if ( ita !=das_module_alias.end() ) {
-                    das_yyerror("module alias already used " + info.importName + " as " + ita->second,tokAt(@name),
-                        CompilationError::module_not_found);
+                    if ( ita->second != info.moduleName ) {
+                        das_yyerror("module alias already used " + info.importName + " as " + ita->second,tokAt(@name),
+                            CompilationError::module_not_found);
+                    }
                 } else {
                     das_module_alias[info.importName] = info.moduleName;
                 }
@@ -505,8 +507,10 @@ require_module
             g_Program->thisModule->addDependency(mod, $pub);
             auto ita = das_module_alias.find(*$modalias);
             if ( ita !=das_module_alias.end() ) {
-                das_yyerror("module alias already used " + *$modalias + " as " + ita->second,tokAt(@name),
-                    CompilationError::module_not_found);
+                if ( ita->second != info.moduleName ) {
+                    das_yyerror("module alias already used " + *$modalias + " as " + ita->second,tokAt(@name),
+                        CompilationError::module_not_found);
+                }
             } else {
                 das_module_alias[*$modalias] = info.moduleName;
             }

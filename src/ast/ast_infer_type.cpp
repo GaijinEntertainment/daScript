@@ -2876,6 +2876,11 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprOp2
+        bool isAssignmentOperator ( const string & op ) {
+            return (op=="+=") || (op=="-=") || (op=="*=") || (op=="/=")
+                || (op=="%=") || (op=="&=") || (op=="|=") || (op=="^=")
+                || (op=="<<=") || (op==">>=") || (op=="<<<=") || (op==">>>=");
+        }
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
@@ -2889,13 +2894,28 @@ namespace das {
             auto functions = findMatchingFunctions("_::" + expr->op, types);    // NOTE: operators always in the context of the callee
             if (functions.size() != 1) {
                 if (expr->left->type->isNumeric() && expr->right->type->isNumeric()) {
-                    TextWriter tw;
-                    tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
-                    tw << "\t" << das_to_string(expr->right->type->baseType) << "(" << *expr->left << ") " << expr->op << " " << *expr->right << "\n";
-                    error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
-                        das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType) 
-                        + " is not defined\ntry one of the following\n" + tw.str(), 
-                        expr->at, CompilationError::operator_not_found);
+                    if ( isAssignmentOperator(expr->op) ) {
+                        if ( !expr->left->type->ref ) {
+                            error("numeric operator " + expr->op + " left side must be reference.", expr->at, CompilationError::operator_not_found);
+                        } else if ( expr->left->type->isConst() ) {
+                            error("numeric operator " + expr->op + " left side can't be constant.", expr->at, CompilationError::operator_not_found);
+                        } else  {
+                            TextWriter tw;
+                            tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
+                            error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
+                                das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType)
+                                + " is not defined\ntry the following\n" + tw.str(),
+                                expr->at, CompilationError::operator_not_found);
+                        }
+                    } else {
+                        TextWriter tw;
+                        tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
+                        tw << "\t" << das_to_string(expr->right->type->baseType) << "(" << *expr->left << ") " << expr->op << " " << *expr->right << "\n";
+                        error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
+                            das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType)
+                            + " is not defined\ntry one of the following\n" + tw.str(),
+                            expr->at, CompilationError::operator_not_found);
+                    }
                 } else if (functions.size() == 0) {
                     reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
                 } else if (functions.size() > 1) {

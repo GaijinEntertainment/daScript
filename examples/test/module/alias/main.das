@@ -1,9 +1,9 @@
 // options log_require = true
 // options log = true
-options optimize = false
 
 require event
 require sub/event as sub_event
+require sub/event as sub_event  // testing duplicate here
 
 [export]
 def test
