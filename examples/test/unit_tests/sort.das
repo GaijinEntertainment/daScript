@@ -7,11 +7,25 @@ def test_sort ( var arr : auto(TT) )
     for i in range(1,len)
         assert ( !(arr[i-1] < arr[i]) )
 
+def test_sort_comp ( var arr : auto(TT) )
+    let len = length(arr)
+    sort ( arr ) <| $ (a, b)
+        return a.x < b.x
+    for i in range(1, len)
+        assert ( arr[i-1].x < arr[i].x )
+
 struct Foo
     x, y : int
 
 def operator < ( a, b : Foo )
     return a.x+a.y < b.x+b.y
+
+def test_vector_sort
+    var arr : array<float2>
+    push(arr, float2(4, 0))
+    push(arr, float2(3, 1))
+    push(arr, float2(5, 2))
+    test_sort_comp ( arr )
 
 [export]
 def test
@@ -34,5 +48,7 @@ def test
     // custom type
     test_sort ( [[Foo x=1,y=2; x=1,y=1; x=2,y=2; x=0,y=1]] )    // Foo[]
     test_sort ( [{Foo x=1,y=2; x=1,y=1; x=2,y=2; x=0,y=1}] )    // array<Foo>
+	// vector
+	test_vector_sort()
     return true
 
