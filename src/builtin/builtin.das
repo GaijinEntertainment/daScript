@@ -221,6 +221,8 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete cons
 def sort ( var a : auto(TT)[] )
     if typeinfo(is_numeric_comparable type TT)
         __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
+    elif typeinfo(is_vector type TT)
+        concept_assert(false,"there is no default compare function for vectors")
     elif typeinfo(is_string type TT)
         __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
@@ -232,6 +234,8 @@ def sort ( var a : array<auto(TT)> )
     __builtin_array_lock(a)
     if typeinfo(is_numeric_comparable type TT)
         __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
+    elif typeinfo(is_vector type TT)
+        concept_assert(false,"there is no default compare function for vectors")
     elif typeinfo(is_string type TT)
         __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
@@ -243,6 +247,8 @@ def sort ( var a : array<auto(TT)> )
 def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
     if typeinfo(is_numeric_comparable type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+    elif typeinfo(is_vector type TT)
+        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     elif typeinfo(is_string type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     else
@@ -252,6 +258,8 @@ def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
 def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
     __builtin_array_lock(a)
     if typeinfo(is_numeric_comparable type TT)
+        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+    elif typeinfo(is_vector type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     elif typeinfo(is_string type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )

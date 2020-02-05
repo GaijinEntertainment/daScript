@@ -2006,6 +2006,9 @@ namespace das {
                         iterable = true;
                     } 
                     return make_shared<ExprConstBool>(expr->at, iterable);
+                } else if ( expr->trait=="is_vector" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isVectorType());
                 } else if ( expr->trait=="is_numeric" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumeric());

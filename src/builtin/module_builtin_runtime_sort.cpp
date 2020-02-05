@@ -42,6 +42,10 @@ namespace das
     addExtern<DAS_BIND_FUN(builtin_sort_cblock<CTYPE>)>(*this, lib, "__builtin_sort_cblock", \
         SideEffects::modifyArgumentAndExternal, "builtin_sort_cblock<" xstr(CTYPE) ">");
 
+#define ADD_VECTOR_SORT(CTYPE) \
+    addExtern<DAS_BIND_FUN(builtin_sort_cblock<CTYPE>)>(*this, lib, "__builtin_sort_cblock", \
+        SideEffects::modifyArgumentAndExternal, "builtin_sort_cblock<" xstr(CTYPE) ">");
+
     void Module_BuiltIn::addRuntimeSort(ModuleLibrary & lib) {
         // numeric
         ADD_NUMERIC_SORT(int32_t);
@@ -50,6 +54,18 @@ namespace das
         ADD_NUMERIC_SORT(uint64_t);
         ADD_NUMERIC_SORT(float);
         ADD_NUMERIC_SORT(double);
+        // vector
+        ADD_VECTOR_SORT(range);
+        ADD_VECTOR_SORT(urange);
+        ADD_VECTOR_SORT(int2);
+        ADD_VECTOR_SORT(int3);
+        ADD_VECTOR_SORT(int4);
+        ADD_VECTOR_SORT(uint2);
+        ADD_VECTOR_SORT(uint3);
+        ADD_VECTOR_SORT(uint4);
+        ADD_VECTOR_SORT(float2);
+        ADD_VECTOR_SORT(float3);
+        ADD_VECTOR_SORT(float4);
         // string
         addExtern<DAS_BIND_FUN(builtin_sort_string)>(*this, lib, "__builtin_sort_string",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_string");
