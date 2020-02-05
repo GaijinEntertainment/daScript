@@ -153,13 +153,13 @@ namespace das {
     }
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, bool needYield ) {
+                                        const StructurePtr & ls, bool needYield, bool isUnsafe ) {
         auto lfn = lambdaName + "__def";
         auto pFunc = make_shared<Function>();
         pFunc->generated = true;
         pFunc->at = block->at;
         pFunc->name = lfn;
-        pFunc->unsafe = true;   // TODO: inherit from parent function
+        pFunc->unsafe = isUnsafe;
         auto fb = make_shared<ExprBlock>();
         auto with = make_shared<ExprWith>(block->at);
         with->with = make_shared<ExprVar>(block->at, "__this");

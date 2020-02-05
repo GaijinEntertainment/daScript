@@ -1559,7 +1559,8 @@ namespace das {
                             string lname = generateNewLambdaName(block->at);
                             auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
                             if ( program->addStructure(ls) ) {
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls);
+                                bool isUnsafe = func ? func->unsafe : false;
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
                                 if ( program->addFunction(pFn) ) {
                                     reportGenericInfer();
                                     auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
@@ -1652,7 +1653,8 @@ namespace das {
                             string lname = generateNewLambdaName(block->at);
                             auto ls = generateLambdaStruct(lname, block.get(), cl.capt, true);
                             if ( program->addStructure(ls) ) {
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, true);
+                                bool isUnsafe = func ? func->unsafe : false;
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, true, isUnsafe);
                                 if ( program->addFunction(pFn) ) {
                                     reportGenericInfer();
                                     auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );

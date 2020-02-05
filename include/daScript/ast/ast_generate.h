@@ -45,7 +45,7 @@ namespace das {
                 ...block_body...
      */
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, bool needYield = false );
+                                        const StructurePtr & ls, bool needYield, bool isUnsafe );
 
     /*
          [[__lambda_at_line_xxx THIS=@__lambda_function_at_line_xxx; ba1=ba1; ba2=ba2; ... ]]
