@@ -44,6 +44,7 @@ namespace das
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             *pA = sAB;
+            context.stringHeap.recognize(sAB);
         } else {
             context.throw_error("can't add two strings, out of heap");
         }

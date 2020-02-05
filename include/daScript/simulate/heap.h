@@ -154,6 +154,7 @@ namespace das {
         virtual void sweep() override;
         void forEachString ( function<void (const char *)> && fn );
         char * intern ( const char * str ) const;
+        void recognize ( char * str );
     protected:
         das_string_set internMap;
         bool needIntern = false;

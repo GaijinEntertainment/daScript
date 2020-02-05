@@ -508,6 +508,10 @@ namespace das
         debugInfo = ctx.debugInfo;
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
+        // heap
+        heap.setInitialSize(ctx.heap.initialSize);
+        stringHeap.setInitialSize(ctx.stringHeap.initialSize);
+        stringHeap.setIntern(ctx.stringHeap.isIntern());
         // globals
         annotationData = ctx.annotationData;
         globalsSize = ctx.globalsSize;

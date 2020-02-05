@@ -48,9 +48,10 @@ namespace das {
     }
 
     void MemoryModel::setInitialSize ( uint32_t size ) {
-        if ( shelf.empty() ) {
+        if ( size && shelf.empty() ) {
             uint32_t tp = (size+pageSize-1) / pageSize;
             shelf.emplace_back(pageSize, das::max(tp,1u));
+            initialSize = size;
         }
     }
 

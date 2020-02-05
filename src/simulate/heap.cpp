@@ -47,9 +47,15 @@ namespace das {
         }
     }
 
+    void StringAllocator::recognize ( char * str ) {
+        if ( needIntern && str && isOwnPtr(str) ) {
+            internMap.insert(str);
+        }
+    }
+
     char * StringAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
-            if ( needIntern ) {
+            if ( needIntern && text ) {
                 auto it = internMap.find(text);
                 if ( it != internMap.end() ) {
                     return (char *) *it;
@@ -62,7 +68,7 @@ namespace das {
                 str += sizeof(StringHeader);
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
-                if ( needIntern ) internMap.insert(str);
+                if ( needIntern && text ) internMap.insert(str);
                 return str;
             }
         }

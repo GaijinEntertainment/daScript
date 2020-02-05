@@ -124,6 +124,7 @@ namespace das {
         uint32_t                totalAllocated;
         uint32_t                maxAllocated;
         uint32_t                initial_page_count = 16;
+        uint32_t                initialSize = 0;
         vector<Book>            shelf;
         das_hash_map<void *,uint32_t>bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
     };

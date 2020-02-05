@@ -10,6 +10,7 @@ namespace das {
         data[dataSize] = 0;
         sh->hash = 0;
         sh->length = dataSize;
+        heap->recognize(data);
         return data;
     }
 

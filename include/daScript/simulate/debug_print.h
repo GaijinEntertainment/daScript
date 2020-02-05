@@ -17,7 +17,7 @@ namespace das {
         char * allocate (int l);
         virtual void output() {}
     protected:
-        HeapAllocator * heap = nullptr;
+        StringAllocator * heap = nullptr;
         char *  data = nullptr;
         int     dataSize = 0;
         int     dataCapacity = 0;
