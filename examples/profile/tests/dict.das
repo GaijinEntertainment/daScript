@@ -2,6 +2,9 @@
 
 require math
 
+// enable for test purposes only. this is slower
+// options intern_strings = true
+
 // 8Mb heap
 options string_heap=8388608
 
@@ -31,6 +34,7 @@ def test
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
+	// print("string heap depth is {string_heap_depth()}\n")
     verify(string_heap_depth()==1)
     return true
 
