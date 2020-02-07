@@ -118,6 +118,9 @@ namespace das {
     }
 
     void MemoryModel::reset() {
+        for ( auto & itb : bigStuff ) {
+            das_aligned_free16(itb.first);
+        }
         bigStuff.clear();
         if ( shelf.size()!=1 ) {
             uint32_t pages = pagesTotal();
