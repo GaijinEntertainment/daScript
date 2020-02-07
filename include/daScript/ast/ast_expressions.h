@@ -415,6 +415,7 @@ namespace das
     struct ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
         ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) {}
         ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) {}
+        virtual bool rtti_isFakeContext() const override { return true; }
     };
 
     struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {

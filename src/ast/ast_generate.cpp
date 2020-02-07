@@ -6,6 +6,28 @@
 
 namespace das {
 
+#define VERIFY_GENERATED    1
+#define LOG_GENERATED       0
+
+    struct CheckLineInfoVisitor : Visitor {
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            if ( expr->rtti_isFakeContext() ) return;
+            DAS_ASSERT(expr->at.column && expr->at.line);
+        }
+    };
+
+    void verifyGenerated ( const ExpressionPtr & expr ) {
+#if LOG_GENERATED
+        TextPrinter pp;
+        pp << "VERIFY:\n" << *expr << "\n";
+#endif
+#if VERIFY_GENERATED
+        CheckLineInfoVisitor vis;
+        expr->visit(vis);
+#endif
+    }
+
     // array comprehension
     //  invoke( $()
     //      let temp : Array<expr->subexpr->type>
@@ -161,6 +183,7 @@ namespace das {
         pFunc->name = lfn;
         pFunc->unsafe = isUnsafe;
         auto fb = make_shared<ExprBlock>();
+        fb->at = block->at;
         auto with = make_shared<ExprWith>(block->at);
         with->with = make_shared<ExprVar>(block->at, "__this");
         with->body = block->clone();
@@ -190,6 +213,7 @@ namespace das {
             cA->marked_used = true;             // to avoid 'unsued argument' error
             pFunc->arguments.push_back(cA);
         }
+        verifyGenerated(pFunc->body);
         return pFunc;
     }
 
@@ -216,10 +240,13 @@ namespace das {
         return pStruct;
     }
 
-    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const das_set<VariablePtr> & capt ) {
+    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf,
+                                            const das_set<VariablePtr> & capt, const LineInfo & at ) {
         auto asc = new ExprAscend();
+        asc->at = at;
         asc->needTypeInfo = true;
         auto makeS = make_shared<ExprMakeStructure>();
+        makeS->at = at;
         makeS->makeType = make_shared<TypeDecl>(ls);
         auto ms = make_shared<MakeStruct>();
         auto atTHIS = make_shared<ExprAddr>(lf->at, lf->name);
@@ -235,7 +262,9 @@ namespace das {
         asc->ascType = make_shared<TypeDecl>(*ls->fields[0].type);
         asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
         asc->ascType->baseType = Type::tLambda;
-        return ExpressionPtr(asc);
+        auto res = ExpressionPtr(asc);
+        verifyGenerated(res);
+        return res;
     }
 
     // rename variable to unique name variable
@@ -340,5 +369,209 @@ namespace das {
         BreakAndContinueVisitor rbnc(bg, cg);
         expr->visit(rbnc);
     }
+
+    ExpressionPtr generateYield( ExprYield * expr, const FunctionPtr & func ) {
+        const auto & yarg = func->arguments[1];
+        // TODO: verify yield type so that error is 'yield' error, not copy or move error
+        auto LabelX = func->totalGenLabel ++;
+        auto blk = make_shared<ExprBlock>();
+        blk->isCollapseable = true;
+        blk->at = expr->at;
+        bool makeRef = false;
+        if ( func->arguments.size()==2 ) { // starts with _ryield
+            const auto & argn = func->arguments[1]->name;
+            if ( argn.length()>=7 ) {
+                makeRef = memcmp ( argn.c_str(), "_ryield", 7 ) ==  0;
+            }
+        }
+        if ( expr->moveSemantics ) {
+            // TODO: error on makeRef + moveSemantics
+            // result <- a
+            auto mto = make_shared<ExprVar>(expr->at, yarg->name);
+            auto mfr = expr->subexpr->clone();
+            auto mve = make_shared<ExprMove>(expr->at, mto, mfr);
+            blk->list.push_back(mve);
+        } else {
+            // result = a
+            auto cto = make_shared<ExprVar>(expr->at, yarg->name);
+            auto cfr = expr->subexpr->clone();
+            if ( makeRef ) {
+                cfr = make_shared<ExprRef2Ptr>(expr->at, cfr);
+            }
+            auto cpy = make_shared<ExprCopy>(expr->at, cto, cfr);
+            blk->list.push_back(cpy);
+        }
+        // yield = X
+        auto yyx = make_shared<ExprVar>(expr->at, "__yield");
+        auto clx = make_shared<ExprConstInt>(expr->at, LabelX);
+        auto cpy = make_shared<ExprCopy>(expr->at, yyx, clx);
+        blk->list.push_back(cpy);
+        // return true
+        auto btr = make_shared<ExprConstBool>(expr->at, true);
+        auto rex = make_shared<ExprReturn>(expr->at, btr);
+        rex->fromYield = true;
+        blk->list.push_back(rex);
+        auto lbx = make_shared<ExprLabel>(expr->at, LabelX,
+                                          "yield at line " + to_string(expr->at.line));
+        blk->list.push_back(lbx);
+        verifyGenerated(blk);
+        return blk;
+    }
+
+    ExpressionPtr replaceGeneratorLet ( ExprLet * expr, const FunctionPtr & func, ExprBlock * scope ) {
+        auto blk = make_shared<ExprBlock>();
+        blk->at = expr->at;
+        blk->isCollapseable = true;
+        auto capture = func->arguments[0]->type->structType;
+        DAS_ASSERT(capture && "generator first argument is lambda capture");
+        for ( auto & var : expr->variables ) {
+            auto vtd = make_shared<TypeDecl>(*var->type);
+            bool isRef = vtd->ref;
+            if ( isRef ) {
+                auto pvtd = make_shared<TypeDecl>(Type::tPointer);
+                pvtd->firstType = vtd;
+                pvtd->constant = vtd->constant;
+                vtd->ref = false;
+                vtd = pvtd;
+                replaceRef2Ptr(scope->shared_from_this(), var->name);
+            }
+            capture->fields.emplace_back(
+                                         var->name,
+                                         vtd,
+                                         nullptr,
+                                         AnnotationArgumentList(),
+                                         false,
+                                         expr->at);
+            auto lvar = make_shared<ExprVar>(var->at, var->name);
+            if ( var->init ) {
+                auto rini = var->init->clone();
+                if ( isRef ) {
+                    auto arini = make_shared<ExprRef2Ptr>(expr->at, rini);
+                    arini->alwaysSafe = true;
+                    rini = arini;
+                }
+                if ( var->init_via_clone ) {
+                    auto cln = make_shared<ExprClone>(var->at, lvar, rini);
+                    blk->list.push_back(cln);
+                } else if ( var->init_via_move ) {
+                    auto mve = make_shared<ExprMove>(var->at, lvar, rini);
+                    blk->list.push_back(mve);
+                } else {
+                    auto cpy = make_shared<ExprCopy>(var->at, lvar, rini);
+                    blk->list.push_back(cpy);
+                }
+            } else {
+                auto mz = make_shared<ExprMemZero>(var->at, "memzero");
+                mz->arguments.push_back(lvar);
+                blk->list.push_back(mz);
+            }
+        }
+        verifyGenerated(blk);
+        return blk;
+    }
+
+    ExpressionPtr replaceGeneratorIfThenElse ( ExprIfThenElse * expr, const FunctionPtr & func ) {
+        auto blk = make_shared<ExprBlock>();
+        blk->at = expr->at;
+        blk->isCollapseable = true;
+        if ( expr->if_false ) {
+            auto else_label = func->totalGenLabel ++;
+            auto end_label = func->totalGenLabel ++;
+            auto gtel = make_shared<ExprGoto>(expr->at, else_label);
+            auto btel = make_shared<ExprBlock>();
+            btel->at = expr->at;
+            btel->list.push_back(gtel);
+            auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
+            auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
+            blk->list.push_back(ifnc);
+            auto ift = expr->if_true->clone();
+            if ( ift->rtti_isBlock() ){
+                auto iftb = static_pointer_cast<ExprBlock>(ift);
+                iftb->isCollapseable = true;
+                giveBlockVariablesUniqueNames(ift);
+            }
+            blk->list.push_back(ift);
+            auto gten = make_shared<ExprGoto>(expr->at, end_label);
+            blk->list.push_back(gten);
+            auto elsel = make_shared<ExprLabel>(expr->at, else_label,
+                                                "else if at line " + to_string(expr->at.line));
+            blk->list.push_back(elsel);
+            auto iff = expr->if_false->clone();
+            if ( iff->rtti_isBlock() ){
+                auto iffb = static_pointer_cast<ExprBlock>(iff);
+                iffb->isCollapseable = true;
+                giveBlockVariablesUniqueNames(iff);
+            }
+            blk->list.push_back(iff);
+            auto enddl = make_shared<ExprLabel>(expr->at, end_label,
+                                                "end if at line " + to_string(expr->at.line));
+            blk->list.push_back(enddl);
+        } else {
+            auto end_label = func->totalGenLabel ++;
+            auto gtel = make_shared<ExprGoto>(expr->at, end_label);
+            auto btel = make_shared<ExprBlock>();
+            btel->at = expr->at;
+            btel->list.push_back(gtel);
+            auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
+            auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
+            blk->list.push_back(ifnc);
+            auto ift = expr->if_true->clone();
+            if ( ift->rtti_isBlock() ){
+                auto iftb = static_pointer_cast<ExprBlock>(ift);
+                iftb->isCollapseable = true;
+                giveBlockVariablesUniqueNames(ift);
+            }
+            blk->list.push_back(ift);
+            auto enddl = make_shared<ExprLabel>(expr->at, end_label,
+                                                "end if at line " + to_string(expr->at.line));
+            blk->list.push_back(enddl);
+        }
+        verifyGenerated(blk);
+        return blk;
+    }
+
+    ExpressionPtr replaceGeneratorWhile ( ExprWhile * expr, const FunctionPtr & func ) {
+        auto begin_loop_label = func->totalGenLabel ++;
+        auto end_loop_label = func->totalGenLabel ++;
+        shared_ptr<ExprBlock> bodyBlock;
+        if ( expr->body->rtti_isBlock() ) {
+            bodyBlock = static_pointer_cast<ExprBlock>(expr->body->clone());
+            giveBlockVariablesUniqueNames(bodyBlock);
+            replaceBreakAndContinue(bodyBlock.get(), end_loop_label, begin_loop_label);
+        }
+        auto blk = make_shared<ExprBlock>();
+        blk->at = expr->at;
+        blk->isCollapseable = true;
+        auto bll = make_shared<ExprLabel>(expr->at, begin_loop_label,
+                                          "begin while at line " + to_string(expr->at.line));
+        blk->list.push_back(bll);
+        auto gtel = make_shared<ExprGoto>(expr->at, end_loop_label);
+        auto btel = make_shared<ExprBlock>();
+        btel->at = expr->at;
+        btel->list.push_back(gtel);
+        auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
+        auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
+        blk->list.push_back(ifnc);
+        if ( bodyBlock ) {
+            for ( auto & bse : bodyBlock->list ) {
+                blk->list.push_back(bse->clone());
+            }
+        } else {
+            blk->list.push_back(expr->body->clone());
+        }
+        auto gbeg = make_shared<ExprGoto>(expr->at, begin_loop_label);
+        blk->list.push_back(gbeg);
+        auto ell = make_shared<ExprLabel>(expr->at, end_loop_label,
+                                          "end while at line " + to_string(expr->at.line));
+        blk->list.push_back(ell);
+        if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
+            for ( auto & fse : bodyBlock->finalList ) {
+                blk->list.push_back(fse->clone());
+            }
+        }
+        verifyGenerated(blk);
+        return blk;
+    }
+
 }
 

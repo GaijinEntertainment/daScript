@@ -26,8 +26,7 @@ namespace das {
         bool                fail = false;
     };
 
-
-    // type inference
+// type inference
 
     class InferTypes : public FoldingVisitor {
     public:
@@ -1426,7 +1425,7 @@ namespace das {
             if ( !expr->subexpr->type->isRef() ) {
                 error("can only make a pointer of of a reference", expr->at, CompilationError::cant_dereference);
             } else {
-                if ( func && !func->unsafe ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
                     error("address of reference requires [unsafe]", expr->at,
                         CompilationError::unsafe);
                 }
@@ -1563,7 +1562,7 @@ namespace das {
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
                                 if ( program->addFunction(pFn) ) {
                                     reportGenericInfer();
-                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
+                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
                                     return ms;
                                 } else {
                                     error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
@@ -1657,7 +1656,7 @@ namespace das {
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls, true, isUnsafe);
                                 if ( program->addFunction(pFn) ) {
                                     reportGenericInfer();
-                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt );
+                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
                                     // each ( [[ ]]] )
                                     auto cEach = make_shared<ExprCall>(block->at, makeRef ? "each_ref" : "each");
                                     cEach->arguments.push_back(ms);
@@ -3238,54 +3237,9 @@ namespace das {
                           expr->at, CompilationError::invalid_yield );
                 }
                 if ( !expr->subexpr->type ) return Visitor::visit(expr);
-                const auto & yarg = func->arguments[1];
+                // const auto & yarg = func->arguments[1];
                 // TODO: verify yield type so that error is 'yield' error, not copy or move error
-                // now, replace yield A with
-                //  result = A
-                //  __yield = X
-                //  return true
-                //  label X
-                auto LabelX = func->totalGenLabel ++;
-                auto blk = make_shared<ExprBlock>();
-                blk->isCollapseable = true;
-                blk->at = expr->at;
-                bool makeRef = false;
-                if ( func->arguments.size()==2 ) { // starts with _ryield
-                    const auto & argn = func->arguments[1]->name;
-                    if ( argn.length()>=7 ) {
-                        makeRef = memcmp ( argn.c_str(), "_ryield", 7 ) ==  0;
-                    }
-                }
-                if ( expr->moveSemantics ) {
-                    // TODO: error on makeRef + moveSemantics
-                    // result <- a
-                    auto mto = make_shared<ExprVar>(expr->at, yarg->name);
-                    auto mfr = expr->subexpr->clone();
-                    auto mve = make_shared<ExprMove>(expr->at, mto, mfr);
-                    blk->list.push_back(mve);
-                } else {
-                    // result = a
-                    auto cto = make_shared<ExprVar>(expr->at, yarg->name);
-                    auto cfr = expr->subexpr->clone();
-                    if ( makeRef ) {
-                        cfr = make_shared<ExprRef2Ptr>(expr->at, cfr);
-                    }
-                    auto cpy = make_shared<ExprCopy>(expr->at, cto, cfr);
-                    blk->list.push_back(cpy);
-                }
-                // yield = X
-                auto yyx = make_shared<ExprVar>(expr->at, "__yield");
-                auto clx = make_shared<ExprConstInt>(expr->at, LabelX);
-                auto cpy = make_shared<ExprCopy>(expr->at, yyx, clx);
-                blk->list.push_back(cpy);
-                // return true
-                auto btr = make_shared<ExprConstBool>(expr->at, true);
-                auto rex = make_shared<ExprReturn>(expr->at, btr);
-                rex->fromYield = true;
-                blk->list.push_back(rex);
-                auto lbx = make_shared<ExprLabel>(expr->at, LabelX,
-                                                  "yield at line " + to_string(expr->at.line));
-                blk->list.push_back(lbx);
+                auto blk = generateYield(expr, func);
                 scopes.back()->needCollapse = true;
                 reportGenericInfer();
                 return blk;
@@ -3373,89 +3327,24 @@ namespace das {
                 uint32_t tf = expr->if_true->getEvalFlags();
                 uint32_t ff = expr->if_false ? expr->if_false->getEvalFlags() : 0;
                 if ( (tf|ff) & EvalFlags::yield ) { // only unwrap if it has "yield"
-                    auto blk = make_shared<ExprBlock>();
-                    blk->at = expr->at;
-                    blk->isCollapseable = true;
-                    if ( expr->if_false ) {
-                        /*
-                         if ( !cond ) goto else_label;
-                         if_true;
-                         goto end_label;
-                         else_label:
-                         if_false;
-                         end_label:
-                         */
-                        auto else_label = func->totalGenLabel ++;
-                        auto end_label = func->totalGenLabel ++;
-                        auto gtel = make_shared<ExprGoto>(expr->at, else_label);
-                        auto btel = make_shared<ExprBlock>();
-                        btel->at = expr->at;
-                        btel->list.push_back(gtel);
-                        auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
-                        auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
-                        blk->list.push_back(ifnc);
-                        auto ift = expr->if_true->clone();
-                        if ( ift->rtti_isBlock() ){
-                            auto iftb = static_pointer_cast<ExprBlock>(ift);
-                            if ( !iftb->finalList.empty() ) {
-                                error("can't have final section in the if-then-else inside generator yet",
-                                      expr->at, CompilationError::invalid_yield);
-                                return Visitor::visit(expr);
-                            }
-                            iftb->isCollapseable = true;
-                            giveBlockVariablesUniqueNames(ift);
+                    // verify if it can be cloned at all
+                    if ( expr->if_true->rtti_isBlock() ){
+                        auto iftb = static_pointer_cast<ExprBlock>(expr->if_true);
+                        if ( !iftb->finalList.empty() ) {
+                            error("can't have final section in the if-then-else inside generator yet",
+                                  expr->at, CompilationError::invalid_yield);
+                            return Visitor::visit(expr);
                         }
-                        blk->list.push_back(ift);
-                        auto gten = make_shared<ExprGoto>(expr->at, end_label);
-                        blk->list.push_back(gten);
-                        auto elsel = make_shared<ExprLabel>(expr->at, else_label,
-                                                            "else if at line " + to_string(expr->at.line));
-                        blk->list.push_back(elsel);
-                        auto iff = expr->if_false->clone();
-                        if ( iff->rtti_isBlock() ){
-                            auto iffb = static_pointer_cast<ExprBlock>(iff);
-                            if ( !iffb->finalList.empty() ) {
-                                error("can't have final section in the if-then-else inside generator yet",
-                                      expr->at, CompilationError::invalid_yield);
-                                return Visitor::visit(expr);
-                            }
-                            iffb->isCollapseable = true;
-                            giveBlockVariablesUniqueNames(iff);
-                        }
-                        blk->list.push_back(iff);
-                        auto enddl = make_shared<ExprLabel>(expr->at, end_label,
-                                                            "end if at line " + to_string(expr->at.line));
-                        blk->list.push_back(enddl);
-                    } else {
-                        /*
-                         if ( !cond ) goto end_label;
-                         if_true;
-                         end_label:
-                         */
-                        auto end_label = func->totalGenLabel ++;
-                        auto gtel = make_shared<ExprGoto>(expr->at, end_label);
-                        auto btel = make_shared<ExprBlock>();
-                        btel->at = expr->at;
-                        btel->list.push_back(gtel);
-                        auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
-                        auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
-                        blk->list.push_back(ifnc);
-                        auto ift = expr->if_true->clone();
-                        if ( ift->rtti_isBlock() ){
-                            auto iftb = static_pointer_cast<ExprBlock>(ift);
-                            if ( !iftb->finalList.empty() ) {
-                                error("can't have final section in the if-then-else inside generator yet",
-                                      expr->at, CompilationError::invalid_yield);
-                                return Visitor::visit(expr);
-                            }
-                            iftb->isCollapseable = true;
-                            giveBlockVariablesUniqueNames(ift);
-                        }
-                        blk->list.push_back(ift);
-                        auto enddl = make_shared<ExprLabel>(expr->at, end_label,
-                                                            "end if at line " + to_string(expr->at.line));
-                        blk->list.push_back(enddl);
                     }
+                    if ( expr->if_false && expr->if_false->rtti_isBlock() ){
+                        auto iffb = static_pointer_cast<ExprBlock>(expr->if_false);
+                        if ( !iffb->finalList.empty() ) {
+                            error("can't have final section in the if-then-else inside generator yet",
+                                  expr->at, CompilationError::invalid_yield);
+                            return Visitor::visit(expr);
+                        }
+                    }
+                    auto blk = replaceGeneratorIfThenElse(expr, func);
                     scopes.back()->needCollapse = true;
                     reportGenericInfer();
                     return blk;
@@ -3522,52 +3411,7 @@ namespace das {
                 }
                 uint32_t tf = expr->body->getEvalFlags();
                 if ( tf & EvalFlags::yield ) { // only unwrap if it has "yield"
-                    auto begin_loop_label = func->totalGenLabel ++;
-                    auto end_loop_label = func->totalGenLabel ++;
-                    shared_ptr<ExprBlock> bodyBlock;
-                    if ( expr->body->rtti_isBlock() ) {
-                        bodyBlock = static_pointer_cast<ExprBlock>(expr->body->clone());
-                        giveBlockVariablesUniqueNames(bodyBlock);
-                        replaceBreakAndContinue(bodyBlock.get(), end_loop_label, begin_loop_label);
-                    }
-                    /*
-                        label beginloop                 continue -> goto beginloop
-                        if ! cond goto endloop          break -> goto endloop
-                        body
-                        goto beginloop
-                        label endloop
-                        finally
-                    */
-                    auto blk = make_shared<ExprBlock>();
-                    blk->at = expr->at;
-                    blk->isCollapseable = true;
-                    auto bll = make_shared<ExprLabel>(expr->at, begin_loop_label,
-                                                      "begin while at line " + to_string(expr->at.line));
-                    blk->list.push_back(bll);
-                    auto gtel = make_shared<ExprGoto>(expr->at, end_loop_label);
-                    auto btel = make_shared<ExprBlock>();
-                    btel->at = expr->at;
-                    btel->list.push_back(gtel);
-                    auto ncnd = make_shared<ExprOp1>(expr->cond->at, "!", expr->cond->clone());
-                    auto ifnc = make_shared<ExprIfThenElse>(expr->at, ncnd, btel, nullptr);
-                    blk->list.push_back(ifnc);
-                   if ( bodyBlock ) {
-                        for ( auto & bse : bodyBlock->list ) {
-                            blk->list.push_back(bse->clone());
-                        }
-                    } else {
-                        blk->list.push_back(expr->body->clone());
-                    }
-                    auto gbeg = make_shared<ExprGoto>(expr->at, begin_loop_label);
-                    blk->list.push_back(gbeg);
-                    auto ell = make_shared<ExprLabel>(expr->at, end_loop_label,
-                                                      "end while at line " + to_string(expr->at.line));
-                    blk->list.push_back(ell);
-                    if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
-                        for ( auto & fse : bodyBlock->finalList ) {
-                            blk->list.push_back(fse->clone());
-                        }
-                    }
+                    auto blk = replaceGeneratorWhile(expr, func);
                     scopes.back()->needCollapse = true;
                     reportGenericInfer();
                     return blk;
@@ -3996,53 +3840,7 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 }
-                auto blk = make_shared<ExprBlock>();
-                blk->at = expr->at;
-                blk->isCollapseable = true;
-                auto capture = func->arguments[0]->type->structType;
-                DAS_ASSERT(capture && "generator first argument is lambda capture");
-                for ( auto & var : expr->variables ) {
-                    auto vtd = make_shared<TypeDecl>(*var->type);
-                    bool isRef = vtd->ref;
-                    if ( isRef ) {
-                        auto pvtd = make_shared<TypeDecl>(Type::tPointer);
-                        pvtd->firstType = vtd;
-                        pvtd->constant = vtd->constant;
-                        vtd->ref = false;
-                        vtd = pvtd;
-                        auto scope = scopes.back();
-                        replaceRef2Ptr(scope->shared_from_this(), var->name);
-                    }
-                    capture->fields.emplace_back(
-                            var->name,
-                            vtd,
-                            nullptr,
-                            AnnotationArgumentList(),
-                            false,
-                            expr->at);
-                    auto lvar = make_shared<ExprVar>(var->at, var->name);
-                    if ( var->init ) {
-                        auto rini = var->init->clone();
-                        if ( isRef ) {
-                            auto arini = make_shared<ExprRef2Ptr>(expr->at, rini);
-                            rini = arini;
-                        }
-                        if ( var->init_via_clone ) {
-                            auto cln = make_shared<ExprClone>(var->at, lvar, rini);
-                            blk->list.push_back(cln);
-                        } else if ( var->init_via_move ) {
-                            auto mve = make_shared<ExprMove>(var->at, lvar, rini);
-                            blk->list.push_back(mve);
-                        } else {
-                            auto cpy = make_shared<ExprCopy>(var->at, lvar, rini);
-                            blk->list.push_back(cpy);
-                        }
-                    } else {
-                        auto mz = make_shared<ExprMemZero>(var->at, "memzero");
-                        mz->arguments.push_back(lvar);
-                        blk->list.push_back(mz);
-                    }
-                }
+                auto blk = replaceGeneratorLet(expr, func, scopes.back());
                 scopes.back()->needCollapse = true;
                 reportGenericInfer();
                 return blk;

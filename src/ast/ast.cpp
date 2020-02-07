@@ -475,6 +475,7 @@ namespace das {
         }
         expr->at = at;
         expr->type = type ? make_shared<TypeDecl>(*type) : nullptr;
+        expr->genFlags = genFlags;
         return expr;
     }
 
@@ -753,6 +754,7 @@ namespace das {
 
     ExpressionPtr ExprMakeBlock::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMakeBlock>(expr);
+        Expression::clone(cexpr);
         cexpr->block = block->clone();
         return cexpr;
     }

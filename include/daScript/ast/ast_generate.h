@@ -3,6 +3,10 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
+
+    // make sure generated code contains line information etc
+    void verifyGenerated ( const ExpressionPtr & expr );
+
     /*
      def STRUCT_NAME
         return [[STRUCT_NAME field1=init1, field2=init2, ...]]
@@ -50,7 +54,8 @@ namespace das {
     /*
          [[__lambda_at_line_xxx THIS=@__lambda_function_at_line_xxx; ba1=ba1; ba2=ba2; ... ]]
      */
-    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const das_set<VariablePtr> & capt );
+    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf,
+                                            const das_set<VariablePtr> & capt, const LineInfo & at );
 
     /*
          array comprehension [[ for x in src; x_expr; where x_expr ]]
@@ -85,5 +90,70 @@ namespace das {
         with 'goto label bg' and 'goto label cg' accordingly
      */
     void replaceBreakAndContinue ( Expression * expr, int32_t bg, int32_t cg );
+
+    /*
+        replace
+            yield A
+        with
+            result = A
+            __yield = X
+            return true
+            label X
+     */
+    struct ExprYield;
+    ExpressionPtr generateYield( ExprYield * expr, const FunctionPtr & func );
+
+    /*
+        replace
+            let a = b
+            let c
+        with
+            this.a = b
+            memzero(c)
+        if variable is & - swap to pointer
+     */
+    struct ExprLet;
+    ExpressionPtr replaceGeneratorLet ( ExprLet * expr, const FunctionPtr & func, ExprBlock * scope );
+
+    /*
+        replace
+            if cond
+                if_true
+            else
+                if_false
+        with
+            if ( !cond ) goto else_label;
+            if_true;
+            goto end_label;
+            else_label:
+            if_false;
+            end_label:
+
+        replace
+            if cond
+                if_true
+        with
+            if ( !cond ) goto end_label;
+            if_true;
+            end_label:
+
+     */
+    struct ExprIfThenElse;
+    ExpressionPtr replaceGeneratorIfThenElse ( ExprIfThenElse * expr, const FunctionPtr & func );
+
+    /*
+    replace
+        while cond
+            body
+    with
+        label beginloop                 continue -> goto beginloop
+        if ! cond goto endloop          break -> goto endloop
+        body
+        goto beginloop
+        label endloop
+        finally
+    */
+    struct ExprWhile;
+    ExpressionPtr replaceGeneratorWhile ( ExprWhile * expr, const FunctionPtr & func );
 }
 

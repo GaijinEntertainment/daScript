@@ -1011,6 +1011,7 @@ kwd_let
 expression_let
     :   kwd_let let_scope[inScope] let_variable_declaration[decl] {
         auto pLet = new ExprLet();
+        pLet->at = tokAt(@kwd_let);
         pLet->inScope = $inScope;
         if ( $decl->pTypeDecl ) {
             for ( const auto & name : *$decl->pNameList ) {

@@ -365,10 +365,17 @@ namespace das
         virtual bool rtti_isAddr() const { return false; }
         virtual bool rtti_isLabel() const { return false; }
         virtual bool rtti_isGoto() const { return false; }
+        virtual bool rtti_isFakeContext() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
         TypeDeclPtr type;
+        union{
+            struct {
+                bool    alwaysSafe : 1;
+            };
+            uint32_t    genFlags = 0;
+        };
         union {
             struct {
                 bool    constexpression : 1;
