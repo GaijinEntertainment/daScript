@@ -47,6 +47,7 @@ __forceinline Point3 getSamplePoint3() {return Point3{0,1,2};}
 __forceinline Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
 
 struct TestObjectFoo {
+    Point3 hit;
     int fooData;
     int propAdd13() {
         return fooData + 13;

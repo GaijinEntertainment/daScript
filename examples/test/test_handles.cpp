@@ -43,6 +43,7 @@ struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotL
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectFoo", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(hit)>("hit");
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
     }

@@ -1112,12 +1112,24 @@ namespace das {
         virtual void preVisit ( ExprCopy * that ) override {
             Visitor::preVisit(that);
             ss << "das_copy(";
+            if ( that->left->type->aotAlias ) {
+                ss << "das_alias<" << that->left->type->alias << ">::from(";
+            }
         }
         virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
+            if ( that->left->type->aotAlias ) {
+                ss << ")";
+            }
             ss << ",";
+            if ( that->right->type->aotAlias ) {
+                ss << "das_alias<" << that->right->type->alias << ">::from(";
+            }
         }
         virtual ExpressionPtr visit ( ExprCopy * that ) override {
+            if ( that->right->type->aotAlias ) {
+                ss << ")";
+            }
             ss << ")";
             return Visitor::visit(that);
         }
@@ -1138,12 +1150,24 @@ namespace das {
         virtual void preVisit ( ExprMove * that ) override {
             Visitor::preVisit(that);
             ss << "das_move(";
+            if ( that->left->type->aotAlias ) {
+                ss << "das_alias<" << that->left->type->alias << ">::from(";
+            }
         }
         virtual void preVisitRight ( ExprMove * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
+            if ( that->left->type->aotAlias ) {
+                ss << ")";
+            }
             ss << ",";
+            if ( that->right->type->aotAlias ) {
+                ss << "das_alias<" << that->right->type->alias << ">::from(";
+            }
         }
         virtual ExpressionPtr visit ( ExprMove * that ) override {
+            if ( that->right->type->aotAlias ) {
+                ss << ")";
+            }
             ss << ")";
             return Visitor::visit(that);
         }
@@ -1704,8 +1728,14 @@ namespace das {
                     ss << ">::swizzle(";
                 }
             }
+            if ( expr->value->type->aotAlias ) {
+                ss << "das_alias<" << expr->value->type->alias << ">::from(";
+            }
         }
         virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
+            if ( expr->value->type->aotAlias ) {
+                ss << ")";
+            }
             if ( expr->type->ref ) {
                 ss << ")";
             } else {
