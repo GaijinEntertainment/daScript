@@ -135,6 +135,7 @@ include/daScript/misc/string_writer.h
 include/daScript/misc/type_name.h
 include/daScript/misc/lookup1.h
 include/daScript/misc/memory_model.h
+include/daScript/misc/fnv.h
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 )

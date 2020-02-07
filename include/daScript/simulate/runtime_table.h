@@ -180,6 +180,10 @@ namespace das
                     }
                 }
             }
+            if (tab.capacity) {
+                uint32_t oldSize = tab.capacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));
+                context->heap.free(tab.data, oldSize);
+            }
             swap ( newTab, tab );
             return true;
         }
