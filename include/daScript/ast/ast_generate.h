@@ -145,6 +145,8 @@ namespace das {
     replace
         while cond
             body
+        finally
+            finally
     with
         label beginloop                 continue -> goto beginloop
         if ! cond goto endloop          break -> goto endloop
@@ -155,5 +157,28 @@ namespace das {
     */
     struct ExprWhile;
     ExpressionPtr replaceGeneratorWhile ( ExprWhile * expr, const FunctionPtr & func );
+
+    /*
+    replace
+        for it0.. in src0..
+            body
+         finally
+             finally
+        with
+            loop = true                                             continue -> goto midloop
+            loop &= _builtin_iterator_first(it0,src0)               break -> goto endloop
+            label beginloop
+            if ! loop goto endloop
+            body
+            label midloop
+            loop &= _builtin_iterator_next(it0,src0)
+            goto beginloop
+            label endloop
+            finally
+            _builtin_itersator_close(it0,src0) ...
+
+     */
+    struct ExprFor;
+    ExpressionPtr replaceGeneratorFor ( ExprFor * expr, const FunctionPtr & func );
 }
 

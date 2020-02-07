@@ -1,6 +1,3 @@
-options log = true
-// options log_infer_passes = true
-
 [sideeffects]
 def checkIt ( gen : iterator<int> )
     //print("testing:\n")
@@ -205,3 +202,4 @@ def test
     test_for_nested()
     test_for_finally()
     return true
+
