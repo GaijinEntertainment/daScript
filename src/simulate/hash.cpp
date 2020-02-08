@@ -55,7 +55,7 @@ namespace das
         virtual void URange ( urange & t )      { update(t); }
         virtual void String ( char * & t )      { updateString(t); }
     // unsupported
-        virtual void beforeIterator ( Iterator *, TypeInfo * ) { error("HASH, not expecting iterator"); }
+        virtual void beforeIterator ( Sequence *, TypeInfo * ) { error("HASH, not expecting iterator"); }
         virtual void WalkBlock ( Block * )              { error("HASH, not expecting block"); }
     };
 

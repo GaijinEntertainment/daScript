@@ -1759,7 +1759,9 @@ namespace das
                 context.code->makeNodeUnroll<SimNode_ForWithIterator>(total, at);
             for ( int t=0; t!=total; ++t ) {
                 if ( sources[t]->type->isGoodIteratorType() ) {
-                    result->source_iterators[t] = sources[t]->simulate(context);
+                    result->source_iterators[t] = context.code->makeNode<SimNode_Ref2Value<void *>>(
+                        sources[t]->at,
+                        sources[t]->simulate(context));
                 } else if ( sources[t]->type->isGoodArrayType() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_GoodArrayIterator>(
                         sources[t]->at,

@@ -1358,9 +1358,9 @@ namespace das {
     };
 
     template <>
-    struct das_iterator <Iterator *> {
-        __forceinline das_iterator(Iterator * r) {
-            that = r;
+    struct das_iterator <Sequence> {
+        __forceinline das_iterator(const Sequence & r) {
+            that = r.iter;
         }
         __forceinline ~das_iterator() {
             // delete that;
@@ -1382,9 +1382,9 @@ namespace das {
     };
 
     template <>
-    struct das_iterator <Iterator * const> : das_iterator<Iterator *> {
-        __forceinline das_iterator(Iterator * const r) 
-            : das_iterator<Iterator *>(r) {
+    struct das_iterator <Sequence const> : das_iterator<Sequence> {
+        __forceinline das_iterator(const Sequence & r)
+            : das_iterator<Sequence>(r) {
         }
     };
 

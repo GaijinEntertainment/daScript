@@ -205,9 +205,9 @@ namespace das {
             }
         } else if ( baseType==Type::tIterator ) {
             if ( type->firstType ) {
-                stream << "Iterator * /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
+                stream << "Sequence /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
             } else {
-                stream << "Iterator *";
+                stream << "Sequence";
             }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             if ( !type->constant && type->baseType==Type::tBlock ) {

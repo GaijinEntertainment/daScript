@@ -95,10 +95,9 @@ namespace das
     void table_lock ( Context & context, Table & arr );
     void table_unlock ( Context & context, Table & arr );
 
-    struct Iterator;
-
-    Iterator * builtin_table_keys ( const Table & tab, int32_t stride, Context * __context__ );
-    Iterator * builtin_table_values ( const Table & tab, int32_t stride, Context * __context__ );
+    struct Sequence;
+    void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ );
+    void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ );
 
     struct EnumStub {
         int32_t     value;

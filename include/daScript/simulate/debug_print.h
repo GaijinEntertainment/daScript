@@ -260,10 +260,10 @@ namespace das {
         virtual void URange ( urange & ra ) override {
             ss << ra;
         }
-        virtual void beforeIterator ( Iterator *, TypeInfo * ) override {
+        virtual void beforeIterator ( Sequence *, TypeInfo * ) override {
             ss << "iterator [[";
         }
-        virtual void afterIterator ( Iterator *, TypeInfo * ) override {
+        virtual void afterIterator ( Sequence *, TypeInfo * ) override {
             ss << "]]";
         }
         virtual void WalkBlock ( struct Block * pa ) override {

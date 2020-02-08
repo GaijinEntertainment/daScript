@@ -621,6 +621,7 @@ namespace das {
             svar->at = expr->at;
             svar->name = srcName;
             svar->type = make_shared<TypeDecl>(Type::autoinfer);
+            svar->init_via_move = true;
             if ( src->type->isGoodIteratorType() ) {
                 svar->init = src->clone();
             } else {

@@ -1,23 +1,15 @@
-def filter(src:iterator<auto(TT)>; blk:lambda<(what:TT):bool> )
-    return generator<TT> () <| $ ()
+def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT):bool> )
+    return <- generator<TT> () <| $ ()
         for w in src
             if invoke(blk,w)
                 yield w
         return false
 
-def map(src:iterator<auto(TT)>; blk:lambda<(what:auto(TT)):auto(QQ)>) : iterator<QQ>
-    return generator<QQ> () <| $ ()
+def map(var src:iterator<auto(TT)>; blk:lambda<(what:auto(TT)):auto(QQ)>) : iterator<QQ>
+    return <- generator<QQ> () <| $ ()
         for w in src
             yield invoke(blk,w)
         return false
-
-def testGen(total,mod:int)
-    return (
-        each(range(0,total))
-        |> filter ( lambda($(x:int) => (x%mod)==0) )
-        |> map ( lambda($(x:int) => string(x)) )
-        |> join(",")
-    )
 
 def each_a(r:range) : array<int>
     var a : array<int>
@@ -39,6 +31,14 @@ def filter_a(src:array<auto(TT)>; blk:block<(what:TT):bool> ) : array<TT>
         if invoke(blk,x)
             push(a,x)
     return <- a
+
+def testGen(total,mod:int)
+    return (
+        each(range(0,total))
+        |> filter ( lambda($(x:int) => (x%mod)==0) )
+        |> map ( lambda($(x:int) => string(x)) )
+        |> join(",")
+    )
 
 def testArr(total,mod:int)
     var in scope a1 <- each_a(range(0,total))

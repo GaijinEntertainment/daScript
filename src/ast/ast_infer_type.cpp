@@ -3584,7 +3584,7 @@ namespace das {
                 auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
                     varT = TypeDecl::inferGenericType(var->type, var->init->type);
-                    error("local variable initialization type can't be infered, "
+                    error("local variable " + var->name + " initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
@@ -3594,28 +3594,29 @@ namespace das {
                     reportGenericInfer();
                 }
             } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("local variable initialization type mismatch, "
+                error("local variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
             } else if ( var->type->ref && !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) && var->init->type->isRef()) {
-                error("local variable initialization type mismatch. reference can't be initialized via value, "
+                error("local variable " + var->name + " initialization type mismatch. reference can't be initialized via value, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
             } else if ( var->type->isRef() &&  !var->type->isConst() && var->init->type->isConst() ) {
-                error("local variable initialization type mismatch. const matters, "
+                error("local variable " + var->name + " initialization type mismatch. const matters, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy() && !var->init->type->canMove() ) {
-                error("this local variable can't be initialized at all", var->at,
+                error("local variable " + var->name + " can't be initialized at all", var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy()
                        && var->init->type->canMove() && !(var->init_via_move || var->init_via_clone) ) {
-                error("this local variable can only be move-initialized, use <- for that", var->at,
+                error("local variable " + var->name + " can only be move-initialized, use <- for that", var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
-                error("can't init (move) from a constant value", var->at, CompilationError::cant_move);
+                error("local variable " + var->name + " can't init (move) from a constant value", var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
-                error("this type can't be cloned", var->at, CompilationError::cant_copy);
+                error("local variable " + var->name + " of type " + var->init->type->describe() + " can't be cloned",
+                      var->at, CompilationError::cant_copy);
             } else {
                 if ( var->init_via_clone ) {
                     reportGenericInfer();

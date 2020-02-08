@@ -296,34 +296,34 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         table_unlock(*context, const_cast<Table&>(arr));
     }
 
-    bool builtin_iterator_first ( const Iterator * it, void * data, Context * context ) {
-        return ((Iterator *)it)->first(*context, (char *)data);
+    bool builtin_iterator_first ( const Sequence & it, void * data, Context * context ) {
+        return it.iter->first(*context, (char *)data);
     }
 
-    bool builtin_iterator_next ( const Iterator * it, void * data, Context * context ) {
-        return ((Iterator *)it)->next(*context, (char *)data);
+    bool builtin_iterator_next ( const Sequence & it, void * data, Context * context ) {
+        return it.iter->next(*context, (char *)data);
     }
 
-    void builtin_iterator_close ( const Iterator * it, void * data, Context * context ) {
-        ((Iterator *)it)->close(*context, (char *)&data);
+    void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
+        it.iter->close(*context, (char *)&data);
     }
 
-    Iterator * builtin_make_good_array_iterator ( const Array & arr, int stride, Context * context ) {
+    void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
         char * iter = context->heap.allocate(sizeof(GoodArrayIterator));
         new (iter) GoodArrayIterator((Array *)&arr, stride);
-        return (Iterator *) iter;
+        result = { (Iterator *) iter };
     }
 
-    Iterator * builtin_make_fixed_array_iterator ( void * data, int size, int stride, Context * context ) {
+    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
         char * iter = context->heap.allocate(sizeof(FixedArrayIterator));
         new (iter) FixedArrayIterator((char *)data, size, stride);
-        return (Iterator *) iter;
+        result = { (Iterator *) iter };
     }
 
-    Iterator * builtin_make_range_iterator ( range rng, Context * context ) {
+    void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
         char * iter = context->heap.allocate(sizeof(RangeIterator));
         new (iter) RangeIterator(rng);
-        return (Iterator *) iter;
+        result = { (Iterator *) iter };
     }
 
     struct NilIterator : Iterator {
@@ -332,10 +332,10 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         virtual void close ( Context &, char * ) override { }
     };
 
-    Iterator * builtin_make_nil_iterator ( Context * context ) {
+    void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
         char * iter = context->heap.allocate(sizeof(NilIterator));
         new (iter) NilIterator();
-        return (Iterator *) iter;
+        result = { (Iterator *) iter };
     }
 
     struct LambdaIterator : Iterator {
@@ -371,10 +371,10 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         SimFunction *   simFunc = nullptr;
     };
 
-    Iterator * builtin_make_lambda_iterator ( const Lambda lambda, Context * context ) {
+    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, Context * context ) {
         char * iter = context->heap.allocate(sizeof(LambdaIterator));
         new (iter) LambdaIterator(*context, lambda);
-        return (Iterator *) iter;
+        result = { (Iterator *) iter };
     }
 
     void resetProfiler( Context * context ) {
@@ -403,20 +403,23 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         addAnnotation(make_shared<MarkUsedFunctionAnnotation>());
         addAnnotation(make_shared<LocalOnlyFunctionAnnotation>());
         // iterator functions
-        addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first", SideEffects::modifyExternal, "builtin_iterator_first");
-        addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",  SideEffects::modifyExternal, "builtin_iterator_next");
-        addExtern<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close", SideEffects::modifyExternal, "builtin_iterator_close");
+        addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
+                                                        SideEffects::modifyArgumentAndExternal, "builtin_iterator_first");
+        addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",
+                                                       SideEffects::modifyArgumentAndExternal, "builtin_iterator_next");
+        addExtern<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close",
+                                                        SideEffects::modifyArgumentAndExternal, "builtin_iterator_close");
         // make-iterator functions
         addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
-            SideEffects::modifyExternal, "builtin_make_good_array_iterator");
+            SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_fixed_array_iterator)>(*this, lib,  "_builtin_make_fixed_array_iterator",
-            SideEffects::modifyExternal, "builtin_make_fixed_array_iterator");
+            SideEffects::modifyArgumentAndExternal, "builtin_make_fixed_array_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
-            SideEffects::modifyExternal, "builtin_make_range_iterator");
+            SideEffects::modifyArgumentAndExternal, "builtin_make_range_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
-            SideEffects::modifyExternal, "builtin_make_nil_iterator");
+            SideEffects::modifyArgumentAndExternal, "builtin_make_nil_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
-            SideEffects::modifyExternal, "builtin_make_lambda_iterator");
+            SideEffects::modifyArgumentAndExternal, "builtin_make_lambda_iterator");
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
@@ -460,10 +463,14 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none, "builtin_table_size");
         addExtern<DAS_BIND_FUN(builtin_table_capacity)>(*this, lib, "capacity", SideEffects::none, "builtin_table_capacity");
-        addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock", SideEffects::modifyArgumentAndExternal, "builtin_table_lock");
-        addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock", SideEffects::modifyArgumentAndExternal, "builtin_table_unlock");
-        addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys", SideEffects::modifyArgumentAndExternal, "builtin_table_keys");
-        addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values", SideEffects::modifyArgumentAndExternal, "builtin_table_values");
+        addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock",
+                                                    SideEffects::modifyArgumentAndExternal, "builtin_table_lock");
+        addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock",
+                                                      SideEffects::modifyArgumentAndExternal, "builtin_table_unlock");
+        addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys",
+                                                    SideEffects::modifyArgumentAndExternal, "builtin_table_keys");
+        addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
+                                                      SideEffects::modifyArgumentAndExternal, "builtin_table_values");
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");
