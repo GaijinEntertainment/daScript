@@ -3920,7 +3920,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr).get();
-            if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
+            if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe && !expr->alwaysSafe ) {
                 error("unsafe call " + expr->name + " requires [unsafe]", expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());

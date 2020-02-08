@@ -622,6 +622,7 @@ namespace das {
             svar->name = srcName;
             svar->type = make_shared<TypeDecl>(Type::autoinfer);
             auto ceach = make_shared<ExprCall>(expr->at, "each");
+            ceach->alwaysSafe = true;
             ceach->arguments.push_back(src->clone());
             svar->init = ceach;
             seqt->variables.push_back(svar);
