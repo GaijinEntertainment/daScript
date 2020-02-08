@@ -2500,7 +2500,9 @@ namespace das {
             ss << ");\n";
             auto & var = ffor->iteratorVariables[idx];
             // source
-            ss << string(tab,'\t') << describeCppType(var->type,CpptSubstitureRef::yes,CpptSkipRef::no,CpptSkipConst::no)
+            bool skipTC = var->type->isString() && !var->type->ref;
+            ss << string(tab,'\t') << describeCppType(var->type,CpptSubstitureRef::yes,CpptSkipRef::no,
+                                                      skipTC ? CpptSkipConst::yes : CpptSkipConst::no)
                 << " " << collector.getVarName(var) << ";\n";
             // loop
             auto nl = needLoopName(ffor);
