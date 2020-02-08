@@ -397,6 +397,7 @@ namespace das {
             auto cfr = expr->subexpr->clone();
             if ( makeRef ) {
                 cfr = make_shared<ExprRef2Ptr>(expr->at, cfr);
+                cfr->alwaysSafe = true;
             }
             auto cpy = make_shared<ExprCopy>(expr->at, cto, cfr);
             blk->list.push_back(cpy);
