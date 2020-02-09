@@ -491,7 +491,7 @@ namespace das {
                 }
             }
             // match inferable block
-            if (inferBlock && passType->isAuto() && passType->isGoodBlockType()) {
+            if (inferBlock && passType->isAuto() && (passType->isGoodBlockType() || passType->isGoodLambdaType())) {
                 return TypeDecl::inferGenericType(passType, argType) != nullptr;
             }
             // compare types which don't need inference
@@ -3784,8 +3784,6 @@ namespace das {
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
-            // TextPrinter ss;
-            // ss << "infer function call in " << *expr << "\n";
             vector<TypeDeclPtr> types;
             types.reserve(expr->arguments.size());
             for ( auto & ar : expr->arguments ) {
@@ -3793,8 +3791,8 @@ namespace das {
                     return nullptr;
                 } 
                 // if its an auto or an alias
-                // we only allow it, if its a block
-                if ( ar->type->baseType!=Type::tBlock ) {
+                // we only allow it, if its a block or lambda
+                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda ) {
                     if ( ar->type->isAlias() || ar->type->isAuto() ) {
                         return nullptr;
                     }
@@ -3886,7 +3884,7 @@ namespace das {
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
-                    if ( arg->type->isAuto() && arg->type->isGoodBlockType() ) {
+                    if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType()) ) {
                         DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
