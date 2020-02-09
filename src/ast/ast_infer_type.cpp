@@ -1124,7 +1124,7 @@ namespace das {
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
-                    error("global variable initialization type can't be infered, "
+                    error("global variable " + var->name + " initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
@@ -1134,24 +1134,24 @@ namespace das {
                     reportGenericInfer();
                 }
             } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("global variable initialization type mismatch, "
+                error("global variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( var->type->isRef() && !var->type->isConst() && var->init->type->isConst() ) {
-                error("global variable initialization type mismatch, const matters "
+                error("global variable " + var->name + " initialization type mismatch, const matters "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                       CompilationError::invalid_initialization_type);
             } else if ( !var->init_via_clone && (!var->init->type->canCopy() && !var->init->type->canMove()) ) {
-                error("this global variable can't be initialized at all", var->at,
-                    CompilationError::invalid_initialization_type);
+                error("global variable " + var->name + " can't be initialized at all. " + var->type->describe(),
+                      var->at, CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
-                error("this global variable can't init (move) from a constant value", var->at, CompilationError::cant_move);
+                error("global variable " + var->name + " can't init (move) from a constant value", var->at, CompilationError::cant_move);
             } else if ( !(var->init_via_move || var->init_via_clone) && !var->init->type->canCopy() ) {
-                error("this global variable can't be copied", var->at, CompilationError::cant_copy);
+                error("global variable " + var->name + " can't be copied", var->at, CompilationError::cant_copy);
             } else if ( var->init_via_move && !var->init->type->canMove() ) {
-                error("this global variable can't be moved", var->at, CompilationError::cant_move);
+                error("global variable " + var->name + " can't be moved", var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
-                error("this global variable init can't be cloned", var->at, CompilationError::cant_copy);
+                error("global variable " + var->name + " can't be cloned", var->at, CompilationError::cant_copy);
             } else {
                 if ( var->init_via_clone ) {
                     reportGenericInfer();
@@ -1527,55 +1527,6 @@ namespace das {
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
-    // ExprMakeLambda
-        virtual ExpressionPtr visit ( ExprMakeLambda * expr ) override {
-            if ( expr->arguments.size()!=1 ) {
-                error("expecting lambda(closure)", expr->at, CompilationError::invalid_argument_count);
-            } else if ( !expr->arguments[0]->rtti_isMakeBlock() ) {
-                error("expecting lambda(closure)", expr->at, CompilationError::invalid_argument_type);
-            } else {
-                auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
-                auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                if ( auto bT = block->makeBlockType() ) {
-                    if ( !isFullySealedType(bT) ) {
-                        error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
-                    } else {
-                        CaptureLambda cl;
-                        // we can only capture in-scope variables
-                        // i.e stuff BEFORE the scope
-                        for ( auto & lv : local )
-                            cl.scope.insert(lv);
-                        for ( auto & bls : blocks ) {
-                            for ( auto & blv : bls->arguments ) {
-                                cl.scope.insert(blv);
-                            }
-                        }
-                        block->visit(cl);
-                        if ( !cl.fail ) {
-                            for ( auto ba : block->arguments ) {
-                                cl.capt.erase(ba);
-                            }
-                            string lname = generateNewLambdaName(block->at);
-                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
-                            if ( program->addStructure(ls) ) {
-                                bool isUnsafe = func ? func->unsafe : false;
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
-                                if ( program->addFunction(pFn) ) {
-                                    reportGenericInfer();
-                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
-                                    return ms;
-                                } else {
-                                    error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
-                                }
-                            } else {
-                                error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
-                            }
-                        }
-                    }
-                }
-            }
-            return Visitor::visit(expr);
-        }
     // ExprMakeGenerator
         virtual ExpressionPtr visit ( ExprMakeGenerator * expr ) override {
             if ( expr->iterType && expr->iterType->isExprType() ) {
@@ -1678,6 +1629,47 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMakeBlock
+        ExpressionPtr convertBlockToLambda ( ExprMakeBlock * expr ) {
+            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            if ( auto bT = block->makeBlockType() ) {
+                if ( !isFullySealedType(bT) ) {
+                    error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
+                } else {
+                    CaptureLambda cl;
+                    // we can only capture in-scope variables
+                    // i.e stuff BEFORE the scope
+                    for ( auto & lv : local )
+                        cl.scope.insert(lv);
+                    for ( auto & bls : blocks ) {
+                        for ( auto & blv : bls->arguments ) {
+                            cl.scope.insert(blv);
+                        }
+                    }
+                    block->visit(cl);
+                    if ( !cl.fail ) {
+                        for ( auto ba : block->arguments ) {
+                            cl.capt.erase(ba);
+                        }
+                        string lname = generateNewLambdaName(block->at);
+                        auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
+                        if ( program->addStructure(ls) ) {
+                            bool isUnsafe = func ? func->unsafe : false;
+                            auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
+                            if ( program->addFunction(pFn) ) {
+                                reportGenericInfer();
+                                auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
+                                return ms;
+                            } else {
+                                error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
+                            }
+                        } else {
+                            error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
             // can only infer block type, if all argument types are infered
@@ -1687,8 +1679,15 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             }
-
             expr->type = block->makeBlockType();
+            if ( expr->isLambda ) {
+                expr->type->baseType = Type::tLambda;
+                if ( isFullySealedType(expr->type) ) {
+                    if ( auto btl = convertBlockToLambda(expr) ) {
+                        return btl;
+                    }
+                }
+            }
             return Visitor::visit(expr);
         }
     // ExprInvoke
@@ -3785,6 +3784,8 @@ namespace das {
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
+            // TextPrinter ss;
+            // ss << "infer function call in " << *expr << "\n";
             vector<TypeDeclPtr> types;
             types.reserve(expr->arguments.size());
             for ( auto & ar : expr->arguments ) {

@@ -225,6 +225,7 @@
 %token  QDOT                "?."
 %token  LPIPE               "<|"
 %token  LBPIPE              " <|"
+%token  LAPIPE              "@ <|"
 %token  RPIPE               "|>"
 %token  CLONEEQU            ":="
 %token  ROTL                "<<<"
@@ -298,6 +299,7 @@
 
 %type <pExpression>     expr
 %type <pExpression>     expr_assign
+%type <pExpression>     expr_assign_pipe
 %type <pExpression>     expr_list
 %type <pExpression>     expression_label
 %type <pExpression>     expression_goto
@@ -357,9 +359,9 @@
 %left       '-' '+'
 %left       '*' '/' '%'
 %right      QQ
-%right      '@' UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
+%right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       DAS_IS
-%left       LPIPE RPIPE LBPIPE
+%left       LPIPE RPIPE LBPIPE LAPIPE
 %left       POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT DEREF
 %nonassoc   COLCOL
 
@@ -859,6 +861,7 @@ expression_block
 expression_any
     :   ';'                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
+    |   expr_assign_pipe[subexpr]           { $$ = $subexpr; }
     |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
     |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
@@ -903,6 +906,9 @@ expr_pipe
             das_yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
+    }
+    |   LAPIPE expr_block[arg] {
+        $$ = $arg;
     }
     ;
 
@@ -1113,8 +1119,8 @@ block_or_simple_block
     ;
 
 block_or_lambda
-    :   '$' { $$ = true;  /* block */  }
-    |   '@' { $$ = false; /* lambda */ }
+    :   '$'     { $$ = false;   /* block */  }
+    |   '@'     { $$ = true;    /* lambda */ }
     ;
 
 expr_block
@@ -1125,12 +1131,7 @@ expr_block
     }
     |   block_or_lambda[bal] optional_annotation_list[annL] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
-        auto res = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
-        if ( $bal ) {
-            $$ = res;
-        } else {
-            $$ = new ExprMakeLambda(tokAt(@bal), ExpressionPtr(res));
-        }
+        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block), $bal);
         ExprBlock * closure = (ExprBlock *) $block;
         closure->returnType = TypeDeclPtr($result);
         if ( $list ) {
@@ -1205,6 +1206,11 @@ expr_assign
     |   expr[left] SHREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),">>=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] ROTLEQU[loc] expr[right]  { $$ = new ExprOp2(tokAt(@loc),"<<<=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] ROTREQU[loc] expr[right]  { $$ = new ExprOp2(tokAt(@loc),">>>=", ExpressionPtr($left), ExpressionPtr($right)); }
+    ;
+
+expr_assign_pipe
+    :   expr[left] '='[loc]    LAPIPE expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] LAPIPE expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
 expr_named_call
@@ -1289,8 +1295,6 @@ expr
     |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
 	|   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   DAS_TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
-    |   DAS_TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
     |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' '(' ')' {
         auto gen = new ExprMakeGenerator(tokAt(@loc));
         gen->iterType = TypeDeclPtr($typeDecl);

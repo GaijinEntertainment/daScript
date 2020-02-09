@@ -612,22 +612,18 @@ namespace das
 
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () = default;
-        ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b )
-        : Expression(a), block(b) { b->at = a; static_pointer_cast<ExprBlock>(b)->isClosure = true; }
+        ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b, bool isl = false )
+        : Expression(a), block(b), isLambda(isl) {
+            b->at = a;
+            static_pointer_cast<ExprBlock>(b)->isClosure = true;
+        }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual bool rtti_isMakeBlock() const override { return true; }
         ExpressionPtr block;
         uint32_t stackTop = 0;
-    };
-
-    struct ExprMakeLambda : ExprLooksLikeCall {
-        ExprMakeLambda () = default;
-        ExprMakeLambda ( const LineInfo & a, const ExpressionPtr & b = nullptr );
-        virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
-        virtual SimNode * simulate (Context & context) const override;
+        bool isLambda = false;
     };
 
     struct ExprMakeGenerator : ExprLooksLikeCall {

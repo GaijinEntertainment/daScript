@@ -785,12 +785,6 @@ namespace das
         return context.code->makeNode<SimNode_MemZero>(at, subexpr->simulate(context), dataSize);
     }
 
-    SimNode * ExprMakeLambda::simulate (Context & context) const {
-        DAS_ASSERTF(0, "we should not be here ever, ExprMakeLambda should completly fold during type inference.");
-        context.thisProgram->error("internal compilation error, generating node for ExprMakeLambda", at);
-        return nullptr;
-    }
-
     SimNode * ExprMakeGenerator::simulate (Context & context) const {
         DAS_ASSERTF(0, "we should not be here ever, ExprMakeGenerator should completly fold during type inference.");
         context.thisProgram->error("internal compilation error, generating node for ExprMakeGenerator", at);

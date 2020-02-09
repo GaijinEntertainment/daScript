@@ -674,27 +674,6 @@ namespace das {
         return cexpr;
     }
 
-    // ExprMakeLambda
-
-    ExprMakeLambda::ExprMakeLambda ( const LineInfo & a, const ExpressionPtr & b )
-    : ExprLooksLikeCall(a, "lambda") {
-        if ( b ) {
-            arguments.push_back(b);
-        }
-    }
-
-    ExpressionPtr ExprMakeLambda::visit(Visitor & vis) {
-        vis.preVisit(this);
-        ExprLooksLikeCall::visit(vis);
-        return vis.visit(this);
-    }
-
-    ExpressionPtr ExprMakeLambda::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprMakeLambda>(expr);
-        ExprLooksLikeCall::clone(cexpr);
-        return cexpr;
-    }
-
     // ExprMakeGenerator
 
     ExprMakeGenerator::ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b )
@@ -756,6 +735,7 @@ namespace das {
         auto cexpr = clonePtr<ExprMakeBlock>(expr);
         Expression::clone(cexpr);
         cexpr->block = block->clone();
+        cexpr->isLambda = isLambda;
         return cexpr;
     }
 
