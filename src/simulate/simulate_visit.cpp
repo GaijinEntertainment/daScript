@@ -449,6 +449,13 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_Seq2Iter::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Seq2Iter);
+        V_SUB_OPT(subexpr);
+        V_END();
+    }
+
     SimNode * SimNode_NullCoalescingRef::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(NullCoalescingRef);

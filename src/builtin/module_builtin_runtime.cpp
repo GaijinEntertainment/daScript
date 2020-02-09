@@ -171,46 +171,45 @@ namespace das
         }
     };
 
-struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
-    LocalOnlyFunctionAnnotation() : FunctionAnnotation("local_only") { }
-    virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
-        err = "not a block annotation";
-        return false;
-    }
-    virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &,
-                           const AnnotationArgumentList &, string & err ) override {
-        err = "not a block annotation";
-        return false;
-    }
-    virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
-        return true;
-    };
-    virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &,
-                           const AnnotationArgumentList &, string & ) override {
-        return true;
-    }
-    // [local_only ()]
-    virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args, string & err ) override {
-        if ( !call->func ) {
-            err = "unknown function";
+    struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
+        LocalOnlyFunctionAnnotation() : FunctionAnnotation("local_only") { }
+        virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
+            err = "not a block annotation";
             return false;
         }
-        for ( size_t i=0; i!=call->func->arguments.size(); ++i ) {
-            auto & farg = call->func->arguments[i];
-            if ( auto it = args.find(farg->name, Type::tBool) ) {
-                auto & carg = call->arguments[i];
-                bool isLocalArg = carg->rtti_isMakeLocal() || carg->rtti_isMakeTuple();
-                bool isLocalFArg = it->bValue;
-                if ( isLocalArg != isLocalFArg ) {
-                    err = isLocalFArg ? "expecting [[...]]" : "not expecting [[...]]";
-                    return false;
+        virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & err ) override {
+            err = "not a block annotation";
+            return false;
+        }
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+            return true;
+        };
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+        // [local_only ()]
+        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args, string & err ) override {
+            if ( !call->func ) {
+                err = "unknown function";
+                return false;
+            }
+            for ( size_t i=0; i!=call->func->arguments.size(); ++i ) {
+                auto & farg = call->func->arguments[i];
+                if ( auto it = args.find(farg->name, Type::tBool) ) {
+                    auto & carg = call->arguments[i];
+                    bool isLocalArg = carg->rtti_isMakeLocal() || carg->rtti_isMakeTuple();
+                    bool isLocalFArg = it->bValue;
+                    if ( isLocalArg != isLocalFArg ) {
+                        err = isLocalFArg ? "expecting [[...]]" : "not expecting [[...]]";
+                        return false;
+                    }
                 }
             }
+            return true;
         }
-        return true;
-    }
-};
-
+    };
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -306,6 +305,7 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
 
     void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
         it.iter->close(*context, (char *)&data);
+        ((Sequence&)it).iter = nullptr;
     }
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
@@ -329,7 +329,9 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
     struct NilIterator : Iterator {
         virtual bool first ( Context &, char * ) override { return false; }
         virtual bool next  ( Context &, char * ) override { return false; }
-        virtual void close ( Context &, char * ) override { }
+        virtual void close ( Context & context, char * ) override {
+            context.heap.free((char *)this, sizeof(NilIterator));
+        }
     };
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
@@ -359,8 +361,9 @@ struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         virtual bool next  ( Context & context, char * ptr ) override {
             return InvokeLambda(context, ptr);
         }
-        virtual void close ( Context &, char * ) override {
+        virtual void close ( Context & context, char * ) override {
             // TODO: release lambda?
+            context.heap.free((char *)this, sizeof(LambdaIterator));
         }
         virtual void walk ( DataWalker & walker ) override {
             walker.beforeLambda(&lambda, lambda.getTypeInfo());

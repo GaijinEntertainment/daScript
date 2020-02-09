@@ -65,8 +65,18 @@ namespace das
         return table->keys;
     }
 
+    void TableKeysIterator::close ( Context & context, char * value ) {
+        TableIterator::close(context,value);
+        context.heap.free((char *)this, sizeof(TableKeysIterator));
+    }
+
     char * TableValuesIterator::getData ( ) const {
         return table->data;
+    }
+
+    void TableValuesIterator::close ( Context & context, char * value ) {
+        TableIterator::close(context,value);
+        context.heap.free((char *)this, sizeof(TableValuesIterator));
     }
 
     void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
