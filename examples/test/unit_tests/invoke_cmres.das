@@ -60,10 +60,10 @@ def test
     check(hfuncC())
     check(hfuncAC(1))
     // invoke function
-    checkInvoke(@func)
-    checkInvoke(1,@funcA)
-    checkInvoke(@funcC)
-    checkInvoke(1,@funcAC)
+    checkInvoke(@@func)
+    checkInvoke(1,@@funcA)
+    checkInvoke(@@funcC)
+    checkInvoke(1,@@funcAC)
     // invoke block
     checkInvoke() <| $() : Foo
         return [[Foo a = 1, b = 2]]

@@ -35,8 +35,8 @@ def filter_a(src:array<auto(TT)>; blk:block<(what:TT):bool> ) : array<TT>
 def testGen(total,mod:int)
     return (
         each(range(0,total))
-        |> filter ( lambda($(x:int) => (x%mod)==0) )
-        |> map ( lambda($(x:int) => string(x)) )
+        |> filter ( @(x:int) => (x%mod)==0 )
+        |> map ( @(x:int) => string(x) )
         |> join(",")
     )
 

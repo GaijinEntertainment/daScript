@@ -1113,8 +1113,8 @@ block_or_simple_block
     ;
 
 block_or_lambda
-    :   '$'         { $$ = true; }
-    |   '$' '$'     { $$ = false; }
+    :   '$' { $$ = true;  /* block */  }
+    |   '@' { $$ = false; /* lambda */ }
     ;
 
 expr_block
@@ -1271,7 +1271,7 @@ expr
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
-    |   '@'[loc] name_in_namespace[name]         { $$ = new ExprAddr(tokAt(@loc),*$name); delete $name; }
+    |   '@' '@'[loc] name_in_namespace[name]     { $$ = new ExprAddr(tokAt(@loc),*$name); delete $name; }
     |   name_in_namespace[name] '(' ')' {
             $$ = g_Program->makeCall(tokAt(@name),*$name);
             delete $name;

@@ -1,7 +1,7 @@
 struct Point
     x, y = 0.0f
-    magnitude  = @point_magnitude
-    dot = @point_dot
+    magnitude  = @@point_magnitude
+    dot = @@point_dot
 
 def Point(X,Y)
     return [[Point() x=X,y=Y]]
