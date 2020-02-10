@@ -358,6 +358,69 @@ namespace das {
             return resT;
         }
 
+        // infer alias type
+        TypeDeclPtr inferPartialAliases ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
+            if ( decl->baseType==Type::autoinfer ) {
+                return decl;
+            }
+            if ( decl->baseType==Type::alias ) {
+                auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
+                if ( aliases ) {
+                    if ( aT && aT->baseType==Type::autoinfer ) {
+                        auto it = aliases->find(decl->alias);
+                        if ( it != aliases->end() ) {
+                            aT = it->second.get();
+                        }
+                    }
+                }
+                if ( aT ) {
+                    auto resT = make_shared<TypeDecl>(*aT);
+                    resT->at = decl->at;
+                    resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
+                    resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
+                    resT->temporary = (resT->temporary | decl->temporary) & !decl->removeTemporary;
+                    resT->dim = decl->dim;
+                    // resT->dim.clear();
+                    // resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
+                    // if ( decl->removeDim && resT->dim.size() ) resT->dim.pop_back();
+                    // resT->alias = decl->alias;
+                    resT->alias.clear();
+                    return resT;
+                } else {
+                    return decl;
+                }
+            }
+            auto resT = make_shared<TypeDecl>(*decl);
+            if ( decl->baseType==Type::tPointer ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tIterator ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tArray ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tTable ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+                if ( decl->secondType ) {
+                    resT->secondType = inferPartialAliases(decl->secondType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
+                for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                    auto & declAT = decl->argTypes[iA];
+                    resT->argTypes[iA] = inferPartialAliases(declAT,fptr,aliases);
+                }
+                resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+            }
+            return resT;
+        }
+
+
         Module * getSearchModule(string & moduleName) const {
             if ( moduleName=="_" ) {
                 moduleName = "*";
@@ -526,6 +589,9 @@ namespace das {
                     auto totalAliases = aliases.size();
                     for ( size_t ai = 0; ai != types.size(); ++ai ) {
                         auto argType = pFn->arguments[ai]->type;
+                        if ( argType->isAlias() ) {
+                            argType = inferPartialAliases(argType, pFn, &aliases);
+                        }
                         auto passType = types[ai];
                         if (!isMatchingArgument(pFn,argType,passType,inferAuto,inferBlock,&aliases)) {
                             anyFailed = true;
@@ -533,8 +599,12 @@ namespace das {
                         }
                         TypeDecl::updateAliasMap(argType, passType, aliases);
                     }
-                    if ( !anyFailed ) break;
-                    if ( totalAliases == aliases.size() ) return false;
+                    if ( !anyFailed ) {
+                        break;
+                    }
+                    if ( totalAliases == aliases.size() ) {
+                        return false;
+                    }
                 }
             } else {
                 for ( size_t ai = 0; ai != types.size(); ++ai ) {
@@ -3820,6 +3890,9 @@ namespace das {
                         auto totalAliases = aliases.size();
                         for ( size_t ai = 0; ai != types.size(); ++ai ) {
                             auto argType = clone->arguments[ai]->type;
+                            if ( argType->isAlias() ) {
+                                argType = inferPartialAliases(argType,clone,&aliases);
+                            }
                             auto passType = types[ai];
                             if (!isMatchingArgument(clone,argType,passType,true,true,&aliases)) {
                                 anyFailed = true;
@@ -3837,7 +3910,7 @@ namespace das {
                     for ( size_t sz = 0; sz != types.size(); ++sz ) {
                         auto & argT = clone->arguments[sz]->type;
                         if ( argT->isAlias() ) {
-                            argT = inferAlias(argT, clone, &aliases);
+                            argT = inferPartialAliases(argT, clone, &aliases);
                         }
                         if ( argT->isAuto() ) {
                             auto & passT = types[sz];
