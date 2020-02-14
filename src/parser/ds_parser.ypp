@@ -225,6 +225,7 @@
 %token  QDOT                "?."
 %token  LPIPE               "<|"
 %token  LBPIPE              " <|"
+%token  LAPIPE              "@ <|"
 %token  RPIPE               "|>"
 %token  CLONEEQU            ":="
 %token  ROTL                "<<<"
@@ -291,6 +292,7 @@
 %type <b>               kwd_let
 %type <b>               is_public_module
 %type <b>               optional_shared
+%type <b>               block_or_lambda
 
 %type <i>               copy_or_move_or_clone
 
@@ -298,6 +300,7 @@
 
 %type <pExpression>     expr
 %type <pExpression>     expr_assign
+%type <pExpression>     expr_assign_pipe
 %type <pExpression>     expr_list
 %type <pExpression>     expression_label
 %type <pExpression>     expression_goto
@@ -357,9 +360,9 @@
 %left       '-' '+'
 %left       '*' '/' '%'
 %right      QQ
-%right      '@' UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
+%right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       DAS_IS
-%left       LPIPE RPIPE LBPIPE
+%left       LPIPE RPIPE LBPIPE LAPIPE
 %left       POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT DEREF
 %nonassoc   COLCOL
 
@@ -859,6 +862,7 @@ expression_block
 expression_any
     :   ';'                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
+    |   expr_assign_pipe[subexpr]           { $$ = $subexpr; }
     |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
     |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
@@ -903,6 +907,9 @@ expr_pipe
             das_yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
+    }
+    |   LAPIPE expr_block[arg] {
+        $$ = $arg;
     }
     ;
 
@@ -1112,15 +1119,20 @@ block_or_simple_block
     }
     ;
 
+block_or_lambda
+    :   '$'     { $$ = false;   /* block */  }
+    |   '@'     { $$ = true;    /* lambda */ }
+    ;
+
 expr_block
     :   expression_block[block]             {
         ExprBlock * closure = (ExprBlock *) $block;
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
         closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
     }
-    |   '$' optional_annotation_list[annL] optional_function_argument_list[list]
+    |   block_or_lambda[bal] optional_annotation_list[annL] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
-        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
+        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block), $bal);
         ExprBlock * closure = (ExprBlock *) $block;
         closure->returnType = TypeDeclPtr($result);
         if ( $list ) {
@@ -1197,6 +1209,11 @@ expr_assign
     |   expr[left] ROTREQU[loc] expr[right]  { $$ = new ExprOp2(tokAt(@loc),">>>=", ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
+expr_assign_pipe
+    :   expr[left] '='[loc]    LAPIPE expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] LAPIPE expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    ;
+
 expr_named_call
     :   name_in_namespace[name] '(' '[' make_struct_fields[list] ']' ')' {
         auto nc = new ExprNamedCall(tokAt(@name),*$name);
@@ -1261,7 +1278,7 @@ expr
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
-    |   '@'[loc] name_in_namespace[name]         { $$ = new ExprAddr(tokAt(@loc),*$name); delete $name; }
+    |   '@' '@'[loc] name_in_namespace[name]     { $$ = new ExprAddr(tokAt(@loc),*$name); delete $name; }
     |   name_in_namespace[name] '(' ')' {
             $$ = g_Program->makeCall(tokAt(@name),*$name);
             delete $name;
@@ -1279,8 +1296,6 @@ expr
     |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
 	|   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   DAS_TLAMBDA[loc] '(' ')'                   { $$ = new ExprMakeLambda(tokAt(@loc)); }
-    |   DAS_TLAMBDA[loc] '(' expr[subexpr] ')'     { $$ = new ExprMakeLambda(tokAt(@loc), ExpressionPtr($subexpr)); }
     |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' '(' ')' {
         auto gen = new ExprMakeGenerator(tokAt(@loc));
         gen->iterType = TypeDeclPtr($typeDecl);

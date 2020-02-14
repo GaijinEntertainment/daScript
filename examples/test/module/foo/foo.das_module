@@ -16,4 +16,4 @@ def module_foo(req,from:string) : module_info
 
 [init]
 def register_foo
-    push(modules,@module_foo)
+    push(modules,@@module_foo)

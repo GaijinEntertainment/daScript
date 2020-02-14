@@ -346,9 +346,10 @@ namespace das
                 *value = data;
                 return data != array_end;
             }
-            virtual void close ( Context &, char * _value ) override {
+            virtual void close ( Context & context, char * _value ) override {
                 char ** value = (char **) _value;
                 *value = nullptr;
+                context.heap.free((char *)this, sizeof(VectorIterator));
             }
             VectorType * array;
             char * array_end = nullptr;

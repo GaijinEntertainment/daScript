@@ -59,8 +59,8 @@ namespace das {
         virtual void afterHandle ( char * pa, TypeInfo * ti ) {}
         virtual void beforeLambda ( Lambda *, TypeInfo * ti ) {}
         virtual void afterLambda ( Lambda *, TypeInfo * ti ) {}
-        virtual void beforeIterator ( Iterator *, TypeInfo * ti ) {}
-        virtual void afterIterator ( Iterator *, TypeInfo * ti ) {}
+        virtual void beforeIterator ( Sequence *, TypeInfo * ti ) {}
+        virtual void afterIterator ( Sequence *, TypeInfo * ti ) {}
     // types
         virtual void Null ( TypeInfo * ti ) {}
         virtual void Bool ( bool & ) {}

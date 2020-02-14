@@ -358,6 +358,69 @@ namespace das {
             return resT;
         }
 
+        // infer alias type
+        TypeDeclPtr inferPartialAliases ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
+            if ( decl->baseType==Type::autoinfer ) {
+                return decl;
+            }
+            if ( decl->baseType==Type::alias ) {
+                auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
+                if ( aliases ) {
+                    if ( aT && aT->baseType==Type::autoinfer ) {
+                        auto it = aliases->find(decl->alias);
+                        if ( it != aliases->end() ) {
+                            aT = it->second.get();
+                        }
+                    }
+                }
+                if ( aT ) {
+                    auto resT = make_shared<TypeDecl>(*aT);
+                    resT->at = decl->at;
+                    resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
+                    resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
+                    resT->temporary = (resT->temporary | decl->temporary) & !decl->removeTemporary;
+                    resT->dim = decl->dim;
+                    // resT->dim.clear();
+                    // resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
+                    // if ( decl->removeDim && resT->dim.size() ) resT->dim.pop_back();
+                    // resT->alias = decl->alias;
+                    resT->alias.clear();
+                    return resT;
+                } else {
+                    return decl;
+                }
+            }
+            auto resT = make_shared<TypeDecl>(*decl);
+            if ( decl->baseType==Type::tPointer ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tIterator ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tArray ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tTable ) {
+                if ( decl->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
+                if ( decl->secondType ) {
+                    resT->secondType = inferPartialAliases(decl->secondType,fptr,aliases);
+                }
+            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
+                for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                    auto & declAT = decl->argTypes[iA];
+                    resT->argTypes[iA] = inferPartialAliases(declAT,fptr,aliases);
+                }
+                resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+            }
+            return resT;
+        }
+
+
         Module * getSearchModule(string & moduleName) const {
             if ( moduleName=="_" ) {
                 moduleName = "*";
@@ -491,7 +554,7 @@ namespace das {
                 }
             }
             // match inferable block
-            if (inferBlock && passType->isAuto() && passType->isGoodBlockType()) {
+            if (inferBlock && passType->isAuto() && (passType->isGoodBlockType() || passType->isGoodLambdaType())) {
                 return TypeDecl::inferGenericType(passType, argType) != nullptr;
             }
             // compare types which don't need inference
@@ -526,6 +589,9 @@ namespace das {
                     auto totalAliases = aliases.size();
                     for ( size_t ai = 0; ai != types.size(); ++ai ) {
                         auto argType = pFn->arguments[ai]->type;
+                        if ( argType->isAlias() ) {
+                            argType = inferPartialAliases(argType, pFn, &aliases);
+                        }
                         auto passType = types[ai];
                         if (!isMatchingArgument(pFn,argType,passType,inferAuto,inferBlock,&aliases)) {
                             anyFailed = true;
@@ -533,8 +599,12 @@ namespace das {
                         }
                         TypeDecl::updateAliasMap(argType, passType, aliases);
                     }
-                    if ( !anyFailed ) break;
-                    if ( totalAliases == aliases.size() ) return false;
+                    if ( !anyFailed ) {
+                        break;
+                    }
+                    if ( totalAliases == aliases.size() ) {
+                        return false;
+                    }
                 }
             } else {
                 for ( size_t ai = 0; ai != types.size(); ++ai ) {
@@ -1146,7 +1216,7 @@ namespace das {
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
-                    error("global variable initialization type can't be infered, "
+                    error("global variable " + var->name + " initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
@@ -1156,24 +1226,24 @@ namespace das {
                     reportGenericInfer();
                 }
             } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("global variable initialization type mismatch, "
+                error("global variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( var->type->isRef() && !var->type->isConst() && var->init->type->isConst() ) {
-                error("global variable initialization type mismatch, const matters "
+                error("global variable " + var->name + " initialization type mismatch, const matters "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                       CompilationError::invalid_initialization_type);
             } else if ( !var->init_via_clone && (!var->init->type->canCopy() && !var->init->type->canMove()) ) {
-                error("this global variable can't be initialized at all", var->at,
-                    CompilationError::invalid_initialization_type);
+                error("global variable " + var->name + " can't be initialized at all. " + var->type->describe(),
+                      var->at, CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
-                error("this global variable can't init (move) from a constant value", var->at, CompilationError::cant_move);
+                error("global variable " + var->name + " can't init (move) from a constant value", var->at, CompilationError::cant_move);
             } else if ( !(var->init_via_move || var->init_via_clone) && !var->init->type->canCopy() ) {
-                error("this global variable can't be copied", var->at, CompilationError::cant_copy);
+                error("global variable " + var->name + " can't be copied", var->at, CompilationError::cant_copy);
             } else if ( var->init_via_move && !var->init->type->canMove() ) {
-                error("this global variable can't be moved", var->at, CompilationError::cant_move);
+                error("global variable " + var->name + " can't be moved", var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
-                error("this global variable init can't be cloned", var->at, CompilationError::cant_copy);
+                error("global variable " + var->name + " can't be cloned", var->at, CompilationError::cant_copy);
             } else {
                 if ( var->init_via_clone ) {
                     reportGenericInfer();
@@ -1552,55 +1622,6 @@ namespace das {
             expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
-    // ExprMakeLambda
-        virtual ExpressionPtr visit ( ExprMakeLambda * expr ) override {
-            if ( expr->arguments.size()!=1 ) {
-                error("expecting lambda(closure)", expr->at, CompilationError::invalid_argument_count);
-            } else if ( !expr->arguments[0]->rtti_isMakeBlock() ) {
-                error("expecting lambda(closure)", expr->at, CompilationError::invalid_argument_type);
-            } else {
-                auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
-                auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                if ( auto bT = block->makeBlockType() ) {
-                    if ( !isFullySealedType(bT) ) {
-                        error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
-                    } else {
-                        CaptureLambda cl;
-                        // we can only capture in-scope variables
-                        // i.e stuff BEFORE the scope
-                        for ( auto & lv : local )
-                            cl.scope.insert(lv);
-                        for ( auto & bls : blocks ) {
-                            for ( auto & blv : bls->arguments ) {
-                                cl.scope.insert(blv);
-                            }
-                        }
-                        block->visit(cl);
-                        if ( !cl.fail ) {
-                            for ( auto ba : block->arguments ) {
-                                cl.capt.erase(ba);
-                            }
-                            string lname = generateNewLambdaName(block->at);
-                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
-                            if ( program->addStructure(ls) ) {
-                                bool isUnsafe = func ? func->unsafe : false;
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
-                                if ( program->addFunction(pFn) ) {
-                                    reportGenericInfer();
-                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
-                                    return ms;
-                                } else {
-                                    error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
-                                }
-                            } else {
-                                error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
-                            }
-                        }
-                    }
-                }
-            }
-            return Visitor::visit(expr);
-        }
     // ExprMakeGenerator
         virtual ExpressionPtr visit ( ExprMakeGenerator * expr ) override {
             if ( expr->iterType && expr->iterType->isExprType() ) {
@@ -1703,6 +1724,47 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMakeBlock
+        ExpressionPtr convertBlockToLambda ( ExprMakeBlock * expr ) {
+            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            if ( auto bT = block->makeBlockType() ) {
+                if ( !isFullySealedType(bT) ) {
+                    error("can't infer lambda block type", expr->at, CompilationError::invalid_block);
+                } else {
+                    CaptureLambda cl;
+                    // we can only capture in-scope variables
+                    // i.e stuff BEFORE the scope
+                    for ( auto & lv : local )
+                        cl.scope.insert(lv);
+                    for ( auto & bls : blocks ) {
+                        for ( auto & blv : bls->arguments ) {
+                            cl.scope.insert(blv);
+                        }
+                    }
+                    block->visit(cl);
+                    if ( !cl.fail ) {
+                        for ( auto ba : block->arguments ) {
+                            cl.capt.erase(ba);
+                        }
+                        string lname = generateNewLambdaName(block->at);
+                        auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
+                        if ( program->addStructure(ls) ) {
+                            bool isUnsafe = func ? func->unsafe : false;
+                            auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
+                            if ( program->addFunction(pFn) ) {
+                                reportGenericInfer();
+                                auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
+                                return ms;
+                            } else {
+                                error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
+                            }
+                        } else {
+                            error("lambda struct name mismatch", expr->at, CompilationError::invalid_block);
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
             // can only infer block type, if all argument types are infered
@@ -1712,8 +1774,15 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             }
-
             expr->type = block->makeBlockType();
+            if ( expr->isLambda ) {
+                expr->type->baseType = Type::tLambda;
+                if ( isFullySealedType(expr->type) ) {
+                    if ( auto btl = convertBlockToLambda(expr) ) {
+                        return btl;
+                    }
+                }
+            }
             return Visitor::visit(expr);
         }
     // ExprInvoke
@@ -3610,7 +3679,7 @@ namespace das {
                 auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
                     varT = TypeDecl::inferGenericType(var->type, var->init->type);
-                    error("local variable initialization type can't be infered, "
+                    error("local variable " + var->name + " initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
@@ -3620,28 +3689,29 @@ namespace das {
                     reportGenericInfer();
                 }
             } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("local variable initialization type mismatch, "
+                error("local variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
             } else if ( var->type->ref && !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) && var->init->type->isRef()) {
-                error("local variable initialization type mismatch. reference can't be initialized via value, "
+                error("local variable " + var->name + " initialization type mismatch. reference can't be initialized via value, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
             } else if ( var->type->isRef() &&  !var->type->isConst() && var->init->type->isConst() ) {
-                error("local variable initialization type mismatch. const matters, "
+                error("local variable " + var->name + " initialization type mismatch. const matters, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy() && !var->init->type->canMove() ) {
-                error("this local variable can't be initialized at all", var->at,
+                error("local variable " + var->name + " can't be initialized at all", var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy()
                        && var->init->type->canMove() && !(var->init_via_move || var->init_via_clone) ) {
-                error("this local variable can only be move-initialized, use <- for that", var->at,
+                error("local variable " + var->name + " can only be move-initialized, use <- for that", var->at,
                     CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
-                error("can't init (move) from a constant value", var->at, CompilationError::cant_move);
+                error("local variable " + var->name + " can't init (move) from a constant value", var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
-                error("this type can't be cloned", var->at, CompilationError::cant_copy);
+                error("local variable " + var->name + " of type " + var->init->type->describe() + " can't be cloned",
+                      var->at, CompilationError::cant_copy);
             } else {
                 if ( var->init_via_clone ) {
                     reportGenericInfer();
@@ -3817,8 +3887,8 @@ namespace das {
                     return nullptr;
                 } 
                 // if its an auto or an alias
-                // we only allow it, if its a block
-                if ( ar->type->baseType!=Type::tBlock ) {
+                // we only allow it, if its a block or lambda
+                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda ) {
                     if ( ar->type->isAlias() || ar->type->isAuto() ) {
                         return nullptr;
                     }
@@ -3846,6 +3916,9 @@ namespace das {
                         auto totalAliases = aliases.size();
                         for ( size_t ai = 0; ai != types.size(); ++ai ) {
                             auto argType = clone->arguments[ai]->type;
+                            if ( argType->isAlias() ) {
+                                argType = inferPartialAliases(argType,clone,&aliases);
+                            }
                             auto passType = types[ai];
                             if (!isMatchingArgument(clone,argType,passType,true,true,&aliases)) {
                                 anyFailed = true;
@@ -3863,7 +3936,7 @@ namespace das {
                     for ( size_t sz = 0; sz != types.size(); ++sz ) {
                         auto & argT = clone->arguments[sz]->type;
                         if ( argT->isAlias() ) {
-                            argT = inferAlias(argT, clone, &aliases);
+                            argT = inferPartialAliases(argT, clone, &aliases);
                         }
                         if ( argT->isAuto() ) {
                             auto & passT = types[sz];
@@ -3910,7 +3983,7 @@ namespace das {
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
-                    if ( arg->type->isAuto() && arg->type->isGoodBlockType() ) {
+                    if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType()) ) {
                         DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
@@ -3946,7 +4019,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr).get();
-            if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
+            if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe && !expr->alwaysSafe ) {
                 error("unsafe call " + expr->name + " requires [unsafe]", expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());

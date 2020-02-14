@@ -1418,6 +1418,28 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * subexpr;
     };
 
+    // Sequence -> Iterator
+    struct SimNode_Seq2Iter : SimNode {      // ptr -> &value
+        DAS_PTR_NODE;
+        SimNode_Seq2Iter ( const LineInfo & at, SimNode * s )
+            : SimNode(at), subexpr(s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            Sequence * ptr = (Sequence *) subexpr->evalPtr(context);
+            if ( !ptr ) {
+                context.throw_error_at(debugInfo,"dereferencing null sequence");
+            }
+            char * res = (char *) ptr->iter;
+            if ( !res ) {
+                context.throw_error_at(debugInfo,"iterator is empty or already consumed");
+            }
+            ptr->iter = nullptr;
+            return res;
+        }
+        SimNode * subexpr;
+    };
+
     // let(a:int?) x = a && 0
     template <typename TT>
     struct SimNode_NullCoalescing : SimNode_Ptr2Ref {

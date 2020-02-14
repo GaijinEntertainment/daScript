@@ -470,13 +470,15 @@ namespace das
             return structType->canClone();
         if ( baseType==Type::tBlock )
             return false;
+        if ( baseType==Type::tIterator )
+            return false;
         return true;
     }
 
     bool TypeDecl::canCopy() const {
         if ( baseType==Type::tHandle )
             return annotation->canCopy();
-        if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tBlock )
+        if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tBlock || baseType==Type::tIterator )
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->canCopy();
@@ -1272,7 +1274,7 @@ namespace das
             return annotation->isRefType();
         }
         return baseType==Type::tTuple || baseType==Type::tStructure || baseType==Type::tArray
-                || baseType==Type::tTable || baseType==Type::tBlock
+                || baseType==Type::tTable || baseType==Type::tBlock || baseType==Type::tIterator
                 || dim.size();
     }
 

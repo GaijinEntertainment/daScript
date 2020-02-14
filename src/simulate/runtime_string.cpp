@@ -210,9 +210,10 @@ namespace das
         return *value != 0;
     }
 
-    void StringIterator::close ( Context &, char * _value )  {
+    void StringIterator::close ( Context & context, char * _value )  {
         int32_t * value = (int32_t *) _value;
         *value = 0;
+        context.heap.free((char *)this, sizeof(StringIterator));
     }
 
     vec4f SimNode_StringIterator::eval ( Context & context ) {

@@ -22,13 +22,13 @@ def onlyNull ( bar : lambda<(a:int):int> )
 		assert(false,"has to be null")
 
 def addX(a:int)
-	return lambda() <| $(b:int)
+	return @ <| (b:int)
 		return a + b
 
 [export]
 def test
     var CNT = 0
-    let counter = lambda() <| $ (extra:int) : int
+    let counter = @ <| (extra:int) : int
         return CNT++ + extra
     var x = invoke(counter,13)
     CNT = 100500

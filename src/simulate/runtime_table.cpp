@@ -65,20 +65,30 @@ namespace das
         return table->keys;
     }
 
+    void TableKeysIterator::close ( Context & context, char * value ) {
+        TableIterator::close(context,value);
+        context.heap.free((char *)this, sizeof(TableKeysIterator));
+    }
+
     char * TableValuesIterator::getData ( ) const {
         return table->data;
     }
 
-    Iterator * builtin_table_keys ( const Table & tab, int32_t stride, Context * __context__ ) {
-        char * iter = __context__->heap.allocate(sizeof(TableKeysIterator));
-        new (iter) TableKeysIterator(&tab, stride);
-        return (Iterator *) iter;
+    void TableValuesIterator::close ( Context & context, char * value ) {
+        TableIterator::close(context,value);
+        context.heap.free((char *)this, sizeof(TableValuesIterator));
     }
 
-    Iterator * builtin_table_values ( const Table & tab, int32_t stride, Context * __context__ ) {
+    void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
+        char * iter = __context__->heap.allocate(sizeof(TableKeysIterator));
+        new (iter) TableKeysIterator(&tab, stride);
+        result = { (Iterator *) iter };
+    }
+
+    void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
         char * iter = __context__->heap.allocate(sizeof(TableKeysIterator));
         new (iter) TableValuesIterator(&tab, stride);
-        return (Iterator *) iter;
+        result = { (Iterator *) iter };
     }
 
     // delete

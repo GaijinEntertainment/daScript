@@ -397,6 +397,7 @@ namespace das {
             auto cfr = expr->subexpr->clone();
             if ( makeRef ) {
                 cfr = make_shared<ExprRef2Ptr>(expr->at, cfr);
+                cfr->alwaysSafe = true;
             }
             auto cpy = make_shared<ExprCopy>(expr->at, cto, cfr);
             blk->list.push_back(cpy);
@@ -620,9 +621,15 @@ namespace das {
             svar->at = expr->at;
             svar->name = srcName;
             svar->type = make_shared<TypeDecl>(Type::autoinfer);
-            auto ceach = make_shared<ExprCall>(expr->at, "each");
-            ceach->arguments.push_back(src->clone());
-            svar->init = ceach;
+            svar->init_via_move = true;
+            if ( src->type->isGoodIteratorType() ) {
+                svar->init = src->clone();
+            } else {
+                auto ceach = make_shared<ExprCall>(expr->at, "each");
+                ceach->alwaysSafe = true;
+                ceach->arguments.push_back(src->clone());
+                svar->init = ceach;
+            }
             seqt->variables.push_back(svar);
             blk->list.push_back(seqt);
             // let it0 : type_of_iterable

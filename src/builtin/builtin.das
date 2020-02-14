@@ -114,10 +114,14 @@ def make_clone(res:auto(TT)) : TT delete const
 		return <- temp
 
 def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
-    return __builtin_table_keys(a,typeinfo(sizeof type keyT))
+    var it : iterator<keyT & const>
+    __builtin_table_keys(it,a,typeinfo(sizeof type keyT))
+    return <- it
 
 def values(a:table<auto(keyT);auto(valT)>) : iterator<valT &>
-    return __builtin_table_values(a,typeinfo(sizeof type valT))
+    var it : iterator<valT &>
+    __builtin_table_values(it,a,typeinfo(sizeof type valT))
+    return <- it
 
 // temporal
 
@@ -140,23 +144,33 @@ def lock_forever ( var Tab : table<auto(keyT);auto(valT)> ) : table<keyT;valT> #
 
 [generic]
 def each ( rng : range ) : iterator<int>
-    return _builtin_make_range_iterator(rng)
+    var it : iterator<int>
+    _builtin_make_range_iterator(it,rng)
+    return <- it
 
 [unsafe,unsafe_operation]
 def each ( a : auto(TT)[] ) : iterator<TT&>
     var parr : void? = reinterpret<void?>(addr(a[0]))
-    return _builtin_make_fixed_array_iterator(parr,typeinfo(dim a),typeinfo(sizeof type TT))
+    var it : iterator<TT&>
+    _builtin_make_fixed_array_iterator(it,parr,typeinfo(dim a),typeinfo(sizeof type TT))
+    return <- it
 
 [unsafe_operation]
 def each ( a : array<auto(TT)> ) : iterator<TT&>
-    return _builtin_make_good_array_iterator(a, typeinfo(sizeof type TT))
+    var it : iterator<TT&>
+    _builtin_make_good_array_iterator(it, a, typeinfo(sizeof type TT))
+    return <- it
 
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT delete &>
 	concept_assert(typeinfo(is_ref type argT),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
-    return _builtin_make_lambda_iterator(lam)
+    var it : iterator<argT delete &>
+    _builtin_make_lambda_iterator(it,lam)
+    return <- it
 
 def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
-    return _builtin_make_lambda_iterator(lam)
+    var it : iterator<argT &>
+    _builtin_make_lambda_iterator(it, lam)
+    return <- it
 
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>

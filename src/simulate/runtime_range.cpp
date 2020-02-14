@@ -18,7 +18,8 @@ namespace das
         return (nextValue != range_to);
     }
 
-    void RangeIterator::close ( Context &, char * ) {
+    void RangeIterator::close ( Context & context, char * ) {
+        context.heap.free((char *)this, sizeof(RangeIterator));
     }
 
     vec4f SimNode_RangeIterator::eval ( Context & context ) {

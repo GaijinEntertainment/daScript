@@ -154,7 +154,8 @@ namespace das {
     template<> struct ToBasicType<EnumStub8>    { enum { type = Type::tEnumeration8 }; };
     template<> struct ToBasicType<EnumStub16>   { enum { type = Type::tEnumeration16 }; };
     template<> struct ToBasicType<EnumStub64>   { enum { type = Type::tEnumeration64 }; };
-    template<> struct ToBasicType<Iterator *>   { enum { type = Type::tIterator }; };
+    template<> struct ToBasicType<Sequence>     { enum { type = Type::tIterator }; };
+    template<> struct ToBasicType<Sequence *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };
     template<> struct ToBasicType<bool>         { enum { type = Type::tBool }; };

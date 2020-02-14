@@ -549,6 +549,10 @@ namespace das
         virtual void walk ( DataWalker & ) { }
     };
 
+    struct Sequence {
+        Iterator * iter;
+    };
+
 #if DAS_ENABLE_PROFILER
 
 __forceinline void profileNode ( Context & context, SimNode * node ) {

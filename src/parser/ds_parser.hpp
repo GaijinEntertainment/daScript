@@ -215,36 +215,37 @@ extern int das_yydebug;
     QDOT = 362,
     LPIPE = 363,
     LBPIPE = 364,
-    RPIPE = 365,
-    CLONEEQU = 366,
-    ROTL = 367,
-    ROTR = 368,
-    ROTLEQU = 369,
-    ROTREQU = 370,
-    MAPTO = 371,
-    BRABRAB = 372,
-    BRACBRB = 373,
-    CBRCBRB = 374,
-    INTEGER = 375,
-    LONG_INTEGER = 376,
-    UNSIGNED_INTEGER = 377,
-    UNSIGNED_LONG_INTEGER = 378,
-    FLOAT = 379,
-    DOUBLE = 380,
-    NAME = 381,
-    BEGIN_STRING = 382,
-    STRING_CHARACTER = 383,
-    END_STRING = 384,
-    BEGIN_STRING_EXPR = 385,
-    END_STRING_EXPR = 386,
-    UNARY_MINUS = 387,
-    UNARY_PLUS = 388,
-    PRE_INC = 389,
-    PRE_DEC = 390,
-    POST_INC = 391,
-    POST_DEC = 392,
-    DEREF = 393,
-    COLCOL = 394
+    LAPIPE = 365,
+    RPIPE = 366,
+    CLONEEQU = 367,
+    ROTL = 368,
+    ROTR = 369,
+    ROTLEQU = 370,
+    ROTREQU = 371,
+    MAPTO = 372,
+    BRABRAB = 373,
+    BRACBRB = 374,
+    CBRCBRB = 375,
+    INTEGER = 376,
+    LONG_INTEGER = 377,
+    UNSIGNED_INTEGER = 378,
+    UNSIGNED_LONG_INTEGER = 379,
+    FLOAT = 380,
+    DOUBLE = 381,
+    NAME = 382,
+    BEGIN_STRING = 383,
+    STRING_CHARACTER = 384,
+    END_STRING = 385,
+    BEGIN_STRING_EXPR = 386,
+    END_STRING_EXPR = 387,
+    UNARY_MINUS = 388,
+    UNARY_PLUS = 389,
+    PRE_INC = 390,
+    PRE_DEC = 391,
+    POST_INC = 392,
+    POST_DEC = 393,
+    DEREF = 394,
+    COLCOL = 395
   };
 #endif
 
@@ -277,7 +278,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 281 "ds_parser.hpp"
+#line 282 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

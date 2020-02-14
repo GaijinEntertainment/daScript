@@ -808,12 +808,6 @@ namespace das
         return context.code->makeNode<SimNode_MemZero>(at, subexpr->simulate(context), dataSize);
     }
 
-    SimNode * ExprMakeLambda::simulate (Context & context) const {
-        DAS_ASSERTF(0, "we should not be here ever, ExprMakeLambda should completly fold during type inference.");
-        context.thisProgram->error("internal compilation error, generating node for ExprMakeLambda", at);
-        return nullptr;
-    }
-
     SimNode * ExprMakeGenerator::simulate (Context & context) const {
         DAS_ASSERTF(0, "we should not be here ever, ExprMakeGenerator should completly fold during type inference.");
         context.thisProgram->error("internal compilation error, generating node for ExprMakeGenerator", at);
@@ -1782,7 +1776,9 @@ namespace das
                 context.code->makeNodeUnroll<SimNode_ForWithIterator>(total, at);
             for ( int t=0; t!=total; ++t ) {
                 if ( sources[t]->type->isGoodIteratorType() ) {
-                    result->source_iterators[t] = sources[t]->simulate(context);
+                    result->source_iterators[t] = context.code->makeNode<SimNode_Seq2Iter>(
+                        sources[t]->at,
+                        sources[t]->simulate(context));
                 } else if ( sources[t]->type->isGoodArrayType() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_GoodArrayIterator>(
                         sources[t]->at,

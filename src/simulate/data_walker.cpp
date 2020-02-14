@@ -195,9 +195,13 @@ namespace das {
                     }
                     break;
                 case Type::tIterator: {
-                        auto ll = * ((Iterator **) pa);
+                        auto ll = (Sequence *) pa;
                         beforeIterator(ll, info);
-                        if ( ll ) ll->walk(*this);
+                        if ( ll && ll->iter ) {
+                            ll->iter->walk(*this);
+                        } else {
+                            Null(info);
+                        }
                         afterIterator(ll, info);
                     }
                     break;

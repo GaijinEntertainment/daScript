@@ -211,9 +211,9 @@ namespace das {
             }
         } else if ( baseType==Type::tIterator ) {
             if ( type->firstType ) {
-                stream << "Iterator * /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
+                stream << "Sequence /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
             } else {
-                stream << "Iterator *";
+                stream << "Sequence";
             }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             if ( !type->constant && type->baseType==Type::tBlock ) {
@@ -2522,7 +2522,9 @@ namespace das {
             ss << ");\n";
             auto & var = ffor->iteratorVariables[idx];
             // source
-            ss << string(tab,'\t') << describeCppType(var->type,CpptSubstitureRef::yes,CpptSkipRef::no,CpptSkipConst::no)
+            bool skipTC = var->type->isString() && !var->type->ref;
+            ss << string(tab,'\t') << describeCppType(var->type,CpptSubstitureRef::yes,CpptSkipRef::no,
+                                                      skipTC ? CpptSkipConst::yes : CpptSkipConst::no)
                 << " " << collector.getVarName(var) << ";\n";
             // loop
             auto nl = needLoopName(ffor);

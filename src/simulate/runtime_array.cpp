@@ -68,6 +68,7 @@ namespace das
         char ** value = (char **) _value;
         *value = nullptr;
         array_unlock(context, *array);
+        context.heap.free((char *)this, sizeof(GoodArrayIterator));
     }
 
     vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
@@ -95,9 +96,10 @@ namespace das
         return dataV != fixed_array_end;
     }
 
-    void FixedArrayIterator::close ( Context &, char * _value )  {
+    void FixedArrayIterator::close ( Context & context, char * _value )  {
         char ** value = (char **) _value;
         *value = nullptr;
+        context.heap.free((char *)this, sizeof(FixedArrayIterator));
     }
 
     vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {

@@ -428,6 +428,24 @@
         return LBPIPE;
     }
 }
+<normal>\<\|[ \t]\@                         {
+    unput('@');
+    if ( das_nested_parentheses ) {
+        return LPIPE;
+    } else {
+        das_need_oxford_comma = false;
+        return LBPIPE;
+    }
+}
+<normal>\@[ \t]*\<\|               {
+    unput('@');
+    if ( das_nested_parentheses ) {
+        return LAPIPE;
+    } else {
+        das_need_oxford_comma = false;
+        return LAPIPE;
+    }
+}
 <normal>"\<\|"                              return LPIPE;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\."                              return QDOT;
@@ -480,11 +498,12 @@
         das_current_line_indent = 0;
         das_need_oxford_comma = true;
         BEGIN(indent);
-        #ifdef FLEX_DEBUG
-        printf("emit ;\n");
-        #endif
-        if ( ns )
+        if ( ns ) {
+            #ifdef FLEX_DEBUG
+            printf("emit ; at EOL\n");
+            #endif
             return ';';
+        }
     }
 }
 <normal><<EOF>>         {
@@ -495,10 +514,10 @@
             das_current_line_indent = 0;
             das_need_oxford_comma = true;
             BEGIN(indent);
-            #ifdef FLEX_DEBUG
-            printf("emit ;\n");
-            #endif
             if ( ns ) {
+                #ifdef FLEX_DEBUG
+                printf("emit ; at EOF\n");
+                #endif
                 return ';';
             }
         } else {

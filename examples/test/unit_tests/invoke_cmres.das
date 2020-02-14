@@ -60,10 +60,10 @@ def test
     check(hfuncC())
     check(hfuncAC(1))
     // invoke function
-    checkInvoke(@func)
-    checkInvoke(1,@funcA)
-    checkInvoke(@funcC)
-    checkInvoke(1,@funcAC)
+    checkInvoke(@@func)
+    checkInvoke(1,@@funcA)
+    checkInvoke(@@funcC)
+    checkInvoke(1,@@funcAC)
     // invoke block
     checkInvoke() <| $() : Foo
         return [[Foo a = 1, b = 2]]
@@ -74,16 +74,12 @@ def test
     checkInvoke(1) <| $( t : int ) : Foo const
         return [[Foo a = t, b = t + 1]]
     // invoke lambda
-    let lmb = lambda() <| $() : Foo
+    checkInvoke() <| @() : Foo
         return [[Foo a = 1, b = 2]]
-    checkInvoke(lmb)
-    let lmbC = lambda() <| $() : Foo const
+    checkInvoke() <| @() : Foo const
         return [[Foo a = 1, b = 2]]
-    checkInvoke(lmbC)
-    let lmbA = lambda() <| $( t : int ) : Foo
+    checkInvoke(1) <| @( t : int ) : Foo
         return [[Foo a = t, b = t + 1]]
-    checkInvoke(1,lmbA)
-    let lmbAC = lambda() <| $( t : int ) : Foo const
+    checkInvoke(1) <| @( t : int ) : Foo const
         return [[Foo a = t, b = t + 1]]
-    checkInvoke(1,lmbAC)
     return true
