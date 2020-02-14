@@ -27,6 +27,8 @@ SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two) {
     return (SomeEnum98_DasProxy) efn_takeOne_giveTwo_98( (SomeEnum98)two);
 }
 
+DAS_BASE_BIND_ENUM_98(SomeEnum_16, SomeEnum_16, SomeEnum_16_zero, SomeEnum_16_one, SomeEnum_16_two)
+
 void Module_UnitTest::addEnumTest(ModuleLibrary &lib)
 {
     // enum
@@ -39,5 +41,7 @@ void Module_UnitTest::addEnumTest(ModuleLibrary &lib)
     addEnumeration(make_shared<EnumerationSomeEnum98>());
     addExtern<DAS_BIND_FUN(efn_takeOne_giveTwo_98_DasProxy)>(*this, lib, "efn_takeOne_giveTwo_98",
         SideEffects::modifyExternal, "efn_takeOne_giveTwo_98");
+    // enum16
+    addEnumeration(make_shared<EnumerationSomeEnum_16>());
 };
 

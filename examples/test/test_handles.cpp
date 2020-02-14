@@ -20,6 +20,8 @@ namespace das {
 	};
 }
 
+DAS_BASE_BIND_ENUM_98(SomeEnum_16, SomeEnum_16, SomeEnum_16_zero, SomeEnum_16_one, SomeEnum_16_two)
+
 //sample of your engine annotated struct
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
@@ -45,6 +47,7 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectFoo", ml) {
         addField<DAS_BIND_MANAGED_FIELD(hit)>("hit");
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
+        addField<DAS_BIND_MANAGED_FIELD(e16)>("e16");
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
     }
     virtual bool isLocal() const override { return true; }

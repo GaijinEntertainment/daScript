@@ -29,6 +29,13 @@ enum SomeEnum98 {
 
 DAS_BIND_ENUM_CAST_98(SomeEnum98);
 
+enum SomeEnum_16 : int16_t {
+    SomeEnum_16_zero = 0
+,   SomeEnum_16_one  = 1
+,   SomeEnum_16_two  = 2
+};
+DAS_BIND_ENUM_CAST_98(SomeEnum_16);
+
 Goo::GooEnum efn_flip ( Goo::GooEnum goo );
 SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
 SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
@@ -50,6 +57,7 @@ __forceinline Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + 
 struct TestObjectFoo {
     Point3 hit;
     int fooData;
+    SomeEnum_16 e16;
     int propAdd13() {
         return fooData + 13;
     }

@@ -51,4 +51,10 @@ def test
     var goo : GooEnum
     goo = GooEnum regular
     verify ( efn_flip(goo)==GooEnum hazardous )
+    var foo16 : TestObjectFoo
+    assert(foo16.e16==SomeEnum_16 SomeEnum_16_zero)
+    foo16.e16 = SomeEnum_16 SomeEnum_16_one
+    assert(foo16.e16==SomeEnum_16 SomeEnum_16_one)
+    assert(int(foo16.e16)==1)
+    assert(typeinfo(sizeof foo16.e16)==2)
     return true

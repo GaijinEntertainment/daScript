@@ -105,7 +105,7 @@ namespace das {
         } else {
             info->structType = nullptr;
         }
-        if ( type->baseType==Type::tEnumeration ) {
+        if ( type->isEnumT() ) {
             info->enumType = type->enumType ? makeEnumDebugInfo(*type->enumType) : nullptr;
         } else {
             info->enumType = nullptr;
