@@ -94,12 +94,15 @@ namespace das
         Enumeration( const string & na ) : name(na) {}
         bool add ( const string & f );
         bool add ( const string & f, const ExpressionPtr & expr );
-        bool addI ( const string & f, int32_t value );
+        bool addI ( const string & f, int64_t value );
         string describe() const { return name; }
         string getMangledName() const;
-        int find ( const string & na, int def ) const;
-        string find ( int va, const string & def ) const;
+        int64_t find ( const string & na, int64_t def ) const;
+        string find ( int64_t va, const string & def ) const;
         pair<ExpressionPtr,bool> find ( const string & f ) const;
+        TypeDeclPtr makeBaseType() const;
+        Type getEnumType() const;
+        TypeDeclPtr makeEnumType() const;
     public:
         string          name;
         string          cppName;
@@ -107,6 +110,7 @@ namespace das
         vector<pair<string,ExpressionPtr>> list;
         Module *        module = nullptr;
         bool            external = false;
+        Type            baseType = Type::tInt;
     };
 
     class Structure : public enable_shared_from_this<Structure> {

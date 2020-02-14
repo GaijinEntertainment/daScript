@@ -236,13 +236,22 @@ namespace das {
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
-            if ( expr->type->baseType==Type::tEnumeration ) {
-                int32_t ival = cast<int32_t>::to(value);
+            if ( expr->type->isEnumT() ) {
+                int64_t ival = 0;
+                switch ( expr->type->enumType->baseType ) {
+                case Type::tInt8:   ival = cast<int8_t>::to(value); break;
+                case Type::tUInt8:  ival = cast<uint8_t>::to(value); break;
+                case Type::tInt16:  ival = cast<int16_t>::to(value); break;
+                case Type::tUInt16: ival = cast<uint16_t>::to(value); break;
+                case Type::tInt:    ival = cast<int32_t>::to(value); break;
+                case Type::tUInt:   ival = cast<uint32_t>::to(value); break;
+                case Type::tInt64:  ival = cast<int64_t>::to(value); break;
+                case Type::tUInt64: ival = cast<uint64_t>::to(value); break;
+                }
                 auto cef = expr->type->enumType->find(ival, "");
                 if ( cef.empty() ) return expr->shared_from_this(); // it folded to unsupported value
                 auto sim = make_shared<ExprConstEnumeration>(expr->at, cef, expr->type);
-                sim->type = make_shared<TypeDecl>(Type::tEnumeration);
-                sim->type->enumType = expr->type->enumType;
+                sim->type = expr->type->enumType->makeEnumType();
                 sim->constexpression = true;
                 reportFolding();
                 return sim;

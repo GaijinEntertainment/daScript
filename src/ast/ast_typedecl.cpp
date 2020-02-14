@@ -10,6 +10,11 @@ namespace das
 
     // auto or generic type conversion
 
+    TypeDecl::TypeDecl(const EnumerationPtr & ep) 
+        : baseType(ep->getEnumType()), enumType(ep) 
+    {
+    }
+
     bool TypeDecl::isExprType() const {
         for ( auto di : dim ) {
             if ( di==TypeDecl::dimConst ) {
@@ -250,7 +255,7 @@ namespace das
             } else {
                 stream << "void ?";
             }
-        } else if ( baseType==Type::tEnumeration ) {
+        } else if ( isEnumT() ) {
             if ( enumType ) {
                 if (dmodule == DescribeModule::yes && enumType->module && !enumType->module->name.empty()) {
                     stream << enumType->module->name << "::";
@@ -569,6 +574,21 @@ namespace das
             if ( enumType ) {
                 ss << "#" << enumType->getMangledName();
             }
+        } else if ( baseType==Type::tEnumeration8 ) {
+            ss << "#enum8";
+            if ( enumType ) {
+                ss << "#" << enumType->getMangledName();
+            }
+        } else if ( baseType==Type::tEnumeration16 ) {
+            ss << "#enum16";
+            if ( enumType ) {
+                ss << "#" << enumType->getMangledName();
+            }
+        } else if ( baseType==Type::tEnumeration64 ) {
+            ss << "#enum64";
+            if ( enumType ) {
+                ss << "#" << enumType->getMangledName();
+            }
         } else if ( baseType==Type::tIterator ) {
             ss << "#iterator";
             if ( firstType ) {
@@ -680,7 +700,10 @@ namespace das
                 return false;
             }
         }
-        if ( baseType==Type::tEnumeration ) {
+        if ( isEnumT() ) {
+            if ( baseType != decl.baseType ) {
+                return false;
+            }
             if ( enumType && decl.enumType && enumType!=decl.enumType ) {
                 return false;
             }
@@ -915,8 +938,13 @@ namespace das
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
 
+    bool TypeDecl::isEnumT() const {
+        return (baseType==Type::tEnumeration) || (baseType==Type::tEnumeration8)
+            || (baseType==Type::tEnumeration16) || (baseType==Type::tEnumeration64);
+    }
+
     bool TypeDecl::isEnum() const {
-        return (baseType==Type::tEnumeration) && (dim.size()==0);
+        return isEnumT() && (dim.size()==0);
     }
 
     void TypeDecl::collectAliasList(vector<string> & aliases) const {
@@ -1035,6 +1063,9 @@ namespace das
             case Type::tString:
             case Type::tDouble:
             case Type::tEnumeration:
+            case Type::tEnumeration8:
+            case Type::tEnumeration16:
+            case Type::tEnumeration64:
             case Type::tRange:
             case Type::tURange:
                 return true;
@@ -1109,6 +1140,7 @@ namespace das
             case Type::tInt64:
             case Type::tUInt64:
             case Type::tEnumeration:
+            case Type::tEnumeration64:
             case Type::tInt:
             case Type::tInt2:
             case Type::tInt3:
@@ -1163,6 +1195,9 @@ namespace das
         switch ( baseType ) {
             case Type::tVoid:
             case Type::tEnumeration:
+            case Type::tEnumeration8:
+            case Type::tEnumeration16:
+            case Type::tEnumeration64:
             case Type::tBool:
                 /*
             case Type::tInt8:
@@ -1326,6 +1361,24 @@ namespace das
         }
     }
 
+    bool TypeDecl::isInteger() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tInt:
+        case Type::tUInt:
+        case Type::tInt8:
+        case Type::tUInt8:
+        case Type::tInt16:
+        case Type::tUInt16:
+        case Type::tInt64:
+        case Type::tUInt64:
+            return true;
+        default:;
+        }
+        return false;
+    }
+
+
     bool TypeDecl::isNumeric() const {
         if (dim.size() != 0) return false;
         switch (baseType) {
@@ -1345,20 +1398,20 @@ namespace das
         return false;
     }
 
-        bool TypeDecl::isNumericComparable() const {
-            if (dim.size() != 0) return false;
-            switch (baseType) {
-            case Type::tInt:
-            case Type::tUInt:
-            case Type::tInt64:
-            case Type::tUInt64:
-            case Type::tFloat:
-            case Type::tDouble:
-                return true;
-            default:;
-            }
-            return false;
+    bool TypeDecl::isNumericComparable() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tInt:
+        case Type::tUInt:
+        case Type::tInt64:
+        case Type::tUInt64:
+        case Type::tFloat:
+        case Type::tDouble:
+            return true;
+        default:;
         }
+        return false;
+    }
 
     bool TypeDecl::isIndex() const {
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
@@ -1410,6 +1463,8 @@ namespace das
             return structType->getSizeOf();
         } else if ( baseType==Type::tTuple ) {
             return getTupleSize();
+        } else if ( isEnumT() ) {
+            return enumType ? getTypeBaseSize(enumType->baseType) : getTypeBaseSize(Type::tInt);
         } else {
            return getTypeBaseSize(baseType);
         }
@@ -1422,6 +1477,8 @@ namespace das
             return structType->getAlignOf();
         } else if ( baseType==Type::tTuple ) {
             return getTupleAlign();
+        } else if ( isEnumT() ) {
+            return enumType ? getTypeBaseAlign(enumType->baseType) : getTypeBaseAlign(Type::tInt);
         } else {
             return getTypeBaseAlign(baseType);
         }

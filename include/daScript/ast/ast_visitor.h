@@ -33,7 +33,7 @@ namespace das {
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) { }
         virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) {
-            return value->shared_from_this();
+            return value ? value->shared_from_this() : nullptr;
         }
         virtual EnumerationPtr visit ( Enumeration * enu ) { return enu->shared_from_this(); }
         // STRUCTURE
@@ -191,11 +191,15 @@ namespace das {
         VISIT_EXPR(ExprFakeContext)
         VISIT_EXPR(ExprConstPtr)
         VISIT_EXPR(ExprConstEnumeration)
+        VISIT_EXPR(ExprConstInt8)
+        VISIT_EXPR(ExprConstInt16)
         VISIT_EXPR(ExprConstInt64)
         VISIT_EXPR(ExprConstInt)
         VISIT_EXPR(ExprConstInt2)
         VISIT_EXPR(ExprConstInt3)
         VISIT_EXPR(ExprConstInt4)
+        VISIT_EXPR(ExprConstUInt8)
+        VISIT_EXPR(ExprConstUInt16)
         VISIT_EXPR(ExprConstUInt64)
         VISIT_EXPR(ExprConstUInt)
         VISIT_EXPR(ExprConstUInt2)

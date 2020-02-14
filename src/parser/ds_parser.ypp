@@ -255,6 +255,7 @@
 
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration
+%type <type>            enum_basic_type_declaration
 %type <pTypeDecl>       type_declaration
 %type <pTypeDecl>       auto_type_declaration
 %type <pTypeDecl>       optional_function_type
@@ -1566,6 +1567,18 @@ enum_declaration
         }
 		delete $name;
     }
+    |   DAS_ENUM[loc] NAME[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
+		das_checkName(*$name,tokAt(@name));
+        auto pEnum = EnumerationPtr($pE);
+        pEnum->at = tokAt(@loc);
+        pEnum->name = *$name; 
+		pEnum->baseType = $ebt;
+        if ( !g_Program->addEnumeration(pEnum) ) {
+            das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
+                CompilationError::enumeration_already_declared);
+        }
+		delete $name;
+    }
     ;
 
 optional_structure_parent
@@ -1719,6 +1732,17 @@ basic_type_declaration
     |   DAS_TRANGE      { $$ = Type::tRange; }
     |   DAS_TURANGE     { $$ = Type::tURange; }
     |   DAS_TDOUBLE     { $$ = Type::tDouble; }
+    ;
+
+enum_basic_type_declaration
+    :   DAS_TINT        { $$ = Type::tInt; }
+    |   DAS_TINT8       { $$ = Type::tInt8; }
+    |   DAS_TINT16      { $$ = Type::tInt16; }
+    |   DAS_TINT64      { $$ = Type::tInt64; }
+    |   DAS_TUINT       { $$ = Type::tUInt; }
+    |   DAS_TUINT8      { $$ = Type::tUInt8; }
+    |   DAS_TUINT16     { $$ = Type::tUInt16; }
+    |   DAS_TUINT64     { $$ = Type::tUInt64; }
     ;
 
 structure_type_declaration

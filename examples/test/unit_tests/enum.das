@@ -1,6 +1,6 @@
 require UnitTest
 
-enum Numbers
+enum Numbers : int16
     zero
     one
     two

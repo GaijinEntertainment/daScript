@@ -23,7 +23,8 @@ DAS_BASE_BIND_ENUM_98(Type, Type,
     tString,        tStructure,     tHandle,        tEnumeration,
     tPointer,       tFunction,      tLambda,        tIterator,
     tArray,         tTable,         tBlock,         tInt8,
-    tUInt8,         tInt16,         tUInt16,        tTuple
+    tUInt8,         tInt16,         tUInt16,        tTuple,
+    tEnumeration8,  tEnumeration16, tEnumeration64
 )
 namespace das {
     struct RttiProgram {

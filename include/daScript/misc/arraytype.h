@@ -100,7 +100,14 @@ namespace das
     Iterator * builtin_table_keys ( const Table & tab, int32_t stride, Context * __context__ );
     Iterator * builtin_table_values ( const Table & tab, int32_t stride, Context * __context__ );
 
-    struct EnumStub {
-        int32_t     value;
+    template <typename TT>
+    struct EnumStubAny  {
+        typedef TT  BaseType;
+        TT          value;
     };
+
+    typedef EnumStubAny<int32_t> EnumStub;
+    typedef EnumStubAny<int8_t>  EnumStub8;
+    typedef EnumStubAny<int16_t> EnumStub16;
+    typedef EnumStubAny<int64_t> EnumStub64;
 }

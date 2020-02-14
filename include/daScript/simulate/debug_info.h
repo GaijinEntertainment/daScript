@@ -41,6 +41,9 @@ namespace das
         tStructure,
         tHandle,
         tEnumeration,
+        tEnumeration8,
+        tEnumeration16,
+        tEnumeration64,
         tPointer,
         tFunction,
         tLambda,
@@ -220,7 +223,7 @@ namespace das
 
     struct EnumValueInfo {
         char *      name;
-        int32_t     value;
+        int64_t     value;
     };
 
     struct EnumInfo {

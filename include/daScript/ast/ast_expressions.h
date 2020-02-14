@@ -444,6 +444,16 @@ namespace das
         string          text;
     };
 
+    struct ExprConstInt8 : ExprConstT<int8_t,ExprConstInt8> {
+        ExprConstInt8(int8_t i = 0)  : ExprConstT(i,Type::tInt8) {}
+        ExprConstInt8(const LineInfo & a, int8_t i = 0)  : ExprConstT(a,i,Type::tInt8) {}
+    };
+
+    struct ExprConstInt16 : ExprConstT<int16_t,ExprConstInt16> {
+        ExprConstInt16(int16_t i = 0)  : ExprConstT(i,Type::tInt16) {}
+        ExprConstInt16(const LineInfo & a, int16_t i = 0)  : ExprConstT(a,i,Type::tInt16) {}
+    };
+
     struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
         ExprConstInt64(int64_t i = 0)  : ExprConstT(i,Type::tInt64) {}
         ExprConstInt64(const LineInfo & a, int64_t i = 0)  : ExprConstT(a,i,Type::tInt64) {}
@@ -469,6 +479,16 @@ namespace das
         ExprConstInt4(const LineInfo & a, int4 i)  : ExprConstT(a,i,Type::tInt4) {}
     };
 
+    struct ExprConstUInt8 : ExprConstT<uint8_t,ExprConstUInt8> {
+        ExprConstUInt8(uint8_t i = 0) : ExprConstT(i,Type::tUInt8) {}
+        ExprConstUInt8(const LineInfo & a, uint8_t i = 0) : ExprConstT(a,i,Type::tUInt8) {}
+    };
+
+    struct ExprConstUInt16 : ExprConstT<uint16_t,ExprConstUInt16> {
+        ExprConstUInt16(uint16_t i = 0) : ExprConstT(i,Type::tUInt16) {}
+        ExprConstUInt16(const LineInfo & a, uint16_t i = 0) : ExprConstT(a,i,Type::tUInt16) {}
+    };
+
     struct ExprConstUInt64 : ExprConstT<uint64_t,ExprConstUInt64> {
         ExprConstUInt64(uint64_t i = 0) : ExprConstT(i,Type::tUInt64) {}
         ExprConstUInt64(const LineInfo & a, uint64_t i = 0) : ExprConstT(a,i,Type::tUInt64) {}
@@ -479,7 +499,7 @@ namespace das
         ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConstT(a,i,Type::tUInt) {}
     };
 
-    int32_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
+    int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
 
     struct ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())  : ExprConstT(i,Type::tUInt2) {}

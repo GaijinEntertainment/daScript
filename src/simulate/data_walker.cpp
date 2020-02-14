@@ -170,9 +170,10 @@ namespace das {
                 case Type::tDouble:     Double(*((double *)pa)); break;
                 case Type::tRange:      Range(*((range *)pa)); break;
                 case Type::tURange:     URange(*((urange *)pa)); break;
-                case Type::tEnumeration:
-                    WalkEnumeration(*((int32_t *)pa), info->enumType);
-                    break;
+                case Type::tEnumeration:    WalkEnumeration(*((int32_t *)pa), info->enumType); break;
+                case Type::tEnumeration8:   WalkEnumeration8(*((int8_t *)pa),  info->enumType); break;
+                case Type::tEnumeration16:  WalkEnumeration16(*((int16_t *)pa), info->enumType); break;
+                case Type::tEnumeration64:  WalkEnumeration64(*((int64_t *)pa), info->enumType); break;
                 case Type::tPointer:
                     beforePtr(pa, info);
                     if ( cancel ) return;

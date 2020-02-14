@@ -41,7 +41,7 @@ namespace das {
         TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
         TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp.get()) {}
-        TypeDecl(const EnumerationPtr & ep) : baseType(Type::tEnumeration), enumType(ep) {}
+        TypeDecl(const EnumerationPtr & ep);
         TypeDeclPtr visit ( Visitor & vis );
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
         string getMangledName() const;
@@ -68,10 +68,12 @@ namespace das {
         bool isShareable(das_set<Structure*> & dep) const;
         bool isShareable() const;
         bool isIndex() const;
+        bool isInteger() const;
         bool isNumeric() const;
         bool isNumericComparable() const;
         bool isPointer() const;
         bool isEnum() const;
+        bool isEnumT() const;
         bool isHandle() const;
         bool isStructure() const;
         bool isTuple() const;
@@ -149,6 +151,9 @@ namespace das {
 
     template <typename TT> struct ToBasicType;
     template<> struct ToBasicType<EnumStub>     { enum { type = Type::tEnumeration }; };
+    template<> struct ToBasicType<EnumStub8>    { enum { type = Type::tEnumeration8 }; };
+    template<> struct ToBasicType<EnumStub16>   { enum { type = Type::tEnumeration16 }; };
+    template<> struct ToBasicType<EnumStub64>   { enum { type = Type::tEnumeration64 }; };
     template<> struct ToBasicType<Iterator *>   { enum { type = Type::tIterator }; };
     template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
     template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };

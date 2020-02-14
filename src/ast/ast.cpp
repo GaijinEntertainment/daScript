@@ -59,8 +59,56 @@ namespace das {
     // enumeration
 
     string Enumeration::getMangledName() const {
-        return module ? module->name+"::"+name : name;
+        return (module ? module->name+"::"+name : name) + "#" + das_to_string(baseType);
     }
+
+    TypeDeclPtr Enumeration::makeBaseType() const { 
+        return make_shared<TypeDecl>(baseType); 
+    }
+
+    Type Enumeration::getEnumType() const {
+        switch (baseType) {
+        case Type::tInt8:
+        case Type::tUInt8:
+            return Type::tEnumeration8;
+        case Type::tInt16:
+        case Type::tUInt16:
+            return Type::tEnumeration16;
+        case Type::tInt64:
+        case Type::tUInt64:
+            return Type::tEnumeration64;
+        case Type::tInt:
+        case Type::tUInt:
+            return Type::tEnumeration;
+        default:
+            DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
+            return Type::none;
+        }
+    }
+
+    TypeDeclPtr Enumeration::makeEnumType() const {
+        TypeDeclPtr res;
+        switch (baseType) {
+        case Type::tInt8:
+        case Type::tUInt8:
+            res = make_shared<TypeDecl>(Type::tEnumeration8); break;
+        case Type::tInt16:
+        case Type::tUInt16:
+            res = make_shared<TypeDecl>(Type::tEnumeration16); break;
+        case Type::tInt64:
+        case Type::tUInt64:
+            res = make_shared<TypeDecl>(Type::tEnumeration64); break;
+        case Type::tInt:
+        case Type::tUInt:
+            res = make_shared<TypeDecl>(Type::tEnumeration); break;
+        default:
+            DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
+            return nullptr;
+        }
+        res->enumType = const_pointer_cast<Enumeration>(shared_from_this());
+        return res;
+    }
+
 
     pair<ExpressionPtr,bool> Enumeration::find ( const string & na ) const {
         auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
@@ -71,14 +119,14 @@ namespace das {
             pair<ExpressionPtr,bool>(nullptr,false);
     }
 
-    int Enumeration::find ( const string & na, int def ) const {
+    int64_t Enumeration::find ( const string & na, int64_t def ) const {
         auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
             return arg.first == na;
         });
         return it!=list.end() ? getConstExprIntOrUInt(it->second) : def;
     }
 
-    string Enumeration::find ( int va, const string & def ) const {
+    string Enumeration::find ( int64_t va, const string & def ) const {
         for ( const auto & it : list ) {
             if ( getConstExprIntOrUInt(it.second)==va ) {
                 return it.first;
@@ -91,8 +139,8 @@ namespace das {
         return add(f, nullptr);
     }
 
-    bool Enumeration::addI ( const string & f, int32_t value ) {
-        return add(f, make_shared<ExprConstInt>(value));
+    bool Enumeration::addI ( const string & f, int64_t value ) {
+        return add(f, make_shared<ExprConstInt64>(value));
     }
 
     bool Enumeration::add ( const string & na, const ExpressionPtr & expr ) {
@@ -1962,26 +2010,40 @@ namespace das {
         }
     }
 
-    int32_t getConstExprIntOrUInt ( const ExpressionPtr & expr ) {
+    int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr ) {
         DAS_ASSERTF ( expr && expr->rtti_isConstant(),
                      "expecting constant. something in enumeration (or otherwise) did not fold.");
         auto econst = static_pointer_cast<ExprConst>(expr);
-        DAS_ASSERTF ( econst->baseType==Type::tInt || econst->baseType==Type::tUInt,
-                     "expecting int or uint constant only. something in enumeration (or otherwise) did not fold.");
-        return econst->baseType==Type::tInt ?
-            static_pointer_cast<ExprConstInt>(expr)->getValue() :
-            int32_t(static_pointer_cast<ExprConstUInt>(expr)->getValue());
+        switch (econst->baseType) {
+        case Type::tInt8:   return static_pointer_cast<ExprConstInt8>(expr)->getValue();
+        case Type::tUInt8:  return static_pointer_cast<ExprConstUInt8>(expr)->getValue();
+        case Type::tInt16:  return static_pointer_cast<ExprConstInt16>(expr)->getValue();
+        case Type::tUInt16: return static_pointer_cast<ExprConstUInt16>(expr)->getValue();
+        case Type::tInt:    return static_pointer_cast<ExprConstInt>(expr)->getValue();
+        case Type::tUInt:   return static_pointer_cast<ExprConstUInt>(expr)->getValue();
+        case Type::tInt64:  return static_pointer_cast<ExprConstInt64>(expr)->getValue();
+        case Type::tUInt64: return static_pointer_cast<ExprConstUInt64>(expr)->getValue();
+        default:
+            DAS_ASSERTF ( 0,
+                "we should not even be here. there is an enumeration of unsupported type."
+                "something in enumeration (or otherwise) did not fold.");
+            return 0;
+        }
     }
 
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
             case Type::tBool:           return make_shared<ExprConstBool>(at, cast<bool>::to(value));
+            case Type::tInt8:           return make_shared<ExprConstInt8>(at, cast<int8_t>::to(value));
+            case Type::tInt16:          return make_shared<ExprConstInt16>(at, cast<int16_t>::to(value));
             case Type::tInt64:          return make_shared<ExprConstInt64>(at, cast<int64_t>::to(value));
             case Type::tInt:            return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
             case Type::tInt2:           return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
             case Type::tInt3:           return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
             case Type::tInt4:           return make_shared<ExprConstInt4>(at, cast<int4>::to(value));
+            case Type::tUInt8:          return make_shared<ExprConstUInt8>(at, cast<uint8_t>::to(value));
+            case Type::tUInt16:         return make_shared<ExprConstUInt16>(at, cast<uint16_t>::to(value));
             case Type::tUInt64:         return make_shared<ExprConstUInt64>(at, cast<uint64_t>::to(value));
             case Type::tUInt:           return make_shared<ExprConstUInt>(at, cast<uint32_t>::to(value));
             case Type::tUInt2:          return make_shared<ExprConstUInt2>(at, cast<uint2>::to(value));

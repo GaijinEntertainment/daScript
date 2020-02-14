@@ -581,16 +581,14 @@ namespace das {
     }
 
     TypeDeclPtr ModuleLibrary::makeEnumType ( const string & name ) const {
-        auto t = make_shared<TypeDecl>(Type::tEnumeration);
         auto enums = findEnum(name,nullptr);
         if ( enums.size()==1 ) {
-            t->enumType = enums.back();
+            return enums.back()->makeEnumType();
         } else {
             DAS_FATAL_LOG("makeEnumType(%s) failed\n", name.c_str());
             DAS_FATAL_ERROR;
             return nullptr;
         }
-        return t;
     }
 
     // Module group

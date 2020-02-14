@@ -15,16 +15,17 @@ namespace das
     DEFINE_OP2_EVAL_ORDERED_POLICY(char *);
     DEFINE_OP2_EVAL_GROUPBYADD_POLICY(char *);
 
-    template <>
-    struct cast <EnumStub> {
-        static __forceinline struct EnumStub to ( vec4f x )               { union { struct EnumStub t; vec4f vec; } T; T.vec = x; return T.t; }
-        static __forceinline vec4f EnumStub ( EnumStub x )         { union { struct EnumStub t; vec4f vec; } T; T.t = x; return T.vec; }
+    template <typename QQ>
+    struct cast <EnumStubAny<QQ>> {
+        static __forceinline struct EnumStubAny<QQ> to(vec4f x)     { return prune<EnumStubAny<QQ>,vec4f>::from(x); }
+        static __forceinline vec4f from ( EnumStubAny<QQ> x )       { return prune<vec4f, EnumStubAny<QQ>>::from(x); }
     };
 
-    template<>
-    struct SimPolicy<EnumStub> {
-        static __forceinline int32_t to_enum ( vec4f val ) {
-            return cast<int32_t>::to(val);
+
+    template<typename QQ>
+    struct SimPolicy<EnumStubAny<QQ>> {
+        static __forceinline auto to_enum ( vec4f val ) {
+            return cast<QQ>::to(val);
         }
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
             return to_enum(a) == to_enum(b);
@@ -34,14 +35,27 @@ namespace das
         }
     };
 
-    template <> struct typeName<EnumStub>  { static string name() { return "enum"; } };
+    template <> struct typeName<EnumStub>    { static string name() { return "enum"; } };
+    template <> struct typeName<EnumStub8>   { static string name() { return "enum8"; } };
+    template <> struct typeName<EnumStub16>  { static string name() { return "enum16"; } };
+    template <> struct typeName<EnumStub64>  { static string name() { return "enum64"; } };
 
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub);
 
-    __forceinline int32_t enum_to_int ( EnumStub stub ) {
-        return stub.value;
-    }
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub8);
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub8);
+
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub16);
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub16);
+
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub64);
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub64);
+
+    __forceinline int32_t enum_to_int   ( EnumStub stub )   { return stub.value; }
+    __forceinline int32_t enum8_to_int  ( EnumStub8 stub )  { return stub.value; }
+    __forceinline int32_t enum16_to_int ( EnumStub16 stub ) { return stub.value; }
+    __forceinline int32_t enum64_to_int ( EnumStub64 stub ) { return int32_t(stub.value); }
 
     template <>
     struct SimPolicy<Func> {
@@ -119,6 +133,15 @@ namespace das
         // enum
         addFunctionBasic<EnumStub>(*this,lib);
         addExtern<DAS_BIND_FUN(enum_to_int)>(*this, lib, "int", SideEffects::none, "int");
+        // enum8
+        addFunctionBasic<EnumStub8>(*this,lib);
+        addExtern<DAS_BIND_FUN(enum8_to_int)>(*this, lib, "int", SideEffects::none, "int");
+        // enum16
+        addFunctionBasic<EnumStub16>(*this,lib);
+        addExtern<DAS_BIND_FUN(enum16_to_int)>(*this, lib, "int", SideEffects::none, "int");
+        // enum64
+        addFunctionBasic<EnumStub64>(*this,lib);
+        addExtern<DAS_BIND_FUN(enum64_to_int)>(*this, lib, "int", SideEffects::none, "int");
         // function
         addFunctionBasic<Func>(*this,lib);
         addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,const Func,const void *>>("==",lib,"==",false) );

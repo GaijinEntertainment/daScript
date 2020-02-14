@@ -24,7 +24,10 @@ namespace das {
         {   Type::tUInt64,      "tUInt64"  },
         {   Type::tString,      "tString" },
         {   Type::tPointer,     "tPointer" },
-        {   Type::tEnumeration, "tEnumeration" },
+        {   Type::tEnumeration,   "tEnumeration" },
+        {   Type::tEnumeration8,  "tEnumeration8" },
+        {   Type::tEnumeration16, "tEnumeration16" },
+        {   Type::tEnumeration64, "tEnumeration64" },
         {   Type::tIterator,    "tIterator" },
         {   Type::tArray,       "tArray" },
         {   Type::tTable,       "tTable" },
@@ -115,6 +118,9 @@ namespace das {
             case Type::tFloat:
             case Type::tDouble:
             case Type::tEnumeration:
+            case Type::tEnumeration8:
+            case Type::tEnumeration16:
+            case Type::tEnumeration64:
                 return true;
             default:
                 return false;
@@ -191,7 +197,7 @@ namespace das {
             } else {
                 stream << "void *";
             }
-        } else if ( baseType==Type::tEnumeration ) {
+        } else if ( type->isEnumT() ) {
             if ( type->enumType ) {
                 if ( type->enumType->external ) {
                     stream << "/*bound enum*/ " << type->enumType->cppName;
@@ -765,11 +771,11 @@ namespace das {
             if ( enu->external ) {
                 ss << "#if 0 // external enum\n";
             }
-            ss << "\nenum class " << enu->name << " {\n";
+            ss << "\nenum class " << enu->name << " : " << das_to_cppString(enu->baseType) << " {\n";
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu, name, value, last);
-            ss << "\t" << name << " = int32_t(";
+            ss << "\t" << name << " = " << das_to_cppString(enu->baseType) << "(";
         }
         virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             ss << ")";
@@ -1553,8 +1559,24 @@ namespace das {
             ss << c->getValue();
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit ( ExprConstInt8 * c ) override {
+            ss << c->getValue();
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt16 * c ) override {
+            ss << c->getValue();
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstInt64 * c ) override {
             ss << c->getValue() << "ll";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt8 * c ) override {
+            ss << "0x" << HEX << c->getValue() << DEC;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt16 * c ) override {
+            ss << "0x" << HEX << c->getValue() << DEC;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt64 * c ) override {

@@ -941,14 +941,30 @@ namespace das {
 
     // enumeration
 
+        ExpressionPtr makeEnumConstValue(Enumeration * enu, int64_t nextInt) const {
+            vec4f nextV = v_zero();
+            switch (enu->baseType) {
+            case Type::tInt8:   nextV = cast<int8_t>  ::from(int8_t  (nextInt)); break;
+            case Type::tUInt8:  nextV = cast<uint8_t> ::from(uint8_t (nextInt)); break;
+            case Type::tInt16:  nextV = cast<int16_t> ::from(int16_t (nextInt)); break;
+            case Type::tUInt16: nextV = cast<uint16_t>::from(uint16_t(nextInt)); break;
+            case Type::tInt:    nextV = cast<int32_t> ::from(int32_t (nextInt)); break;
+            case Type::tUInt:   nextV = cast<uint32_t>::from(uint32_t(nextInt)); break;
+            case Type::tInt64:  nextV = cast<int64_t> ::from(int64_t (nextInt)); break;
+            case Type::tUInt64: nextV = cast<uint64_t>::from(uint64_t(nextInt)); break;
+            }
+            auto nextValue = Program::makeConst(enu->at, enu->makeBaseType(), nextV);
+            nextValue->type = enu->makeBaseType();
+            return nextValue;
+        }
+
         virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             if ( !value ) {
                 if ( lastEnuValue ) {
-                    if ( lastEnuValue->rtti_isConstant() && lastEnuValue->type && lastEnuValue->type->isIndex() ) {
+                    if ( lastEnuValue->rtti_isConstant() && lastEnuValue->type && lastEnuValue->type->isInteger() ) {
                         reportGenericInfer();
-                        auto nextInt = getConstExprIntOrUInt(lastEnuValue->shared_from_this()) + 1;
-                        auto nextValue = make_shared<ExprConstInt>(nextInt);
-                        nextValue->type = make_shared<TypeDecl>(Type::tInt);
+                        int64_t nextInt = getConstExprIntOrUInt(lastEnuValue->shared_from_this()) + 1;
+                        auto nextValue = makeEnumConstValue(enu, nextInt);
                         lastEnuValue = nextValue.get();
                         return nextValue;
                     } else {
@@ -956,20 +972,26 @@ namespace das {
                     }
                 } else {
                     reportGenericInfer();
-                    auto zeroValue = make_shared<ExprConstInt>(0);
-                    zeroValue->type = make_shared<TypeDecl>(Type::tInt);
+                    auto zeroValue = Program::makeConst(enu->at, enu->makeBaseType(), v_zero());
+                    zeroValue->type = enu->makeBaseType();
                     lastEnuValue = zeroValue.get();
                     return zeroValue;
                 }
             } else {
                 if ( !value->type ) {
                     error("enumeration value " + name + " can't be infered yet", value->at);
-                } else if ( !value->type || !value->type->isIndex() ) {
-                    error("enumeration value " + name + " has to be int or uint",
+                } else if ( !value->type || !value->type->isInteger() ) {
+                    error("enumeration value " + name + " has to be signed or unsigned integer of any size",
                           value->at, CompilationError::invalid_enumeration);
                 } else if ( !value->rtti_isConstant() ) {
                     error("enumeration value " + name + " must be constant",
                           value->at, CompilationError::invalid_enumeration);
+                } else if (value->type->baseType != enu->baseType) {
+                    reportGenericInfer();
+                    int64_t thisInt = getConstExprIntOrUInt(value->shared_from_this());
+                    auto thisValue = makeEnumConstValue(enu, thisInt);
+                    lastEnuValue = thisValue.get();
+                    return thisValue;
                 }
             }
             lastEnuValue = value;
@@ -1305,11 +1327,14 @@ namespace das {
         }
     // const
         virtual ExpressionPtr visit ( ExprConst * c ) override {
-            c->type = make_shared<TypeDecl>(c->baseType);
-            c->type->constant = true;
-            if ( c->baseType == Type::tEnumeration ) {
+            if ( c->baseType==Type::tEnumeration || c->baseType==Type::tEnumeration8 ||
+                c->baseType==Type::tEnumeration16 || c->baseType==Type::tEnumeration64 ) {
                 auto cE = static_cast<ExprConstEnumeration *>(c);
-                c->type->enumType = cE->enumType;
+                c->type = cE->enumType->makeEnumType();
+                c->type->constant = true;
+            } else {
+                c->type = make_shared<TypeDecl>(c->baseType);
+                c->type->constant = true;
             }
             return Visitor::visit(c);
         }
@@ -3270,8 +3295,9 @@ namespace das {
                     auto enumc = static_cast<ExprConstEnumeration *>(expr);
                     auto enumv = enumc->enumType->find(enumc->text);
                     if ( !enumv.second ) return nullptr;                        // not found???
-                    if ( !enumv.first ) return nullptr;                         // not resolved
+                    if ( !enumv.first || !enumv.first->type ) return nullptr;   // not resolved
                     if ( !enumv.first->rtti_isConstant() ) return nullptr;      // not a constant
+                    if ( enumc->baseType != enumv.first->type->baseType ) return nullptr;   // not a constant of the same type
                 }
                 return expr->shared_from_this();
             }

@@ -112,13 +112,14 @@ namespace das {
     // enumeration
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
-            ss << "enum " << enu->name << "\n";
+            ss << "enum " << enu->name << " : " << das_to_string(enu->baseType) << "\n";
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu, name, value, last);
             ss << "\t" << name << " = ";
         }
         virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
+            if ( last ) ss << "\n";
             ss << "\n";
             return Visitor::visitEnumerationValue(enu, name, value, last);
         }
@@ -506,6 +507,22 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {
             ss << c->getValue();
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt8 * c ) override {
+            ss << c->getValue();
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt8 * c ) override {
+            ss << "0x" << HEX << c->getValue() << DEC;
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstInt16 * c ) override {
+            ss << c->getValue();
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstUInt16 * c ) override {
+            ss << "0x" << HEX << c->getValue() << DEC;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt64 * c ) override {

@@ -311,8 +311,28 @@ namespace das {
             label(c, to_string(c->getValue()));
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit(ExprConstInt8 * c) override {
+            label(c, to_string(c->getValue()));
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit(ExprConstInt16 * c) override {
+            label(c, to_string(c->getValue()));
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit(ExprConstInt64 * c) override {
             label(c, to_string(c->getValue()));
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit(ExprConstUInt8 * c) override {
+            TextWriter ss;
+            ss << "0x" << HEX << intptr_t(c->getValue()) << DEC;
+            label(c, ss.str());
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit(ExprConstUInt16 * c) override {
+            TextWriter ss;
+            ss << "0x" << HEX << intptr_t(c->getValue()) << DEC;
+            label(c, ss.str());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprConstUInt64 * c) override {

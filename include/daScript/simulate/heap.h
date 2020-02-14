@@ -216,6 +216,9 @@ namespace das {
             case Type::tInt64:          return makeNode<NodeType<int64_t>>(args...);
             case Type::tUInt64:         return makeNode<NodeType<uint64_t>>(args...);
             case Type::tEnumeration:    return makeNode<NodeType<int32_t>>(args...);
+            case Type::tEnumeration8:   return makeNode<NodeType<int8_t>>(args...);
+            case Type::tEnumeration16:  return makeNode<NodeType<int16_t>>(args...);
+            case Type::tEnumeration64:  return makeNode<NodeType<int64_t>>(args...);
             case Type::tInt:            return makeNode<NodeType<int32_t>>(args...);
             case Type::tInt2:           return makeNode<NodeType<int2>>(args...);
             case Type::tInt3:           return makeNode<NodeType<int3>>(args...);

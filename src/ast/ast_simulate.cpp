@@ -747,9 +747,32 @@ namespace das
         auto cfa = enumType->find(text);
         DAS_ASSERTF( cfa.second, "we should not even be here. enumeration value not found. failed to simulate" );
         vec4f envalue = v_zero();
-        int32_t iou = getConstExprIntOrUInt(cfa.first);
-		memcpy ( &envalue, &iou, sizeof(int32_t) );
-        return context.code->makeNode<SimNode_ConstValue>(at,envalue);
+        int64_t iou = getConstExprIntOrUInt(cfa.first);
+        switch (enumType->baseType) {
+        case Type::tInt8: 
+        case Type::tUInt8: {
+            int8_t tv = int8_t(iou); memcpy(&envalue, &tv, sizeof(int8_t));
+            return context.code->makeNode<SimNode_ConstValue>(at, envalue);
+        }
+        case Type::tInt16: 
+        case Type::tUInt16: {
+            int16_t tv = int16_t(iou); memcpy(&envalue, &tv, sizeof(int16_t));
+            return context.code->makeNode<SimNode_ConstValue>(at, envalue);
+        }
+        case Type::tInt: 
+        case Type::tUInt: {
+            int32_t tv = int32_t(iou); memcpy(&envalue, &tv, sizeof(int32_t));
+            return context.code->makeNode<SimNode_ConstValue>(at, envalue);
+        }
+        case Type::tInt64: 
+        case Type::tUInt64: {
+            memcpy(&envalue, &iou, sizeof(int64_t));
+            return context.code->makeNode<SimNode_ConstValue>(at, envalue);
+        }
+        default:
+            DAS_ASSERTF( 0, "we should not even be here. unsupported enumeration type." );
+            return nullptr;
+        }
     }
 
     SimNode * ExprConstString::simulate (Context & context) const {

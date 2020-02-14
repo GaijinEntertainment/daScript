@@ -488,13 +488,12 @@ namespace das {
                         }
                     } else {
                         if ( expr->type->isFoldable() && !expr->variable->access_init ) {
-                            if ( expr->type->baseType==Type::tEnumeration ) {
+                            if ( expr->type->isEnumT() ) {
                                 auto cfv = expr->type->enumType->find(0, "");
                                 if ( !cfv.empty() ) {
                                     reportFolding();
                                     auto exprV = make_shared<ExprConstEnumeration>(expr->at, cfv, make_shared<TypeDecl>(*expr->type));
-                                    exprV->type = make_shared<TypeDecl>(Type::tEnumeration);
-                                    exprV->type->enumType = expr->type->enumType;
+                                    exprV->type = expr->type->enumType->makeEnumType();
                                     exprV->type->constant = true;
                                     return exprV;
                                 }
