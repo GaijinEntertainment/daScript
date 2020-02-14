@@ -1022,6 +1022,7 @@ namespace das {
             case Type::tUInt:   nextV = cast<uint32_t>::from(uint32_t(nextInt)); break;
             case Type::tInt64:  nextV = cast<int64_t> ::from(int64_t (nextInt)); break;
             case Type::tUInt64: nextV = cast<uint64_t>::from(uint64_t(nextInt)); break;
+            default: DAS_ASSERTF(0,"we should not be here. unsupported enum type");
             }
             auto nextValue = Program::makeConst(enu->at, enu->makeBaseType(), nextV);
             nextValue->type = enu->makeBaseType();

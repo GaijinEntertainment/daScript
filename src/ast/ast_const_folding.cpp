@@ -241,6 +241,7 @@ namespace das {
                 case Type::tUInt:   ival = cast<uint32_t>::to(value); break;
                 case Type::tInt64:  ival = cast<int64_t>::to(value); break;
                 case Type::tUInt64: ival = cast<uint64_t>::to(value); break;
+                default: DAS_ASSERTF(0,"we should not be here. unsupported enum type");
                 }
                 auto cef = expr->type->enumType->find(ival, "");
                 if ( cef.empty() ) return expr->shared_from_this(); // it folded to unsupported value
