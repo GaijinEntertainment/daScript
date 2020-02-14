@@ -365,6 +365,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
     // register function
     addEquNeq<TestObjectFoo>(*this, lib);
+    addExtern<DAS_BIND_FUN(complex_bind)>(*this, lib, "complex_bind", SideEffects::modifyExternal, "complex_bind");
     addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init", SideEffects::none, "new_and_init");
     addExtern<DAS_BIND_FUN(get_screen_dimensions)>(*this, lib, "get_screen_dimensions", SideEffects::none, "get_screen_dimensions");
     addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::modifyExternal, "test_das_string");

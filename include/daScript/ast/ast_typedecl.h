@@ -269,6 +269,18 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct TArray;
+
+    template <typename TT>
+    struct typeFactory< TArray<TT> > {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_shared<TypeDecl>(Type::tArray);
+            t->firstType = typeFactory<TT>::make(lib);
+            return t;
+        }
+    };
+
     template <typename TT, int dim>
     struct typeFactory<TT[dim]> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
