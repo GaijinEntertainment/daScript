@@ -9,4 +9,6 @@ def test:bool
     var foo : TestObjectFoo
     foo.hit = UnitTest::getSamplePoint3()
     assert(foo.hit.x==0.0 & foo.hit.y==1.0 & foo.hit.z==2.0)
+	var qq = foo.hit
+	assert(qq.x==0.0 & qq.y==1.0 & qq.z==2.0)
     return true

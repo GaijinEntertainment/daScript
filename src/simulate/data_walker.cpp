@@ -197,7 +197,7 @@ namespace das {
                 case Type::tIterator: {
                         auto ll = (Sequence *) pa;
                         beforeIterator(ll, info);
-                        if ( ll && ll->iter ) {
+                        if ( ll->iter ) {
                             ll->iter->walk(*this);
                         } else {
                             Null(info);

@@ -37,6 +37,11 @@
     DAS_BASE_BIND_ENUM_CAST(enum_name##_DasProxy, #enum_name) \
     DAS_BASE_BIND_ENUM_CAST(enum_name, #enum_name)
 
+#define DAS_BIND_ENUM_CAST_98_IN_NAMESPACE(enum_name,stripped_enum_name) \
+    enum class stripped_enum_name##_DasProxy {}; \
+    DAS_BASE_BIND_ENUM_CAST(stripped_enum_name##_DasProxy, #enum_name) \
+    DAS_BASE_BIND_ENUM_CAST(enum_name, #enum_name)
+
 #define DAS_BASE_BIND_ENUM_BOTH(helper, enum_name, das_enum_name, ...) \
 class Enumeration##das_enum_name : public das::Enumeration {\
 public:\
@@ -56,6 +61,6 @@ public:\
     DAS_BASE_BIND_ENUM_FACTORY(enum_name, #das_enum_name)
 
 #define DAS_BASE_BIND_ENUM_98(enum_name, das_enum_name, ...) \
-    DAS_BASE_BIND_ENUM_BOTH(DAS_BIND_ENUM_UNQUALIFIED_HELPER, enum_name, das_enum_name, __VA_ARGS__)\
+    DAS_BASE_BIND_ENUM_BOTH(DAS_BIND_ENUM_QUALIFIED_HELPER, enum_name, das_enum_name, __VA_ARGS__)\
     DAS_BASE_BIND_ENUM_FACTORY(enum_name, #das_enum_name)\
     DAS_BASE_BIND_ENUM_FACTORY(das_enum_name##_DasProxy, #das_enum_name)

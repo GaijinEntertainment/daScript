@@ -8,6 +8,7 @@ using namespace das;
 DAS_BASE_BIND_ENUM(SomeEnum, SomeEnum, zero, one, two)
 
 DAS_BASE_BIND_ENUM(Goo::GooEnum, GooEnum, regular, hazardous)
+DAS_BASE_BIND_ENUM_98(Goo::GooEnum98, GooEnum98, soft, hard)
 
 Goo::GooEnum efn_flip ( Goo::GooEnum goo ) {
     return (goo == Goo::GooEnum::regular) ? Goo::GooEnum::hazardous : Goo::GooEnum::regular;

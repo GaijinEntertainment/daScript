@@ -1297,6 +1297,8 @@ namespace das
                 fieldOffset = value->type->getTupleFieldOffset(tupleIndex);
             }
         } else {
+            DAS_ASSERTF(field, "field can't be null");
+            if (!field) return nullptr;
             fieldOffset = field->offset;
         }
         DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
@@ -1793,15 +1795,16 @@ namespace das
                         sources[t]->at,
                         sources[t]->simulate(context));
                 } else if ( sources[t]->type->isHandle() ) {
-                    result->source_iterators[t] = sources[t]->type->annotation->simulateGetIterator(
-                         context,
-                         sources[t]->at,
-                         sources[t]
-                    );
                     if ( !result ) {
                         context.thisProgram->error("integration error, simulateGetIterator returned null",
                                                    at, CompilationError::missing_node );
                         return nullptr;
+                    } else {
+                        result->source_iterators[t] = sources[t]->type->annotation->simulateGetIterator(
+                            context,
+                            sources[t]->at,
+                            sources[t]
+                        );                    
                     }
                 } else if ( sources[t]->type->dim.size() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(
@@ -2162,10 +2165,11 @@ namespace das
                 }
             }
             for ( int i=0; i!=context.totalFunctions; ++i ) {
-                SimFunction * fn = context.getFunction(i);
-                logs << "// " << fn->name << "\n";
-                printSimNode(logs, fn->code);
-                logs << "\n\n";
+                if (SimFunction * fn = context.getFunction(i)) {
+                    logs << "// " << fn->name << "\n";
+                    printSimNode(logs, fn->code);
+                    logs << "\n\n";
+                }
             }
         }
         // run init script and restart

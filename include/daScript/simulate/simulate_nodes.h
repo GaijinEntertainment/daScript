@@ -1427,14 +1427,17 @@ SIM_NODE_AT_VECTOR(Float, float)
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             Sequence * ptr = (Sequence *) subexpr->evalPtr(context);
+            char * res = nullptr;
             if ( !ptr ) {
                 context.throw_error_at(debugInfo,"dereferencing null sequence");
+            } else {
+                res = (char *) ptr->iter;
+                if ( !res ) {
+                    context.throw_error_at(debugInfo,"iterator is empty or already consumed");
+                } else {
+                    ptr->iter = nullptr;
+                }
             }
-            char * res = (char *) ptr->iter;
-            if ( !res ) {
-                context.throw_error_at(debugInfo,"iterator is empty or already consumed");
-            }
-            ptr->iter = nullptr;
             return res;
         }
         SimNode * subexpr;
@@ -2058,7 +2061,12 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNode_ForWithIteratorBase : SimNode_Block {
         SimNode_ForWithIteratorBase ( const LineInfo & at )
-            : SimNode_Block(at) {}
+            : SimNode_Block(at) {
+            for ( int i = 0; i != MAX_FOR_ITERATORS; ++i ) {
+                source_iterators[i] = nullptr;
+                stackTop[i] = 0;
+            }
+        }
         SimNode * visitFor ( SimVisitor & vis, int total );
         SimNode *   source_iterators[MAX_FOR_ITERATORS];
         uint32_t    stackTop[MAX_FOR_ITERATORS];

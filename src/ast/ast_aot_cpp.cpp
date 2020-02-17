@@ -1056,6 +1056,9 @@ namespace das {
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
             ss << " = ";
+            if ( expr->type->aotAlias ) {
+                ss << "das_alias<" << expr->type->alias << ">::from(";
+            }
             if ( var->type->constant ) {
                 ss << "(";
                 describeVarLocalCppType(ss, var->type);
@@ -1079,6 +1082,9 @@ namespace das {
                 ss << ")";
             }
             if ( var->type->ref ) {
+                ss << ")";
+            }
+            if ( expr->type->aotAlias ) {
                 ss << ")";
             }
             return Visitor::visitLetInit(let, var, expr);
