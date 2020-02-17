@@ -11,4 +11,6 @@ def test:bool
     assert(foo.hit.x==0.0 & foo.hit.y==1.0 & foo.hit.z==2.0)
 	var qq = foo.hit
 	assert(qq.x==0.0 & qq.y==1.0 & qq.z==2.0)
+	var qq1 = UnitTest::getSamplePoint3()
+	assert(qq1.x==0.0 & qq1.y==1.0 & qq1.z==2.0)
     return true

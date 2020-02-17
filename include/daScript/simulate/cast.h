@@ -31,6 +31,12 @@ namespace das
         static __forceinline VT from ( const PT & value ) {
             return prune<VT,PT>::from(value);
         }
+        static __forceinline VT & from ( VT & value ) {
+            return value;
+        }
+        static __forceinline VT from ( const VT & value ) {
+            return value;
+        }
         static __forceinline PT & to ( VT & value ) {
             return *((PT *)&value);
         }
