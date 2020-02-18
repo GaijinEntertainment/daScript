@@ -1230,7 +1230,7 @@ namespace das {
                 error("global variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
-            } else if ( var->type->isRef() && !var->type->isConst() && var->init->type->isConst() ) {
+            } else if ( var->type->ref && !var->type->isConst() && var->init->type->isConst() ) {
                 error("global variable " + var->name + " initialization type mismatch, const matters "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                       CompilationError::invalid_initialization_type);
@@ -3697,7 +3697,7 @@ namespace das {
                 error("local variable " + var->name + " initialization type mismatch. reference can't be initialized via value, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
-            } else if ( var->type->isRef() &&  !var->type->isConst() && var->init->type->isConst() ) {
+            } else if ( var->type->ref &&  !var->type->isConst() && var->init->type->isConst() ) {
                 error("local variable " + var->name + " initialization type mismatch. const matters, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                     CompilationError::invalid_initialization_type);
