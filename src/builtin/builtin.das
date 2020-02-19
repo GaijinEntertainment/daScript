@@ -123,6 +123,28 @@ def values(a:table<auto(keyT);auto(valT)>) : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type valT))
     return <- it
 
+[unsafe]
+def finalize_dim(var a : auto(TT)[])
+    if typeinfo(can_delete type TT)
+        for aV in a
+            delete aV
+    else
+        concept_assert(false,"can't finalize this array")
+
+[unsafe]
+def finalize(var a:array<auto(TT)>)
+    if typeinfo(can_delete type TT)
+        for aV in a
+            delete aV
+    builtin_array_free(a,typeinfo(sizeof type TT))
+
+[unsafe]
+def finalize(var a:table<auto(TK);auto(TV)>)
+    if typeinfo(can_delete type TV)
+        for aV in values(a)
+            delete aV
+    builtin_table_free(a,typeinfo(sizeof type TK),typeinfo(sizeof type TV))
+
 // temporal
 
 [unsafe]

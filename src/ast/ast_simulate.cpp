@@ -927,6 +927,7 @@ namespace das
     
     SimNode * ExprDelete::simulate (Context & context) const {
         uint32_t total = uint32_t(subexpr->type->getCountOf());
+        DAS_ASSERTF(total==1,"we should not be deleting more than one at a time");
         auto sube = subexpr->simulate(context);
         if ( subexpr->type->baseType==Type::tArray ) {
             auto stride = subexpr->type->firstType->getSizeOf();

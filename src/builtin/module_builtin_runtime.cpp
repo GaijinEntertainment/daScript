@@ -388,6 +388,30 @@ namespace das
         context->dumpProfileInfo();
     }
 
+    void builtin_array_free ( Array & dim, int szt, Context * __context__ ) {
+        if ( dim.data ) {
+            if ( !dim.lock ) {
+                uint32_t oldSize = dim.capacity*szt;
+                __context__->heap.free(dim.data, oldSize);
+            } else {
+                __context__->throw_error("can't delete locked array");
+            }
+        }
+        memset ( &dim, 0, sizeof(Array) );
+    }
+
+    void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ ) {
+        if ( tab.data ) {
+            if ( !tab.lock ) {
+                uint32_t oldSize = tab.capacity*(szk+szv+sizeof(uint32_t));
+                __context__->heap.free(tab.data, oldSize);
+            } else {
+                __context__->throw_error("can't delete locked table");
+            }
+        }
+        memset ( &tab, 0, sizeof(Table) );
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_shared<CommentAnnotation>());
@@ -474,6 +498,9 @@ namespace das
                                                     SideEffects::modifyArgumentAndExternal, "builtin_table_keys");
         addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
                                                       SideEffects::modifyArgumentAndExternal, "builtin_table_values");
+        // array and table free
+        addExtern<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "builtin_array_free", SideEffects::modifyArgumentAndExternal, "builtin_array_free");
+        addExtern<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "builtin_table_free", SideEffects::modifyArgumentAndExternal, "builtin_table_free");
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");

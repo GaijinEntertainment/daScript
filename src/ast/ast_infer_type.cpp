@@ -908,14 +908,7 @@ namespace das {
             return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
         }
 
-        vector<FunctionPtr> getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
-            vector<TypeDeclPtr> argDummy;
-            argDummy.push_back(make_shared<TypeDecl>(*left));
-            argDummy.push_back(make_shared<TypeDecl>(*right));
-            return findMatchingFunctions("clone", argDummy);
-        }
-
-        bool verifyCloneFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
+        bool verifyAnyFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
             int genCount = 0;
             int customCount = 0;
             for ( auto & fn : fnList ) {
@@ -927,17 +920,38 @@ namespace das {
             }
             if ( customCount && genCount ) {
                 string candidates = program->describeCandidates(fnList);
-                error("both generated and custom clone functions exist for " + fnList[0]->describe(), at,
+                error("both generated and custom " + fnList[0]->name + " functions exist for " + fnList[0]->describe(), at,
                       CompilationError::function_not_found);
                 return false;
             } else if ( customCount>1 ) {
                 string candidates = program->describeCandidates(fnList);
-                error("too many custom clone functions exist for " + fnList[0]->describe(), at,
+                error("too many custom  " + fnList[0]->name + " functions exist for " + fnList[0]->describe(), at,
                       CompilationError::function_not_found);
                 return false;
             } else {
                 return true;
             }
+        }
+
+        vector<FunctionPtr> getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
+            vector<TypeDeclPtr> argDummy;
+            argDummy.push_back(make_shared<TypeDecl>(*left));
+            argDummy.push_back(make_shared<TypeDecl>(*right));
+            return findMatchingFunctions("clone", argDummy);
+        }
+
+        bool verifyCloneFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
+            return verifyAnyFunc(fnList, at);
+        }
+
+        vector<FunctionPtr> getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
+            vector<TypeDeclPtr> argDummy;
+            argDummy.push_back(make_shared<TypeDecl>(*subexpr));
+            return findMatchingFunctions("finalize", argDummy);
+        }
+
+        bool verifyFinalizeFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
+            return verifyAnyFunc(fnList, at);
         }
 
         ExprWith * hasMatchingWith ( const string & fieldName ) const {
@@ -1643,6 +1657,9 @@ namespace das {
                 error("generator of udefined type " + expr->iterType->describe(), expr->at,
                       CompilationError::type_not_found);
                 return Visitor::visit(expr);
+            } else if ( expr->iterType->isVoid() ) {
+                error("generator can't be void (yet)", expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
             }
             if ( expr->arguments.size()!=1 ) {
                 error("expecting generator(closure)", expr->at, CompilationError::invalid_argument_count);
@@ -2117,6 +2134,12 @@ namespace das {
                 } else if ( expr->trait=="can_move" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
+                } else if ( expr->trait=="can_delete" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canDelete());
+                } else if ( expr->trait=="need_delete" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->needDelete());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportGenericInfer();
@@ -2251,9 +2274,23 @@ namespace das {
             // infer
             return Visitor::visit(expr);
         }
-    // ExprDelete
+    // ExprClone
         virtual ExpressionPtr visit ( ExprDelete * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
+            auto fnList = getFinalizeFunc(expr->subexpr->type);
+            if ( fnList.size() ) {
+                if ( verifyFinalizeFunc(fnList, expr->at) ) {
+                    auto fn = fnList[0];
+                    string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
+                    auto finalizeFn = make_shared<ExprCall>(expr->at, finalizeName);
+                    finalizeFn->arguments.push_back(expr->subexpr->clone());
+                    return ExpressionPtr(finalizeFn);
+                } else {
+                    return Visitor::visit(expr);
+                }
+            }
+            // infer
             if ( !expr->subexpr->type->canDelete() ) {
                 error("can't delete " + expr->subexpr->type->describe(),
                       expr->at, CompilationError::bad_delete);
@@ -2268,8 +2305,44 @@ namespace das {
                     error("delete of pointer requires [unsafe]", expr->at,
                           CompilationError::unsafe);
                 }
+            } else {
+                auto finalizeType = expr->subexpr->type;
+                if ( finalizeType->isGoodArrayType() || finalizeType->isGoodTableType() ) {
+                    reportGenericInfer();
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                    cloneFn->arguments.push_back(expr->subexpr->clone());
+                    return ExpressionPtr(cloneFn);
+                } else if ( finalizeType->isStructure() ) {
+                    // TODO: generate structure erase code
+                    return Visitor::visit(expr);
+                    /*
+                    reportGenericInfer();
+                    auto stt = finalizeType->structType;
+                    fnList = getCloneFunc(finalizeType,finalizeType);
+                    if ( verifyCloneFunc(fnList, expr->at) ) {
+                        if ( fnList.size()==0 ) {
+                            auto clf = makeClone(stt);
+                            clf->privateFunction = program->policies.private_clones;
+                            extraFunctions.push_back(clf);
+                        }
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                        cloneFn->arguments.push_back(expr->left->clone());
+                        cloneFn->arguments.push_back(expr->right->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                    */
+                } else if ( finalizeType->dim.size() ) {
+                    reportGenericInfer();
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "finalize_dim");
+                    cloneFn->arguments.push_back(expr->subexpr->clone());
+                    return ExpressionPtr(cloneFn);
+                } else {
+                    expr->type = make_shared<TypeDecl>();
+                    return Visitor::visit(expr);
+                }
             }
-            expr->type = make_shared<TypeDecl>();
             return Visitor::visit(expr);
         }
     // ExprCast

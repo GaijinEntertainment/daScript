@@ -258,6 +258,7 @@ namespace das
         virtual bool isLocal() const { return false; }
         virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
+        virtual bool needDelete() const { return canDelete(); }
         virtual bool canDeletePtr() const { return false; }
         virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
         virtual bool isIterable ( ) const { return false; }

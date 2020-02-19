@@ -90,6 +90,7 @@ namespace das {
         bool canMove() const;
         bool canClone() const;
         bool canDelete() const;
+        bool needDelete() const;
         bool isPod() const;
         bool isRawPod() const;
         bool isNoHeapType() const;

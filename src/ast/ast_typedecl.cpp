@@ -175,6 +175,7 @@ namespace das
         // now, lets make the type
         auto TT = make_shared<TypeDecl>(*initT);
         TT->at = autoT->at;
+        TT->aotAlias = autoT->aotAlias;
         TT->alias = autoT->alias;
         TT->removeRef = false;
         TT->removeConstant = false;
@@ -429,6 +430,23 @@ namespace das
             return true;
         } else if ( baseType==Type::tString ) {
             return true;
+        } else {
+            return false;
+        }
+    }
+
+    bool TypeDecl::needDelete() const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->needDelete();
+        } else if ( baseType==Type::tPointer ) {
+            return false;
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            return true;
+        } else if ( baseType==Type::tString ) {
+            return true;
+        } else if ( baseType==Type::tStructure ) {
+            // TODO: support structure -> need delete?
+            return false;
         } else {
             return false;
         }
