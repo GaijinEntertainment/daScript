@@ -272,9 +272,9 @@ namespace das {
     template <typename TT> struct das_index<vec3<TT>> : das_vec_index<TT, vec3<TT>, 3> {};
     template <typename TT> struct das_index<vec4<TT>> : das_vec_index<TT, vec4<TT>, 4> {};
 
-    template <typename TT> struct das_index<const vec2<TT>> : das_vec_index<TT, const vec2<TT>, 2> {};
-    template <typename TT> struct das_index<const vec3<TT>> : das_vec_index<TT, const vec3<TT>, 3> {};
-    template <typename TT> struct das_index<const vec4<TT>> : das_vec_index<TT, const vec4<TT>, 4> {};
+    template <typename TT> struct das_index<const vec2<TT>> : das_vec_index<TT, vec2<TT>, 2> {};
+    template <typename TT> struct das_index<const vec3<TT>> : das_vec_index<TT, vec3<TT>, 3> {};
+    template <typename TT> struct das_index<const vec4<TT>> : das_vec_index<TT, vec4<TT>, 4> {};
 
 
     template <typename VecT, int size>
