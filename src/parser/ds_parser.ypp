@@ -1117,6 +1117,14 @@ block_or_simple_block
             blkE->list.push_back(retE);
             $$ = blkE;
     }
+    |   MAPTO[loc] LARROW expr[subexpr]        {
+            auto retE = make_shared<ExprReturn>(tokAt(@loc), ExpressionPtr($subexpr));
+			retE->moveSemantics = true;
+            auto blkE = new ExprBlock();
+            blkE->at = tokAt(@loc);
+            blkE->list.push_back(retE);
+            $$ = blkE;
+    }
     ;
 
 block_or_lambda
