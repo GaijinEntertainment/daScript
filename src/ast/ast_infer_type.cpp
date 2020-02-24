@@ -4478,7 +4478,37 @@ namespace das {
 
     // program
 
-    void Program::inferTypes(TextWriter & logs) {
+    // try infer, if failed - no macros
+    // run macros til any of them does work, then reinfer and restart (i.e. infer after each macro)
+    void Program::inferTypes(TextWriter &logs, ModuleGroup & libGroup) {
+        inferTypesNoMacro(logs);
+        if ( failed() ) return;
+        bool anyMacrosDidWork;
+        do {
+            anyMacrosDidWork = false;
+            libGroup.foreach([&](Module * mod) -> bool {    // we run all macros for each module
+                for ( const auto & pm : mod->macros ) {
+                    this->visit(*pm);
+                    if ( failed() ) {                       // if macro failed, we report it, and we are done
+                        error("macro " + mod->name + "::" + pm->macroName() + " failed", LineInfo());
+                        return false;
+                    }
+                    if ( pm->didAnything() ) {              // if macro did anything, we done
+                        inferTypesNoMacro(logs);
+                        if ( failed() ) {                   // if it failed to infer types after, we report it
+                            error("macro " + mod->name + "::" + pm->macroName() + " failed to infer", LineInfo());
+                            return false;
+                        }
+                        anyMacrosDidWork = true;            // if any work been done, we start over
+                        return false;
+                    }
+                }
+                return true;
+            },"*");
+        } while ( !failed() && anyMacrosDidWork );
+    }
+
+    void Program::inferTypesNoMacro(TextWriter & logs) {
         const bool log = options.getBoolOption("log_infer_passes",false);
         int pass = 0, maxPasses = 50;
         if (auto maxP = options.find("max_infer_passes", Type::tInt)) {

@@ -28,6 +28,9 @@ namespace das
     struct Expression;
     typedef shared_ptr<Expression> ExpressionPtr;
 
+    class VisitorMacro;
+    typedef shared_ptr<VisitorMacro> VisitorMacroPtr;
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -631,6 +634,7 @@ namespace das
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<uint32_t, uint64_t>                 annotationData;
         das_map<Module *,bool>                      requireModule;      // visibility modules
+        vector<VisitorMacroPtr>                     macros;
         string  name;
         bool    builtIn = false;
     private:
@@ -753,7 +757,8 @@ namespace das
         bool addGeneric ( const FunctionPtr & fn );
         Module * addModule ( const string & name );
         void finalizeAnnotations();
-        void inferTypes(TextWriter & logs);
+        void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
+        void inferTypesNoMacro(TextWriter & logs);
         void lint();
         void checkSideEffects();
         bool optimizationRefFolding();

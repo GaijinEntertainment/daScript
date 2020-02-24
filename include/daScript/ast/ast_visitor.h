@@ -26,6 +26,9 @@ namespace das {
         // what do we visit
         virtual bool canVisitFunction ( Function * fun ) { return true; }
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
+        // WHOLE PROGRAM
+        virtual void preVisitProgram () {}
+        virtual void visitProgram () {}
         // TYPE
         virtual void preVisit ( TypeDecl * td ) {}
         virtual TypeDeclPtr visit ( TypeDecl * td ) { return td->shared_from_this(); }
@@ -241,16 +244,20 @@ namespace das {
 #pragma clang diagnostic pop
 #endif
 
-    class OptVisitor : public Visitor {
+    class VisitorMacro : public Visitor {
     public:
+        VisitorMacro ( const string & na = "" ) : name(na) {}
         bool didAnything () const { return anyFolding; }
+        const string & macroName() const { return name; }
     protected:
         void reportFolding();
+        virtual void preVisitProgram () override;
     private:
-        bool anyFolding = false;
+        bool    anyFolding = false;
+        string  name;
     };
 
-    class FoldingVisitor : public OptVisitor {
+    class FoldingVisitor : public VisitorMacro {
     public:
         FoldingVisitor( const ProgramPtr & prog ) 
             : program(prog)

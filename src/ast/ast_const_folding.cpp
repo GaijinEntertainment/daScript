@@ -11,7 +11,12 @@ TODO:
 
 namespace das {
 
-    void OptVisitor::reportFolding() {
+    void VisitorMacro::preVisitProgram () {
+        Visitor::preVisitProgram();
+        anyFolding = false;
+    }
+
+    void VisitorMacro::reportFolding() {
         anyFolding = true;
     }
 

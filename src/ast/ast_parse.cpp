@@ -199,7 +199,7 @@ namespace das {
             sort(program->errors.begin(),program->errors.end());
             return program;
         } else {
-            program->inferTypes(logs);
+            program->inferTypes(logs, libGroup);
             if ( !program->failed() ) {
                 program->lint();
                 if (program->options.getBoolOption("optimize", true)) {

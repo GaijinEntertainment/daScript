@@ -2071,6 +2071,8 @@ namespace das {
     }
 
     void Program::visit(Visitor & vis, bool visitGenerics ) {
+        // before program
+        vis.preVisitProgram();
         // enumerations
         for ( auto & ite : thisModule->enumerations ) {
             ite.second = visitEnumeration(vis, ite.second.get());
@@ -2129,6 +2131,8 @@ namespace das {
                 }
             }
         }
+        // done
+        vis.visitProgram();
     }
 
     void Program::optimize(TextWriter & logs) {

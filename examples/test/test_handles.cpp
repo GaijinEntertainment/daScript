@@ -352,6 +352,39 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
     }
 };
 
+uint32_t CheckEid2 ( char * const name, Context * context ) {
+    return hash_function(*context, name);
+}
+
+uint32_t CheckEidHint2 ( char * const name, uint32_t hashHint, Context * context ) {
+    uint32_t hv = hash_function(*context, name);
+    if ( hv != hashHint ) context->throw_error("invalid hash value");
+    return hashHint;
+}
+
+class CheckEid2Macro : public VisitorMacro {
+public:
+    CheckEid2Macro ( Module * tm ) : VisitorMacro("CheckEid2") , thisModule(tm) {}
+protected:
+    virtual ExpressionPtr visit ( ExprCall * call ) override {
+        if ( call->name=="CheckEid2" && call->func->module==thisModule && call->arguments.size()==2 ) {
+            const auto & nameArg = call->arguments[0];
+            if ( nameArg->rtti_isStringConstant() ) {
+                // add 2nd argument, which is hash of the string
+                auto name = static_pointer_cast<ExprConstString>(nameArg)->getValue();
+                auto hv = hash_blockz32((uint8_t *)name.c_str());
+                auto hvc = make_shared<ExprConstUInt>(nameArg->at, hv);
+                call->arguments.insert(call->arguments.begin() + 1, hvc);
+                reportFolding();
+                return call->shared_from_this();
+            }
+        }
+        return VisitorMacro::visit(call);
+    }
+protected:
+    Module * thisModule;
+};
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -393,6 +426,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     auto ceid_decl = make_shared<AnnotationDeclaration>();
     ceid_decl->annotation = make_shared<CheckEidFunctionAnnotation>();
     ceid->annotations.push_back(ceid_decl);
+    // register CheckEid2 functoins and macro
+    addExtern<DAS_BIND_FUN(CheckEidHint2)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEidHint2");
+    addExtern<DAS_BIND_FUN(CheckEid2)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEid2");
+    macros.push_back(make_shared<CheckEid2Macro>(this));
     // and verify
     verifyAotReady();
 }
