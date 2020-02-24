@@ -246,15 +246,15 @@ namespace das {
 
     class VisitorMacro : public Visitor {
     public:
-        VisitorMacro ( const string & na = "" ) : name(na) {}
+        VisitorMacro ( const string & na = "" ) : macName(na) {}
         bool didAnything () const { return anyFolding; }
-        const string & macroName() const { return name; }
+        const string & macroName() const { return macName; }
     protected:
         void reportFolding();
         virtual void preVisitProgram () override;
     private:
         bool    anyFolding = false;
-        string  name;
+        string  macName;
     };
 
     class FoldingVisitor : public VisitorMacro {
