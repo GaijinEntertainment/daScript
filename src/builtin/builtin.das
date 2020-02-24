@@ -31,6 +31,13 @@ def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
+def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
+    __builtin_table_lock(Tab)
+    var val = __builtin_table_find(Tab,at)
+	if val != null
+		invoke(blk,val)
+    __builtin_table_unlock(Tab)
+
 [unsafe_operation,unsafe]
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT const?
     return reinterpret<valT const?>(__builtin_table_find(Tab,at))
@@ -43,6 +50,13 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
+    __builtin_table_unlock(Tab)
+
+def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
+    __builtin_table_lock(Tab)
+    var val = __builtin_table_find(Tab,at)
+	if val != null
+		invoke(blk,val)
     __builtin_table_unlock(Tab)
 
 [unsafe_operation]

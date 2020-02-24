@@ -90,6 +90,12 @@ namespace das {
         resetFusionEngine();
     }
 
+    void Module::foreach ( function<bool (Module * module)> && func ) {
+        for (auto m = modules; m != nullptr; m = m->next) {
+            if (!func(m)) break;
+        }
+    }
+
     Module * Module::require ( const string & name ) {
         for ( auto m = modules; m != nullptr; m = m->next ) {
             if ( m->name == name ) {

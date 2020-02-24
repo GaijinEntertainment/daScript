@@ -201,9 +201,9 @@ namespace das {
         } else {
             program->inferTypes(logs, libGroup);
             if ( !program->failed() ) {
-                program->lint();
+                program->lint(libGroup);
                 if (program->options.getBoolOption("optimize", true)) {
-                    program->optimize(logs);
+                    program->optimize(logs,libGroup);
                 } else {
                     program->buildAccessFlags(logs);
                 }

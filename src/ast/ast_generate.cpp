@@ -6,6 +6,36 @@
 
 namespace das {
 
+    bool isExpressionVariable(const ExpressionPtr & expr, const string & name) {
+        if (expr->rtti_isVar()) {
+            auto var = static_pointer_cast<ExprVar>(expr);
+            return var->name == name;
+        }
+        return false;
+    }
+
+    bool isExpressionVariableDeref(const ExpressionPtr & expr, const string & name) {
+        if (expr->rtti_isVar()) {
+            auto var = static_pointer_cast<ExprVar>(expr);
+            return var->name == name;
+        } else if (expr->rtti_isR2V()) {
+            auto r2v = static_pointer_cast<ExprRef2Value>(expr);
+            if (r2v->subexpr->rtti_isVar()) {
+                auto var = static_pointer_cast<ExprVar>(r2v->subexpr);
+                return var->name == name;
+            }
+        }
+        return false;
+    }
+
+    bool isExpressionNull(const ExpressionPtr & expr) {
+        if (expr->rtti_isConstant() && expr->type->isPointer()) {
+            auto cptr = static_pointer_cast<ExprConstPtr>(expr);
+            return cptr->getValue() == nullptr;
+        }
+        return false;
+    }
+
 #define VERIFY_GENERATED    0
 #define LOG_GENERATED       0
 

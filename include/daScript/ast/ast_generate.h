@@ -4,6 +4,12 @@
 
 namespace das {
 
+    // ExprVar, where name matches
+    bool isExpressionVariable(const ExpressionPtr & expr, const string & name);         // only var
+    bool isExpressionVariableDeref(const ExpressionPtr & expr, const string & name);    // r2v(var) or var
+    // ExprConstPtr, where value is nullptr
+    bool isExpressionNull(const ExpressionPtr & expr);
+
     // make sure generated code contains line information etc
     void verifyGenerated ( const ExpressionPtr & expr );
 

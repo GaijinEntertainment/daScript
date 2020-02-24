@@ -4486,7 +4486,7 @@ namespace das {
         bool anyMacrosDidWork;
         do {
             anyMacrosDidWork = false;
-            libGroup.foreach([&](Module * mod) -> bool {    // we run all macros for each module
+            auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
                 for ( const auto & pm : mod->macros ) {
                     this->visit(*pm);
                     if ( failed() ) {                       // if macro failed, we report it, and we are done
@@ -4504,7 +4504,11 @@ namespace das {
                     }
                 }
                 return true;
-            },"*");
+            };
+            Module::foreach(modMacro);
+            if (failed()) break;
+            if (anyMacrosDidWork) continue;
+            libGroup.foreach(modMacro, "*");
         } while ( !failed() && anyMacrosDidWork );
     }
 

@@ -265,7 +265,7 @@ namespace das {
         DAS_VERIFYF(!failed, "verifyOptions failed");
     }
 
-    void Program::lint() {
+    void Program::lint ( ModuleGroup & libGroup ) {
         if (!options.getBoolOption("lint", true)) {
             return;
         }
@@ -308,6 +308,12 @@ namespace das {
                       CompilationError::invalid_option);
             }
         }
+        libGroup.foreach([&](Module * mod) -> bool {
+            for ( const auto & pm : mod->lintMacros ) {
+                this->visit(*pm);
+            }
+            return true;
+        },"*");
     }
 }
 

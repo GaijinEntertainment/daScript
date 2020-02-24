@@ -28,8 +28,14 @@ namespace das
     struct Expression;
     typedef shared_ptr<Expression> ExpressionPtr;
 
+    class LintMacro;
+    typedef shared_ptr<LintMacro> LintMacroPtr;
+
     class VisitorMacro;
     typedef shared_ptr<VisitorMacro> VisitorMacroPtr;
+
+    class OptimizationMacro;
+    typedef shared_ptr<OptimizationMacro> OptimizationMacroPtr;
 
     struct AnnotationArgumentList;
 
@@ -604,6 +610,7 @@ namespace das
         static void Shutdown();
         static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
         static Type findOption ( const string & name );
+        static void foreach(function<bool(Module * module)> && func);
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);
@@ -634,7 +641,9 @@ namespace das
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<uint32_t, uint64_t>                 annotationData;
         das_map<Module *,bool>                      requireModule;      // visibility modules
-        vector<VisitorMacroPtr>                     macros;
+        vector<VisitorMacroPtr>                     macros;             // infer macros (hygenic)
+        vector<OptimizationMacroPtr>                optimizationMacros; // optimization macros (non-hygenic)
+        vector<LintMacroPtr>                        lintMacros;         // lint macros (read-only)
         string  name;
         bool    builtIn = false;
     private:
@@ -759,7 +768,7 @@ namespace das
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesNoMacro(TextWriter & logs);
-        void lint();
+        void lint ( ModuleGroup & libGroup );
         void checkSideEffects();
         bool optimizationRefFolding();
         bool optimizationConstFolding();
@@ -769,7 +778,7 @@ namespace das
         void fusion ( Context & context, TextWriter & logs );
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
-        void optimize(TextWriter & logs);
+        void optimize(TextWriter & logs, ModuleGroup & libGroup);
         void markSymbolUse(bool builtInSym);
         void clearSymbolUse();
         void markOrRemoveUnusedSymbols(bool forceAll = false);

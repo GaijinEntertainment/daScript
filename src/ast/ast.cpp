@@ -2135,7 +2135,7 @@ namespace das {
         vis.visitProgram();
     }
 
-    void Program::optimize(TextWriter & logs) {
+    void Program::optimize(TextWriter & logs, ModuleGroup & libGroup) {
         const bool log = options.getBoolOption("log_optimization_passes",false);
         bool any, last;
         if (log) {
@@ -2157,6 +2157,24 @@ namespace das {
             // this is here again for a reason
             last = optimizationUnused(logs);    if ( failed() ) break;  any |= last;
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n" << *this;
+            // now, user macros
+            last = false;
+            auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
+                for ( const auto & pm : mod->optimizationMacros ) {
+                    this->visit(*pm);
+                    if ( failed() ) {                       // if macro failed, we report it, and we are done
+                        error("optimization macro " + mod->name + "::" + pm->macroName() + " failed", LineInfo());
+                        return false;
+                    }
+                    last |= pm->didAnything();
+                }
+                return true;
+            };
+            Module::foreach(modMacro);
+            if ( failed() ) break;  any |= last;
+            libGroup.foreach(modMacro,"*");
+            if ( failed() ) break;  any |= last;
+            if ( log ) logs << "MACROS:" << (last ? "optimized" : "nothing") << "\n" << *this;
         } while ( any );
     }
 }

@@ -167,6 +167,8 @@ namespace das
         addTime(lib);
         // NOW, for the builtin module
         appendCompiledFunctions();
+        // now, macros
+        addMacros(lib);
         // lets verify options (it is here because its the builtin module)
         verifyOptions();
         // lets verify all names
