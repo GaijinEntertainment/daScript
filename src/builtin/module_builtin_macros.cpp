@@ -116,6 +116,9 @@ namespace das {
             return OptimizationMacro::visit(call);
         }
         virtual ExpressionPtr visit ( ExprOp2 * op2 ) override {
+            if ( !op2->left->noSideEffects && !op2->right->noSideEffects ) {    // side effects on both sides, can't reorder
+                return OptimizationMacro::visit(op2);
+            }
             /*
                 transpose(b) * transpose(a) = transpose(a*b)
              */
