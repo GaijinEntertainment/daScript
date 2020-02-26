@@ -14,9 +14,9 @@ namespace das {
             re-doing type inference on optimized tree will put too much strain on optimization passes (block variable renaming etc)
             so for now this stays as infer-time pass, and would do its function replacement goo there
     */
-    class OptimizeBuiltinFunctions : public VisitorMacro {
+    class InferBuiltinFunctions : public VisitorMacro {
     public:
-        OptimizeBuiltinFunctions ( Module * tm ) : VisitorMacro("OptimizeBuiltinFunctions") , thisModule(tm) {}
+        InferBuiltinFunctions ( Module * tm ) : VisitorMacro("InferBuiltinFunctions") , thisModule(tm) {}
     protected:
         /*
             find(tab, key) <| $ ( pvalue )
@@ -76,8 +76,71 @@ namespace das {
         Module * thisModule;
     };
 
+    class OptimizeBuiltinFunctions : public OptimizationMacro {
+    public:
+        OptimizeBuiltinFunctions ( Module * tm ) : OptimizationMacro("OptimizeBuiltinFunctions") , thisModule(tm) {}
+    protected:
+        bool isFloat4x4 ( const TypeDeclPtr & td ) const {
+            if (    td->isHandle()
+                &&  td->annotation
+                &&  td->annotation->module==thisModule
+                &&  td->annotation->name=="float4x4" ) {
+                return true;
+            }
+            return false;
+        }
+        bool isTranspose4x4 ( const ExpressionPtr & expr ) const {
+            if ( expr->rtti_isCall() ) {
+                auto call = static_pointer_cast<ExprCall>(expr);
+                if (    call->func->module==thisModule
+                &&      call->name=="transpose"
+                &&      call->arguments.size()==1
+                &&      isFloat4x4(call->arguments[0]->type) ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        virtual ExpressionPtr visit ( ExprCall * call ) override {
+            /*
+                float4x4
+                    transpose(transpose(x)) = x
+             */
+            if ( isTranspose4x4(call->shared_from_this()) ) {
+                if ( isTranspose4x4(call->arguments[0]) ) {
+                    reportFolding();
+                    auto tt = static_pointer_cast<ExprCall>(call->arguments[0]);
+                    return tt->arguments[0];
+                }
+            }
+            return OptimizationMacro::visit(call);
+        }
+        virtual ExpressionPtr visit ( ExprOp2 * op2 ) override {
+            /*
+                transpose(b) * transpose(a) = transpose(a*b)
+             */
+            if (    op2->op=="*"
+            &&      isTranspose4x4(op2->left)
+            &&      isTranspose4x4(op2->right)) {
+                reportFolding();
+                auto cl = static_pointer_cast<ExprCall>(op2->left);
+                auto cr = static_pointer_cast<ExprCall>(op2->right);
+                auto b = cl->arguments[0];
+                auto a = cr->arguments[0];
+                auto rest = cl;
+                rest->arguments[0] = op2->shared_from_this();
+                op2->left = a;
+                op2->right = b;
+                return rest;
+            }
+            return OptimizationMacro::visit(op2);
+        }
+    protected:
+        Module * thisModule;
+    };
 
     void Module_BuiltIn::addMacros(ModuleLibrary &) {
-        macros.push_back(make_shared<OptimizeBuiltinFunctions>(this));
+        macros.push_back(make_shared<InferBuiltinFunctions>(this));
+        optimizationMacros.push_back(make_shared<OptimizeBuiltinFunctions>(this));
     }
 }

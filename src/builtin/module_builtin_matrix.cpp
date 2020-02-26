@@ -243,7 +243,7 @@ namespace das {
         matrix_identity<4,3>((float*)&mat);
     }
 
-    float4x4 float_4x4_translation(float3 xyz) {
+    float4x4 float4x4_translation(float3 xyz) {
         float4x4 mat;
         matrix_identity<4,4>((float*)&mat);
         mat.m[3].x = xyz.x;
@@ -263,6 +263,21 @@ namespace das {
         return ret;
     }
 
+    float4x4 float4x4_mul(const float4x4 &a, const float4x4 &b) {
+        mat44f va,vb,res;
+        memcpy(&va,&a,sizeof(float4x4));
+        memcpy(&vb,&b,sizeof(float4x4));
+        v_mat44_mul(res,va,vb);
+        return reinterpret_cast<float4x4&>(res);;
+    }
+
+    float4x4 float4x4_transpose ( const float4x4 & src ) {
+        mat44f res;
+        memcpy ( &res, &src, sizeof(float4x4) );
+        v_mat44_transpose(res.col0, res.col1, res.col2, res.col3);
+        return reinterpret_cast<float4x4&>(res);
+    }
+
     void Module_BuiltIn::addMatrixTypes(ModuleLibrary & lib) {
         // structure annotations
         addAnnotation(make_shared<float4x4_ann>());
@@ -272,7 +287,11 @@ namespace das {
         addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
         // 4x4
         addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument, "float4x4_identity");
-        addExtern<DAS_BIND_FUN(float_4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::none, "float_4x4_translation");
+        addExtern<DAS_BIND_FUN(float4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::none, "float_4x4_translation");
+        addExtern<DAS_BIND_FUN(float4x4_transpose), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "transpose", SideEffects::none, "float4x4_transpose");
+        addExtern<DAS_BIND_FUN(float4x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*", SideEffects::none,"float4x4_mul");
+        addExtern<DAS_BIND_FUN(float4x4_equ)>(*this, lib, "==", SideEffects::none, "float4x4_equ");
+        addExtern<DAS_BIND_FUN(float4x4_nequ)>(*this, lib, "!=", SideEffects::none, "float4x4_nequ");
         // 3x4
         addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument,"float3x4_identity");
         addExtern<DAS_BIND_FUN(float3x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*", SideEffects::none,"float3x4_mul");
