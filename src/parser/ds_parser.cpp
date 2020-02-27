@@ -88,9 +88,9 @@
 	#pragma warning(disable:4127)
 	#pragma warning(disable:4702)
 	#endif
-    
+
     using namespace das;
-    
+
     void das_yyerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
 	void das_checkName(const string & name, const LineInfo &at);
@@ -151,7 +151,7 @@ extern int das_yydebug;
         CorM_MOVE   = (1<<0),
         CorM_CLONE  = (1<<1)
     };
-    
+
     namespace das {
         extern ProgramPtr			    g_Program;
         extern FileAccessPtr            g_Access;
@@ -159,7 +159,7 @@ extern int das_yydebug;
         extern das_map<string,string>   das_module_alias;
     }
     using namespace das;
-    
+
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
@@ -178,14 +178,14 @@ extern int das_yydebug;
         bool                    override = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
-    
+
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list );
-    
+
     LineInfo tokAt ( const struct YYLTYPE & li );
-    
+
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
 #line 192 "ds_parser.cpp"
@@ -4249,9 +4249,9 @@ yyreduce:
 
   case 76:
 #line 737 "ds_parser.ypp"
-    { 
+    {
 		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
-		(yyval.s) = (yyvsp[0].s); 
+		(yyval.s) = (yyvsp[0].s);
 	}
 #line 4257 "ds_parser.cpp"
     break;
@@ -6107,7 +6107,7 @@ yyreduce:
 		das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
         auto pEnum = EnumerationPtr((yyvsp[-1].pEnum));
         pEnum->at = tokAt((yylsp[-4]));
-        pEnum->name = *(yyvsp[-3].s); 
+        pEnum->name = *(yyvsp[-3].s);
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*(yyvsp[-3].s),tokAt((yylsp[-1])),
                 CompilationError::enumeration_already_declared);
@@ -6123,7 +6123,7 @@ yyreduce:
 		das_checkName(*(yyvsp[-5].s),tokAt((yylsp[-5])));
         auto pEnum = EnumerationPtr((yyvsp[-1].pEnum));
         pEnum->at = tokAt((yylsp[-6]));
-        pEnum->name = *(yyvsp[-5].s); 
+        pEnum->name = *(yyvsp[-5].s);
 		pEnum->baseType = (yyvsp[-3].type);
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*(yyvsp[-5].s),tokAt((yylsp[-1])),
