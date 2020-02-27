@@ -2072,7 +2072,7 @@ namespace das {
 
     void Program::visit(Visitor & vis, bool visitGenerics ) {
         // before program
-        vis.preVisitProgram();
+        vis.preVisitProgram(this);
         // enumerations
         for ( auto & ite : thisModule->enumerations ) {
             ite.second = visitEnumeration(vis, ite.second.get());
@@ -2132,7 +2132,7 @@ namespace das {
             }
         }
         // done
-        vis.visitProgram();
+        vis.visitProgram(this);
     }
 
     void Program::optimize(TextWriter & logs, ModuleGroup & libGroup) {

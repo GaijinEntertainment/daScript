@@ -27,8 +27,8 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) { return true; }
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
         // WHOLE PROGRAM
-        virtual void preVisitProgram () {}
-        virtual void visitProgram () {}
+        virtual void preVisitProgram ( Program * prog ) {}
+        virtual void visitProgram ( Program * prog ) {}
         // TYPE
         virtual void preVisit ( TypeDecl * td ) {}
         virtual TypeDeclPtr visit ( TypeDecl * td ) { return td->shared_from_this(); }
@@ -248,8 +248,13 @@ namespace das {
     public:
         LintMacro ( const string & na = "" ) : macName(na) {}
         const string & macroName() const { return macName; }
+    protected:
+        virtual void preVisitProgram ( Program * prog ) override;
+        virtual void visitProgram ( Program * prog ) override;
     private:
         string  macName;
+    protected:
+        Program *   program = nullptr;
     };
 
     class VisitorMacro : public LintMacro {
@@ -258,7 +263,7 @@ namespace das {
         bool didAnything () const { return anyFolding; }
     protected:
         void reportFolding();
-        virtual void preVisitProgram () override;
+        virtual void preVisitProgram ( Program * prog ) override;
     private:
         bool    anyFolding = false;
     };
@@ -270,12 +275,10 @@ namespace das {
 
     class FoldingVisitor : public VisitorMacro {
     public:
-        FoldingVisitor( const ProgramPtr & prog ) 
-            : program(prog)
-            , ctx(prog->getContextStackSize()) {
+        FoldingVisitor(const ProgramPtr & prog)
+            : ctx(prog->getContextStackSize()) {
         }
     protected:
-        ProgramPtr      program;
         Context         ctx;
     protected:
         vec4f eval ( Expression * expr, bool & failed );

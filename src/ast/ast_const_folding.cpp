@@ -11,8 +11,18 @@ TODO:
 
 namespace das {
 
-    void VisitorMacro::preVisitProgram () {
-        Visitor::preVisitProgram();
+    void LintMacro::preVisitProgram ( Program * prog ) {
+        Visitor::preVisitProgram(prog);
+        program = prog;
+    }
+
+    void LintMacro::visitProgram ( Program * prog ) {
+        program = nullptr;
+        Visitor::visitProgram(prog);
+    }
+
+    void VisitorMacro::preVisitProgram ( Program * prog ) {
+        LintMacro::preVisitProgram(prog);
         anyFolding = false;
     }
 
@@ -706,12 +716,12 @@ namespace das {
     public:
         RunFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {
             TextWriter dummy;
-            program->markOrRemoveUnusedSymbols(true);
-            DAS_ASSERTF ( !program->failed(), "internal error while folding (remove unused)?" );
-            program->allocateStack(dummy);
-            DAS_ASSERTF ( !program->failed(), "internal error while folding (allocate stack)?" );
-            program->simulate(ctx, dummy);
-            DAS_ASSERTF ( !program->failed(), "internal error while folding (simulate)?" );
+            prog->markOrRemoveUnusedSymbols(true);
+            DAS_ASSERTF ( !prog->failed(), "internal error while folding (remove unused)?" );
+            prog->allocateStack(dummy);
+            DAS_ASSERTF ( !prog->failed(), "internal error while folding (allocate stack)?" );
+            prog->simulate(ctx, dummy);
+            DAS_ASSERTF ( !prog->failed(), "internal error while folding (simulate)?" );
         }
     protected:
         // ExprCall

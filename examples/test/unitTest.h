@@ -113,9 +113,6 @@ __forceinline int CppS2DOffset() { return int(offsetof(CppS2, d)); }
 uint32_t CheckEid ( char * const name, das::Context * context );
 uint32_t CheckEidHint ( char * const name, uint32_t hashHint, das::Context * context );
 
-uint32_t CheckEid2 ( char * const name, das::Context * context );
-uint32_t CheckEidHint2 ( char * const name, uint32_t hashHint, das::Context * context );
-
 __forceinline void complex_bind (const TestObjectFoo &,
                           const das::TBlock<void, das::TArray<TestObjectFoo>> &,
                           das::Context *) {

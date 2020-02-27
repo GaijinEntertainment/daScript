@@ -322,10 +322,12 @@ int *getPtr() {return &g_st;}
 das::uint2 get_screen_dimensions() {return das::uint2{1280, 720};}
 
 uint32_t CheckEid ( char * const name, Context * context ) {
+    if (!name) context->throw_error("invalid id");
     return hash_function(*context, name);
 }
 
 uint32_t CheckEidHint ( char * const name, uint32_t hashHint, Context * context ) {
+    if (!name) context->throw_error("invalid id");
     uint32_t hv = hash_function(*context, name);
     if ( hv != hashHint ) context->throw_error("invalid hash value");
     return hashHint;
@@ -333,34 +335,25 @@ uint32_t CheckEidHint ( char * const name, uint32_t hashHint, Context * context 
 
 struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
     CheckEidFunctionAnnotation() : TransformFunctionAnnotation("check_eid") { }
-    virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & /*err*/ ) override {
+    virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
         auto arg = call->arguments[0];
         if ( arg->type && arg->type->isString() && arg->type->isConst() && arg->rtti_isConstant() ) {
-
             auto starg = static_pointer_cast<ExprConstString>(arg);
-            uint32_t hv = hash_blockz32((uint8_t *)starg->text.c_str());
-
-            auto hconst = make_shared<ExprConstUInt>(arg->at, hv);
-            hconst->type = make_shared<TypeDecl>(Type::tUInt);
-            hconst->type->constant = true;
-
-            auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
-            newCall->arguments.insert(newCall->arguments.begin() + 1, hconst);
-            return newCall;
+            if (!starg->getValue().empty()) {
+                uint32_t hv = hash_blockz32((uint8_t *)starg->text.c_str());
+                auto hconst = make_shared<ExprConstUInt>(arg->at, hv);
+                hconst->type = make_shared<TypeDecl>(Type::tUInt);
+                hconst->type->constant = true;
+                auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
+                newCall->arguments.insert(newCall->arguments.begin() + 1, hconst);
+                return newCall;
+            } else {
+                err = "EID can't be an empty string";
+            }
         }
         return nullptr;
     }
 };
-
-uint32_t CheckEid2 ( char * const name, Context * context ) {
-    return hash_function(*context, name);
-}
-
-uint32_t CheckEidHint2 ( char * const name, uint32_t hashHint, Context * context ) {
-    uint32_t hv = hash_function(*context, name);
-    if ( hv != hashHint ) context->throw_error("invalid hash value");
-    return hashHint;
-}
 
 class CheckEid2Macro : public VisitorMacro {
 public:
@@ -372,14 +365,41 @@ protected:
             if ( nameArg->rtti_isStringConstant() ) {
                 // add 2nd argument, which is hash of the string
                 auto name = static_pointer_cast<ExprConstString>(nameArg)->getValue();
-                auto hv = hash_blockz32((uint8_t *)name.c_str());
-                auto hvc = make_shared<ExprConstUInt>(nameArg->at, hv);
-                call->arguments.insert(call->arguments.begin() + 1, hvc);
-                reportFolding();
-                return call->shared_from_this();
+                if (!name.empty()) {
+                    auto hv = hash_blockz32((uint8_t *)name.c_str());
+                    auto hvc = make_shared<ExprConstUInt>(nameArg->at, hv);
+                    call->arguments.insert(call->arguments.begin() + 1, hvc);
+                    reportFolding();
+                    return call->shared_from_this();
+                } else {
+                    program->error("EID can't be an empty string", 
+                        call->at, CompilationError::invalid_argument_type);
+                }
             }
         }
         return VisitorMacro::visit(call);
+    }
+protected:
+    Module * thisModule;
+};
+
+class LintEidMacro : public LintMacro {
+public:
+    LintEidMacro ( Module * tm ) : LintMacro("LintEidMacro"), thisModule(tm) {}
+protected:
+    virtual ExpressionPtr visit ( ExprCall * call ) override {
+        if (    call->name=="CheckEid3"
+            &&  call->func->module==thisModule 
+            &&  call->arguments.size()==2 ) {
+            if (call->arguments[0]->rtti_isStringConstant()) {
+                auto cst = static_pointer_cast<ExprConstString>(call->arguments[0]);
+                if (cst->getValue().empty()) {
+                    program->error("EID can't be an empty string", 
+                        call->at, CompilationError::invalid_argument_type);
+                }
+            }
+        }
+        return LintMacro::visit(call);
     }
 protected:
     Module * thisModule;
@@ -427,9 +447,11 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ceid_decl->annotation = make_shared<CheckEidFunctionAnnotation>();
     ceid->annotations.push_back(ceid_decl);
     // register CheckEid2 functoins and macro
-    addExtern<DAS_BIND_FUN(CheckEidHint2)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEidHint2");
-    addExtern<DAS_BIND_FUN(CheckEid2)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEid2");
+    addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEidHint");
+    addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEid");
     macros.push_back(make_shared<CheckEid2Macro>(this));
+    addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid3", SideEffects::modifyExternal, "CheckEid");
+    lintMacros.push_back(make_shared<LintEidMacro>(this));
     // and verify
     verifyAotReady();
 }
