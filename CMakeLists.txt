@@ -406,8 +406,12 @@ examples/test/test_handles.cpp
 examples/test/test_enum.cpp
 examples/test/module_unitTest.h
 examples/test/unitTest.h
+examples/test/unit_test.das.inc
+examples/test/unit_test.das
 )
 SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
+
+XXD(examples/test/unit_test.das)
 
 ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptTest)

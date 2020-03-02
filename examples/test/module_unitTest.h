@@ -8,4 +8,5 @@ public:
     void addEnumTest(ModuleLibrary &);
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
     virtual Type getOptionType ( const string & name ) const override;
+    bool appendCompiledFunctions();
 };

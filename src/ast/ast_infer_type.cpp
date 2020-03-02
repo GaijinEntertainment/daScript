@@ -4025,14 +4025,9 @@ namespace das {
                             argT = resT;
                         }
                     }
-                    if ( program->addFunction(clone) ) {
-                        reportGenericInfer();
-                    } else {
-                        auto realFn = program->findFunction(clone->getMangledName());
-                        vector<FunctionPtr> candidates = { realFn };
-                        reportFunctionNotFound(clone->name, "no matching generic function " + expr->describe(),
-                                               expr->at, candidates, types, true, true, true);
-                    }
+                    program->addFunction(clone);
+                    expr->name = "_::" + clone->name;
+                    reportGenericInfer();
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {

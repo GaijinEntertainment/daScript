@@ -119,4 +119,7 @@ __forceinline void complex_bind (const TestObjectFoo &,
     // THIS DOES ABSOLUTELY NOTHING, ITS HERE TO TEST BIND OF ARRAY INSIDE BLOCK
 }
 
-
+__forceinline bool start_effect(const char *, const das::float3x4 &, float) {
+    // THIS DOES ABSOLUTELY NOTHING, ITS HERE TO TEST DEFAULT ARGUMENTS
+    return false;
+}

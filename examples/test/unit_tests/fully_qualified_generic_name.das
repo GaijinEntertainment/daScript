@@ -1,5 +1,3 @@
-options log_infer_passes = true
-
 require UnitTest
 
 def on_armor_hit_fx_effect_es(visual_armor_hit_dot_effectName : string)

@@ -452,6 +452,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     macros.push_back(make_shared<CheckEid2Macro>(this));
     addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid3", SideEffects::modifyExternal, "CheckEid");
     lintMacros.push_back(make_shared<LintEidMacro>(this));
+    // extra tests
+    addExtern<DAS_BIND_FUN(start_effect)>(*this, lib, "start_effect", SideEffects::modifyExternal, "start_effect");
+    // compiled functions
+    appendCompiledFunctions();
     // and verify
     verifyAotReady();
 }
@@ -464,6 +468,11 @@ Type Module_UnitTest::getOptionType ( const string & optName ) const {
 ModuleAotType Module_UnitTest::aotRequire ( TextWriter & tw ) const {
     tw << "#include \"unitTest.h\"\n";
     return ModuleAotType::cpp;
+}
+
+#include "unit_test.das.inc"
+bool Module_UnitTest::appendCompiledFunctions() {
+    return compileBuiltinModule("unit_test.das",unit_test_das, sizeof(unit_test_das));
 }
 
 REGISTER_MODULE(Module_UnitTest);
