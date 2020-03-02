@@ -209,8 +209,8 @@ namespace das {
 
     template <typename TT>
     struct das_null_coalescing<TT &> {
-        static __forceinline TT & get ( TT * ptr, TT & value ) {
-            return ptr ? *ptr : value;
+        static __forceinline TT & get ( const TT * ptr, TT & value ) {
+            return ptr ? *((TT *)ptr) : value;
         }
     };
 
