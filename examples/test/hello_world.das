@@ -1,17 +1,18 @@
-options log_infer_passes = true
+options log = true
 
-require UnitTest
+struct Foo
+	a : int
 
-def on_armor_hit_fx_effect_es(visual_armor_hit_dot_effectName : string)
-	var tm: float3x4
-	identity(tm)
-	return UnitTest::start_effect(visual_armor_hit_dot_effectName, tm)
+def mkf(a:Foo)
+	print("a = {a}\n")
+
+def mkf(a:int)
+	print("a = {a}\n")
 
 [export]
 def test
-	verify(!on_armor_hit_fx_effect_es("test"))
-	var tm: float3x4
-	identity(tm)
-	UnitTest::start_effect("test-test", tm)
+	// let t = @@mkf
+	let t = @@<(arg:Foo):void> mkf
+	debug(t,"\nt=")
 	return true
 

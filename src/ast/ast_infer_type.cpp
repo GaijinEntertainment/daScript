@@ -4008,6 +4008,9 @@ namespace das {
             }
             return Visitor::visitCallArg(call, arg, last);
         }
+        string getGenericInstanceName(const Function * fn) const {
+            return "__gen_" + fn->module->name + "_" + fn->name;
+        }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
             vector<TypeDeclPtr> types;
@@ -4032,58 +4035,78 @@ namespace das {
             } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
-                    auto clone = oneGeneric->clone();
-                    clone->fromGeneric = oneGeneric.get();
-                    clone->privateFunction = program->policies.private_generics;
-                    if (func) {
-                        clone->inferStack.emplace_back(expr->at, func);
-                        clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
-                    }
-                    // we build alias map for the generic
-                    AliasMap aliases;
-                    for ( ;; ) {
-                        bool anyFailed = false;
-                        auto totalAliases = aliases.size();
-                        for ( size_t ai = 0; ai != types.size(); ++ai ) {
-                            auto argType = clone->arguments[ai]->type;
-                            if ( argType->isAlias() ) {
-                                argType = inferPartialAliases(argType,clone,&aliases);
+                    auto genName = getGenericInstanceName(oneGeneric.get());
+                    auto instancedFunctions = findMatchingFunctions("__::" + genName, types, true);
+                    if ( instancedFunctions.size() > 1 ) {
+                        error("internal compiler error. multiple instances of " + genName, expr->at);
+                    } else if (instancedFunctions.size() == 1) {
+                        expr->name = "__::" + genName;
+                        reportGenericInfer();
+                    } else if (instancedFunctions.size() == 0) {
+                        auto clone = oneGeneric->clone();
+                        clone->name = genName;
+                        clone->fromGeneric = oneGeneric.get();
+                        clone->privateFunction = program->policies.private_generics;
+                        if (func) {
+                            clone->inferStack.emplace_back(expr->at, func);
+                            clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
+                        }
+                        // we build alias map for the generic
+                        AliasMap aliases;
+                        for (;; ) {
+                            bool anyFailed = false;
+                            auto totalAliases = aliases.size();
+                            for (size_t ai = 0; ai != types.size(); ++ai) {
+                                auto argType = clone->arguments[ai]->type;
+                                if (argType->isAlias()) {
+                                    argType = inferPartialAliases(argType, clone, &aliases);
+                                }
+                                auto passType = types[ai];
+                                if (!isMatchingArgument(clone, argType, passType, true, true, &aliases)) {
+                                    anyFailed = true;
+                                    continue;
+                                }
+                                TypeDecl::updateAliasMap(argType, passType, aliases);
                             }
-                            auto passType = types[ai];
-                            if (!isMatchingArgument(clone,argType,passType,true,true,&aliases)) {
-                                anyFailed = true;
-                                continue;
+                            if (!anyFailed) break;
+                            if (totalAliases == aliases.size()) {
+                                DAS_ASSERTF(0, "we should not be here. function matched arguments!");
+                                break;
                             }
-                            TypeDecl::updateAliasMap(argType, passType, aliases);
                         }
-                        if ( !anyFailed ) break;
-                        if ( totalAliases == aliases.size() ) {
-                            DAS_ASSERTF(0,"we should not be here. function matched arguments!");
-                            break;
-                        }
-                    }
-                    // now, we resolve types given infered aliases
-                    for ( size_t sz = 0; sz != types.size(); ++sz ) {
-                        auto & argT = clone->arguments[sz]->type;
-                        if ( argT->isAlias() ) {
-                            argT = inferPartialAliases(argT, clone, &aliases);
-                        }
-                        if ( argT->isAuto() ) {
-                            auto & passT = types[sz];
-                            auto resT = TypeDecl::inferGenericType(argT, passT, &aliases);
-                            DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
-                            resT->ref = false;                  // by default no ref
-                            resT->implicit = argT->implicit;    // copy implicit on the arguments
-                            TypeDecl::applyAutoContracts(resT, argT);
-                            if ( resT->isRefType() ) {   // we don't pass boxed type by reference ever
-                                resT->ref = false;
+                        // now, we resolve types given infered aliases
+                        for (size_t sz = 0; sz != types.size(); ++sz) {
+                            auto & argT = clone->arguments[sz]->type;
+                            if (argT->isAlias()) {
+                                argT = inferPartialAliases(argT, clone, &aliases);
                             }
-                            argT = resT;
+                            if (argT->isAuto()) {
+                                auto & passT = types[sz];
+                                auto resT = TypeDecl::inferGenericType(argT, passT, &aliases);
+                                DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
+                                resT->ref = false;                  // by default no ref
+                                resT->implicit = argT->implicit;    // copy implicit on the arguments
+                                TypeDecl::applyAutoContracts(resT, argT);
+                                if (resT->isRefType()) {   // we don't pass boxed type by reference ever
+                                    resT->ref = false;
+                                }
+                                argT = resT;
+                            }
                         }
+                        if (!program->addFunction(clone)) {
+                            auto exf = program->thisModule->functions[clone->getMangledName()];
+                            DAS_VERIFYF(exf, "if we can't add, this means there is function with exactly this mangled name");
+                            if (exf->fromGeneric != clone->fromGeneric) {
+                                error("can't instance generic " + clone->describe() + "\n"
+                                    + "\ttrying to instance from module " + clone->fromGeneric->module->name + "\n"
+                                    + "\texisting instance from module " + exf->fromGeneric->module->name,
+                                    expr->at, CompilationError::function_already_declared);
+                                return nullptr;
+                            }
+                        }
+                        expr->name = "__::" + clone->name;
+                        reportGenericInfer();
                     }
-                    program->addFunction(clone);
-                    expr->name = "_::" + clone->name;
-                    reportGenericInfer();
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
