@@ -1,18 +1,34 @@
 options log = true
 
-struct Foo
-	a : int
-
-def mkf(a:Foo)
-	print("a = {a}\n")
-
-def mkf(a:int)
-	print("a = {a}\n")
+/*
+def filter ( var arr : array<auto(TT)>; var blk : lambda<(arg:TT):bool> )
+    return <- generator<TT>() <| $()
+        for x in arr
+            if invoke(blk,x)
+                yield x
+        return false
+    finally
+        print("hello\n")
 
 [export]
 def test
-	// let t = @@mkf
-	let t = @@<(arg:Foo):void> mkf
-	debug(t,"\nt=")
+    var arr <- [[for x in range(0,10); x]]
+    var farr <- to_array ( filter(arr, @(t) => (t%2)==0 )  )
+    print("farr = {farr}\n")
 	return true
+*/
+
+[export]
+def test
+    var arr <- [{int 1;2;3}]
+    var t = 2
+    var lmb <- generator<int>() <| $ ( )
+        for x in arr
+            if x == t
+                yield t
+        return false
+    finally
+        delete arr
+    print("lmb = {lmb}\n")
+    return true
 

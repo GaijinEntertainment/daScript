@@ -204,6 +204,43 @@ namespace das {
         return fn;
     }
 
+    FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
+                                        const StructurePtr & ls, bool isUnsafe ) {
+        auto lfn = lambdaName + "__def_fin";
+        auto pFunc = make_shared<Function>();
+        pFunc->generated = true;
+        pFunc->at = block->at;
+        pFunc->name = lfn;
+        pFunc->unsafe = isUnsafe;
+        auto fb = make_shared<ExprBlock>();
+        fb->at = block->at;
+        auto with = make_shared<ExprWith>(block->at);
+        with->with = make_shared<ExprVar>(block->at, "__this");
+        auto bbl = make_shared<ExprBlock>();
+        with->body = bbl;
+        with->body->at = block->at;
+        if ( block->finalList.size() ) {
+            bbl->list.reserve(block->finalList.size());     // copy finally section of the block body
+            for ( auto & subexpr : block->finalList ) {
+                bbl->list.push_back(subexpr->clone());
+            }
+        } else {
+            // add delete __this
+        }
+        auto wb = static_pointer_cast<ExprBlock>(with->body);
+        wb->blockFlags = 0;
+        fb->list.push_back(with);
+        pFunc->body = fb;
+        pFunc->result = make_shared<TypeDecl>(Type::tVoid);
+        auto cTHIS = make_shared<Variable>();
+        cTHIS->name = "__this";
+        cTHIS->type = make_shared<TypeDecl>(ls);
+        pFunc->arguments.push_back(cTHIS);
+        verifyGenerated(pFunc->body);
+        return pFunc;
+    }
+
+
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, bool needYield, bool isUnsafe ) {
         auto lfn = lambdaName + "__def";
@@ -217,6 +254,7 @@ namespace das {
         auto with = make_shared<ExprWith>(block->at);
         with->with = make_shared<ExprVar>(block->at, "__this");
         with->body = block->clone();
+        static_pointer_cast<ExprBlock>(with->body)->finalList.clear();
         if ( needYield ) {
             pFunc->generator = true;
             auto bbl = static_pointer_cast<ExprBlock>(with->body);
@@ -257,6 +295,13 @@ namespace das {
         auto thisArg = make_shared<TypeDecl>(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
+        auto finFunc = make_shared<TypeDecl>(Type::tFunction);
+        auto finArg = make_shared<TypeDecl>(pStruct);
+        finArg->constant = false;
+        finArg->removeConstant = true;
+        finFunc->argTypes.emplace_back(finArg);
+        finFunc->firstType = make_shared<TypeDecl>(Type::tVoid);
+        pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         if ( needYield ) {
             auto yt = make_shared<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
@@ -270,12 +315,13 @@ namespace das {
         return pStruct;
     }
 
-    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf,
+    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
                                             const das_set<VariablePtr> & capt, const LineInfo & at ) {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
         auto makeS = make_shared<ExprMakeStructure>();
+        // makeS->useInitializer = true;
         makeS->at = at;
         makeS->makeType = make_shared<TypeDecl>(ls);
         auto ms = make_shared<MakeStruct>();
@@ -283,6 +329,9 @@ namespace das {
         // TODO: expand atTHIS->funcType, so that it points to correct function by type as well
         auto mTHIS = make_shared<MakeFieldDecl>(lf->at, "__lambda", atTHIS, false);
         ms->push_back(mTHIS);
+        auto atTHISF = make_shared<ExprAddr>(lff->at, lff->name);
+        auto mTHISF = make_shared<MakeFieldDecl>(lf->at, "__finalize", atTHISF, false);
+        ms->push_back(mTHISF);
         for ( auto cV : capt ) {
             auto varV = make_shared<ExprVar>(cV->at, cV->name);
             auto mV = make_shared<MakeFieldDecl>(cV->at, cV->name, varV, !cV->type->canCopy());

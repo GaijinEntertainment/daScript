@@ -1775,12 +1775,17 @@ namespace das {
                                 bool isUnsafe = func ? func->unsafe : false;
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls, true, isUnsafe);
                                 if ( program->addFunction(pFn) ) {
-                                    reportGenericInfer();
-                                    auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
-                                    // each ( [[ ]]] )
-                                    auto cEach = make_shared<ExprCall>(block->at, makeRef ? "each_ref" : "each");
-                                    cEach->arguments.push_back(ms);
-                                    return cEach;
+                                    auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, isUnsafe);
+                                    if ( program->addFunction(pFnFin) ) {
+                                        reportGenericInfer();
+                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
+                                        // each ( [[ ]]] )
+                                        auto cEach = make_shared<ExprCall>(block->at, makeRef ? "each_ref" : "each");
+                                        cEach->arguments.push_back(ms);
+                                        return cEach;
+                                    } else {
+                                        error("generator finalizer name mismatch", expr->at, CompilationError::invalid_block);
+                                    }
                                 } else {
                                     error("generator function name mismatch", expr->at, CompilationError::invalid_block);
                                 }
@@ -1825,9 +1830,14 @@ namespace das {
                             bool isUnsafe = func ? func->unsafe : false;
                             auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
                             if ( program->addFunction(pFn) ) {
-                                reportGenericInfer();
-                                auto ms = generateLambdaMakeStruct ( ls, pFn, cl.capt, expr->at );
-                                return ms;
+                                auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, isUnsafe);
+                                if ( program->addFunction(pFnFin) ) {
+                                    reportGenericInfer();
+                                    auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
+                                    return ms;
+                                } else {
+                                    error("lambda finalizer name mismatch", expr->at, CompilationError::invalid_block);
+                                }
                             } else {
                                 error("lambda function name mismatch", expr->at, CompilationError::invalid_block);
                             }
@@ -4009,7 +4019,22 @@ namespace das {
             return Visitor::visitCallArg(call, arg, last);
         }
         string getGenericInstanceName(const Function * fn) const {
-            return "__gen_" + fn->module->name + "_" + fn->name;
+            string name = "__gen_";
+            if ( fn->module ) {
+                if ( fn->module->name=="$" ) {
+                    name += "_builtin";
+                } else {
+                    name += fn->module->name;
+                }
+            }
+            name += "_";
+            name += fn->name;
+            for ( auto & ch : name ) {
+                if ( !isalnum(ch) && ch!='_' ) {
+                    ch = '_';
+                }
+            }
+            return name;
         }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer

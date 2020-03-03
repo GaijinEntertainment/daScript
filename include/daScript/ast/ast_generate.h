@@ -52,15 +52,27 @@ namespace das {
         lambda function, i.e.
          def __lambda_function_at_line_xxx(THIS:__lambda_at_line_xxx;...block_args...)
             with THIS
-                ...block_body...
+                ...block_body...    // with finally section removed
      */
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, bool needYield, bool isUnsafe );
 
     /*
-         [[__lambda_at_line_xxx THIS=@__lambda_function_at_line_xxx; ba1=ba1; ba2=ba2; ... ]]
+        lambda finalizer, i.e.
+         def __lambda_finalizer_at_line_xxx(THIS:__lambda_at_line_xxx)
+            with THIS
+                ...block_finally...    
      */
-    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf,
+    FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
+                                         const StructurePtr & ls, bool isUnsafe );
+
+    /*
+         [[__lambda_at_line_xxx
+            THIS=@__lambda_function_at_line_xxx;
+            FINALIZER=@__lambda_finalier_at_line_xx;
+            _ba1=ba1; ba2=ba2; ... ]]
+     */
+    ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
                                             const das_set<VariablePtr> & capt, const LineInfo & at );
 
     /*
