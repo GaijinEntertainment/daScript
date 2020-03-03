@@ -624,6 +624,11 @@ namespace das {
 
     ExpressionPtr ExprAddr::visit(Visitor & vis) {
         vis.preVisit(this);
+        if ( funcType ) {
+            vis.preVisit(funcType.get());
+            funcType = funcType->visit(vis);
+            funcType = vis.visit(funcType.get());
+        }
         return vis.visit(this);
     }
 
@@ -632,6 +637,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->target = target;
         cexpr->func = func;
+        if (funcType) cexpr->funcType = make_shared<TypeDecl>(*funcType);
         return cexpr;
     }
 

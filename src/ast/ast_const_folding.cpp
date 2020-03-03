@@ -517,11 +517,6 @@ namespace das {
             c->constexpression = true;
             return Visitor::visit(c);
         }
-    // addr
-        virtual ExpressionPtr visit ( ExprAddr * a ) override {
-            a->constexpression = true;
-            return Visitor::visit(a);
-        }
     // assert
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->arguments[0]->constexpression ) {

@@ -280,6 +280,7 @@ namespace das {
         makeS->makeType = make_shared<TypeDecl>(ls);
         auto ms = make_shared<MakeStruct>();
         auto atTHIS = make_shared<ExprAddr>(lf->at, lf->name);
+        // TODO: expand atTHIS->funcType, so that it points to correct function by type as well
         auto mTHIS = make_shared<MakeFieldDecl>(lf->at, "__lambda", atTHIS, false);
         ms->push_back(mTHIS);
         for ( auto cV : capt ) {

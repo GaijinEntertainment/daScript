@@ -343,6 +343,7 @@
 %type <pExpression>     array_comprehension
 %type <pExpression>     expr_method_call
 %type <pExpression>     block_or_simple_block
+%type <pExpression>     func_addr_expr
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -1248,6 +1249,31 @@ expr_method_call
     }
     ;
 
+func_addr_expr
+    :   '@' '@'[loc] name_in_namespace[name]     { 
+		$$ = new ExprAddr(tokAt(@loc),*$name); 
+		delete $name; 
+	}
+    |   '@' '@'[loc] '<' type_declaration[blockType] '>' name_in_namespace[name] {
+		auto expr = new ExprAddr(tokAt(@loc),*$name); 
+		delete $name; 
+        expr->funcType = make_shared<TypeDecl>(Type::tFunction);
+        expr->funcType->firstType = TypeDeclPtr($blockType);
+		$$ = expr;
+    }
+    |   '@' '@'[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' name_in_namespace[name] { 
+		auto expr = new ExprAddr(tokAt(@loc),*$name); 
+		delete $name; 
+        expr->funcType = make_shared<TypeDecl>(Type::tFunction);
+        expr->funcType->firstType = TypeDeclPtr($result);
+        if ( $list ) {
+            varDeclToTypeDecl(expr->funcType.get(), $list);
+            deleteVariableDeclarationList($list);
+        }
+		$$ = expr;
+    }
+	;
+
 expr
     :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   name_in_namespace[name]               { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
@@ -1286,7 +1312,7 @@ expr
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
-    |   '@' '@'[loc] name_in_namespace[name]     { $$ = new ExprAddr(tokAt(@loc),*$name); delete $name; }
+	|	func_addr_expr[subexpr]					 { $$ = $subexpr; }
     |   name_in_namespace[name] '(' ')' {
             $$ = g_Program->makeCall(tokAt(@name),*$name);
             delete $name;

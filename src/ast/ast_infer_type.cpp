@@ -468,6 +468,38 @@ namespace das {
             return result;
         }
 
+        vector<FunctionPtr> findTypedFuncAddr ( const string & name, const vector<TypeDeclPtr> & arguments, const TypeDeclPtr & resType ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<FunctionPtr> result;
+            auto inWhichModule = getSearchModule(moduleName);
+            TextWriter ss;
+            for ( auto & arg : arguments ) {
+                ss << " " << arg->getMangledName();
+            }
+            string mangledNamePostfix = ss.str();
+            program->library.foreach([&](Module * mod) -> bool {
+                string mangledName;
+                if ( !mod->name.empty() ) {
+                    mangledName = "@" + mod->name + "::";
+                }
+                mangledName = mangledName + funcName + mangledNamePostfix;
+                auto itFn = mod->functions.find(mangledName);
+                if ( itFn != mod->functions.end() ) {
+                    const auto & pFn = itFn->second;
+                    if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
+                        if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                            if ( pFn->result->isSameType(*resType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
+                                result.push_back(pFn);
+                            }
+                        }
+                    }
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -1488,8 +1520,32 @@ namespace das {
         }
     // ExprAddr
         virtual ExpressionPtr visit ( ExprAddr * expr ) override {
+
+            if (expr->funcType) {
+                if (expr->funcType->isAlias()) {
+                    auto aT = inferAlias(expr->funcType);
+                    if (aT) {
+                        expr->funcType = aT;
+                        reportGenericInfer();
+                    } else {
+                        error("udefined type " + expr->funcType->describe(), expr->at,
+                            CompilationError::type_not_found);
+                        return Visitor::visit(expr);
+                    }
+                }
+                if (expr->funcType->isAuto()) {
+                    error("function of udefined type " + expr->funcType->describe(), expr->at,
+                        CompilationError::type_not_found);
+                    return Visitor::visit(expr);
+                }
+            }
             expr->func = nullptr;
-            auto fns = findFuncAddr(expr->target);
+            vector<FunctionPtr> fns;
+            if (expr->funcType) {
+                fns = findTypedFuncAddr(expr->target, expr->funcType->argTypes, expr->funcType->firstType);
+            } else {
+                fns = findFuncAddr(expr->target);
+            }
             if ( fns.size()==1 ) {
                 expr->func = fns.back().get();
                 expr->func->addr = true;

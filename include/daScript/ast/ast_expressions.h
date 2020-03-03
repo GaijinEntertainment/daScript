@@ -66,6 +66,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAddr() const override { return true; }
         string target;
+        TypeDeclPtr funcType;
         Function * func = nullptr;
     };
 
