@@ -4090,7 +4090,7 @@ namespace das {
                     if ( instancedFunctions.size() > 1 ) {
                         error("internal compiler error. multiple instances of " + genName, expr->at);
                     } else if (instancedFunctions.size() == 1) {
-                        expr->name = "__::" + genName;
+                        expr->name = "_::" + genName;
                         reportGenericInfer();
                     } else if (instancedFunctions.size() == 0) {
                         auto clone = oneGeneric->clone();
@@ -4154,7 +4154,7 @@ namespace das {
                                 return nullptr;
                             }
                         }
-                        expr->name = "__::" + clone->name;
+                        expr->name = /*"_::" + */ clone->name;
                         reportGenericInfer();
                     }
                 } else {
