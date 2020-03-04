@@ -887,6 +887,7 @@ namespace das {
         auto cexpr = clonePtr<ExprDelete>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
+        cexpr->native = native;
         return cexpr;
     }
 

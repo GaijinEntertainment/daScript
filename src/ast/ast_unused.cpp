@@ -210,9 +210,11 @@ namespace das {
                 return fnc->sideEffectFlags;
             }
             if ( asked.find(fnc.get())!=asked.end() ) {
+                /*
                 if ( func != fnc ) {
                     logs << "optimization warning, assuming " << fnc->name << " has no side effects during the infer loop\n";
                 }
+                */
                 return 0;
             }
             asked.insert(fnc.get());

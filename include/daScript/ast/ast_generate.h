@@ -39,6 +39,26 @@ namespace das {
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b );
 
     /*
+     pointer finalizer, i.e.
+      def finalize(var THIS:PtrType&)
+        if THIS != null
+            delete *THIS
+            delete native THIS
+            THIS = null
+     */
+    FunctionPtr generatePointerFinalizer ( const TypeDeclPtr & ptrType, const LineInfo & at );
+
+    /*
+     structure finalizer, i.e.
+      def __lambda_finalizer_at_line_xxx(var THIS:StructureType)
+         with THIS
+            delete field1
+            delete field2
+            memzero(THIS)
+     */
+    FunctionPtr generateStructureFinalizer ( const StructurePtr & ls );
+
+    /*
      struct __lambda_at_line_xxx
          __lambda = @lambda_fn
         (yield : int)

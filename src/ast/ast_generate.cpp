@@ -204,6 +204,85 @@ namespace das {
         return fn;
     }
 
+    FunctionPtr generatePointerFinalizer ( const TypeDeclPtr & ptrType, const LineInfo & at ) {
+        auto pFunc = make_shared<Function>();
+        pFunc->generated = true;
+        pFunc->at = at;
+        pFunc->name = "finalize";
+        pFunc->unsafe = true;
+        auto THIS0 = make_shared<ExprVar>(at, "__this");
+        auto NULLP0 = make_shared<ExprConstPtr>(at);
+        auto NEQ = make_shared<ExprOp2>(at, "!=", THIS0, NULLP0);
+        auto ifb = make_shared<ExprBlock>();
+        ifb->at = at;
+        auto THISA = make_shared<ExprVar>(at, "__this");    // delete * this
+        auto THISR = make_shared<ExprPtr2Ref>(at, THISA);
+        auto delit = make_shared<ExprDelete>(at, THISR);
+        ifb->list.push_back(delit);
+        auto THISA1 = make_shared<ExprVar>(at, "__this");   // delete /*native*/ this
+        auto delit1 = make_shared<ExprDelete>(at, THISA1);
+        delit1->native = true;
+        ifb->list.push_back(delit1);
+        auto THISB = make_shared<ExprVar>(at, "__this");    // *THIS = null
+        auto NULLP = make_shared<ExprConstPtr>(at);
+        auto SETB = make_shared<ExprCopy>(at, THISB, NULLP);
+        ifb->list.push_back(SETB);
+        auto ife = make_shared<ExprIfThenElse>(at, NEQ, ifb, nullptr);
+        auto fb = make_shared<ExprBlock>();
+        fb->at = at;
+        fb->list.push_back(ife);
+        pFunc->body = fb;
+        pFunc->result = make_shared<TypeDecl>(Type::tVoid);
+        auto cTHIS = make_shared<Variable>();
+        cTHIS->name = "__this";
+        cTHIS->type = make_shared<TypeDecl>(*ptrType);
+        cTHIS->type->constant = false;
+        cTHIS->type->removeConstant = true;
+        cTHIS->type->ref = true;
+        cTHIS->type->removeRef = false;
+        pFunc->arguments.push_back(cTHIS);
+        verifyGenerated(pFunc->body);
+        return pFunc;
+    }
+
+    FunctionPtr generateStructureFinalizer ( const StructurePtr & ls ) {
+        auto pFunc = make_shared<Function>();
+        pFunc->generated = true;
+        pFunc->at = ls->at;
+        pFunc->name = "finalize";
+        pFunc->unsafe = true;
+        auto fb = make_shared<ExprBlock>();
+        fb->at = ls->at;
+        auto with = make_shared<ExprWith>(ls->at);
+        with->with = make_shared<ExprVar>(ls->at, "__this");
+        auto bbl = make_shared<ExprBlock>();
+        with->body = bbl;
+        with->body->at = ls->at;
+        // now finalize
+        for ( const auto & fl : ls->fields ) {
+            if ( fl.type->needDelete() ) {
+                if ( !fl.annotation.getBoolOption("do_not_delete", false) ) {
+                    auto fld = make_shared<ExprVar>(fl.at, fl.name);
+                    auto delf = make_shared<ExprDelete>(fl.at, fld);
+                    bbl->list.emplace_back(delf);
+                }
+            }
+        }
+        auto mz = make_shared<ExprMemZero>(ls->at, "memzero");
+        auto lvar = make_shared<ExprVar>(ls->at, "__this");
+        mz->arguments.push_back(lvar);
+        bbl->list.push_back(mz);
+        fb->list.push_back(with);
+        pFunc->body = fb;
+        pFunc->result = make_shared<TypeDecl>(Type::tVoid);
+        auto cTHIS = make_shared<Variable>();
+        cTHIS->name = "__this";
+        cTHIS->type = make_shared<TypeDecl>(ls);
+        pFunc->arguments.push_back(cTHIS);
+        verifyGenerated(pFunc->body);
+        return pFunc;
+    }
+
     FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, bool isUnsafe ) {
         auto lfn = lambdaName + "__def_fin";
@@ -225,10 +304,10 @@ namespace das {
                 bbl->list.push_back(subexpr->clone());
             }
         } else {
-            // add delete __this
+            auto THISA = make_shared<ExprVar>(block->at, "__this");    // delete this
+            auto delit = make_shared<ExprDelete>(block->at, THISA);
+            bbl->list.push_back(delit);
         }
-        auto wb = static_pointer_cast<ExprBlock>(with->body);
-        wb->blockFlags = 0;
         fb->list.push_back(with);
         pFunc->body = fb;
         pFunc->result = make_shared<TypeDecl>(Type::tVoid);
@@ -516,11 +595,14 @@ namespace das {
                 vtd = pvtd;
                 replaceRef2Ptr(scope->shared_from_this(), var->name);
             }
-            capture->fields.emplace_back(
-                                         var->name,
+            AnnotationArgumentList aaList;
+            if ( isRef || var->do_not_delete ) {
+                aaList.emplace_back("do_not_delete",true);
+            }
+            capture->fields.emplace_back(var->name,
                                          vtd,
                                          nullptr,
-                                         AnnotationArgumentList(),
+                                         aaList,
                                          false,
                                          expr->at);
             auto lvar = make_shared<ExprVar>(var->at, var->name);
@@ -719,6 +801,7 @@ namespace das {
             srcv->at = expr->at;
             srcv->name = srcVarName;
             if ( iterv->type->isRef() ) {
+                srcv->do_not_delete = true;
                 srcv->type = make_shared<TypeDecl>(Type::tPointer);
                 srcv->type->firstType = make_shared<TypeDecl>(*iterv->type);
                 srcv->type->firstType->ref = false;

@@ -650,7 +650,11 @@ namespace das {
         }
     // addr
         virtual void preVisit ( ExprAddr * expr ) override {
-            ss << "@" << expr->target;
+            ss << "@@";
+            if ( expr->funcType ) {
+                ss << "<" << expr->funcType->describe() << ">";
+            }
+            ss << expr->target;
         }
     // ptr2ref
         virtual void preVisit ( ExprPtr2Ref * ptr2ref ) override {
@@ -674,6 +678,7 @@ namespace das {
         virtual void preVisit ( ExprDelete * edel ) override {
             Visitor::preVisit(edel);
             ss << "delete ";
+            if ( edel->native ) ss << "/*native*/ ";
         }
     // cast
         virtual void preVisit ( ExprCast * expr ) override {

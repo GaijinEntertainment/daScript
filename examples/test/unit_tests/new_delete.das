@@ -1,4 +1,5 @@
-// options log=true, log_infer_passes=true // log_nodes=false
+// options log=true
+// options log_infer_passes=true // log_nodes=false
 
 require UnitTest
 

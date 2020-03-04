@@ -89,6 +89,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         ExpressionPtr subexpr;
+        bool native = false;
     };
 
     struct ExprAt : Expression {

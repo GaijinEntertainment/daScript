@@ -194,6 +194,7 @@ namespace das
                 bool    aliasCMRES : 1;
                 bool    marked_used : 1;
                 bool    global_shared : 1;
+                bool    do_not_delete : 1;
             };
             uint32_t flags = 0;
         };

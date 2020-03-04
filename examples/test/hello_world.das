@@ -27,8 +27,22 @@ def test
             if x == t
                 yield t
         return false
+/*
     finally
         delete arr
+        print("boo\n")
+*/
     print("lmb = {lmb}\n")
     return true
 
+/*
+struct Foo
+    a : array<int>
+    b : Foo?
+
+[export]
+def test
+    var f : Foo
+    delete f
+    return true
+*/

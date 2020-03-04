@@ -979,7 +979,7 @@ namespace das {
         vector<FunctionPtr> getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
             vector<TypeDeclPtr> argDummy;
             argDummy.push_back(make_shared<TypeDecl>(*subexpr));
-            return findMatchingFunctions("finalize", argDummy);
+            return findMatchingFunctions("_::finalize", argDummy);
         }
 
         bool verifyFinalizeFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
@@ -2340,20 +2340,32 @@ namespace das {
             // infer
             return Visitor::visit(expr);
         }
-    // ExprClone
+    // ExprDelete
+        void reportMissingFinalizer ( const string & message, const LineInfo & at, const TypeDeclPtr & ftype ) {
+            auto fakeCall = make_shared<ExprCall>(at, "_::finalize");
+            auto fakeVar = make_shared<ExprVar>(at, "this");
+            fakeVar->type = make_shared<TypeDecl>(*ftype);
+            fakeCall->arguments.push_back(fakeVar);
+            vector<TypeDeclPtr> fakeTypes;
+            fakeTypes.push_back(ftype);
+            reportMissing(fakeCall.get(), fakeTypes, message, true, CompilationError::function_already_declared);
+        }
         virtual ExpressionPtr visit ( ExprDelete * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
-            auto fnList = getFinalizeFunc(expr->subexpr->type);
-            if ( fnList.size() ) {
-                if ( verifyFinalizeFunc(fnList, expr->at) ) {
-                    auto fn = fnList[0];
-                    string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
-                    auto finalizeFn = make_shared<ExprCall>(expr->at, finalizeName);
-                    finalizeFn->arguments.push_back(expr->subexpr->clone());
-                    return ExpressionPtr(finalizeFn);
-                } else {
-                    return Visitor::visit(expr);
+            if ( !expr->native ) {
+                auto fnList = getFinalizeFunc(expr->subexpr->type);
+                if ( fnList.size() ) {
+                    if ( verifyFinalizeFunc(fnList, expr->at) ) {
+                        reportGenericInfer();
+                        auto fn = fnList[0];
+                        string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
+                        auto finalizeFn = make_shared<ExprCall>(expr->at, finalizeName);
+                        finalizeFn->arguments.push_back(expr->subexpr->clone());
+                        return ExpressionPtr(finalizeFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
                 }
             }
             // infer
@@ -2370,6 +2382,29 @@ namespace das {
                 if ( func && !func->unsafe ) {
                     error("delete of pointer requires [unsafe]", expr->at,
                           CompilationError::unsafe);
+                } else if ( !expr->native ) {
+                    if ( expr->subexpr->type->firstType && expr->subexpr->type->firstType->needDelete() ) {
+                        auto ptrf = getFinalizeFunc(expr->subexpr->type);
+                        if ( ptrf.size()==0 ) {
+                            auto fnDel = generatePointerFinalizer(expr->subexpr->type, expr->at);
+                            if ( !program->addFunction(fnDel) ) {
+                                reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
+                                return Visitor::visit(expr);
+                            }
+                        } else if ( ptrf.size() > 1 ) {
+                            string candidates = program->describeCandidates(ptrf);
+                            error("too many finalizers\n" + candidates, expr->at, CompilationError::function_already_declared);
+                            return Visitor::visit(expr);
+                        }
+                        reportGenericInfer();
+                        expr->native = true;
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        cloneFn->arguments.push_back(expr->subexpr->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        reportGenericInfer();
+                        expr->native = true;
+                    }
                 }
             } else {
                 auto finalizeType = expr->subexpr->type;
@@ -2379,26 +2414,16 @@ namespace das {
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( finalizeType->isStructure() ) {
-                    // TODO: generate structure erase code
-                    return Visitor::visit(expr);
-                    /*
-                    reportGenericInfer();
-                    auto stt = finalizeType->structType;
-                    fnList = getCloneFunc(finalizeType,finalizeType);
-                    if ( verifyCloneFunc(fnList, expr->at) ) {
-                        if ( fnList.size()==0 ) {
-                            auto clf = makeClone(stt);
-                            clf->privateFunction = program->policies.private_clones;
-                            extraFunctions.push_back(clf);
-                        }
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
-                        cloneFn->arguments.push_back(expr->left->clone());
-                        cloneFn->arguments.push_back(expr->right->clone());
+                    auto fnDel = generateStructureFinalizer(finalizeType->structType->shared_from_this());
+                    if ( program->addFunction(fnDel) ) {
+                        reportGenericInfer();
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        cloneFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(cloneFn);
                     } else {
+                        reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                         return Visitor::visit(expr);
                     }
-                    */
                 } else if ( finalizeType->dim.size() ) {
                     reportGenericInfer();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "finalize_dim");
@@ -4061,7 +4086,7 @@ namespace das {
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
                     auto genName = getGenericInstanceName(oneGeneric.get());
-                    auto instancedFunctions = findMatchingFunctions("__::" + genName, types, true);
+                    auto instancedFunctions = findMatchingFunctions("_::" + genName, types, true);
                     if ( instancedFunctions.size() > 1 ) {
                         error("internal compiler error. multiple instances of " + genName, expr->at);
                     } else if (instancedFunctions.size() == 1) {

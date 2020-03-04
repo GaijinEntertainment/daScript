@@ -1,3 +1,5 @@
+// options log_infer_passes = true
+
 struct Ball
     center : float3 = float3(7,8,9)
     radius : float = 1.234f

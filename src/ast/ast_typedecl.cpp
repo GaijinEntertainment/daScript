@@ -430,6 +430,8 @@ namespace das
             return true;
         } else if ( baseType==Type::tString ) {
             return true;
+        } else if ( baseType==Type::tStructure ) {
+            return true;
         } else {
             return false;
         }
@@ -439,14 +441,13 @@ namespace das
         if ( baseType==Type::tHandle ) {
             return annotation->needDelete();
         } else if ( baseType==Type::tPointer ) {
-            return false;
+            return true;
         } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             return true;
         } else if ( baseType==Type::tString ) {
             return true;
         } else if ( baseType==Type::tStructure ) {
-            // TODO: support structure -> need delete?
-            return false;
+            return true;
         } else {
             return false;
         }
