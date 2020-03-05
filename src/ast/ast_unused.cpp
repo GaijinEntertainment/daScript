@@ -90,12 +90,9 @@ namespace das {
     //  a.b = 5 ->  #a#.b=5
     //  a[b]=3  ->  #a#[b]=3
     class TrackFieldAndAtFlags : public Visitor {
-        TextWriter &            logs;
         das_set<const Function *>   asked;
         FunctionPtr             func;
     public:
-        TrackFieldAndAtFlags ( TextWriter & l ) : logs(l) {
-        }
         void MarkSideEffects ( Module & mod ) {
             for (auto & fnI : mod.functions) {
                 auto & fn = fnI.second;
@@ -210,12 +207,7 @@ namespace das {
                 return fnc->sideEffectFlags;
             }
             if ( asked.find(fnc.get())!=asked.end() ) {
-                /*
-                if ( func != fnc ) {
-                    logs << "optimization warning, assuming " << fnc->name << " has no side effects during the infer loop\n";
-                }
-                */
-                return 0;
+                return 0;   // assume no side-effects on this branch
             }
             asked.insert(fnc.get());
             auto sfn = func;
@@ -543,10 +535,10 @@ namespace das {
 
     // program
 
-    void Program::buildAccessFlags(TextWriter & logs) {
+    void Program::buildAccessFlags(TextWriter &) {
         markSymbolUse(true);
         // determine function side-effects
-        TrackFieldAndAtFlags faf(logs);
+        TrackFieldAndAtFlags faf;
         faf.MarkSideEffects(*thisModule);
     }
 

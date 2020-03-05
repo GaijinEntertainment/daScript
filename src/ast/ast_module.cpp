@@ -360,7 +360,7 @@ namespace das {
                 if ( isupper(ch) ) {
                     return false;
                 }
-            } else if ( isdigit(ch) || ch=='_' ) {
+            } else if ( isdigit(ch) || ch=='_' || ch=='`' ) {
                 hasAlNum = true;
             } else if ( ispunct(ch) ) {
                 if ( canPunkt ) {

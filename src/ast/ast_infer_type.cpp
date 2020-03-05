@@ -4044,18 +4044,18 @@ namespace das {
             return Visitor::visitCallArg(call, arg, last);
         }
         string getGenericInstanceName(const Function * fn) const {
-            string name = "__gen_";
+            string name;
             if ( fn->module ) {
                 if ( fn->module->name=="$" ) {
-                    name += "_builtin";
+                    name += "builtin";
                 } else {
                     name += fn->module->name;
                 }
             }
-            name += "_";
+            name += "`";
             name += fn->name;
             for ( auto & ch : name ) {
-                if ( !isalnum(ch) && ch!='_' ) {
+                if ( !isalnum(ch) && ch!='_' && ch!='`' ) {
                     ch = '_';
                 }
             }
@@ -4086,11 +4086,11 @@ namespace das {
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
                     auto genName = getGenericInstanceName(oneGeneric.get());
-                    auto instancedFunctions = findMatchingFunctions("_::" + genName, types, true);
+                    auto instancedFunctions = findMatchingFunctions(genName, types, true);
                     if ( instancedFunctions.size() > 1 ) {
                         error("internal compiler error. multiple instances of " + genName, expr->at);
                     } else if (instancedFunctions.size() == 1) {
-                        expr->name = "_::" + genName;
+                        expr->name = genName;
                         reportGenericInfer();
                     } else if (instancedFunctions.size() == 0) {
                         auto clone = oneGeneric->clone();
@@ -4154,7 +4154,7 @@ namespace das {
                                 return nullptr;
                             }
                         }
-                        expr->name = /*"_::" + */ clone->name;
+                        expr->name = clone->name;
                         reportGenericInfer();
                     }
                 } else {
