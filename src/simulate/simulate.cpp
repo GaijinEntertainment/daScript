@@ -78,6 +78,25 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNode_DeleteLambda::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        auto pLambda = (Lambda *) subexpr->evalPtr(context);
+        pLambda = pLambda + total - 1;
+        for ( uint32_t i=0; i!=total; ++i, pLambda-- ) {
+            if ( pLambda->capture ) {
+                int32_t * fnIndex = (int32_t *) pLambda->capture;
+                SimFunction * simFunc = context.getFunction(fnIndex[1]-1);
+                if (!simFunc) context.throw_error("lambda finalizer is a null function");
+                vec4f argValues[1] = {
+                    cast<void *>::from(pLambda->capture)
+                };
+                context.call(simFunc, argValues, 0);
+                pLambda->capture = nullptr;
+            }
+        }
+        return v_zero();
+    }
+
     vec4f SimNode_Swizzle::eval ( Context & context ) {
         DAS_PROFILE_NODE
         union {

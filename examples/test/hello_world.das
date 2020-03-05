@@ -1,4 +1,4 @@
-options log = true
+options log_infer_passes = true
 
 /*
 def filter ( var arr : array<auto(TT)>; var blk : lambda<(arg:TT):bool> )
@@ -23,16 +23,15 @@ def test
     var arr <- [{int 1;2;3}]
     var t = 2
     var lmb <- generator<int>() <| $ ( )
+        var z = 0
         for x in arr
             if x == t
-                yield t
+                yield x
         return false
-/*
     finally
+        print("custom finalizer\n")
         delete arr
-        print("boo\n")
-*/
-    print("lmb = {lmb}\n")
+    delete lmb
     return true
 
 /*

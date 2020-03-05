@@ -750,6 +750,22 @@ namespace das {
         }
     };
 
+    template <>
+    struct das_delete<Lambda> {
+        static __forceinline void clear ( Context * __context__, Lambda & lambda ) {
+            if ( lambda.capture ) {
+                int32_t * fnIndex = (int32_t *) lambda.capture;
+                SimFunction * simFunc = __context__->getFunction(fnIndex[1]-1);
+                if (!simFunc) __context__->throw_error("lambda finalizer is a null function");
+                vec4f argValues[1] = {
+                    cast<void *>::from(lambda.capture)
+                };
+                __context__->call(simFunc, argValues, 0);
+                lambda.capture = nullptr;
+            }
+        }
+    };
+
     template <typename TT>
     struct das_final_call {
         TT finalizer;

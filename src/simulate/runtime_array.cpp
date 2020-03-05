@@ -65,8 +65,10 @@ namespace das
     }
 
     void GoodArrayIterator::close ( Context & context, char * _value )  {
-        char ** value = (char **) _value;
-        *value = nullptr;
+        if ( _value ) {
+            char ** value = (char **) _value;
+            *value = nullptr;
+        }
         array_unlock(context, *array);
         context.heap.free((char *)this, sizeof(GoodArrayIterator));
     }
@@ -97,8 +99,10 @@ namespace das
     }
 
     void FixedArrayIterator::close ( Context & context, char * _value )  {
-        char ** value = (char **) _value;
-        *value = nullptr;
+        if ( _value ) {
+            char ** value = (char **) _value;
+            *value = nullptr;
+        }
         context.heap.free((char *)this, sizeof(FixedArrayIterator));
     }
 

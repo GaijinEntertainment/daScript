@@ -145,8 +145,10 @@ namespace das {
             }
         }
         virtual void close ( Context & context, char * _value ) override {
-            VT ** value = (VT **) _value;
-            *value = nullptr;
+            if ( _value ) {
+                VT ** value = (VT **) _value;
+                *value = nullptr;
+            }
             context.heap.free((char *)this, sizeof(DebugInfoIterator<VT,ST>));
         }
         VT ** data;

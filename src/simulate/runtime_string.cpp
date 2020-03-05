@@ -211,8 +211,10 @@ namespace das
     }
 
     void StringIterator::close ( Context & context, char * _value )  {
-        int32_t * value = (int32_t *) _value;
-        *value = 0;
+        if ( _value ) {
+            int32_t * value = (int32_t *) _value;
+            *value = 0;
+        }
         context.heap.free((char *)this, sizeof(StringIterator));
     }
 

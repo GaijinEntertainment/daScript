@@ -54,8 +54,10 @@ namespace das
     }
 
     void TableIterator::close ( Context & context, char * _value ) {
-        char ** value = (char **) _value;
-        *value = nullptr;
+        if ( _value ) {
+            char ** value = (char **) _value;
+            *value = nullptr;
+        }
         table_unlock(context, *(Table *)table);
     }
 

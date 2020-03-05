@@ -96,6 +96,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_DeleteLambda::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(DeleteLambda);
+        V_ARG(total);
+        V_SUB(subexpr);
+        V_END();
+    }
+
     SimNode * SimNode_MakeBlock::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(MakeBlock);

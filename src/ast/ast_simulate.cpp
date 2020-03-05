@@ -964,6 +964,8 @@ namespace das
             return resN;
         } else if ( subexpr->type->baseType==Type::tString ) {
             return context.code->makeNode<SimNode_DeleteString>(at, sube, total);
+        } else if ( subexpr->type->baseType==Type::tLambda ) {
+            return context.code->makeNode<SimNode_DeleteLambda>(at, sube, total);
         } else {
             DAS_ASSERTF(0, "we should not be here. this is delete for unsupported type. infer types should have failed.");
             context.thisProgram->error("internal compilation error, generating node for unsupported ExprDelete", at);

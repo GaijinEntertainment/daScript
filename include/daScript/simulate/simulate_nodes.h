@@ -195,6 +195,14 @@ namespace das {
         uint32_t    structSize;
     };
 
+    // Delete lambda
+    struct SimNode_DeleteLambda : SimNode_Delete {
+        SimNode_DeleteLambda ( const LineInfo & a, SimNode * s, uint32_t t )
+            : SimNode_Delete(a,s,t) {}
+        virtual vec4f eval ( Context & context ) override;
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+    };
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4100)

@@ -55,7 +55,7 @@ namespace das {
         vector<FunctionPtr>     extraFunctions;
     protected:
         string generateNewLambdaName(const LineInfo & at) {
-            return "__lambda__" + to_string(at.line) + "_" + to_string(newLambdaIndex++);
+            return "_lambda_" + to_string(at.line) + "_" + to_string(newLambdaIndex++);
         }
         void pushVarStack() {
             varStack.push_back(local.size());
@@ -2379,7 +2379,7 @@ namespace das {
                 error("can't delete constant expression " + expr->subexpr->type->describe(),
                       expr->at, CompilationError::bad_delete);
             } else if ( expr->subexpr->type->isPointer() ) {
-                if ( func && !func->unsafe ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
                     error("delete of pointer requires [unsafe]", expr->at,
                           CompilationError::unsafe);
                 } else if ( !expr->native ) {
@@ -2408,7 +2408,12 @@ namespace das {
                 }
             } else {
                 auto finalizeType = expr->subexpr->type;
-                if ( finalizeType->isGoodArrayType() || finalizeType->isGoodTableType() ) {
+                if ( finalizeType->isGoodIteratorType() ) {
+                    reportGenericInfer();
+                    auto cloneFn = make_shared<ExprCall>(expr->at, "_builtin_iterator_delete");
+                    cloneFn->arguments.push_back(expr->subexpr->clone());
+                    return ExpressionPtr(cloneFn);
+                } else if ( finalizeType->isGoodArrayType() || finalizeType->isGoodTableType() ) {
                     reportGenericInfer();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
@@ -3494,6 +3499,7 @@ namespace das {
                 if ( !func->generator ) {
                     error("can't yield from non-generator",
                           expr->at, CompilationError::invalid_yield );
+                    return Visitor::visit(expr);
                 }
                 if ( !expr->subexpr->type ) return Visitor::visit(expr);
                 // const auto & yarg = func->arguments[1];

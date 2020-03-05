@@ -58,6 +58,12 @@ namespace das {
 #endif
     }
 
+    ExpressionPtr genComment ( const string & comment ) {
+        auto call = make_shared<ExprCall>(LineInfo(), "print");
+        call->arguments.push_back(make_shared<ExprConstString>(comment));
+        return call;
+    }
+
     // array comprehension
     //  invoke( $()
     //      let temp : Array<expr->subexpr->type>
@@ -285,7 +291,7 @@ namespace das {
 
     FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, bool isUnsafe ) {
-        auto lfn = lambdaName + "__def_fin";
+        auto lfn = lambdaName + "`finazlier";
         auto pFunc = make_shared<Function>();
         pFunc->generated = true;
         pFunc->at = block->at;
@@ -293,27 +299,36 @@ namespace das {
         pFunc->unsafe = isUnsafe;
         auto fb = make_shared<ExprBlock>();
         fb->at = block->at;
-        auto with = make_shared<ExprWith>(block->at);
-        with->with = make_shared<ExprVar>(block->at, "__this");
-        auto bbl = make_shared<ExprBlock>();
-        with->body = bbl;
-        with->body->at = block->at;
+        // fb->list.push_back(genComment("delete this lambda\n"));
         if ( block->finalList.size() ) {
+            auto with = make_shared<ExprWith>(block->at);
+            auto THISVAR = make_shared<ExprVar>(block->at, "__this");
+            with->with = make_shared<ExprPtr2Ref>(block->at, THISVAR);
+            auto bbl = make_shared<ExprBlock>();
+            with->body = bbl;
+            with->body->at = block->at;
             bbl->list.reserve(block->finalList.size());     // copy finally section of the block body
             for ( auto & subexpr : block->finalList ) {
                 bbl->list.push_back(subexpr->clone());
             }
+            fb->list.push_back(with);
         } else {
-            auto THISA = make_shared<ExprVar>(block->at, "__this");    // delete this
-            auto delit = make_shared<ExprDelete>(block->at, THISA);
-            bbl->list.push_back(delit);
+            auto THISA = make_shared<ExprVar>(block->at, "__this");    // delete * this
+            auto THISAP = make_shared<ExprPtr2Ref>(block->at, THISA);
+            auto delit = make_shared<ExprDelete>(block->at, THISAP);
+            fb->list.push_back(delit);
         }
-        fb->list.push_back(with);
+        auto THISA1 = make_shared<ExprVar>(block->at, "__this");    // delete this
+        auto delit1 = make_shared<ExprDelete>(block->at, THISA1);
+        delit1->native = true;
+        delit1->alwaysSafe = true;
+        fb->list.push_back(delit1);
         pFunc->body = fb;
         pFunc->result = make_shared<TypeDecl>(Type::tVoid);
         auto cTHIS = make_shared<Variable>();
         cTHIS->name = "__this";
-        cTHIS->type = make_shared<TypeDecl>(ls);
+        cTHIS->type = make_shared<TypeDecl>(Type::tPointer);
+        cTHIS->type->firstType = make_shared<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
         verifyGenerated(pFunc->body);
         return pFunc;
@@ -322,7 +337,7 @@ namespace das {
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, bool needYield, bool isUnsafe ) {
-        auto lfn = lambdaName + "__def";
+        auto lfn = lambdaName + "`function";
         auto pFunc = make_shared<Function>();
         pFunc->generated = true;
         pFunc->at = block->at;
@@ -375,7 +390,8 @@ namespace das {
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
         auto finFunc = make_shared<TypeDecl>(Type::tFunction);
-        auto finArg = make_shared<TypeDecl>(pStruct);
+        auto finArg = make_shared<TypeDecl>(Type::tPointer);
+        finArg->firstType = make_shared<TypeDecl>(pStruct);
         finArg->constant = false;
         finArg->removeConstant = true;
         finFunc->argTypes.emplace_back(finArg);

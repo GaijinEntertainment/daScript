@@ -432,6 +432,10 @@ namespace das
             return true;
         } else if ( baseType==Type::tStructure ) {
             return true;
+        } else if ( baseType==Type::tLambda ) {
+            return true;
+        } else if ( baseType==Type::tIterator ) {
+            return true;
         } else {
             return false;
         }
@@ -447,6 +451,10 @@ namespace das
         } else if ( baseType==Type::tString ) {
             return true;
         } else if ( baseType==Type::tStructure ) {
+            return true;
+        } else if ( baseType==Type::tLambda ) {
+            return true;
+        } else if ( baseType==Type::tIterator ) {
             return true;
         } else {
             return false;

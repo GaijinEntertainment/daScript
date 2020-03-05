@@ -296,15 +296,22 @@ namespace das
     }
 
     bool builtin_iterator_first ( const Sequence & it, void * data, Context * context ) {
+        if ( !it.iter ) context->throw_error("calling first on empty iterator");
         return it.iter->first(*context, (char *)data);
     }
 
     bool builtin_iterator_next ( const Sequence & it, void * data, Context * context ) {
+        if ( !it.iter ) context->throw_error("calling next on empty iterator");
         return it.iter->next(*context, (char *)data);
     }
 
     void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
-        it.iter->close(*context, (char *)&data);
+        if ( it.iter ) it.iter->close(*context, (char *)&data);
+        ((Sequence&)it).iter = nullptr;
+    }
+
+    void builtin_iterator_delete ( const Sequence & it, Context * context ) {
+        if ( it.iter ) it.iter->close(*context, nullptr);
         ((Sequence&)it).iter = nullptr;
     }
 
@@ -362,7 +369,13 @@ namespace das
             return InvokeLambda(context, ptr);
         }
         virtual void close ( Context & context, char * ) override {
-            // TODO: release lambda?
+            int32_t * fnIndex = (int32_t *) lambda.capture;
+            SimFunction * finFunc = context.getFunction(fnIndex[1]-1);
+            if (!finFunc) context.throw_error("generator finalizer is a null function");
+            vec4f argValues[1] = {
+                cast<void *>::from(lambda.capture)
+            };
+            context.call(finFunc, argValues, 0);
             context.heap.free((char *)this, sizeof(LambdaIterator));
         }
         virtual void walk ( DataWalker & walker ) override {
@@ -436,6 +449,8 @@ namespace das
                                                        SideEffects::modifyArgumentAndExternal, "builtin_iterator_next");
         addExtern<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_close");
+        addExtern<DAS_BIND_FUN(builtin_iterator_delete)>(*this, lib, "_builtin_iterator_delete",
+                                                        SideEffects::modifyArgumentAndExternal, "builtin_iterator_delete");
         // make-iterator functions
         addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator");
