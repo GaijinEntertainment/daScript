@@ -970,6 +970,7 @@ namespace das
         ExpressionPtr   exprFor;
         ExpressionPtr   exprWhere;
         ExpressionPtr   subexpr;
+        bool            generatorSyntax = false;
     };
 }
 

@@ -96,7 +96,7 @@ namespace das {
                                             const das_set<VariablePtr> & capt, const LineInfo & at );
 
     /*
-         array comprehension [[ for x in src; x_expr; where x_expr ]]
+         array comprehension [{ for x in src; x_expr; where x_expr }]
          invoke() <| $()
              let temp : Array<expr->subexpr->type>
              for .....
@@ -106,6 +106,16 @@ namespace das {
     */
     struct ExprArrayComprehension;
     ExpressionPtr generateComprehension ( ExprArrayComprehension * expr );
+
+    /*
+         array comprehension [[ for x in src; x_expr; where x_expr ]]
+         generate() <| $()
+             for .....
+                 if where ....
+                     yield subexpr
+             return false
+    */
+    ExpressionPtr generateComprehensionIterator ( ExprArrayComprehension * expr );
 
     /*
         replace reference with pointer

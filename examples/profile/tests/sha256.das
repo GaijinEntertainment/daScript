@@ -90,7 +90,7 @@ def sha256(msg:array<uint8>)
 
 [export]
 def test
-    let input <- [[for i in range(0,1024); uint8('.')]]
+    let input <- [{for i in range(0,1024); uint8('.')}]
     let dt = profile(20,"sha256") <|
         for i in range(0,1024)
             sha256(input)

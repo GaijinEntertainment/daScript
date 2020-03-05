@@ -1806,6 +1806,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->exprFor = exprFor->clone();
         cexpr->subexpr = subexpr->clone();
+        cexpr->generatorSyntax = generatorSyntax;
         if ( exprWhere ) {
             cexpr->exprWhere = exprWhere->clone();
         }

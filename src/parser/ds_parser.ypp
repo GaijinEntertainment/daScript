@@ -2136,6 +2136,21 @@ array_comprehension
         delete $iters;
         pFor->sources = sequenceToList($srcs);
         auto pAC = new ExprArrayComprehension(tokAt(@loc));
+        pAC->generatorSyntax = true;
+        pAC->exprFor = pFor;
+        pAC->subexpr = ExpressionPtr($subexpr);
+        if ( $where ) {
+            pAC->exprWhere = ExpressionPtr($where);
+        }
+        $$ = pAC;
+    }
+    |   BRACBRB DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' {
+        auto pFor = make_shared<ExprFor>(tokAt(@loc));
+        pFor->iterators = *$iters;
+        delete $iters;
+        pFor->sources = sequenceToList($srcs);
+        auto pAC = new ExprArrayComprehension(tokAt(@loc));
+        pAC->generatorSyntax = false;
         pAC->exprFor = pFor;
         pAC->subexpr = ExpressionPtr($subexpr);
         if ( $where ) {

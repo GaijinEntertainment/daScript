@@ -4598,7 +4598,8 @@ namespace das {
         virtual ExpressionPtr visit ( ExprArrayComprehension * expr ) override {
             popVarStack();
             if ( expr->subexpr->type ) {
-                auto pAC = generateComprehension(expr);
+                auto pAC = expr->generatorSyntax ?
+                    generateComprehensionIterator(expr) : generateComprehension(expr);
                 reportGenericInfer();
                 return pAC;
             }

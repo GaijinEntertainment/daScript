@@ -119,7 +119,7 @@ namespace das {
             pForBlock->list.push_back(pPush);
         }
         auto pFor = static_pointer_cast<ExprFor>(expr->exprFor->clone());
-      pFor->body = pForBlock;
+        pFor->body = pForBlock;
         pClosure->list.push_back(pFor);
         // return temp
         auto pVal = make_shared<ExprVar>();
@@ -136,6 +136,53 @@ namespace das {
         auto pInvoke = make_shared<ExprInvoke>(expr->at, "invoke");
         pInvoke->arguments.push_back(pMakeBlock);
         return pInvoke;
+    }
+
+    // array comprehension
+    //  generator( $()
+    //      for .....
+    //          if where ....
+    //              yield subexpr
+    //      return false
+    ExpressionPtr generateComprehensionIterator ( ExprArrayComprehension * expr ) {
+        auto pClosure = make_shared<ExprBlock>();
+        pClosure->at = expr->subexpr->at;
+        pClosure->returnType = make_shared<TypeDecl>(Type::autoinfer);
+        // yield subexpr
+        auto pYield = make_shared<ExprYield>(expr->at, expr->subexpr->clone());
+        // for ...
+        auto pForBlock = make_shared<ExprBlock>();
+        pForBlock->at = expr->at;
+        pForBlock->inTheLoop = true;
+        if ( expr->exprWhere ) {
+            // yield block
+            auto pPushBlock = make_shared<ExprBlock>();
+            pPushBlock->at = expr->at;
+            pPushBlock->list.push_back(pYield);
+            // for .... if where ... yield
+            auto pIf = make_shared<ExprIfThenElse>();
+            pIf->at = expr->at;
+            pIf->cond = expr->exprWhere->clone();
+            pIf->if_true = pPushBlock;
+            pForBlock->list.push_back(pIf);
+        } else {
+            // for .... yield
+            pForBlock->list.push_back(pYield);
+        }
+        auto pFor = static_pointer_cast<ExprFor>(expr->exprFor->clone());
+        pFor->body = pForBlock;
+        pClosure->list.push_back(pFor);
+        // return false
+        auto pRet = make_shared<ExprReturn>();
+        pRet->at = expr->at;
+        pRet->subexpr = make_shared<ExprConstBool>(expr->at, false);
+        pClosure->list.push_back(pRet);
+        // make block
+        auto pMakeBlock = make_shared<ExprMakeBlock>(expr->at,pClosure);
+        // generator
+        auto pMkGen = make_shared<ExprMakeGenerator>(expr->at, pMakeBlock);
+        pMkGen->iterType = make_shared<TypeDecl>(*expr->subexpr->type);
+        return pMkGen;
     }
 
     /* a->b(args) is short for invoke(a.b, cast<auto> a, args)  */
