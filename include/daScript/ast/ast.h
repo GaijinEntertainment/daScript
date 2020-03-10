@@ -825,6 +825,12 @@ namespace das
         bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
+        union {
+            struct {
+                bool    unsafe : 1;
+            };
+            uint32_t    flags = 0;
+        };
     public:
         das_map<CompilationError,int>   expectErrors;
     public:
