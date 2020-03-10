@@ -919,8 +919,8 @@ namespace das {
     };
 
     void Program::setPrintFlags() {
-        SetPrinterFlags flags;
-        visit(flags);
+        SetPrinterFlags pflags;
+        visit(pflags);
     }
 
     template <typename TT>
