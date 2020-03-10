@@ -521,6 +521,7 @@ namespace das
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<StringAllocator>();
         debugInfo = make_shared<DebugInfoAllocator>();
+        ownStack = (stackSize != 0);
     }
 
     Context::Context(const Context & ctx) : stack(ctx.stack.size()) {
@@ -529,6 +530,7 @@ namespace das
         debugInfo = ctx.debugInfo;
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
+        ownStack = (ctx.stack.size() != 0);
         // heap
         heap.setInitialSize(ctx.heap.initialSize);
         stringHeap.setInitialSize(ctx.stringHeap.initialSize);

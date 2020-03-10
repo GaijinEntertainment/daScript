@@ -480,6 +480,7 @@ namespace das
         shared_ptr<DebugInfoAllocator>  debugInfo;
         StackAllocator                  stack;
         uint32_t                        insideContext = 0;
+        bool                            ownStack = false;
     public:
         vec4f *         abiThisBlockArg;
         vec4f *         abiArg;
