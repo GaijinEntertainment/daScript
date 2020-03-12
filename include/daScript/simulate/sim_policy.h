@@ -147,16 +147,18 @@ namespace  das {
     };
 
     struct SimPolicy_MathFloat {
-        static __forceinline float Abs   ( float a, Context & )          { return v_extract_x(v_abs(v_splats(a))); }
-        static __forceinline float Floor ( float a, Context & )          { return v_extract_x(v_floor(v_splats(a))); }
-        static __forceinline float Ceil  ( float a, Context & )          { return v_extract_x(v_ceil(v_splats(a))); }
-        static __forceinline float Sqrt  ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
-        static __forceinline float Min   ( float a, float b, Context & ) { return a < b ? a : b; }
-        static __forceinline float Max   ( float a, float b, Context & ) { return a > b ? a : b; }
-        static __forceinline float Sat   ( float a, Context & )          { return a < 0 ? 0 : (a > 1 ? 1 : a); }
-        static __forceinline float Mad   ( float a, float b, float c, Context & ) { return a*b + c; }
-        static __forceinline float Lerp  ( float a, float b, float t, Context & ) { return (b-a)*t +a; }
-        static __forceinline float Clamp  ( float t, float a, float b, Context & ){ return t>a ? (t<b ? t : b) : a; }
+        static __forceinline float Abs      ( float a, Context & )          { return v_extract_x(v_abs(v_splats(a))); }
+        static __forceinline float Floor    ( float a, Context & )          { return v_extract_x(v_floor(v_splats(a))); }
+        static __forceinline float Ceil     ( float a, Context & )          { return v_extract_x(v_ceil(v_splats(a))); }
+        static __forceinline float Sqrt     ( float a, Context & )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
+        static __forceinline float RSqrt    ( float a, Context & )          { return v_extract_x(v_rsqrt_x(v_splats(a))); }
+        static __forceinline float RSqrtEst ( float a, Context & )          { return v_extract_x(v_rsqrt_fast_x(v_splats(a))); }
+        static __forceinline float Min      ( float a, float b, Context & ) { return a < b ? a : b; }
+        static __forceinline float Max      ( float a, float b, Context & ) { return a > b ? a : b; }
+        static __forceinline float Sat      ( float a, Context & )          { return a < 0 ? 0 : (a > 1 ? 1 : a); }
+        static __forceinline float Mad      ( float a, float b, float c, Context & ) { return a*b + c; }
+        static __forceinline float Lerp     ( float a, float b, float t, Context & ) { return (b-a)*t +a; }
+        static __forceinline float Clamp    ( float t, float a, float b, Context & ) { return t>a ? (t<b ? t : b) : a; }
 
         static __forceinline int Trunci ( float a, Context & )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
         static __forceinline int Roundi ( float a, Context & )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
@@ -189,17 +191,19 @@ namespace  das {
     };
 
     struct SimPolicy_MathVec {
-        static __forceinline vec4f Abs   ( vec4f a, Context & )          { return v_abs(a); }
-        static __forceinline vec4f Floor ( vec4f a, Context & )          { return v_floor(a); }
-        static __forceinline vec4f Ceil  ( vec4f a, Context & )          { return v_ceil(a); }
-        static __forceinline vec4f Sqrt  ( vec4f a, Context & )          { return v_sqrt4(a); }
-        static __forceinline vec4f Min   ( vec4f a, vec4f b, Context & ) { return v_min(a,b); }
-        static __forceinline vec4f Max   ( vec4f a, vec4f b, Context & ) { return v_max(a,b); }
-        static __forceinline vec4f Sat   ( vec4f a, Context & )          { return v_min(v_max(a,v_zero()),v_splats(1.0f)); }
-        static __forceinline vec4f Clamp ( vec4f a, vec4f r0, vec4f r1, Context & ) { return v_max(v_min(a,r1), r0); }
-        static __forceinline vec4f Mad   ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
-        static __forceinline vec4f MadS  ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,v_perm_xxxx(b),c); }
-        static __forceinline vec4f Lerp  ( vec4f a, vec4f b, vec4f t, Context & ) { return v_madd(v_sub(b,a),t,a); }
+        static __forceinline vec4f Abs      ( vec4f a, Context & )          { return v_abs(a); }
+        static __forceinline vec4f Floor    ( vec4f a, Context & )          { return v_floor(a); }
+        static __forceinline vec4f Ceil     ( vec4f a, Context & )          { return v_ceil(a); }
+        static __forceinline vec4f Sqrt     ( vec4f a, Context & )          { return v_sqrt4(a); }
+        static __forceinline vec4f RSqrt    ( vec4f a, Context & )          { return v_rsqrt4(a); }
+        static __forceinline vec4f RSqrtEst ( vec4f a, Context & )          { return v_rsqrt4_fast(a); }
+        static __forceinline vec4f Min      ( vec4f a, vec4f b, Context & ) { return v_min(a,b); }
+        static __forceinline vec4f Max      ( vec4f a, vec4f b, Context & ) { return v_max(a,b); }
+        static __forceinline vec4f Sat      ( vec4f a, Context & )          { return v_min(v_max(a,v_zero()),v_splats(1.0f)); }
+        static __forceinline vec4f Clamp    ( vec4f a, vec4f r0, vec4f r1, Context & ) { return v_max(v_min(a,r1), r0); }
+        static __forceinline vec4f Mad      ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,b,c); }
+        static __forceinline vec4f MadS     ( vec4f a, vec4f b, vec4f c, Context & ) { return v_madd(a,v_perm_xxxx(b),c); }
+        static __forceinline vec4f Lerp     ( vec4f a, vec4f b, vec4f t, Context & ) { return v_madd(v_sub(b,a),t,a); }
 
         static __forceinline vec4f Exp   ( vec4f a, Context & )          { return v_exp(a); }
         static __forceinline vec4f Log   ( vec4f a, Context & )          { return v_log(a); }
