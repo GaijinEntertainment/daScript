@@ -101,6 +101,7 @@ bool unit_test ( const string & fn, bool useAot ) {
             }
             return false;
         } else {
+            if (program->unsafe) tout << "[unsafe] ";
             Context ctx(program->getContextStackSize());
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";

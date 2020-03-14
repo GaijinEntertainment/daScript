@@ -34,15 +34,6 @@ namespace das {
             stackSize = src.stackSize;
         }
 
-        __forceinline void acquire( const StackAllocator & owner, StackAllocator & ST ) {
-            ST.copy(*this);
-            copy(owner);
-        }
-
-        __forceinline void release( StackAllocator & ST ) {
-            copy(ST);
-        }
-
         __forceinline uint32_t size() const {
             return stackSize;
         }
@@ -93,6 +84,10 @@ namespace das {
 
         __forceinline uint32_t spi() const {            // execution stack offset
             return uint32_t(evalTop - stack);
+        }
+
+        __forceinline uint32_t api() const {              // allocation stack offset
+            return uint32_t(stackTop - stack);
         }
 
         __forceinline char * bottom() const {            // bottom of the stack

@@ -238,6 +238,8 @@ namespace das {
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->privateFunction ) { ss << "[private]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
+            if ( fn->unsafe ) { ss << "[unsafe]\n"; }
+            if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
             logAnnotations(fn->annotations);
             ss << "def " << fn->name;
@@ -917,8 +919,8 @@ namespace das {
     };
 
     void Program::setPrintFlags() {
-        SetPrinterFlags flags;
-        visit(flags);
+        SetPrinterFlags pflags;
+        visit(pflags);
     }
 
     template <typename TT>

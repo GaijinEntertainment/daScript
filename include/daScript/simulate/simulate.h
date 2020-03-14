@@ -212,15 +212,12 @@ namespace das
         }
 
         __forceinline void restart( ) {
-            DAS_ASSERTF(stack.empty(),"can't reset context during the simulation");
             DAS_ASSERTF(insideContext==0,"can't reset locked context");
             stopFlags = 0;
             exception = nullptr;
-            stack.reset();
         }
 
         __forceinline void restartHeaps() {
-            DAS_ASSERTF(stack.empty(),"can't reset heaps context during the simulation");
             DAS_ASSERTF(insideContext==0,"can't reset heaps in locked context");
             heap.reset();
             stringHeap.reset();
@@ -483,6 +480,7 @@ namespace das
         shared_ptr<DebugInfoAllocator>  debugInfo;
         StackAllocator                  stack;
         uint32_t                        insideContext = 0;
+        bool                            ownStack = false;
     public:
         vec4f *         abiThisBlockArg;
         vec4f *         abiArg;
@@ -524,19 +522,24 @@ namespace das
 
     class SharedStackGuard {
     public:
+        static StackAllocator *lastContextStack;
         SharedStackGuard() = delete;
         SharedStackGuard(const SharedStackGuard &) = delete;
         SharedStackGuard & operator = (const SharedStackGuard &) = delete;
-        __forceinline SharedStackGuard(Context & c, StackAllocator & stack) : ctx(c), ST(0) {
-            ctx.stack.acquire(stack, ST);
+        __forceinline SharedStackGuard(Context & currentContext, StackAllocator & shared_stack) : savedStack(0) {
+            savedStack.copy(currentContext.stack);
+            currentContext.stack.copy(lastContextStack ? *lastContextStack : shared_stack);
+            saveLastContextStack = lastContextStack;
+            lastContextStack = &currentContext.stack;
         }
         __forceinline ~SharedStackGuard() {
-            ctx.stack.release(ST);
-            ST.letGo();
+            lastContextStack->copy(savedStack);
+            lastContextStack = saveLastContextStack;
+            savedStack.letGo();
         }
     protected:
-        Context & ctx;
-        StackAllocator ST;
+        StackAllocator savedStack;
+        StackAllocator *saveLastContextStack = nullptr;
     };
 
     struct DataWalker;

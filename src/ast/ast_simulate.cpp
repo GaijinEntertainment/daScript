@@ -2056,7 +2056,7 @@ namespace das
         }
     }
 
-    bool Program::simulate ( Context & context, TextWriter & logs ) {
+    bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         context.thisProgram = this;
         context.constStringHeap = make_shared<StringAllocator>();
         if ( globalStringHeapSize ) {
@@ -2178,6 +2178,9 @@ namespace das
         // run init script and restart
         if (!context.runWithCatch([&]() {
             if (context.stack.size()) {
+                context.runInitScript();
+            } else if ( sharedStack ) {
+                SharedStackGuard guard(context, *sharedStack);
                 context.runInitScript();
             } else {
                 auto ssz = getContextStackSize();

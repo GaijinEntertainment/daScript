@@ -175,14 +175,13 @@ namespace das {
         }
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
-            if ( checkUnsafe ) {
-                auto fnMod = fn->fromGeneric ? fn->fromGeneric->module : fn->module;
-                if ( fnMod == program->thisModule.get() ) {
-                    if ( fn->unsafe ) {
-                        error("unsafe function " + fn->getMangledName() +
-                              "\nunsafe functions are prohibited by CodeOfPolicies", fn->at,
-                                CompilationError::unsafe_function);
-                    }
+            auto fnMod = fn->fromGeneric ? fn->fromGeneric->module : fn->module;
+            if ( fnMod == program->thisModule.get() ) {
+                anyUnsafe |= fn->unsafe;
+                if ( fn->unsafe && checkUnsafe ) {
+                    error("unsafe function " + fn->getMangledName() +
+                            "\nunsafe functions are prohibited by CodeOfPolicies", fn->at,
+                            CompilationError::unsafe_function);
                 }
             }
         }
@@ -196,8 +195,9 @@ namespace das {
                 }
             }
         }
-    protected:
+    public:
         ProgramPtr program;
+        bool anyUnsafe = false;
     };
 
     struct Option {
@@ -275,6 +275,7 @@ namespace das {
         // lint it
         LintVisitor lintV(shared_from_this());
         visit(lintV);
+        unsafe = lintV.anyUnsafe;
         // all control paths return something
         for ( auto & fnT : thisModule->functions ) {
             auto fn = fnT.second;

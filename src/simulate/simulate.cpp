@@ -17,6 +17,8 @@ namespace das
     #define WARN_SLOW_CAST(TYPE)
     // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
 
+    StackAllocator *SharedStackGuard::lastContextStack = nullptr;
+
     SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
         auto prefix = ((NodePrefix *)this) - 1;
         DAS_ASSERTF(prefix->magic==0xdeadc0de,"node was allocated on the heap without prefix");
@@ -519,6 +521,7 @@ namespace das
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<StringAllocator>();
         debugInfo = make_shared<DebugInfoAllocator>();
+        ownStack = (stackSize != 0);
     }
 
     Context::Context(const Context & ctx) : stack(ctx.stack.size()) {
@@ -527,6 +530,7 @@ namespace das
         debugInfo = ctx.debugInfo;
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
+        ownStack = (ctx.stack.size() != 0);
         // heap
         heap.setInitialSize(ctx.heap.initialSize);
         stringHeap.setInitialSize(ctx.stringHeap.initialSize);

@@ -785,7 +785,7 @@ namespace das
         void markOrRemoveUnusedSymbols(bool forceAll = false);
         void allocateStack(TextWriter & logs);
         string dotGraph();
-        bool simulate ( Context & context, TextWriter & logs );
+        bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
         void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
@@ -825,6 +825,12 @@ namespace das
         bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
+        union {
+            struct {
+                bool    unsafe : 1;
+            };
+            uint32_t    flags = 0;
+        };
     public:
         das_map<CompilationError,int>   expectErrors;
     public:
