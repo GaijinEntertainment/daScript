@@ -1,47 +1,14 @@
-options log_infer_passes = true
+options log = true
+options log_nodes = true
+options log_stack = true
 
-/*
-def filter ( var arr : array<auto(TT)>; var blk : lambda<(arg:TT):bool> )
-    return <- generator<TT>() <| $()
-        for x in arr
-            if invoke(blk,x)
-                yield x
-        return false
-    finally
-        print("hello\n")
+require UnitTest
+
+def getEntityTemplateName(eid) : string
+    return "foo"
 
 [export]
 def test
-    var arr <- [[for x in range(0,10); x]]
-    var farr <- to_array ( filter(arr, @(t) => (t%2)==0 )  )
-    print("farr = {farr}\n")
-	return true
-*/
-
-[export]
-def test
-    var arr <- [{int 1;2;3}]
-    var t = 2
-    var lmb <- generator<int>() <| $ ( )
-        var z = 0
-        for x in arr
-            if x == t
-                yield x
-        return false
-    finally
-        print("custom finalizer\n")
-        delete arr
-    delete lmb
+    let activeRitualTemplate : string const& = getEntityTemplateName(12)
+    print("activeRitualTemplate = {activeRitualTemplate}\n")
     return true
-
-/*
-struct Foo
-    a : array<int>
-    b : Foo?
-
-[export]
-def test
-    var f : Foo
-    delete f
-    return true
-*/
