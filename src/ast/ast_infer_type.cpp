@@ -3863,7 +3863,7 @@ namespace das {
                 error("local variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
-            } else if ( var->type->ref && !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) && var->init->type->isRef()) {
+            } else if ( var->type->ref && !var->init->type->isRef()) {
                 error("local variable " + var->name + " initialization type mismatch. reference can't be initialized via value, "
                       + var->type->describe() + " = " + var->init->type->describe(), var->at,
                         CompilationError::invalid_initialization_type);
