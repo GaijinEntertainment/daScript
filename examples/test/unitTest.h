@@ -59,6 +59,7 @@ struct SomeDummyType {
 
 __forceinline Point3 getSamplePoint3() {return Point3{0,1,2};}
 __forceinline Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
+__forceinline void project_to_nearest_navmesh_point(Point3 & a, float t) { a = Point3{ a.x + t, a.y + t, a.z + t }; }
 
 struct TestObjectFoo {
     Point3 hit;
