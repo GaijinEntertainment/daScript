@@ -1606,7 +1606,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
-            ss << "\"" << escapeString(c->text) << "\"";
+            ss << "((char *) \"" << escapeString(c->text) << "\")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt2 * c ) override {
