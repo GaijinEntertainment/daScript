@@ -309,8 +309,8 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    // #define TEST_NAME   "examples/test/hello_world.das"
-    #define TEST_NAME   "examples/test/unit_tests/new_delete.das"
+    #define TEST_NAME   "examples/test/hello_world.das"
+    // #define TEST_NAME   "examples/test/unit_tests/new_delete.das"
     unit_test(TEST_PATH TEST_NAME,false);
     //unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();

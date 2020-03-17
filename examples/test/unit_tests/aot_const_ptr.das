@@ -8,9 +8,9 @@ var
 def get_ecs_string(obj,name) : das_string?
 	return ds
 
-def get_string(obj; name, default : string)
+def get_string(obj; name, defaultValue : string)
 	let str = get_ecs_string(obj, name)
-	return str != null ? string(deref(str)) : default
+	return str != null ? string(deref(str)) : defaultValue
 
 [export]
 def test

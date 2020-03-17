@@ -24,8 +24,8 @@ namespace Goo {
     };
 }
 
-DAS_BIND_ENUM_CAST(Goo::GooEnum);
-DAS_BIND_ENUM_CAST_98_IN_NAMESPACE(Goo::GooEnum98,GooEnum98);
+DAS_BIND_ENUM_CAST(::Goo::GooEnum);
+DAS_BIND_ENUM_CAST_98_IN_NAMESPACE(::Goo::GooEnum98,GooEnum98);
 
 enum SomeEnum98 {
     SomeEnum98_zero = 0

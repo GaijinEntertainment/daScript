@@ -7,6 +7,29 @@
 
 namespace das {
 
+    das::unordered_set<string> g_cpp_keywords = {
+        /* reserved C++ names*/
+        "alignas","alignof","and","and_eq","asm","atomic_cancel","atomic_commit","atomic_noexcept","auto"
+        ,"bitand","bitor","bool","break","case","catch","char","char8_t","char16_t","char32_t","class"
+        ,"compl","concept","const","consteval","constexpr","constinit","const_cast","continue","co_await"
+        ,"co_return","co_yield","decltype","default","delete","do","double","dynamic_cast","else","enum"
+        ,"explicit","export","extern","false","float","for","friend","goto","if","inline","int","long"
+        ,"mutable","namespace","new","noexcept","not","not_eq","nullptr","operator","or","or_eq","private"
+        ,"protected","public","reflexpr","register","reinterpret_cast","requires","return","short","signed"
+        ,"sizeof","static","static_assert","static_cast","struct","switch","synchronized","template","this"
+        ,"thread_local","throw","true","try","typedef","typeid","typename","union","unsigned","using"
+        ,"virtual","void","volatile","wchar_t","while","xor","xor_eq"
+        /* extra */    
+        ,"override","final","import","module","transaction_safe","transaction_safe_dynamic"
+        /* preprocessor */
+        ,"if","elif","else","endif","ifdef","ifndef","define","undef","include","line","error",
+        "pragma","defined","__has_include","__","_Pragma"
+    };
+
+    bool isCppKeyword(const string & str) {
+        return g_cpp_keywords.find(str) != g_cpp_keywords.end();
+    }
+
     bool exprReturns ( const ExpressionPtr & expr ) {
         if ( expr->rtti_isReturn() ) {
             return true;
@@ -65,6 +88,62 @@ namespace das {
                 if ( bif->cppName.empty() ) {
                     program->error(func->describe() + " has no cppName while onlyFastAot option is set", at,
                                    CompilationError::only_fast_aot_no_cpp_name );
+                }
+            }
+        }
+        bool isValidEnumName(const string & str) const {
+            return !isCppKeyword(str);
+        }
+        bool isValidEnumValueName(const string & str) const {
+            return !isCppKeyword(str);
+        }
+        virtual void preVisit ( Enumeration * enu ) override {
+            Visitor::preVisit(enu);
+            if (!isValidEnumName(enu->name)) {
+                program->error("invalid enumeration name " + enu->name,
+                    enu->at, CompilationError::invalid_name );
+            }
+        }
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override { 
+            Visitor::preVisitEnumerationValue(enu,name,value,last);
+            if (!isValidEnumValueName(name)) {
+                program->error("invalid enumeration value name " + name,
+                    enu->at, CompilationError::invalid_name );
+            }
+        }
+        bool isValidStructureName(const string & str) const {
+            return !isCppKeyword(str);
+        }
+        virtual void preVisit ( Structure * var ) override { 
+            Visitor::preVisit(var);
+            if (!isValidStructureName(var->name)) {
+                program->error("invalid structure name " + var->name,
+                    var->at, CompilationError::invalid_name );
+            }
+        }
+        bool isValidVarName(const string & str) const {
+            return !isCppKeyword(str);
+        }
+        virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
+            Visitor::preVisitStructureField(var, decl, last);
+            if (!isValidVarName(decl.name)) {
+                program->error("invalid structure field name " + decl.name,
+                    var->at, CompilationError::invalid_name );
+            }
+        }
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
+            Visitor::preVisitGlobalLet(var);
+            if (!isValidVarName(var->name)) {
+                program->error("invalid variable name " + var->name,
+                    var->at, CompilationError::invalid_name );
+            }
+        }
+        virtual void preVisit(ExprLet * expr) override {
+            Visitor::preVisit(expr);
+            for (const auto & var : expr->variables) {
+                if (!isValidVarName(var->name)) {
+                    program->error("invalid variable name " + var->name,
+                        var->at, CompilationError::invalid_name );
                 }
             }
         }
@@ -173,8 +252,16 @@ namespace das {
                       CompilationError::assert_with_side_effects);
             }
         }
+        bool isValidFunctionName(const string & str) const {
+            return !isCppKeyword(str);
+        }
+
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
+            if (!isValidFunctionName(fn->name)) {
+                program->error("invalid function name " + fn->name,
+                    fn->at, CompilationError::invalid_name );
+            }
             auto fnMod = fn->fromGeneric ? fn->fromGeneric->module : fn->module;
             if ( fnMod == program->thisModule.get() ) {
                 anyUnsafe |= fn->unsafe;
@@ -187,12 +274,23 @@ namespace das {
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
+            if (!isValidVarName(var->name)) {
+                program->error("invalid argument variable name " + var->name,
+                    var->at, CompilationError::invalid_name );
+            }
             if ( checkUnusedArgument ) {
                 if ( !var->marked_used && var->isAccessUnused() ) {
                     error("unused function argument " + var->name +
                           "; use [unused_argument(" + var->name + ")] if intentional", var->at,
                             CompilationError::unused_function_argument);
                 }
+            }
+        }
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block, var, lastArg);
+            if (!isValidVarName(var->name)) {
+                program->error("invalid block argument variable name " + var->name,
+                    var->at, CompilationError::invalid_name );
             }
         }
     public:

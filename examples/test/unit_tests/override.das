@@ -3,26 +3,26 @@ struct Foo
     set = @@Foo_setXY
     set2 = @@Foo_setXY
 
-def Foo_setXY(var this:Foo;x,y:int)
-    this.x = x
-    this.y = y
+def Foo_setXY(var that:Foo;x,y:int)
+    that.x = x
+    that.y = y
 
 struct Foo3D : Foo
     z : int = 3
     override set = cast<auto> @@Foo3D_setXY
     override set2 = @@Foo3D_setXY2
 
-def Foo3D_setXY(var this:Foo3D;x,y:int)
-    this.x = x
-    this.y = y
-    this.z = 0
+def Foo3D_setXY(var that:Foo3D;x,y:int)
+    that.x = x
+    that.y = y
+    that.z = 0
 
 [unsafe]
 def Foo3D_setXY2(var that:Foo;x,y:int)
-    var this : Foo3D& = upcast<auto> that
-    this.x = x
-    this.y = y
-    this.z = 0
+    var that : Foo3D& = upcast<auto> that
+    that.x = x
+    that.y = y
+    that.z = 0
 
 [export]
 def test

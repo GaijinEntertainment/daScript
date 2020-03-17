@@ -6,11 +6,11 @@ struct Point
 def Point(X,Y)
     return [[Point() x=X,y=Y]]
 
-def point_magnitude(this:Point)
-    return this.x*this.x + this.y*this.y
+def point_magnitude(that:Point)
+    return that.x*that.x + that.y*that.y
 
-def point_dot(this,p:Point)
-    return this.x*p.x + this.y*p.y
+def point_dot(that,p:Point)
+    return that.x*p.x + that.y*p.y
 
 [export]
 def test
