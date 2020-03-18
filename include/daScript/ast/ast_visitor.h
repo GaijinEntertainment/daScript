@@ -26,6 +26,7 @@ namespace das {
         // what do we visit
         virtual bool canVisitFunction ( Function * fun ) { return true; }
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
+        virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) { return true; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}

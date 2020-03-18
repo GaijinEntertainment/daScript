@@ -1430,11 +1430,13 @@ namespace das {
     ExpressionPtr ExprIfThenElse::visit(Visitor & vis) {
         vis.preVisit(this);
         cond = cond->visit(vis);
-        vis.preVisitIfBlock(this, if_true.get());
-        if_true = if_true->visit(vis);
-        if ( if_false ) {
-            vis.preVisitElseBlock(this, if_false.get());
-            if_false = if_false->visit(vis);
+        if ( vis.canVisitIfSubexpr(this) ) {
+            vis.preVisitIfBlock(this, if_true.get());
+            if_true = if_true->visit(vis);
+            if ( if_false ) {
+                vis.preVisitElseBlock(this, if_false.get());
+                if_false = if_false->visit(vis);
+            }
         }
         return vis.visit(this);
     }
@@ -1446,6 +1448,7 @@ namespace das {
         cexpr->if_true = if_true->clone();
         if ( if_false )
             cexpr->if_false = if_false->clone();
+        cexpr->isStatic = isStatic;
         return cexpr;
     }
 

@@ -83,14 +83,14 @@ def clone_to_move(clone_src:auto(TT)) : TT delete const
     return <- clone_dest
 
 def clone_dim(var a;b:auto)
-	if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
+	static_if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
 		for aV,bV in a,b
 			aV := bV
 	else
 		concept_assert(false,"can't clone this array")
 
 def clone_dim(var a;b:auto#)
-    if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
+    static_if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
         for aV,bV in a,b
             aV := bV
     else
@@ -120,7 +120,7 @@ def clone(var a:das_string;b:string)
     set(a,b)
 
 def make_clone(res:auto(TT)) : TT delete const
-	if typeinfo(can_copy type TT)
+	static_if typeinfo(can_copy type TT)
 		return res
 	else
 		var temp : TT
@@ -139,7 +139,7 @@ def values(a:table<auto(keyT);auto(valT)>) : iterator<valT &>
 
 [unsafe]
 def finalize_dim(var a : auto(TT)[])
-    if typeinfo(can_delete type TT)
+    static_if typeinfo(can_delete type TT)
         for aV in a
             delete aV
     else
@@ -147,14 +147,14 @@ def finalize_dim(var a : auto(TT)[])
 
 [unsafe]
 def finalize(var a:array<auto(TT)>)
-    if typeinfo(can_delete type TT)
+    static_if typeinfo(can_delete type TT)
         for aV in a
             delete aV
     builtin_array_free(a,typeinfo(sizeof type TT))
 
 [unsafe]
 def finalize(var a:table<auto(TK);auto(TV)>)
-    if typeinfo(can_delete type TV)
+    static_if typeinfo(can_delete type TV)
         for aV in values(a)
             delete aV
     builtin_table_free(a,typeinfo(sizeof type TK),typeinfo(sizeof type TV))
@@ -211,7 +211,7 @@ def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>
-    if typeinfo(is_ref type TT)
+    static_if typeinfo(is_ref type TT)
         var rkey : TT delete const &?
         var pkey : void? = reinterpret<void?>(addr(rkey))
         var loop = _builtin_iterator_first(it,pkey)
@@ -239,10 +239,10 @@ def to_array(a:auto(TT)[]) : array<TT delete const>
 [unsafe]
 def to_array_move(var a:auto(TT)[]) : array<TT delete const>
     var arr : array<TT delete const>
-    if typeinfo(can_copy a)
+    static_if typeinfo(can_copy a)
         resize(arr,length(a))
         reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) = a
-    elif typeinfo(can_move a)
+    static_elif typeinfo(can_move a)
         resize(arr,length(a))
         reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) <- a
     else
@@ -257,10 +257,10 @@ def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const;valT>
 
 def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const;valT>
     var tab : table<keyT delete const;valT>
-    if typeinfo(can_copy type valT)
+    static_if typeinfo(can_copy type valT)
 		for x in a
 			tab[x._0] = x._1
-	elif typeinfo(can_move type valT)
+	static_elif typeinfo(can_move type valT)
 		for x in a
 			tab[x._0] <- x._1
     else
@@ -269,11 +269,11 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete cons
 
 [unsafe]
 def sort ( var a : auto(TT)[] )
-    if typeinfo(is_numeric_comparable type TT)
+    static_if typeinfo(is_numeric_comparable type TT)
         __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
-    elif typeinfo(is_vector type TT)
+    static_elif typeinfo(is_vector type TT)
         concept_assert(false,"there is no default compare function for vectors")
-    elif typeinfo(is_string type TT)
+    static_elif typeinfo(is_string type TT)
         __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
         __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a) ) <| $ ( x, y  : TT ) : bool
@@ -282,11 +282,11 @@ def sort ( var a : auto(TT)[] )
 [unsafe]
 def sort ( var a : array<auto(TT)> )
     __builtin_array_lock(a)
-    if typeinfo(is_numeric_comparable type TT)
+    static_if typeinfo(is_numeric_comparable type TT)
         __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
-    elif typeinfo(is_vector type TT)
+    static_elif typeinfo(is_vector type TT)
         concept_assert(false,"there is no default compare function for vectors")
-    elif typeinfo(is_string type TT)
+    static_elif typeinfo(is_string type TT)
         __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
         __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a) ) <| $ ( x, y  : TT ) : bool
@@ -295,11 +295,11 @@ def sort ( var a : array<auto(TT)> )
 
 [unsafe]
 def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
-    if typeinfo(is_numeric_comparable type TT)
+    static_if typeinfo(is_numeric_comparable type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
-    elif typeinfo(is_vector type TT)
+    static_elif typeinfo(is_vector type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
-    elif typeinfo(is_string type TT)
+    static_elif typeinfo(is_string type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     else
         __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a), cmp )
@@ -307,18 +307,18 @@ def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
 [unsafe]
 def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
     __builtin_array_lock(a)
-    if typeinfo(is_numeric_comparable type TT)
+    static_if typeinfo(is_numeric_comparable type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
-    elif typeinfo(is_vector type TT)
+    static_elif typeinfo(is_vector type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
-    elif typeinfo(is_string type TT)
+    static_elif typeinfo(is_string type TT)
         __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     else
         __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type TT), length(a), cmp )
     __builtin_array_unlock(a)
 
 def join(it; separator:string)
-	if !typeinfo(is_iterable it)
+	static_if !typeinfo(is_iterable it)
 		concept_assert(false,"can't join non-iterable type")
 		return ""
 	else
@@ -369,7 +369,7 @@ def find_index_if ( arr : auto(TT)[] implicit; blk : block<(key:TT):bool> )
     return -1
 
 def has_value ( a; key )
-    if typeinfo(is_iterable a)
+    static_if typeinfo(is_iterable a)
         for t in a
             if t == key
                 return true

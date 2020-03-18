@@ -3558,6 +3558,21 @@ namespace das {
             }
             return nullptr;
         }
+        virtual bool canVisitIfSubexpr ( ExprIfThenElse * expr ) override {
+            if ( expr->isStatic ) {
+                // static_if prevents normal resolve flow
+                //  so we say 'hasReturn' for current block or function
+                //  to prevent it from becoming void
+                //  until static_if resolves that is
+                if ( blocks.size() ) {
+                    ExprBlock * block = blocks.back();
+                    block->hasReturn = true;
+                } else {
+                    func->hasReturn = true;
+                }
+            }
+            return !expr->isStatic;
+        }
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( !expr->cond->type ) {
                 return Visitor::visit(expr);
@@ -3571,7 +3586,7 @@ namespace das {
                 expr->cond = Expression::autoDereference(expr->cond);
             }
             // now, for the static if
-            if ( enableInferTimeFolding ) {
+            if ( enableInferTimeFolding || expr->isStatic ) {
                 if ( auto constCond = getConstExpr(expr->cond.get()) ) {
                     reportGenericInfer();
                     auto condR = static_pointer_cast<ExprConstBool>(constCond)->getValue();
@@ -3580,6 +3595,10 @@ namespace das {
                     } else {
                         return expr->if_false;
                     }
+                } else if ( expr->isStatic ) {
+                    error("static_if must resolve to constant", expr->at,
+                          CompilationError::condition_must_be_static);
+                    return Visitor::visit(expr);
                 }
             }
             // now, to unwrap the generator

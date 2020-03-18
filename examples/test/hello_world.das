@@ -1,3 +1,4 @@
+// options log_infer_passes = true
 options log = true
 
 /////////////
@@ -54,7 +55,7 @@ def reduce_by_reference(it:iterator<auto(TT)>;functor)
 // reduce value, any invokable
 [unsafe,private]
 def reduce_by_value(it:iterator<auto(TT)>;functor)
-    var left, right : TT delete &
+    var left, right : TT
     var pkey : void? = reinterpret<void?>(addr(right))
     var loop = _builtin_iterator_first(it,pkey)
     if loop
@@ -71,7 +72,7 @@ def reduce_by_value(it:iterator<auto(TT)>;functor)
 // reduce with lambda
 [unsafe]
 def reduce(it:iterator<auto(TT)>;blk:lambda<(left,right:TT delete &):TT const delete &>)
-    if typeinfo(is_ref type TT)
+    static_if typeinfo(is_ref type TT)
         return reduce_by_reference(it,blk)
     else
         return reduce_by_value(it,blk)
@@ -79,7 +80,7 @@ def reduce(it:iterator<auto(TT)>;blk:lambda<(left,right:TT delete &):TT const de
 // reduce with function
 [unsafe]
 def reduce(it:iterator<auto(TT)>;blk:function<(left,right:TT delete &):TT const delete &>)
-    if typeinfo(is_ref type TT)
+    static_if typeinfo(is_ref type TT)
         return reduce_by_reference(it,blk)
     else
         return reduce_by_value(it,blk)
@@ -87,7 +88,7 @@ def reduce(it:iterator<auto(TT)>;blk:function<(left,right:TT delete &):TT const 
 // reduce with block
 [unsafe]
 def reduce(it:iterator<auto(TT)>;blk:block<(left,right:TT delete &):TT const delete &>)
-    if typeinfo(is_ref type TT)
+    static_if typeinfo(is_ref type TT)
         return reduce_by_reference(it,blk)
     else
         return reduce_by_value(it,blk)
@@ -102,7 +103,7 @@ def sum(it:iterator<auto(TT)>)
 
 // any
 def any ( it )
-    if !typeinfo(is_iterable it)
+    static_if !typeinfo(is_iterable it)
         concept_assert(false,"can't ANY non-iterable type")
         return false
     else
@@ -113,7 +114,7 @@ def any ( it )
 
 // all
 def all ( it )
-    if !typeinfo(is_iterable it)
+    static_if !typeinfo(is_iterable it)
         concept_assert(false,"can't ALL non-iterable type")
         return false
     else
@@ -254,9 +255,7 @@ def test
     )
 
     (   // any (pass)
-            range(0,10)
-        |>  each()
-        |>  map ( @(x) : bool => x % 3 != 0 )
+            [[bool true;false]]
         |>  any()
         |>  verify()
     )

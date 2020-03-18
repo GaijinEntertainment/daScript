@@ -83,6 +83,7 @@ namespace das
     ,   cant_pass_temporary                     =   30509       //  let t : int? = q // where q is int?#
 
     ,   condition_must_be_bool                  =   30601       //  if ( 10 ) ...
+    ,   condition_must_be_static                =   30602       //  if ( constexpr ) only
 
     ,   cant_pipe                               =   30701       //  wtf <| arg
 

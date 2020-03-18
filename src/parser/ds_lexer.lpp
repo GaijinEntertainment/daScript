@@ -221,7 +221,9 @@
 <normal>"for"                                           /* das_need_oxford_comma = false; */ return DAS_FOR;
 <normal>"while"                                         das_need_oxford_comma = false; return DAS_WHILE;
 <normal>"if"                                            das_need_oxford_comma = false; return DAS_IF;
+<normal>"static_if"                                     das_need_oxford_comma = false; return DAS_STATIC_IF;
 <normal>"elif"                                          das_need_oxford_comma = false; return DAS_ELIF;
+<normal>"static_elif"                                   das_need_oxford_comma = false; return DAS_STATIC_ELIF;
 <normal>"else"                                          das_need_oxford_comma = false; return DAS_ELSE;
 <normal>"finally"                                       das_need_oxford_comma = false; return DAS_FINALLY;
 <normal>"def"                                           das_need_oxford_comma = false; return DAS_DEF;

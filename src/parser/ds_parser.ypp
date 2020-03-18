@@ -120,6 +120,7 @@
 %token  DAS_DEF             "def"
 %token  DAS_WHILE           "while"
 %token  DAS_IF              "if"
+%token  DAS_STATIC_IF       "static_if"
 %token  DAS_ELSE            "else"
 %token  DAS_FOR             "for"
 %token  DAS_CATCH           "catch"
@@ -132,6 +133,7 @@
 %token  DAS_IS              "is"
 %token  DAS_AS              "as"
 %token  DAS_ELIF            "elif"
+%token  DAS_STATIC_ELIF     "static_elif"
 %token  DAS_ARRAY           "array"
 %token  DAS_RETURN          "return"
 %token  DAS_NULL            "null"
@@ -293,6 +295,9 @@
 %type <b>               is_public_module
 %type <b>               optional_shared
 %type <b>               block_or_lambda
+
+%type <b>               if_or_static_if
+%type <b>               elif_or_static_elif
 
 %type <i>               copy_or_move_or_clone
 
@@ -566,19 +571,33 @@ expression_goto
     }
     ;
 
+elif_or_static_elif
+    :   DAS_ELIF          { $$ = false; }
+    |   DAS_STATIC_ELIF   { $$ = true; }
+    ;
+
 expression_else
     :                                                      { $$ = nullptr; }
     |   DAS_ELSE expression_block[block]                   { $$ = $block; }
-    |   DAS_ELIF[loc] expr[cond] expression_block[block] expression_else[then] {
-        $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
+    |   elif_or_static_elif[loc] expr[cond] expression_block[block] expression_else[then] {
+        auto eite = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
+        eite->isStatic = $loc;
+        $$ = eite;
     }
     ;
 
+if_or_static_if
+    :   DAS_IF          { $$ = false; }
+    |   DAS_STATIC_IF   { $$ = true; }
+    ;
+
 expression_if_then_else
-    :   DAS_IF[loc] expr[cond] expression_block[block] expression_else[then] {
-        $$ = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
+    :   if_or_static_if[loc] expr[cond] expression_block[block] expression_else[then] {
+        auto eite = new ExprIfThenElse(tokAt(@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
+        eite->isStatic = $loc;
+        $$ = eite;
     }
     ;
 
