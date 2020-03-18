@@ -122,6 +122,23 @@ def all ( it )
                 return false
         return true
 
+// islice
+def islice( var src : iterator<auto(TT)>; start,stop : int ) : iterator<TT>
+    return <- generator<TT> () <| $ ()
+        for x,i in src,range(0,INT_MAX)  // todo: optimize similar to reduce
+            if i>=stop
+                return false
+            elif i>=start
+                yield x
+        return false
+
+// [[ start; start+step; start+2*step ]]
+def count(var start,step:int) : iterator<int>
+    return <- each() <| @(var result:int&) : bool
+        result = start
+        start += step
+        return true
+
 def is_equal(a,b)
     return a == b
 
@@ -269,6 +286,23 @@ def test
         // |>  echo()
         |>  all()
         |>  not()
+        |>  verify()
+    )
+
+    (   // islice
+            range(0,10)
+        |>  each()
+        |>  islice(1,4)
+        |>  sum()
+        |>  is_equal(6)
+        |>  verify()
+    )
+
+    (   // count
+            count(0,10)
+        |>  islice(0,10)
+        |>  sum()
+        |>  is_equal(450)
         |>  verify()
     )
 
