@@ -375,8 +375,10 @@ namespace das
             vec4f argValues[1] = {
                 cast<void *>::from(lambda.capture)
             };
+            auto flags = context.stopFlags; // need to save stop flags, we can be in the middle of some return or something
             context.call(finFunc, argValues, 0);
             context.heap.free((char *)this, sizeof(LambdaIterator));
+            context.stopFlags = flags;
         }
         virtual void walk ( DataWalker & walker ) override {
             walker.beforeLambda(&lambda, lambda.getTypeInfo());
