@@ -87,6 +87,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Rtti);
+    NEED_MODULE(Module_Functional);
     require_project_specific_modules();
     for ( ;; ) {
         if ( !compile_and_run(argv[1]) ) {

@@ -18,7 +18,7 @@ namespace das
 
     template <typename Result, typename ...Args>
     struct TBlock : Block {
-        TBlock() = default;
+        TBlock()  {}
         TBlock( const TBlock & ) = default;
         TBlock( const Block & that ) { *(Block *)this = that; }
     };
@@ -59,7 +59,7 @@ namespace das
     static_assert(sizeof(Lambda)==sizeof(void *), "has to be castable");
 
     struct Tuple {
-        Tuple() = default;
+        Tuple() {}
     };
 
     struct Array {

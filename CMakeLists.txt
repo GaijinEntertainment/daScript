@@ -99,6 +99,7 @@ src/builtin/module_builtin_random.cpp
 src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_fio.cpp
+src/builtin/module_builtin_functional.cpp
 src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
@@ -106,12 +107,15 @@ src/builtin/fio.das.inc
 src/builtin/fio.das
 src/builtin/rtti.das.inc
 src/builtin/rtti.das
+src/builtin/functional.das.inc
+src/builtin/functional.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 XXD(src/builtin/builtin.das)
 XXD(src/builtin/fio.das)
 XXD(src/builtin/rtti.das)
+XXD(src/builtin/functional.das)
 
 IF(MSVC)
 set_source_files_properties(src/ast/ast_simulate.cpp PROPERTIES COMPILE_FLAGS /bigobj)

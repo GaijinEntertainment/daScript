@@ -467,11 +467,11 @@ namespace das {
         makeS->at = at;
         makeS->makeType = make_shared<TypeDecl>(ls);
         auto ms = make_shared<MakeStruct>();
-        auto atTHIS = make_shared<ExprAddr>(lf->at, lf->name);
+        auto atTHIS = make_shared<ExprAddr>(lf->at, "_::" + lf->name);
         // TODO: expand atTHIS->funcType, so that it points to correct function by type as well
         auto mTHIS = make_shared<MakeFieldDecl>(lf->at, "__lambda", atTHIS, false);
         ms->push_back(mTHIS);
-        auto atTHISF = make_shared<ExprAddr>(lff->at, lff->name);
+        auto atTHISF = make_shared<ExprAddr>(lff->at, "_::" + lff->name);
         auto mTHISF = make_shared<MakeFieldDecl>(lf->at, "__finalize", atTHISF, false);
         ms->push_back(mTHISF);
         for ( auto cV : capt ) {

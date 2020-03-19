@@ -446,6 +446,18 @@ namespace das {
             return fn->fromGeneric ? fn->fromGeneric->module : fn->module;
         }
 
+        bool canCallPrivate ( const FunctionPtr & pFn, Module * mod, Module * thisMod ) const {
+            if ( !pFn->privateFunction ) {
+                return true;
+            } else if ( pFn->module==mod || pFn->module==thisMod ) {
+                return true;
+            } else if ( pFn->fromGeneric && (pFn->fromGeneric->module==mod || pFn->fromGeneric->module==thisMod) ) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
         vector<FunctionPtr> findFuncAddr ( const string & name ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -457,7 +469,7 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 result.push_back(pFn);
                             }
                         }
@@ -488,7 +500,7 @@ namespace das {
                 if ( itFn != mod->functions.end() ) {
                     const auto & pFn = itFn->second;
                     if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                        if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                        if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                             if ( pFn->result->isSameType(*resType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
                                 result.push_back(pFn);
                             }
@@ -784,7 +796,7 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
                                     result.push_back(pFn);
                                 }
@@ -808,7 +820,7 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if (  inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get()) ) ) {
-                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                     result.push_back(pFn);
                                 }
@@ -832,7 +844,7 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
                                     result.push_back(pFn);
                                 }
@@ -856,7 +868,7 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
-                            if ( !pFn->privateFunction || pFn->module==program->thisModule.get() ) {
+                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                                     result.push_back(pFn);
                                 }
@@ -900,7 +912,7 @@ namespace das {
                         ss << inWhichModule->name << "\n";
                     }
                 }
-                if ( missFn->privateFunction && missFn->module!=program->thisModule.get() ) {
+                if ( canCallPrivate(missFn,inWhichModule,program->thisModule.get()) ) {
                     ss << "\t\tfunction is private";
                     if ( !missFn->module->name.empty() ) {
                         ss << " to module " << missFn->module->name;

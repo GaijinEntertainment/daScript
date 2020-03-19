@@ -162,6 +162,7 @@ int main() {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Random);
+    NEED_MODULE(Module_Functional);
     NEED_MODULE(Module_PathTracerHelper);
     unit_test(TEST_PATH "examples/pathTracer/toy_path_tracer.das");
     Module::Shutdown();

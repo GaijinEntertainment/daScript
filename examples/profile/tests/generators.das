@@ -1,15 +1,4 @@
-def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT):bool> )
-    return <- generator<TT> () <| $ ()
-        for w in src
-            if invoke(blk,w)
-                yield w
-        return false
-
-def map(var src:iterator<auto(TT)>; blk:lambda<(what:TT):auto(QQ)>) : iterator<QQ>
-    return <- generator<QQ> () <| $ ()
-        for w in src
-            yield invoke(blk,w)
-        return false
+require functional
 
 def each_a(r:range) : array<int>
     var a : array<int>

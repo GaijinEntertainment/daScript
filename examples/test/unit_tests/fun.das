@@ -1,6 +1,7 @@
 // options log_infer_passes = true
 // options log = true
 // options log_nodes = true
+// options log_cpp = true
 
 require functional
 
@@ -184,3 +185,4 @@ def test
     )
 
     return true
+

@@ -373,7 +373,7 @@ namespace das {
 
     template <typename TT>
     struct TArray : Array {
-        TArray() = default;
+        TArray()  {}
         TArray(TArray & arr) { moveA(arr); }
         TArray(TArray && arr ) { moveA(arr); }
         TArray & operator = ( TArray & arr ) { moveA(arr); return *this; }
@@ -413,7 +413,7 @@ namespace das {
 
     template <typename TK, typename TV>
     struct TTable : Table {
-        TTable() = default;
+        TTable()  {}
         TTable(TTable & arr) { moveT(arr); }
         TTable(TTable && arr ) { moveT(arr); }
         TTable & operator = ( TTable & arr ) { moveT(arr); return *this; }
@@ -439,7 +439,7 @@ namespace das {
 
     template <int tupleSize, typename ...TA>
     struct TTuple : Tuple {
-        TTuple() = default;
+        TTuple() {}
         TTuple(const TTuple & arr) { moveT(arr); }
         TTuple(TTuple && arr ) { moveT(arr); }
         TTuple & operator = ( const TTuple & arr ) { moveT(arr); return *this; }

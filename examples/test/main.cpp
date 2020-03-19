@@ -303,14 +303,15 @@ int main() {
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_Random);
+    NEED_MODULE(Module_Functional);
 #if 0 // Debug this one test
     compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/circular_module_dependency.das",true);
     Module::Shutdown();
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "examples/test/hello_world.das"
-    // #define TEST_NAME   "examples/test/unit_tests/new_delete.das"
+    // #define TEST_NAME   "examples/test/hello_world.das"
+    #define TEST_NAME   "examples/test/unit_tests/fun.das"
     unit_test(TEST_PATH TEST_NAME,false);
     //unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();
