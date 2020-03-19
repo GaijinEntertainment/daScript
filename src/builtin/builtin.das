@@ -211,7 +211,11 @@ def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>
-    static_if typeinfo(is_ref type TT)
+    for x in it
+        push(arr,x)
+/*
+    // this is here to show internal implementation of the 'for' loop with iterator
+    static_if typeinfo(is_ref_value type TT)
         var rkey : TT delete const &?
         var pkey : void? = reinterpret<void?>(addr(rkey))
         var loop = _builtin_iterator_first(it,pkey)
@@ -227,6 +231,7 @@ def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
             push(arr,rkey)
             loop = _builtin_iterator_next(it,pkey)
         _builtin_iterator_close(it,pkey)
+*/
     return <- arr
 
 [unsafe]

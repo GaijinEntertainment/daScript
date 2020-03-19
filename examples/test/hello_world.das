@@ -1,5 +1,6 @@
 // options log_infer_passes = true
-options log = true
+// options log = true
+// options log_nodes = true
 
 /////////////
 // functional
@@ -34,64 +35,35 @@ def map(var src:iterator<auto(TT)>; blk:function<(what:TT):auto(QQ)>) : iterator
             yield invoke(blk,w)
         return false
 
-// reduce ref, any invokable
-[unsafe,private]
-def reduce_by_reference(it:iterator<auto(TT)>;functor)
-    var left : TT delete const &
-    var right : TT delete const &?
-    var pkey : void? = reinterpret<void?>(addr(right))
-    var loop = _builtin_iterator_first(it,pkey)
-    if loop
-        left = *right
-        loop = _builtin_iterator_next(it,pkey)
-        while loop
-            left = invoke(functor,left,*right)
-            loop = _builtin_iterator_next(it,pkey)
-    else
-        panic("can't reduce empty sequence")
-    _builtin_iterator_close(it,pkey)
-    return left
-
-// reduce value, any invokable
-[unsafe,private]
-def reduce_by_value(it:iterator<auto(TT)>;functor)
-    var left, right : TT
-    var pkey : void? = reinterpret<void?>(addr(right))
-    var loop = _builtin_iterator_first(it,pkey)
-    if loop
-        left = right
-        loop = _builtin_iterator_next(it,pkey)
-        while loop
+ // reduce value, any invokable
+[private]
+def reduce_any(it:iterator<auto(TT)>;functor)
+    var left : TT delete &
+    var first = true
+    for right in it
+        if first
+            first = false
+            left = right
+        else
             left = invoke(functor,left,right)
-            loop = _builtin_iterator_next(it,pkey)
-    else
+    if first
         panic("can't reduce empty sequence")
-    _builtin_iterator_close(it,pkey)
     return left
 
-// reduce with lambda
+ // reduce with lambda
 [unsafe]
 def reduce(it:iterator<auto(TT)>;blk:lambda<(left,right:TT delete &):TT const delete &>)
-    static_if typeinfo(is_ref type TT)
-        return reduce_by_reference(it,blk)
-    else
-        return reduce_by_value(it,blk)
+    return reduce_any(it,blk)
 
-// reduce with function
+ // reduce with function
 [unsafe]
 def reduce(it:iterator<auto(TT)>;blk:function<(left,right:TT delete &):TT const delete &>)
-    static_if typeinfo(is_ref type TT)
-        return reduce_by_reference(it,blk)
-    else
-        return reduce_by_value(it,blk)
+    return reduce_any(it,blk)
 
-// reduce with block
+ // reduce with block
 [unsafe]
 def reduce(it:iterator<auto(TT)>;blk:block<(left,right:TT delete &):TT const delete &>)
-    static_if typeinfo(is_ref type TT)
-        return reduce_by_reference(it,blk)
-    else
-        return reduce_by_value(it,blk)
+    return reduce_any(it,blk)
 
 // summ of all elements
 //  same as reduce(it, @(a,b) => a + b)
@@ -126,10 +98,8 @@ def all ( it )
 // islice
 def islice( var src : iterator<auto(TT)>; start,stop : int ) : iterator<TT>
     return <- generator<TT> () <| $ ()
-        for x,i in src,range(0,INT_MAX)  // todo: optimize similar to reduce
-            if i>=stop
-                return false
-            elif i>=start
+        for x,i in src,range(0,stop)
+            if i>=start
                 yield x
         return false
 
@@ -139,6 +109,16 @@ def count(var start,step:int) : iterator<int>
         result = start
         start += step
         return true
+
+// [[ value; value; value; .... count times ]]
+def repeat(value : auto(TT); var count : int = 0)
+    return <- generator<TT> () <| $ ()
+        if count == 0
+            while true
+                yield value
+        for x in range(0,count)
+            yield value
+        return false
 
 def is_equal(a,b)
     return a == b
@@ -170,7 +150,10 @@ def verify_even(arr)
     for x,y in arr,range(0,50)
         assert(x==y*2)
 
-[export]
+def first(x)
+    return x._0
+
+[export,unsafe]
 def test
     // compehension
     verify_even() <| [[for x in range(0,100); x; where x % 2==0]]
@@ -246,6 +229,16 @@ def test
         |>  verify()
     )
 
+    (   // reduce ref type
+            range(0,10)
+        |>  each()
+        |>  map( @(x : int) => [[auto x, 1.5]] )
+        |>  reduce( $(x,y) => [[auto x._0 + y._0, 2.f]] )
+        |>  first()
+        |>  is_equal(45)
+        |>  verify()
+    )
+
     (   // sum
             range(0,10)
         |>  each()
@@ -302,6 +295,23 @@ def test
         |>  islice(0,10)
         |>  sum()
         |>  is_equal(450)
+        |>  verify()
+    )
+
+    (   // infinite repeat
+            repeat(10)
+        |>  islice(0,5)
+        |>  to_array()
+        |>  length()
+        |>  is_equal(5)
+        |>  verify()
+    )
+
+    (   // limited repeat
+            repeat(10,6)
+        |>  to_array()
+        |>  length()
+        |>  is_equal(6)
         |>  verify()
     )
 

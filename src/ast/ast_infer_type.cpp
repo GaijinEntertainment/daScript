@@ -2150,6 +2150,9 @@ namespace das {
                 } else if ( expr->trait=="is_ref_type" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRefType());
+                } else if ( expr->trait=="is_ref_value" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, bool(expr->typeexpr->ref));
                 } else if ( expr->trait=="is_const" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isConst());
