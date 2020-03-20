@@ -819,6 +819,7 @@ namespace das
         ModuleGroup *               thisModuleGroup;
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
+        int                         newLambdaIndex = 1;
         vector<Error>               errors;
         bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;

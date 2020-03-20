@@ -863,7 +863,7 @@ namespace das {
             auto srcv = make_shared<Variable>();
             srcv->at = expr->at;
             srcv->name = srcVarName;
-            if ( iterv->type->isRef() ) {
+            if ( iterv->type->ref ) {
                 srcv->do_not_delete = true;
                 srcv->type = make_shared<TypeDecl>(Type::tPointer);
                 srcv->type->firstType = make_shared<TypeDecl>(*iterv->type);

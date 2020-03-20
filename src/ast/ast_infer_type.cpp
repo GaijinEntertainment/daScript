@@ -48,14 +48,14 @@ namespace das {
         bool                    cppLayoutPod = false;
         const Structure *       cppLayoutParent = nullptr;
         bool                    needRestart = false;
-        uint32_t                newLambdaIndex = 1;
         bool                    enableInferTimeFolding;
         Expression *            lastEnuValue = nullptr;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
         string generateNewLambdaName(const LineInfo & at) {
-            return "_lambda_" + to_string(at.line) + "_" + to_string(newLambdaIndex++);
+            return "_lambda_" + to_string(at.line) + "_" + to_string(at.column)
+                + "_" + to_string(program->newLambdaIndex++);
         }
         void pushVarStack() {
             varStack.push_back(local.size());
@@ -1817,7 +1817,7 @@ namespace das {
                                     error("generator function name mismatch", expr->at, CompilationError::invalid_block);
                                 }
                             } else {
-                                error("generator struct name mismatch", expr->at, CompilationError::invalid_block);
+                                error("generator struct name mismatch " + ls->name, expr->at, CompilationError::invalid_block);
                             }
                             // in case of error
                             if ( !expr->iterType->isVoid() ) {
@@ -4671,6 +4671,7 @@ namespace das {
     // try infer, if failed - no macros
     // run macros til any of them does work, then reinfer and restart (i.e. infer after each macro)
     void Program::inferTypes(TextWriter &logs, ModuleGroup & libGroup) {
+        newLambdaIndex = 1;
         inferTypesNoMacro(logs);
         if ( failed() ) return;
         bool anyMacrosDidWork;
