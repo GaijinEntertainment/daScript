@@ -2089,27 +2089,23 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            vec4f * pi[totalCount];
+            char * pi[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
-                pi[t] = (vec4f *)(context.stack.sp() + stackTop[t]);
+                pi[t] = context.stack.sp() + stackTop[t];
             }
             Iterator * sources[totalCount] = {};
             for ( int t=0; t!=totalCount; ++t ) {
                 vec4f ll = source_iterators[t]->eval(context);
                 sources[t] = cast<Iterator *>::to(ll);
             }
-            vec4f ph[totalCount];
             bool needLoop = true;
             SimNode ** __restrict tail = list + total;
             for ( int t=0; t!=totalCount; ++t ) {
-                needLoop = sources[t]->first(context, (char *)(ph+t)) && needLoop;
+                needLoop = sources[t]->first(context, pi[t]) && needLoop;
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
-                for ( int t=0; t!=totalCount; ++t ){
-                    *pi[t] = ph[t];
-                }
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
@@ -2117,14 +2113,14 @@ SIM_NODE_AT_VECTOR(Float, float)
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
                 for ( int t=0; t!=totalCount; ++t ){
-                    if ( !sources[t]->next(context, (char *)(ph+t)) ) goto loopend;
+                    if ( !sources[t]->next(context, pi[t]) ) goto loopend;
                     if ( context.stopFlags ) goto loopend;
                 }
             }
         loopend:
             evalFinal(context);
             for ( int t=0; t!=totalCount; ++t ) {
-                sources[t]->close(context, (char *)(ph+t));
+                sources[t]->close(context, pi[t]);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -2157,29 +2153,27 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            vec4f * pi = (vec4f *)(context.stack.sp() + stackTop[0]);
+            char * pi = (context.stack.sp() + stackTop[0]);
             Iterator * sources;
             vec4f ll = source_iterators[0]->eval(context);
             sources = cast<Iterator *>::to(ll);
-            vec4f ph;
             bool needLoop = true;
             SimNode ** __restrict tail = list + total;
-            needLoop = sources->first(context, (char *)&ph) && needLoop;
+            needLoop = sources->first(context, pi) && needLoop;
             if ( context.stopFlags || !needLoop) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {
-                *pi = ph;
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
-                if ( !sources->next(context, (char *)&ph) ) goto loopend;
+                if ( !sources->next(context, pi) ) goto loopend;
                 if ( context.stopFlags ) goto loopend;
             }
         loopend:
             evalFinal(context);
-            sources->close(context, (char *)&ph);
+            sources->close(context, pi);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }

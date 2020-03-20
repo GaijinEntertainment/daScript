@@ -8,13 +8,19 @@ def reserve(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_reserve(Arr,newSize,typeinfo(sizeof type numT))
 
 def push(var Arr:array<auto(numT)>;value:numT const;at:int=-1)
-    Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] = value
+    static_if typeinfo(can_copy value)
+        Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] = value
+    else
+        concept_assert(false,"can't push value, which can't be copied")
 
 def pop(var Arr:array<auto(numT)>)
     resize(Arr, length(Arr)-1)  // resize will throw if negative
 
 def emplace(var Arr:array<auto(numT)>;var value:numT;at:int=-1)
-    Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] <- value
+    static_if typeinfo(can_move value)
+        Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type numT))] <- value
+    else
+        concept_assert(false,"can't emplace value, which can't be moved")
 
 def erase(var Arr:array<auto(numT)>;at:int)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type numT))

@@ -96,7 +96,7 @@ namespace das {
         pPushVal->name = compName;
         auto pPush = make_shared<ExprCall>();
         pPush->at = expr->at;
-        pPush->name = "push";
+        pPush->name = expr->subexpr->type->canCopy() ? "push" : "emplace";
         pPush->arguments.push_back(pPushVal);
         pPush->arguments.push_back(expr->subexpr->clone());
         // for ...
@@ -150,6 +150,8 @@ namespace das {
         pClosure->returnType = make_shared<TypeDecl>(Type::autoinfer);
         // yield subexpr
         auto pYield = make_shared<ExprYield>(expr->at, expr->subexpr->clone());
+        if ( !expr->subexpr->type->canCopy() )
+            pYield->moveSemantics = true;
         // for ...
         auto pForBlock = make_shared<ExprBlock>();
         pForBlock->at = expr->at;

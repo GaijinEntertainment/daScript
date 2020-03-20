@@ -291,7 +291,8 @@ namespace das {
                     expr->stackTop = allocateStack(sz);
                     if ( log ) {
                         logs << "\t" << expr->stackTop << "\t" << sz
-                            << "\tcall, line " << expr->at.line << "\n";
+                            << "\tcall, line " << expr->at.line
+                            << " // " << expr->describe() << "\n";
                     }
                 }
             }

@@ -1248,6 +1248,7 @@ namespace das {
             return nullptr;
         }
         auto cexpr = static_pointer_cast<ExprOp>(expr);
+        ExprCallFunc::clone(cexpr);
         cexpr->op = op;
         cexpr->func = func;
         cexpr->at = at;

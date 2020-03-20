@@ -94,11 +94,23 @@ def all ( it )
 
 // islice
 def islice( var src : iterator<auto(TT)>; start,stop : int ) : iterator<TT>
-    return <- generator<TT> () <| $ ()
-        for x,i in src,range(0,stop)
-            if i>=start
-                yield x
-        return false
+    static_if typeinfo(can_copy type TT delete &)
+        return <- generator<TT> () <| $ ()
+            for x,i in src,range(0,stop)
+                if i>=start
+                    yield x
+            return false
+    static_if typeinfo(can_move type TT delete &) & typeinfo(can_clone type TT delete &)
+        return <- generator<TT> () <| $ ()
+            for x,i in src,range(0,stop)
+                if i>=start
+                    var t := x
+                    yield <- t
+            return false
+    else
+        concept_assert(false,"can't islice on this iterator; subtype needs to by copiable, or moveable and cloneable")
+        var dummy : iterator<TT delete &>
+        return <- dummy
 
 // [[ start; start+step; start+2*step ]]
 def count(var start,step:int) : iterator<int>

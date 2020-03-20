@@ -2230,6 +2230,9 @@ namespace das {
                 } else if ( expr->trait=="can_move" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
+                } else if ( expr->trait=="can_clone" ) {
+                    reportGenericInfer();
+                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canClone());
                 } else if ( expr->trait=="can_delete" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canDelete());
@@ -4657,10 +4660,15 @@ namespace das {
         virtual ExpressionPtr visit ( ExprArrayComprehension * expr ) override {
             popVarStack();
             if ( expr->subexpr->type ) {
-                auto pAC = expr->generatorSyntax ?
-                    generateComprehensionIterator(expr) : generateComprehension(expr);
-                reportGenericInfer();
-                return pAC;
+                if ( !expr->subexpr->type->canCopy() && !expr->subexpr->type->canMove() ) {
+                    error("comprehension element has to be copyable or moveable",
+                        expr->at, CompilationError::invalid_type);
+                } else {
+                    auto pAC = expr->generatorSyntax ?
+                        generateComprehensionIterator(expr) : generateComprehension(expr);
+                    reportGenericInfer();
+                    return pAC;
+                }
             }
             return Visitor::visit(expr);
         }
