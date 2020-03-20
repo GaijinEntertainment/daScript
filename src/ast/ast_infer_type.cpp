@@ -458,6 +458,21 @@ namespace das {
             }
         }
 
+        // b <- a <- this
+        //  a(x)    b
+        //  this`a(x)   __::b
+        //      inWhichModule = this
+        //      objModule = _b
+        bool isVisibleFunc ( Module * inWhichModule, Module * objModule ) const {
+            if ( inWhichModule->isVisibleDirectly(objModule) ) return true;
+            // can always call within same module from instanced generic
+            if ( func && func->fromGeneric ) {
+                auto inWhichOtherModule = func->fromGeneric->module;
+                if ( inWhichOtherModule->isVisibleDirectly(objModule) ) return true;
+            }
+            return false;
+        }
+
         vector<FunctionPtr> findFuncAddr ( const string & name ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -468,7 +483,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
+                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 result.push_back(pFn);
                             }
@@ -499,7 +514,7 @@ namespace das {
                 auto itFn = mod->functions.find(mangledName);
                 if ( itFn != mod->functions.end() ) {
                     const auto & pFn = itFn->second;
-                    if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
+                    if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                         if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                             if ( pFn->result->isSameType(*resType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
                                 result.push_back(pFn);
@@ -795,7 +810,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
+                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
                                     result.push_back(pFn);
@@ -819,7 +834,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if (  inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get()) ) ) {
+                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                     result.push_back(pFn);
@@ -843,7 +858,7 @@ namespace das {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
+                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
                                     result.push_back(pFn);
@@ -867,7 +882,7 @@ namespace das {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( inWhichModule->isVisibleDirectly(getFunctionVisModule(pFn.get())) ) {
+                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                                     result.push_back(pFn);
@@ -904,7 +919,7 @@ namespace das {
                     ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                 }
                 auto visM = getFunctionVisModule(missFn.get());
-                if ( !inWhichModule->isVisibleDirectly(visM) ) {
+                if ( !isVisibleFunc(inWhichModule,visM) ) {
                     ss << "\t\tmodule " << visM->name << " is not visible directly from ";
                     if ( inWhichModule->name.empty()) {
                         ss << "the current module\n";
@@ -912,7 +927,7 @@ namespace das {
                         ss << inWhichModule->name << "\n";
                     }
                 }
-                if ( canCallPrivate(missFn,inWhichModule,program->thisModule.get()) ) {
+                if ( missFn->privateFunction && canCallPrivate(missFn,inWhichModule,program->thisModule.get()) ) {
                     ss << "\t\tfunction is private";
                     if ( !missFn->module->name.empty() ) {
                         ss << " to module " << missFn->module->name;
@@ -3370,7 +3385,7 @@ namespace das {
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeClone(stt);
-                            clf->privateFunction = program->policies.private_clones;
+                            clf->privateFunction = true;
                             extraFunctions.push_back(clf);
                         }
                         auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
@@ -4101,6 +4116,9 @@ namespace das {
             }
             return name;
         }
+        string callCloneName ( const string & name ) {
+            return "__::" + name;
+        }
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
             vector<TypeDeclPtr> types;
@@ -4126,17 +4144,24 @@ namespace das {
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
                     auto genName = getGenericInstanceName(oneGeneric.get());
-                    auto instancedFunctions = findMatchingFunctions(genName, types, true);
+                    auto instancedFunctions = findMatchingFunctions("__::" + genName, types, true);
                     if ( instancedFunctions.size() > 1 ) {
-                        error("internal compiler error. multiple instances of " + genName, expr->at);
+                        TextWriter ss;
+                        for ( auto & instFn : instancedFunctions ) {
+                            ss  << "\t" << instFn->describe() << " in "
+                                << (instFn->module->name.empty() ? "this module" : instFn->module->name)
+                                << "\n";
+                        }
+                        error("internal compiler error. multiple instances of " + genName
+                              + "\n" + ss.str(), expr->at);
                     } else if (instancedFunctions.size() == 1) {
-                        expr->name = genName;
+                        expr->name = callCloneName(genName);
                         reportGenericInfer();
                     } else if (instancedFunctions.size() == 0) {
                         auto clone = oneGeneric->clone();
                         clone->name = genName;
                         clone->fromGeneric = oneGeneric.get();
-                        clone->privateFunction = program->policies.private_generics;
+                        clone->privateFunction = true;
                         if (func) {
                             clone->inferStack.emplace_back(expr->at, func);
                             clone->inferStack.insert(clone->inferStack.end(), func->inferStack.begin(), func->inferStack.end());
@@ -4194,7 +4219,7 @@ namespace das {
                                 return nullptr;
                             }
                         }
-                        expr->name = clone->name;
+                        expr->name = callCloneName(clone->name);
                         reportGenericInfer();
                     }
                 } else {

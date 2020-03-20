@@ -32,7 +32,7 @@ def map(var src:iterator<auto(TT)>; blk:function<(what:TT):auto(QQ)>) : iterator
             yield invoke(blk,w)
         return false
 
- // reduce value, any invokable
+// reduce value, any invokable
 [private]
 def reduce_any(it:iterator<auto(TT)>;functor)
     var left : TT delete &

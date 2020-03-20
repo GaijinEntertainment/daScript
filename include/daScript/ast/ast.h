@@ -744,8 +744,6 @@ namespace das
         bool no_global_heap = false;
         bool only_fast_aot = false;
         bool aot_order_side_effects = false;
-        bool private_generics = true;
-        bool private_clones = true;
         bool no_unused_function_arguments = false;
     };
 
