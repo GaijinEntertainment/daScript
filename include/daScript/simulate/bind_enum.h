@@ -11,7 +11,7 @@
   namespace das \
   { \
     template <>\
-    struct cast <enum_name> {\
+    struct cast < enum_name > {\
       static __forceinline enum_name to ( vec4f x )            { return (enum_name) v_extract_xi(v_cast_vec4i(x)); }\
       static __forceinline vec4f from ( enum_name x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }\
     };\
@@ -22,7 +22,7 @@
   namespace das \
   { \
     template <>\
-    struct typeFactory<enum_name> {\
+    struct typeFactory< enum_name > {\
         static TypeDeclPtr make(const ModuleLibrary & library ) {\
             return library.makeEnumType(das_enum_name);\
         }\
@@ -48,7 +48,7 @@ public:\
     Enumeration##das_enum_name() : das::Enumeration(#das_enum_name) {\
         external = true;\
         cppName = #enum_name; \
-        baseType = (das::Type) das::ToBasicType< das::underlying_type<enum_name>::type >::type; \
+        baseType = (das::Type) das::ToBasicType< das::underlying_type< enum_name >::type >::type; \
         enum_name enumArray[] = { DAS_FOR_EACH(helper, enum_name, __VA_ARGS__) };\
         static const char *enumArrayName[] = { DAS_FOR_EACH(DAS_BIND_ENUM_PRINT_HELPER, enum_name, __VA_ARGS__) };\
         for (uint32_t i = 0; i < sizeof(enumArray)/sizeof(enumArray[0]); ++i)\
