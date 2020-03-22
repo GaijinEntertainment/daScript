@@ -18,7 +18,7 @@ namespace das {
             // and now its aot ready
             verifyAotReady();
         }
-        virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+        virtual ModuleAotType aotRequire ( TextWriter & ) const override {
             // tw << "#include \"daScript/simulate/aot_builtin_fio.h\"\n";
             return ModuleAotType::cpp;
         }
