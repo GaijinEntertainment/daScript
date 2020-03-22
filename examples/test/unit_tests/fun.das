@@ -1,6 +1,6 @@
-// options log_infer_passes = true
-// options log = true
-// options log_nodes = true
+//options log_infer_passes = true
+//options log = true
+//options log_nodes = true
 // options log_cpp = true
 // options log_aot = true
 
@@ -236,6 +236,17 @@ def test
     |>  is_same([[for x in range(0,10); [{int (x%3)+1;2}] ]])
     |>  verify()
     )
+
+    /*
+    var t <- (   // cycle <by moveable>
+        [[for x in range(1,4); [{int x;2}] ]]
+    |>  cycle()
+    |>  islice(0,10)
+    )
+
+    for x in t
+        print ("x = {x}\n")
+    */
 
     return true
 

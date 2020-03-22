@@ -66,7 +66,7 @@ namespace das {
         capture_field_2
      */
     StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block,
-                                       const das_set<VariablePtr> & capt, bool needYield = false );
+                                       const das_safe_set<VariablePtr> & capt, bool needYield = false );
 
     /*
         lambda function, i.e.
@@ -93,7 +93,7 @@ namespace das {
             _ba1=ba1; ba2=ba2; ... ]]
      */
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
-                                            const das_set<VariablePtr> & capt, const LineInfo & at );
+                                            const das_safe_set<VariablePtr> & capt, const LineInfo & at );
 
     /*
          array comprehension [{ for x in src; x_expr; where x_expr }]

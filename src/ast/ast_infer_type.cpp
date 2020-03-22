@@ -21,8 +21,8 @@ namespace das {
                 }
             }
         }
-        das_set<VariablePtr>    scope;
-        das_set<VariablePtr>    capt;
+        das_safe_set<VariablePtr>    scope;
+        das_safe_set<VariablePtr>    capt;
         bool                fail = false;
     };
 

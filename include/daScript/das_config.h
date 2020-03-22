@@ -5,6 +5,7 @@
 #endif
 
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -34,6 +35,8 @@ template <typename K, typename H = das::hash<K>, typename E = das::equal_to<K>>
 using das_hash_set = das_ska::flat_hash_set<K,H,E>;
 template <typename K, typename V>
 using das_safe_map = std::map<K,V>;
+template <typename K>
+using das_safe_set = std::set<K>;
 }
 #else
 namespace das {
@@ -47,6 +50,8 @@ template <typename K, typename H = das::hash<K>, typename E = das::equal_to<K>>
 using das_hash_set = std::unordered_set<K,H,E>;
 template <typename K, typename V>
 using das_safe_map = std::map<K,V>;
+template <typename K>
+using das_safe_set = std::set<K>;
 }
 #endif
 

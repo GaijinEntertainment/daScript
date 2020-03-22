@@ -429,7 +429,7 @@ namespace das {
     }
 
     StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block,
-                                       const das_set<VariablePtr> & capt, bool needYield ) {
+                                       const das_safe_set<VariablePtr> & capt, bool needYield ) {
         auto lsn = lambdaName;
         auto pStruct = make_shared<Structure>(lsn);
         auto btd = block->makeBlockType();
@@ -460,7 +460,7 @@ namespace das {
     }
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
-                                            const das_set<VariablePtr> & capt, const LineInfo & at ) {
+                                            const das_safe_set<VariablePtr> & capt, const LineInfo & at ) {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;

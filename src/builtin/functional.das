@@ -113,6 +113,7 @@ def islice( var src : iterator<auto(TT)>; start,stop : int )
         return false
 
 // [[ start; start+step; start+2*step ]]
+[generic]
 def count(var start,step:int) : iterator<int>
     return <- each() <| @(var result:int&) : bool
         result = start

@@ -26,7 +26,7 @@ namespace das {
             while ( size-- ) {
                 offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
             }
-            debug_hash("%llx", offset_basis);
+            debug_hash("%llx ", offset_basis);
         }
         __forceinline void write ( const void * pb ) {
             const uint8_t * block = (const uint8_t *) pb;
@@ -94,7 +94,7 @@ namespace das {
     }
 
     uint64_t getFunctionHash ( Function * fun, SimNode * node ) {
-        debug_hash("\n");
+        debug_hash("\n%s\n", fun->name.c_str());
         SimFnHashVisitor hashV;
         // append return type and result type
         string resT = fun->result->describe();
