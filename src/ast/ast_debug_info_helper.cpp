@@ -113,6 +113,8 @@ namespace das {
         info->flags = 0;
         if (type->ref)
             info->flags |= TypeInfo::flag_ref;
+        if (type->ref)
+            info->flags |= TypeInfo::flag_refValue;
         if (type->isRefType())
             info->flags |= TypeInfo::flag_refType;
         if ( type->isRefType() )

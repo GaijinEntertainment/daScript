@@ -153,6 +153,7 @@ namespace das
             flag_isConst = 1<<5,
             flag_isTemp = 1<<6,
             flag_isImplicit = 1<<7,
+            flag_refValue = 1<<8,
         };
         Type                type;
         StructInfo *        structType;

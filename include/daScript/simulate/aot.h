@@ -1377,6 +1377,12 @@ namespace das {
     struct das_iterator <Sequence> {
         __forceinline das_iterator(const Sequence & r) {
             that = r.iter;
+            if ( !that ) {
+                DAS_ASSERTF(false,"iterator is empty or already consumed");
+                // context.throw_error_at(debugInfo,"iterator is empty or already consumed");
+            } else {
+                r.iter = nullptr;
+            }
         }
         __forceinline ~das_iterator() {
             // delete that;

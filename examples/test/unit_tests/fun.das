@@ -2,6 +2,7 @@
 // options log = true
 // options log_nodes = true
 // options log_cpp = true
+// options log_aot = true
 
 require functional
 
@@ -22,6 +23,27 @@ def verify_even(arr)
 def first(x)
     return x._0
 
+def operator != ( a,b : tuple<int;float> )
+    return a._0!=b._0 | a._1!=b._1
+
+def operator != ( a,b : array<int> )
+    if length(a) != length(b)
+        return true
+    for x,y in a,b
+        if x != y
+            return true
+    return false
+
+def is_same(a,b)
+    for x,y in a,b
+        if x != y
+            return false
+    return true
+
+def verify_14 ( t )
+    for x,y in range(1,4),t
+        assert(y[0]==x & y[1]==2)
+
 [export,unsafe]
 def test
     // compehension
@@ -29,6 +51,12 @@ def test
 
     // array comprehension
     verify_even() <| [{for x in range(0,100); x; where x % 2==0}]
+
+    // comprehension iterator with moveable type
+    verify_14() <| [[for x in range(1,4); [{int x;2}] ]]
+
+    // comprehension array with moveable type
+    verify_14() <| [{for x in range(1,4); [{int x;2}] }]
 
     (   // filter with function
             range(0,100)
@@ -182,6 +210,31 @@ def test
         |>  length()
         |>  is_equal(6)
         |>  verify()
+    )
+
+    (   // cycle <by value>
+        range(1,4)
+    |>  each()
+    |>  cycle()
+    |>  islice(0,10)
+    |>  is_same( [[for x in range(0,10); (x % 3)+1]] )
+    |>  verify()
+    )
+
+    (   // cycle <by reference>
+        [[for x in range(1,4); [[tuple<int;float> x,2.5]]]]
+    |>  cycle()
+    |>  islice(0,10)
+    |>  is_same([[for x in range(0,10); [[tuple<int;float> (x%3)+1,2.5]]]])
+    |>  verify()
+    )
+
+    (   // cycle <by moveable>
+        [[for x in range(1,4); [{int x;2}] ]]
+    |>  cycle()
+    |>  islice(0,10)
+    |>  is_same([[for x in range(0,10); [{int (x%3)+1;2}] ]])
+    |>  verify()
     )
 
     return true
