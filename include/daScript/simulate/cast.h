@@ -41,12 +41,12 @@ namespace das
             return *((PT *)&value);
         }
         static __forceinline PT to ( const VT & value ) {
-            return prune<VT,PT>::from(value);
+            return prune<PT,VT>::from(value);
         }
     };
 
     template <typename PT, typename VT>
-    struct das_alias_vec {
+    struct das_alias_vec : das_alias_ref<PT,VT> {
         static __forceinline VT & from ( PT & value ) {
             return *((VT *)&value);
         }
@@ -63,7 +63,7 @@ namespace das
             return *((PT *)&value);
         }
         static __forceinline PT to ( const VT & value ) {
-            return prune<VT,PT>::from(value);
+            return prune<PT,VT>::from(value);
         }
         static __forceinline PT & to ( vec4f & value ) {
             return *((PT *)&value);
