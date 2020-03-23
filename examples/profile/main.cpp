@@ -140,7 +140,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_TestProfile);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Functional);
-#if 0
+#if 1
     const char * TEST_NAME = TEST_PATH "examples/profile/tests/generators.das";
     tout << "\nINTERPRETED:\n";
     unit_test(TEST_NAME,false);

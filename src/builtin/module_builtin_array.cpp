@@ -42,6 +42,21 @@ namespace das {
         return idx;
     }
 
+    int builtin_array_push_zero ( Array & pArray, int index, int stride, Context * context ) {
+        uint32_t idx = pArray.size;
+        array_resize(*context, pArray, idx + 1, stride, false);
+        if ( index >=0 ) {
+            if ( uint32_t(index) >= pArray.size ) {
+                context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
+                return 0;
+            }
+            memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
+            idx = index;
+        }
+        memset(pArray.data + idx*stride, 0, stride);
+        return idx;
+    }
+
     void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) {
         if ( uint32_t(index) >= pArray.size ) {
             context->throw_error_ex("erase index out of range, %u of %u", uint32_t(index), pArray.size);
@@ -72,6 +87,7 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_resize)>(*this, lib, "__builtin_array_resize", SideEffects::modifyArgument, "builtin_array_resize");
         addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve", SideEffects::modifyArgument, "builtin_array_reserve");
         addExtern<DAS_BIND_FUN(builtin_array_push)>(*this, lib, "__builtin_array_push", SideEffects::modifyArgument, "builtin_array_push");
+        addExtern<DAS_BIND_FUN(builtin_array_push_zero)>(*this, lib, "__builtin_array_push_zero", SideEffects::modifyArgument, "builtin_array_push_zero");
         addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase", SideEffects::modifyArgument, "builtin_array_erase");
         addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock", SideEffects::modifyArgumentAndExternal, "builtin_array_lock");
         addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock", SideEffects::modifyArgumentAndExternal, "builtin_array_unlock");

@@ -2,35 +2,53 @@ options indenting=4
 
 require functional
 
-// filter with lambda
-def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT):bool> )
-    return <- generator<TT> () <| $ ()
-        for w in src
-            if invoke(blk,w)
-                yield w
-        return false
+[private,unsafe]
+def filter_any(var src:iterator<auto(TT)>; blk )
+    static_if !typeinfo(is_ref_type type TT)
+        return <- generator<TT delete &> () <| $ ()
+            for w in src
+                if invoke(blk,w)
+                    yield w
+            return false
+    else
+        return <- generator<TT const &> () <| $ ()
+            for w in src
+                if invoke(blk,w)
+                    yield reinterpret<TT const &>(w)
+            return false
+
+def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT delete &):bool> )
+    return <- filter_any(src,blk)
 
 // filter with function
-def filter(var src:iterator<auto(TT)>; blk:function<(what:TT):bool> )
-    return <- generator<TT> () <| $ ()
-        for w in src
-            if invoke(blk,w)
-                yield w
-        return false
+def filter(var src:iterator<auto(TT)>; blk:function<(what:TT delete &):bool> )
+    return <- filter_any(src,blk)
+
+[private,unsafe]
+def map_any(var src:iterator<auto(TT)>; blk)
+    static_if typeinfo(can_copy type QQ)
+        return <- generator<QQ delete &> () <| $ ()
+            for w in src
+                yield invoke(blk,w)
+            return false
+    static_elif typeinfo(can_move type QQ)
+        return <- generator<QQ delete &> () <| $ ()
+            for w in src
+                yield <- invoke(blk,w)
+            return false
+    else
+        concept_assert(false,"can't copy or move return type")
+        var dummy : iterator<QQ>
+        return <- dummy
+
 
 // map with lambda
-def map(var src:iterator<auto(TT)>; blk:lambda<(what:TT):auto(QQ)>) : iterator<QQ>
-    return <- generator<QQ> () <| $ ()
-        for w in src
-            yield invoke(blk,w)
-        return false
+def map(var src:iterator<auto(TT)>; blk:lambda<(what:TT delete &):auto(QQ)>)
+    return <- map_any(src,blk)
 
 // map with function
-def map(var src:iterator<auto(TT)>; blk:function<(what:TT):auto(QQ)>) : iterator<QQ>
-    return <- generator<QQ> () <| $ ()
-        for w in src
-            yield invoke(blk,w)
-        return false
+def map(var src:iterator<auto(TT)>; blk:function<(what:TT delete &):auto(QQ)>)
+    return <- map_any(src,blk)
 
 // reduce value, any invokable
 [private]
@@ -94,23 +112,41 @@ def all ( it )
 
 [unsafe]
 def cycle(var src:iterator<auto(TT)>)
-    return <- generator<TT const &> () <| $ ()
-        var arr : array<TT delete &>
-        for x in src
-            var t := x
-            emplace(arr,t)
-        while true
-            for x in arr
+    static_if !typeinfo(is_ref_type type TT)
+        return <- generator<TT delete &> () <| $ ()
+            var arr : array<TT delete &>
+            for x in src
+                yield x
+                push(arr,x)
+            while true
+                for x in arr
+                    yield x
+            return false
+    else
+        return <- generator<TT const &> () <| $ ()
+            var arr : array<TT delete &>
+            for x in src
                 yield reinterpret<TT const &>(x)
-        return false
+                push_clone(arr,x)
+            while true
+                for x in arr
+                    yield reinterpret<TT const &>(x)
+            return false
 
 [unsafe]
 def islice( var src : iterator<auto(TT)>; start,stop : int )
-    return <- generator<TT const &> () <| $ ()
-        for x,i in src,range(0,stop)
-            if i>=start
-                yield reinterpret<TT const &>(x)
-        return false
+    static_if !typeinfo(is_ref_type type TT)
+        return <- generator<TT delete &> () <| $ ()
+            for x,i in src,range(0,stop)
+                if i>=start
+                    yield x
+            return false
+    else
+        return <- generator<TT const &> () <| $ ()
+            for x,i in src,range(0,stop)
+                if i>=start
+                    yield reinterpret<TT const &>(x)
+            return false
 
 // [[ start; start+step; start+2*step ]]
 [generic]

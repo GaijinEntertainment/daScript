@@ -86,6 +86,13 @@ def test
         |>  verify_even()
     )
 
+    (   // filter and map with moveable type
+            [[for x in range(0,100); [{int x;2}] ]]
+        |>  filter( @(x) => x[0] % 2==0 )
+        |>  map ( @(x) : array<int> { return <- [{int x[0]; x[0]; x[0] }]; } )
+        |>  map ( @(x) : int => x[0] )
+        |>  verify_even()
+    )
 
     (   // reduce non-ref iterator with block
             range(0,10)
@@ -236,17 +243,6 @@ def test
     |>  is_same([[for x in range(0,10); [{int (x%3)+1;2}] ]])
     |>  verify()
     )
-
-    /*
-    var t <- (   // cycle <by moveable>
-        [[for x in range(1,4); [{int x;2}] ]]
-    |>  cycle()
-    |>  islice(0,10)
-    )
-
-    for x in t
-        print ("x = {x}\n")
-    */
 
     return true
 
