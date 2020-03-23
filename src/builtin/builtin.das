@@ -22,6 +22,12 @@ def emplace(var Arr:array<auto(numT)>;var value:numT;at:int=-1)
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
+def push_clone(var Arr:array<auto(numT)>;value:numT;at:int=-1)
+    static_if typeinfo(can_clone value)
+        Arr[__builtin_array_push_zero(Arr,at,typeinfo(sizeof type numT))] := value
+    else
+        concept_assert(false,"can't push-clone value, which can't be moved")
+
 def erase(var Arr:array<auto(numT)>;at:int)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type numT))
 
@@ -218,7 +224,7 @@ def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>
     for x in it
-        push(arr,x)
+        push_clone(arr,x)
 /*
     // this is here to show internal implementation of the 'for' loop with iterator
     static_if typeinfo(is_ref_value type TT)

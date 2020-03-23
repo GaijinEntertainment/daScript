@@ -32,9 +32,9 @@ namespace das {
     }
 
     template <typename TT>
-    __forceinline void das_move ( TT & a, TT & b ) {
-        a = b;
-        memset(&b, 0, sizeof(TT));
+    __forceinline void das_move ( TT & a, const TT & b ) {
+        a = (TT &)b;
+        memset((TT *)&b, 0, sizeof(TT));
     }
 
     template <typename TT, typename QQ>
