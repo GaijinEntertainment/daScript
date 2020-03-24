@@ -68,6 +68,7 @@ struct TestObjectFoo {
     int propAdd13() {
         return fooData + 13;
     }
+    __forceinline Point3 hitPos() const { return hit; }
     __forceinline bool operator == ( const TestObjectFoo & obj ) const {
         return fooData == obj.fooData;
     }

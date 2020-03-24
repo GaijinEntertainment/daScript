@@ -49,6 +49,7 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
         addField<DAS_BIND_MANAGED_FIELD(e16)>("e16");
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
+        addProperty<DAS_BIND_MANAGED_PROP(hitPos)>("hitPos");
     }
     virtual bool isLocal() const override { return true; }
     virtual bool canMove() const override { return true; }

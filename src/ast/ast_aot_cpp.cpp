@@ -1082,11 +1082,6 @@ namespace das {
             if ( expr->type->aotAlias ) {
                 ss << "das_alias<" << expr->type->alias << ">::from(";
             }
-            if ( var->type->constant ) {
-                ss << "(";
-                describeVarLocalCppType(ss, var->type);
-                ss << ")";
-            }
             if ( var->type->ref ) {
                 ss << "&(";
             }
