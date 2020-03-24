@@ -1,5 +1,7 @@
 // options log=true
 
+struct Dummy {}
+
 struct Ball
     position:float3
     radius:float
@@ -47,6 +49,7 @@ var
 
 [export]
 def test:bool
+    assert ( typeinfo(sizeof [[Dummy]])==0 )
     if true
         var b:Ball? = new Ball
         b.position = float3(1.0,2.0,3.0)

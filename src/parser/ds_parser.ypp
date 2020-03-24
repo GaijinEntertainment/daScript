@@ -2037,6 +2037,12 @@ make_struct_decl
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
+    |   BRABRAB [loc] type_declaration[mkt] ']' ']' {
+        auto msd = new ExprMakeStructure();
+        msd->makeType = TypeDeclPtr($mkt);
+        msd->at = tokAt(@loc);
+        $$ = msd;
+    }
     |   BRABRAB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] ']' ']' {
         ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStructure *)$msd)->useInitializer = true;
