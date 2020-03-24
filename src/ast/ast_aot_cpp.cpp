@@ -210,11 +210,11 @@ namespace das {
                 stream << "/* unspecified enumeration */";
             }
         } else if ( baseType==Type::tIterator ) {
-            if ( type->firstType ) {
-                stream << "Sequence /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
-            } else {
+            // if ( type->firstType ) {
+            //     stream << "Sequence /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
+            // } else {
                 stream << "Sequence";
-            }
+            // }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             if ( !type->constant && type->baseType==Type::tBlock ) {
                 stream << "const ";
@@ -771,6 +771,7 @@ namespace das {
             if ( enu->external ) {
                 ss << "#if 0 // external enum\n";
             }
+            ss << "namespace " << aotModuleName(enu->module) << " {\n";
             ss << "\nenum class " << enu->name << " : " << das_to_cppString(enu->baseType) << " {\n";
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
@@ -784,9 +785,29 @@ namespace das {
             return Visitor::visitEnumerationValue(enu, name, value, last);
         }
         virtual EnumerationPtr visit ( Enumeration * enu ) override {
-            ss << "};\n";
+            ss  << "};\n"   // enum
+                << "}\n";   // namespace
             if ( enu->external ) {
                 ss << "#endif // external enum\n";
+            } else {
+                string enuName;
+                if ( !enu->cppName.empty() ) {
+                    enuName = enu->cppName;
+                } else if ( enu->module && !enu->module->name.empty() ) {
+                    enuName = aotModuleName(enu->module) + "::" + enu->name;
+                } else {
+                    enuName = enu->name;
+                }
+                auto castType = das_to_cppString(enu->baseType);
+                ss  << "}\n"
+                    << "template <>\n"
+                    << "struct das::cast<" << enuName << "> {\n"
+                    << "\tstatic __forceinline " << enuName << " to ( vec4f x )\t{ return ("
+                            << enuName << ") cast<" << castType << ">::to(x); }\n"
+                    << "\tstatic __forceinline vec4f from ( " << enuName << " x )\t{ return cast<"
+                            << castType << ">::from(" << castType << "(x)); }\n"
+                    << "};\n"
+                    << "namespace {\n";
             }
             return Visitor::visit(enu);
         }
@@ -823,10 +844,12 @@ namespace das {
         }
         virtual StructurePtr visit ( Structure * that ) override {
             ss << "};\n";
-            ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
-            for ( auto & tf : that->fields ) {
-                ss << "static_assert(offsetof(" << that->name << "," << tf.name << ")=="
-                    << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
+            if ( that->fields.size() ) {
+                ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
+                for ( auto & tf : that->fields ) {
+                    ss << "static_assert(offsetof(" << that->name << "," << tf.name << ")=="
+                        << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
+                }
             }
             if ( that->cppLayout ) {
                 ss << "#endif // end of skipping structure " << that->name << " declaration due to CPP layout\n";
@@ -2650,10 +2673,10 @@ namespace das {
             if ( pm == thisModule.get() ) {
                 continue;
             }
-            aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
             for ( auto & ite : pm->enumerations ) {
                 visitEnumeration(aotVisitor, ite.second.get());
             }
+            aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
             for ( auto & its : pm->structures ) {
                 visitStructure(aotVisitor, its.second.get());
             }

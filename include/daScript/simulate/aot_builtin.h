@@ -41,6 +41,7 @@ namespace das {
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context );
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, Context * context );
     void builtin_make_nil_iterator ( Sequence & result, Context * context );
+    vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * );
 
     void resetProfiler( Context * context );
     void dumpProfileInfo( Context * context );

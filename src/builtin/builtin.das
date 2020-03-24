@@ -220,6 +220,12 @@ def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
     _builtin_make_lambda_iterator(it, lam)
     return <- it
 
+def each_enum(tt:auto(TT)) : iterator<TT delete const &>
+    concept_assert(typeinfo(is_enum tt),"expecting each_enum(any enum value)")
+    var iter : iterator<TT delete const &>
+    _builtin_make_enum_iterator(iter)
+    return <- iter
+
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>

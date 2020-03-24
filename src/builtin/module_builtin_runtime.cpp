@@ -215,6 +215,37 @@ namespace das
 #pragma clang diagnostic pop
 #endif
 
+    template <typename intT>
+    struct EnumIterator : Iterator {
+        EnumIterator ( EnumInfo * ei ) : info(ei) {}
+        virtual bool first ( Context &, char * _value ) override {
+            count = 0;
+            range_to = int32_t(info->count);
+            if ( range_to ) {
+                intT * value = (intT *) _value;
+                *value      = intT(info->fields[count++]->value);
+                return true;
+            } else {
+                return false;
+            }
+        }
+        virtual bool next  ( Context &, char * _value ) override {
+            if ( range_to != count ) {
+                intT * value = (intT *) _value;
+                *value = intT(info->fields[count++]->value);
+                return true;
+            } else {
+                return false;
+            }
+        }
+        virtual void close ( Context & context, char * ) override {
+            context.heap.free((char *)this, sizeof(RangeIterator));
+        }
+        EnumInfo *  info = nullptr;
+        int32_t     count;
+        int32_t     range_to;
+    };
+
     // core functions
 
     void builtin_throw ( char * text, Context * context ) {
@@ -331,6 +362,44 @@ namespace das
         char * iter = context->heap.allocate(sizeof(RangeIterator));
         new (iter) RangeIterator(rng);
         result = { (Iterator *) iter };
+    }
+
+    vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        if ( !call->types ) context.throw_error("missing type info");
+        auto itinfo = call->types[0];
+        if ( itinfo->type != Type::tIterator ) context.throw_error("not an iterator");
+        auto tinfo = itinfo->firstType;
+        if ( !tinfo ) context.throw_error("missing iterator type info");
+        if ( tinfo->type!=Type::tEnumeration && tinfo->type!=Type::tEnumeration8
+            && tinfo->type!=Type::tEnumeration16 && tinfo->type!=Type::tEnumeration64 ) {
+            context.throw_error("not an iterator of enumeration");
+        }
+        auto einfo = tinfo->enumType;
+        if ( !einfo ) context.throw_error("missing enumeraiton type info");
+        char * iter = nullptr;
+        switch ( tinfo->type ) {
+        case Type::tEnumeration:
+            iter = context.heap.allocate(sizeof(EnumIterator<int32_t>));
+            new (iter) EnumIterator<int32_t>(einfo);
+            break;
+        case Type::tEnumeration8:
+            iter = context.heap.allocate(sizeof(EnumIterator<int8_t>));
+            new (iter) EnumIterator<int8_t>(einfo);
+            break;
+        case Type::tEnumeration16:
+            iter = context.heap.allocate(sizeof(EnumIterator<int16_t>));
+            new (iter) EnumIterator<int16_t>(einfo);
+            break;
+        case Type::tEnumeration64:
+            iter = context.heap.allocate(sizeof(EnumIterator<int64_t>));
+            new (iter) EnumIterator<int64_t>(einfo);
+            break;
+        default:
+            DAS_ASSERT(0 && "how???");
+        }
+        Sequence * seq = cast<Sequence *>::to(args[0]);
+        seq->iter = (Iterator *) iter;
+        return v_zero();
     }
 
     struct NilIterator : Iterator {
@@ -464,6 +533,8 @@ namespace das
             SideEffects::modifyArgumentAndExternal, "builtin_make_nil_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_lambda_iterator");
+        addInterop<builtin_make_enum_iterator,void,vec4f>(*this, lib, "_builtin_make_enum_iterator",
+            SideEffects::modifyArgumentAndExternal, "builtin_make_enum_iterator");
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
         addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
