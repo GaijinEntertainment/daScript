@@ -21,9 +21,6 @@ namespace das {
         ,"virtual","void","volatile","wchar_t","while","xor","xor_eq"
         /* extra */    
         ,"override","final","import","module","transaction_safe","transaction_safe_dynamic"
-        /* preprocessor */
-        ,"if","elif","else","endif","ifdef","ifndef","define","undef","include","line","error",
-        "pragma","defined","__has_include","__","_Pragma"
     };
 
     bool isCppKeyword(const string & str) {
