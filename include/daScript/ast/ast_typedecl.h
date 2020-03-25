@@ -117,6 +117,7 @@ namespace das {
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
         static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases = nullptr );
+        static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases = nullptr );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases );
         Type getRangeBaseType() const;

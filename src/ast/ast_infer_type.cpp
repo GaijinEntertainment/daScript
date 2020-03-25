@@ -1288,7 +1288,7 @@ namespace das {
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
             if ( var->type->isAuto() ) {
-                auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
+                auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
                     error("global variable " + var->name + " initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
@@ -3902,9 +3902,8 @@ namespace das {
                 return Visitor::visitLetInit(expr, var, init);
             }
             if ( var->type->isAuto() ) {
-                auto varT = TypeDecl::inferGenericType(var->type, var->init->type);
+                auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
-                    varT = TypeDecl::inferGenericType(var->type, var->init->type);
                     error("local variable " + var->name + " initialization type can't be infered, "
                           + var->type->describe() + " = " + var->init->type->describe(),
                           var->at, CompilationError::cant_infer_mismatching_restrictions );

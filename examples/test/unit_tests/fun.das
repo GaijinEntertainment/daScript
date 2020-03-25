@@ -89,7 +89,7 @@ def test
     (   // filter and map with moveable type
             [[for x in range(0,100); [{int x;2}] ]]
         |>  filter( @(x) => x[0] % 2==0 )
-        |>  map ( @(x) : array<int> { return <- [{int x[0]; x[0]; x[0] }]; } )
+        |>  map ( @(x) : array<int> => <- [{int x[0]; x[0]; x[0] }] )
         |>  map ( @(x) : int => x[0] )
         |>  verify_even()
     )
