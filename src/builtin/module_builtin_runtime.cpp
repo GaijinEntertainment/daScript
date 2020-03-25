@@ -242,8 +242,8 @@ namespace das
             context.heap.free((char *)this, sizeof(RangeIterator));
         }
         EnumInfo *  info = nullptr;
-        int32_t     count;
-        int32_t     range_to;
+        int32_t     count = 0;
+        int32_t     range_to = 0;
     };
 
     // core functions

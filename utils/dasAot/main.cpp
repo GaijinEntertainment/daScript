@@ -105,6 +105,7 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "#pragma warning(disable:4189)   // local variable is initialized but not referenced\n";
                 tw << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
                 tw << "#pragma warning(disable:4114)   // same qualifier more than once\n";
+                tw << "#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted\n";
                 tw << "#endif\n";
                 tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
                 tw << "#pragma GCC diagnostic push\n";
@@ -159,10 +160,6 @@ bool compile ( const string & fn, const string & cppFn ) {
   #define MAIN_FUNC_NAME main
 #endif
 
-namespace das {
-    extern bool g_config_no_local_vec_substitute;
-}
-
 int MAIN_FUNC_NAME(int argc, const char * argv[]) {
     if ( argc<3 ) {
         tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-nlvs|-lvs]\n";
@@ -172,10 +169,6 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
         for (int ai = 3; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
-            } else if ( strcmp(argv[ai], "-nlvs")==0 ) {
-                das::g_config_no_local_vec_substitute = true;
-            } else if ( strcmp(argv[ai], "-lvs")==0 ) {
-                das::g_config_no_local_vec_substitute = false;
             } else {
                 tout << "unsupported option " << argv[ai];
                 return -1;

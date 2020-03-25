@@ -515,34 +515,12 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
     }
 
-	/*
-		why this option exists?
-		1.
-			substituting vectors for vec4f is safe with current aot setup.
-			it also happens to be an optimization under MSVC 64-bit (and 32-bit)
-		2.
-			CLANG 9.0.0 32-bit windows generates incorrect code, when local vector substitue is enabled.
-			long story short, lambda captures vec4f, but does not align it on the stack
-			this addresses the issue, since there is no vec4f to capture
-	*/
-    bool g_config_no_local_vec_substitute = true;
-
     void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
-        if ( isLocalVec(vtype) && !g_config_no_local_vec_substitute ) {
-            if ( vtype->constant ) ss << "const ";
-            ss << "vec4f /*" << describeCppType(vtype,substituteRef) << "*/";
-        } else {
-            ss << describeCppType(vtype,substituteRef,CpptSkipRef::no);
-        }
+        ss << describeCppType(vtype,substituteRef,CpptSkipRef::no);
     }
 
     void describeVarLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
-        if ( isLocalVec(vtype) && !g_config_no_local_vec_substitute ) {
-            if ( vtype->constant ) ss << "const ";
-            ss << "vec4f /*" << describeCppType(vtype,substituteRef) << "*/";
-        } else {
-            ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,CpptSkipConst::yes);
-        }
+        ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,CpptSkipConst::yes);
     }
 
     string aotFuncNameEx ( const string & funcName ) {
@@ -1079,6 +1057,11 @@ namespace das {
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
             ss << " = ";
+            if ( var->type->constant ) {
+                ss << "(";
+                describeVarLocalCppType(ss, var->type);
+                ss << ")";
+            }
             if ( expr->type->aotAlias ) {
                 ss << "das_alias<" << expr->type->alias << ">::from(";
             }
