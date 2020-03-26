@@ -779,7 +779,7 @@ namespace das {
                 auto castType = das_to_cppString(enu->baseType);
                 ss  << "}\n"
                     << "template <>\n"
-                    << "struct das::cast<" << enuName << "> {\n"
+                    << "struct cast<" << enuName << "> {\n"
                     << "\tstatic __forceinline " << enuName << " to ( vec4f x )\t{ return ("
                             << enuName << ") cast<" << castType << ">::to(x); }\n"
                     << "\tstatic __forceinline vec4f from ( " << enuName << " x )\t{ return cast<"
