@@ -1,6 +1,7 @@
 #pragma once
 
 #include <math.h>
+#include <float.h>
 
 #include <dag_noise/dag_uint_noise.h>
 
