@@ -43,6 +43,12 @@ namespace das
         static __forceinline PT to ( const VT & value ) {
             return prune<PT,VT>::from(value);
         }
+        static __forceinline PT & to ( PT & value ) {
+            return value;
+        }
+        static __forceinline PT to ( const PT & value ) {
+            return value;
+        }
     };
 
     template <typename PT, typename VT>
@@ -64,6 +70,12 @@ namespace das
         }
         static __forceinline PT to ( const VT & value ) {
             return prune<PT,VT>::from(value);
+        }
+        static __forceinline PT & to ( PT & value ) {
+            return value;
+        }
+        static __forceinline PT to ( const PT & value ) {
+            return value;
         }
         static __forceinline PT & to ( vec4f & value ) {
             return *((PT *)&value);

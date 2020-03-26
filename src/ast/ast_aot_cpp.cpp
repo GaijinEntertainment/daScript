@@ -511,10 +511,6 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
     }
 
-    bool isVecRef ( const TypeDeclPtr & vtype ) {
-        return vtype->dim.size()==0 && vtype->isVectorType() && vtype->ref;
-    }
-
     void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
         ss << describeCppType(vtype,substituteRef,CpptSkipRef::no);
     }
@@ -1365,9 +1361,7 @@ namespace das {
             auto argT = left->type;
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
-            } else if ( isVecRef(argT) ) {
-                ss << "cast_vec_ref<" << describeCppType(argT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::to";
-            }
+            } 
             ss << "(";
         }
         virtual void preVisitRight ( ExprOp3 * that, Expression * right ) override {
@@ -1376,9 +1370,7 @@ namespace das {
             auto argT = right->type;
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
-            } else if ( isVecRef(argT) ) {
-                ss << "cast_vec_ref<" << describeCppType(argT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::to";
-            }
+            } 
             ss << "(";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
@@ -2195,9 +2187,7 @@ namespace das {
                     if ( needsArgPass(arg) ) {
                         ss << "das_arg<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
                     }
-                } else if (isVecRef(argType)) {
-                    ss << "cast_vec_ref<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::to(";
-                }
+                } 
             }
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
@@ -2207,9 +2197,7 @@ namespace das {
                     if ( needsArgPass(arg) ) {
                         ss << ")";
                     }
-                } else if (isVecRef(argType)) {
-                    ss << ")";
-                }
+                } 
             }
             if ( !last ) {
                 if (call->name == "assert" || call->name=="verify" || call->name=="debug") {
@@ -2406,9 +2394,7 @@ namespace das {
                 if ( needsArgPass(arg) ) {
                     ss << "das_arg<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
                 }
-            } else if (isVecRef(argType)) {
-                ss << "cast_vec_ref<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::to(";
-            }
+            } 
             if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
                 ss << "cast<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::from(";
             }
@@ -2428,9 +2414,7 @@ namespace das {
                 if ( needsArgPass(arg) ) {
                     ss << ")";
                 }
-            } else if (isVecRef(argType)) {
-                ss << ")";
-            }
+            } 
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( funArgType->aotAlias ) ss << ")";
             if ( !last ) ss << ",";
