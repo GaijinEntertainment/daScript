@@ -61,6 +61,8 @@ namespace das {
     MATH_FUN_OP1(Floor)
     MATH_FUN_OP1(Ceil)
     MATH_FUN_OP1(Sqrt)
+    MATH_FUN_OP1(RSqrt)
+    MATH_FUN_OP1(RSqrtEst)
     MATH_FUN_OP1(Sat)
     MATH_FUN_OP3(Clamp)
     MATH_FUN_OP3(Mad)
@@ -118,12 +120,14 @@ namespace das {
 
     template <typename TT>
     void addFunctionCommon(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy        ret   arg1     name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Abs<TT>,  TT,   TT>   >("abs",      lib, "Abs") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Floor<TT>,TT,   TT>   >("floor",    lib, "Floor") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Ceil<TT>, TT,   TT>   >("ceil",     lib, "Ceil") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Sqrt<TT>, TT,   TT>   >("sqrt",     lib, "Sqrt") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Sat<TT>,  TT,   TT>   >("saturate", lib, "Sat") );
+        //                                     policy            ret   arg1     name
+        mod.addFunction( make_shared<BuiltInFn<Sim_Abs<TT>,      TT,   TT>   >("abs",         lib, "Abs") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Floor<TT>,    TT,   TT>   >("floor",       lib, "Floor") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Ceil<TT>,     TT,   TT>   >("ceil",        lib, "Ceil") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sqrt<TT>,     TT,   TT>   >("sqrt",        lib, "Sqrt") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_RSqrt<TT>,    TT,   TT>   >("rsqrt",       lib, "RSqrt") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_RSqrtEst<TT>, TT,   TT>   >("rsqrt_est",   lib, "RSqrtEst") );
+        mod.addFunction( make_shared<BuiltInFn<Sim_Sat<TT>,      TT,   TT>   >("saturate",    lib, "Sat") );
     }
     template <typename Ret, typename TT>
     void addFunctionCommonConversion(Module & mod, const ModuleLibrary & lib) {
