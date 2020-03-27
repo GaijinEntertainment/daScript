@@ -141,7 +141,7 @@ namespace das {
         } else {
             info->secondType = nullptr;
         }
-        if ( type->baseType==Type::tTuple ) {   // todo: other types?
+        if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant ) {   // todo: other types?
             info->argCount = uint32_t(type->argTypes.size());
             if ( info->argCount ) {
                 info->argTypes = (TypeInfo **) debugInfo->allocate(sizeof(TypeInfo *) * info->argCount );

@@ -1168,7 +1168,7 @@ namespace das {
         cexpr->name = name;
         cexpr->value = value->clone();
         cexpr->field = field;
-        cexpr->tupleIndex = tupleIndex;
+        cexpr->tupleOrVariantIndex = tupleOrVariantIndex;
         cexpr->unsafeDeref = unsafeDeref;
         return cexpr;
     }
@@ -1180,6 +1180,10 @@ namespace das {
         } else {
             return -1;
         }
+    }
+
+    int ExprField::variantFieldIndex() const {
+        return -1;
     }
 
     // ExprSafeField

@@ -943,6 +943,9 @@ namespace das
             } else if ( subexpr->type->firstType->baseType==Type::tTuple ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
                 return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
+            } else if ( subexpr->type->firstType->baseType==Type::tVariant ) {
+                auto structSize = subexpr->type->firstType->getSizeOf();
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
             } else {
                 auto ann = subexpr->type->firstType->annotation;
                 assert(ann->canDeletePtr() && "has to be able to delete ptr");
@@ -1267,7 +1270,7 @@ namespace das
     }
 
     SimNode * ExprField::simulate (Context & context) const {
-        if ( !field  && tupleIndex==-1 ) {
+        if ( !field  && tupleOrVariantIndex==-1 ) {
             if ( r2v ) {
                 auto resN = annotation->simulateGetFieldR2V(name, context, at, value);
                 if ( !resN ) {
@@ -1289,15 +1292,23 @@ namespace das
     }
 
     SimNode * ExprField::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
-        if ( !field && tupleIndex==-1 ) {
+        if ( !field && tupleOrVariantIndex==-1 ) {
             return nullptr;
         }
         int fieldOffset = -1;
-        if ( tupleIndex != - 1 ) {
+        if ( tupleOrVariantIndex != - 1 ) {
             if ( value->type->isPointer() ) {
-                fieldOffset = value->type->firstType->getTupleFieldOffset(tupleIndex);
+                if ( value->type->firstType->isVariant() ) {
+                    fieldOffset = value->type->firstType->getVariantFieldOffset(tupleOrVariantIndex);
+                } else {
+                    fieldOffset = value->type->firstType->getTupleFieldOffset(tupleOrVariantIndex);
+                }
             } else {
-                fieldOffset = value->type->getTupleFieldOffset(tupleIndex);
+                if ( value->type->isVariant() ) {
+                    fieldOffset = value->type->getVariantFieldOffset(tupleOrVariantIndex);
+                } else {
+                    fieldOffset = value->type->getTupleFieldOffset(tupleOrVariantIndex);
+                }
             }
         } else {
             DAS_ASSERTF(field, "field can't be null");
@@ -1342,8 +1353,12 @@ namespace das
     SimNode * ExprSafeField::simulate (Context & context) const {
         int fieldOffset = -1;
         if ( !annotation ) {
-            if ( tupleIndex != - 1 ) {
-                fieldOffset = value->type->firstType->getTupleFieldOffset(tupleIndex);
+            if ( tupleOrVariantIndex != - 1 ) {
+                if ( value->type->firstType->isVariant() ) {
+                    fieldOffset = value->type->firstType->getVariantFieldOffset(tupleOrVariantIndex);
+                } else {
+                    fieldOffset = value->type->firstType->getTupleFieldOffset(tupleOrVariantIndex);
+                }
             } else {
                 fieldOffset = field->offset;
             }

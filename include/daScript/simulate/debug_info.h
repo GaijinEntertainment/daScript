@@ -51,7 +51,8 @@ namespace das
         tArray,
         tTable,
         tBlock,
-        tTuple
+        tTuple,
+        tVariant
     };
 
     enum class RefMatters {

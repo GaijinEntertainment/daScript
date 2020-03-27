@@ -50,6 +50,7 @@ namespace das
         {   Type::tFunction,    "function"},
         {   Type::tLambda,      "lambda"},
         {   Type::tTuple,       "tuple"},
+        {   Type::tVariant,     "variant"},
     };
 
     string das_to_string ( Type t ) {
@@ -182,6 +183,27 @@ namespace das
         return size;
     }
 
+    int getVariantAlign ( TypeInfo * info ) {
+        int al = getTypeBaseAlign(Type::tInt);
+        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+            al = das::max ( al, getTypeAlign(info->argTypes[i]) );
+        }
+        return al;
+    }
+
+    int getVariantSize ( TypeInfo * info ) {
+        int maxSize = 0;
+        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+            int al = getTypeAlign(info->argTypes[i]) - 1;
+            int size = (getTypeBaseSize(Type::tInt) + al) & ~al;
+            size += getTypeSize(info->argTypes[i]);
+            maxSize = das::max(size, maxSize);
+        }
+        int al = getVariantAlign(info) - 1;
+        maxSize = (maxSize + al) & ~al;
+        return maxSize;
+    }
+
     int getTypeBaseSize ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
             return int(Module::resolveAnnotation(info)->getSizeOf());
@@ -189,19 +211,22 @@ namespace das
             return info->structType->size;
         } else if ( info->type==Type::tTuple ) {
             return getTupleSize(info);
+        } else if ( info->type==Type::tTuple ) {
+            return getVariantSize(info);
         } else {
             return getTypeBaseSize(info->type);
         }
     }
 
     int getTypeBaseAlign ( TypeInfo * info ) {
-
         if ( info->type==Type::tHandle ) {
             return int(Module::resolveAnnotation(info)->getAlignOf());
         } else if ( info->type==Type::tStructure ) {
             return getStructAlign(info->structType);
         } else if ( info->type==Type::tTuple ) {
             return getTupleAlign(info);
+        } else if ( info->type==Type::tVariant ) {
+            return getVariantAlign(info);
         } else {
             return getTypeBaseAlign(info->type);
         }
@@ -296,7 +321,8 @@ namespace das
             }
         }
         if ( THIS->type==Type::tBlock || THIS->type==Type::tFunction
-            || THIS->type==Type::tLambda || THIS->type==Type::tTuple ) {
+            || THIS->type==Type::tLambda || THIS->type==Type::tTuple
+            || THIS->type==Type::tVariant ) {
             if ( THIS->firstType && decl->firstType && !isSameType(THIS->firstType, decl->firstType,
                                                                    RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, false) ) {
                 return false;

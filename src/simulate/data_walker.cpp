@@ -59,6 +59,22 @@ namespace das {
         afterTuple(ps, ti);
     }
 
+    void DataWalker::walk_variant ( char * ps, TypeInfo * ti ) {
+        beforeVariant(ps, ti);
+        if ( cancel ) return;
+        int32_t fidx = *((int32_t *)ps);
+        DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
+        int fieldOffset = getTypeBaseSize(Type::tInt);
+        TypeInfo * vi = ti->argTypes[fidx];
+        auto fa = getTypeAlign(vi) - 1;
+        fieldOffset = (fieldOffset + fa) & ~fa;
+        char * pf = ps + fieldOffset;
+        if ( cancel ) return;
+        walk(pf, vi);
+        if ( cancel ) return;
+        afterVariant(ps, ti);
+    }
+
     void DataWalker::walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {
         char * pe = pa;
         beforeArrayData(pa, stride, count, ti);
@@ -185,6 +201,7 @@ namespace das {
                     break;
                 case Type::tStructure:  walk_struct(pa, info->structType); break;
                 case Type::tTuple:      walk_tuple(pa, info); break;
+                case Type::tVariant:    walk_variant(pa, info); break;
                 case Type::tBlock:      WalkBlock((Block *)pa); break;
                 case Type::tFunction:   WalkFunction((Func *)pa); break;
                 case Type::tLambda: {

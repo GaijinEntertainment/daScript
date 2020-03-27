@@ -50,6 +50,7 @@ namespace das {
         {   Type::tFunction,    "tFunction"},
         {   Type::tLambda,      "tLambda"},
         {   Type::tTuple,       "tTuple"},
+        {   Type::tVariant,     "tVariant"},
         {   Type::tHandle,      "tHandle"}
     };
 
@@ -81,7 +82,8 @@ namespace das {
         {   Type::tBlock,       "Block"    },
         {   Type::tFunction,    "Func"     },
         {   Type::tLambda,      "Lambda"   },
-        {   Type::tTuple,       "Tuple"    }
+        {   Type::tTuple,       "Tuple"    },
+        {   Type::tVariant,     "Variant"  }
     };
 
     string aotModuleName ( Module * pm  ) {
@@ -177,6 +179,12 @@ namespace das {
             }
         } else if ( baseType==Type::tTuple ) {
             stream << "TTuple<" << int(type->getTupleSize());
+            for ( const auto & arg : type->argTypes ) {
+                stream << "," << describeCppType(arg);
+            }
+            stream << ">";
+        } else if ( baseType==Type::tVariant ) {
+            stream << "TVariant<" << int(type->getVariantSize());
             for ( const auto & arg : type->argTypes ) {
                 stream << "," << describeCppType(arg);
             }
@@ -1427,9 +1435,10 @@ namespace das {
             ss << "das_safe_navigation";
             auto vtype = field->value->type->firstType;
             if ( vtype->isGoodTupleType() ) ss << "_tuple";
-            if ( field->skipQQ ) ss << "_ptr";
+            else if ( vtype->isGoodVariantType() ) ss << "_variant";
+            else if ( field->skipQQ ) ss << "_ptr";
             ss << "<";
-            if ( !vtype->isGoodTupleType() ) {
+            if ( !vtype->isGoodTupleType() && !vtype->isGoodVariantType() ) {
                 ss << describeCppType(field->value->type->firstType) << ",";
             }
             if ( field->skipQQ ) {
@@ -1445,11 +1454,13 @@ namespace das {
                     ss << vtype->annotation->cppName;
                 }
             } else if ( vtype->isGoodTupleType() ) {
-                ss << ", " << vtype->getTupleFieldOffset(field->tupleIndex) <<  ">::get(";
+                ss << ", " << vtype->getTupleFieldOffset(field->tupleOrVariantIndex) <<  ">::get(";
+            } else if ( vtype->isGoodVariantType() ) {
+                ss << ", " << vtype->getVariantFieldOffset(field->tupleOrVariantIndex) <<  ">::get(";
             } else {
                 ss << ",&" << vtype->structType->name;
             }
-            if ( !vtype->isGoodTupleType() ) {
+            if ( !vtype->isGoodTupleType() && !vtype->isGoodVariantType() ) {
                 ss << "::" << field->name <<  ">::get(";
             }
             /*
@@ -1471,9 +1482,15 @@ namespace das {
             Visitor::preVisit(field);
             if ( field->value->type->isTuple() ) {
                 ss << "das_get_tuple_field<"
-                    << describeCppType(field->value->type->argTypes[field->tupleIndex])
+                    << describeCppType(field->value->type->argTypes[field->tupleOrVariantIndex])
                     << ","
-                    << field->value->type->getTupleFieldOffset(field->tupleIndex)
+                    << field->value->type->getTupleFieldOffset(field->tupleOrVariantIndex)
+                    << ">::get(";
+            } else if ( field->value->type->isVariant() ) {
+                ss << "das_get_variant_field<"
+                    << describeCppType(field->value->type->argTypes[field->tupleOrVariantIndex])
+                    << ","
+                    << field->value->type->getVariantFieldOffset(field->tupleOrVariantIndex)
                     << ">::get(";
             } else if ( field->value->type->isHandle() ) {
                 if (field->type->isString()) {
@@ -1485,15 +1502,23 @@ namespace das {
                     field->value->type->firstType->annotation->aotPreVisitGetFieldPtr(ss, field->name);
                 } else if ( field->value->type->firstType->isTuple() ) {
                     ss << "das_get_tuple_field_ptr<"
-                        << describeCppType(field->value->type->firstType->argTypes[field->tupleIndex])
+                        << describeCppType(field->value->type->firstType->argTypes[field->tupleOrVariantIndex])
                         << ","
-                        << field->value->type->firstType->getTupleFieldOffset(field->tupleIndex)
+                        << field->value->type->firstType->getTupleFieldOffset(field->tupleOrVariantIndex)
+                        << ">::get(";
+                } else if ( field->value->type->firstType->isVariant() ) {
+                    ss << "das_get_variant_field_ptr<"
+                        << describeCppType(field->value->type->firstType->argTypes[field->tupleOrVariantIndex])
+                        << ","
+                        << field->value->type->firstType->getVariantFieldOffset(field->tupleOrVariantIndex)
                         << ">::get(";
                 }
             }
         }
         virtual ExpressionPtr visit ( ExprField * field ) override {
             if ( field->value->type->isTuple() ) {
+                ss << ")";
+            } else if ( field->value->type->isVariant() ) {
                 ss << ")";
             } else if ( field->value->type->isHandle() ) {
                 field->value->type->annotation->aotVisitGetField(ss, field->name);
@@ -1506,6 +1531,8 @@ namespace das {
                     field->value->type->firstType->annotation->aotVisitGetFieldPtr(ss, field->name);
                     ss << " /*" << field->name << "*/";
                 } else if ( field->value->type->firstType->isTuple() ) {
+                    ss << ")";
+                } else if ( field->value->type->firstType->isVariant() ) {
                     ss << ")";
                 } else {
                     ss << "->" << field->name;

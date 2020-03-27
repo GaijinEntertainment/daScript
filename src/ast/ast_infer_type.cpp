@@ -183,6 +183,14 @@ namespace das {
                     }
                     verifyType(argType);
                 }
+            } else if ( decl->baseType==Type::tVariant ) {
+                for ( auto & argType : decl->argTypes ) {
+                    if ( argType->ref ) {
+                        error("variant element can't be ref, " + argType->describe(),
+                              argType->at,CompilationError::invalid_type);
+                    }
+                    verifyType(argType);
+                }
             }
         }
 
@@ -232,7 +240,7 @@ namespace das {
         // type chain is fully resolved, and not aliased \ auto
         bool isFullySealedType(const TypeDeclPtr & ptr, das_set<const TypeDecl *> & all ) {
             if (!ptr) return false;
-            if ( ptr->baseType==Type::tStructure || ptr->baseType==Type::tTuple ) {
+            if ( ptr->baseType==Type::tStructure || ptr->baseType==Type::tTuple || ptr->baseType==Type::tVariant ) {
                 auto thisType = ptr.get();
                 if ( all.find(thisType)!=all.end() ) return true;
                 all.insert(thisType);
@@ -2686,8 +2694,14 @@ namespace das {
                 expr->type->firstType->dim.clear();
                 expr->type->dim = expr->typeexpr->dim;
                 expr->name = expr->typeexpr->getMangledName();
+            } else if ( expr->typeexpr->baseType==Type::tVariant ) {
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                expr->type->firstType->dim.clear();
+                expr->type->dim = expr->typeexpr->dim;
+                expr->name = expr->typeexpr->getMangledName();
             } else {
-                error("can only new tuples, structures or handled types, not " + expr->typeexpr->describe(),
+                error("can only new tuples, variants, structures or handled types, not " + expr->typeexpr->describe(),
                       expr->at, CompilationError::invalid_new_type);
             }
             if ( expr->initializer && expr->name.empty() ) {
@@ -2968,7 +2982,14 @@ namespace das {
                         error("can't get tuple field", expr->at, CompilationError::cant_get_field);
                         return Visitor::visit(expr);
                     }
-                    expr->tupleIndex = index;
+                    expr->tupleOrVariantIndex = index;
+                } else if ( valT->firstType->isGoodVariantType() ) {
+                    int index = expr->variantFieldIndex();
+                    if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
+                        error("can't get variant field", expr->at, CompilationError::cant_get_field);
+                        return Visitor::visit(expr);
+                    }
+                    expr->tupleOrVariantIndex = index;
                 }
             } else if ( valT->isGoodTupleType() ) {
                 int index = expr->tupleFieldIndex();
@@ -2976,7 +2997,14 @@ namespace das {
                     error("can't get tuple field", expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                expr->tupleIndex = index;
+                expr->tupleOrVariantIndex = index;
+            } else if ( valT->isGoodVariantType() ) {
+                int index = expr->variantFieldIndex();
+                if ( index==-1 || index>=int(valT->argTypes.size()) ) {
+                    error("can't get variant field", expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+                expr->tupleOrVariantIndex = index;
             } else {
                 error("can't get field of " + expr->value->type->describe(),
                       expr->at, CompilationError::cant_get_field);
@@ -2987,9 +3015,9 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(*expr->field->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
-            } else if ( expr->tupleIndex!=-1 ) {
+            } else if ( expr->tupleOrVariantIndex!=-1 ) {
                 auto tupleT = valT->isPointer() ? valT->firstType : valT;
-                expr->type = make_shared<TypeDecl>(*tupleT->argTypes[expr->tupleIndex]);
+                expr->type = make_shared<TypeDecl>(*tupleT->argTypes[expr->tupleOrVariantIndex]);
                 expr->type->ref = true;
                 expr->type->constant |= tupleT->constant;
             } else if ( !expr->type ) {
@@ -3033,8 +3061,16 @@ namespace das {
                     error("can't get tuple field", expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                expr->tupleIndex = index;
-                expr->type = make_shared<TypeDecl>(*valT->firstType->argTypes[expr->tupleIndex]);
+                expr->tupleOrVariantIndex = index;
+                expr->type = make_shared<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
+            } else if ( valT->firstType->isGoodVariantType() ) {
+                int index = expr->variantFieldIndex();
+                if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
+                    error("can't get variant field", expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+                expr->tupleOrVariantIndex = index;
+                expr->type = make_shared<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
             } else {
                 error("can only safe dereference a pointer to a tuple, a structure or a handle " + valT->describe(),
                       expr->at, CompilationError::cant_get_field);

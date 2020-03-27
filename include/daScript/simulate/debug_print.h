@@ -78,6 +78,19 @@ namespace das {
                 ss << ";";
         }
 
+        virtual void beforeVariant ( char * ps, TypeInfo * ) override {
+            ss << "[[";
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << "variant";
+            }
+            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+                ss << " at 0x" << HEX << intptr_t(ps) << DEC;
+            }
+        }
+        virtual void afterVariant ( char *, TypeInfo * ) override {
+            ss << "]]";
+        }
+
         virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
             ss << " ";
         }

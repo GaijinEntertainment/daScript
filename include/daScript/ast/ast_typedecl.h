@@ -59,6 +59,7 @@ namespace das {
         bool isGoodFunctionType() const;
         bool isGoodLambdaType() const;
         bool isGoodTupleType() const;
+        bool isGoodVariantType() const;
         bool isVoid() const;
         bool isRef() const;
         bool isRefType() const;
@@ -77,6 +78,7 @@ namespace das {
         bool isHandle() const;
         bool isStructure() const;
         bool isTuple() const;
+        bool isVariant() const;
         int getSizeOf() const;
         int getCountOf() const;
         int getAlignOf() const;
@@ -85,6 +87,9 @@ namespace das {
         int getTupleSize() const;
         int getTupleAlign() const;
         int getTupleFieldOffset ( int index ) const;
+        int getVariantSize() const;
+        int getVariantAlign() const;
+        int getVariantFieldOffset ( int index ) const;
         string describe ( DescribeExtra extra = DescribeExtra::yes, DescribeContracts contracts = DescribeContracts::yes, DescribeModule module = DescribeModule::yes) const;
         bool canCopy() const;
         bool canMove() const;
@@ -191,6 +196,7 @@ namespace das {
     template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
     template<> struct ToBasicType<Lambda>       { enum { type = Type::tLambda }; };
     template<> struct ToBasicType<Tuple>        { enum { type = Type::tTuple }; };
+    template<> struct ToBasicType<Variant>      { enum { type = Type::tVariant }; };
     template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
     template<> struct ToBasicType<vec4f>        { enum { type = Type::anyArgument }; };
 

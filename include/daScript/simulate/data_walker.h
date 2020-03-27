@@ -37,6 +37,8 @@ namespace das {
         virtual void afterTuple ( char * ps, TypeInfo * ti ) {}
         virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) {}
         virtual void afterTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) {}
+        virtual void beforeVariant ( char * ps, TypeInfo * ti ) {}
+        virtual void afterVariant ( char * ps, TypeInfo * ti ) {}
         virtual void beforeArrayData ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {}
         virtual void afterArrayData ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {}
         virtual void beforeArrayElement ( char * pa, TypeInfo * ti, char * pe, uint32_t index, bool last ) {}
@@ -97,6 +99,7 @@ namespace das {
         virtual void walk ( vec4f f, TypeInfo * ti );
         virtual void walk_struct ( char * ps, StructInfo * si );
         virtual void walk_tuple ( char * ps, TypeInfo * info );
+        virtual void walk_variant ( char * ps, TypeInfo * info );
         virtual void walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti );
         virtual void walk_dim ( char * pa, TypeInfo * ti );
         virtual void walk_table ( Table * tab, TypeInfo * info );

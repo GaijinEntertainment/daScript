@@ -62,6 +62,10 @@ namespace das
         Tuple() {}
     };
 
+    struct Variant {
+        Variant() {}
+    };
+
     struct Array {
         char *      data;
         uint32_t    size;

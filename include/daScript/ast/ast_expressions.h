@@ -194,10 +194,11 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return true; }
         int tupleFieldIndex() const;
+        int variantFieldIndex() const;
         ExpressionPtr   value;
         string          name;
         const Structure::FieldDeclaration * field = nullptr;
-        int             tupleIndex = -1;
+        int             tupleOrVariantIndex = -1;
         bool            unsafeDeref = false;
         TypeAnnotationPtr annotation;
         union {
