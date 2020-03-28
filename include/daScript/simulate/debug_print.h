@@ -309,15 +309,6 @@ namespace das {
             }
             ss << "enum " << value;
         }
-        virtual void WalkEnumeration64 ( int64_t & value, EnumInfo * info ) override {
-            for ( uint32_t t=0; t!=info->count; ++t ) {
-                if ( value == info->fields[t]->value ) {
-                    ss << info->fields[t]->name;
-                    return;
-                }
-            }
-            ss << "enum " << value;
-        }
         virtual void WalkFunction ( Func * fn ) override {
             if (fn->index) {
                 if (context) {

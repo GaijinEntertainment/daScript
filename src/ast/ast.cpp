@@ -74,9 +74,6 @@ namespace das {
         case Type::tInt16:
         case Type::tUInt16:
             return Type::tEnumeration16;
-        case Type::tInt64:
-        case Type::tUInt64:
-            return Type::tEnumeration64;
         case Type::tInt:
         case Type::tUInt:
             return Type::tEnumeration;
@@ -95,9 +92,6 @@ namespace das {
         case Type::tInt16:
         case Type::tUInt16:
             res = make_shared<TypeDecl>(Type::tEnumeration16); break;
-        case Type::tInt64:
-        case Type::tUInt64:
-            res = make_shared<TypeDecl>(Type::tEnumeration64); break;
         case Type::tInt:
         case Type::tUInt:
             res = make_shared<TypeDecl>(Type::tEnumeration); break;

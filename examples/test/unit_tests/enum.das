@@ -36,11 +36,6 @@ enum BooHoo16 : int16
     hoo = 5
     boo_hoo = 6
 
-enum BooHoo64 : int64
-    boo = 7
-    hoo = 8
-    boo_hoo = 5
-
 [export]
 def test
     assert ( int(QQ size_of_Foo_Padded)==16 )
@@ -82,7 +77,5 @@ def test
     for e,t in each_enum(BooHoo8 boo),[[int 1;2;3]]
         assert(int(e)==t)
     for e,t in each_enum(BooHoo16 boo),[[int 4;5;6]]
-        assert(int(e)==t)
-    for e,t in each_enum(BooHoo64 boo),[[int 7;8;5]]
         assert(int(e)==t)
     return true

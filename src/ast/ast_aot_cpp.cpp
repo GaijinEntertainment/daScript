@@ -27,7 +27,6 @@ namespace das {
         {   Type::tEnumeration,   "tEnumeration" },
         {   Type::tEnumeration8,  "tEnumeration8" },
         {   Type::tEnumeration16, "tEnumeration16" },
-        {   Type::tEnumeration64, "tEnumeration64" },
         {   Type::tIterator,    "tIterator" },
         {   Type::tArray,       "tArray" },
         {   Type::tTable,       "tTable" },
@@ -122,7 +121,6 @@ namespace das {
             case Type::tEnumeration:
             case Type::tEnumeration8:
             case Type::tEnumeration16:
-            case Type::tEnumeration64:
                 return true;
             default:
                 return false;
@@ -782,13 +780,7 @@ namespace das {
                 }
                 auto castType = das_to_cppString(enu->baseType);
                 ss  << "}\n"
-                    << "template <>\n"
-                    << "struct cast<" << enuName << "> {\n"
-                    << "\tstatic __forceinline " << enuName << " to ( vec4f x )\t{ return ("
-                            << enuName << ") cast<" << castType << ">::to(x); }\n"
-                    << "\tstatic __forceinline vec4f from ( " << enuName << " x )\t{ return cast<"
-                            << castType << ">::from(" << castType << "(x)); }\n"
-                    << "};\n"
+                    << "template <> struct cast< " << enuName << " > : cast_enum < " << enuName << " > {};\n"
                     << "namespace {\n";
             }
             return Visitor::visit(enu);

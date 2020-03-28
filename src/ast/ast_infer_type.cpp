@@ -1480,7 +1480,7 @@ namespace das {
     // const
         virtual ExpressionPtr visit ( ExprConst * c ) override {
             if ( c->baseType==Type::tEnumeration || c->baseType==Type::tEnumeration8 ||
-                c->baseType==Type::tEnumeration16 || c->baseType==Type::tEnumeration64 ) {
+                c->baseType==Type::tEnumeration16 ) {
                 auto cE = static_cast<ExprConstEnumeration *>(c);
                 c->type = cE->enumType->makeEnumType();
                 c->type->constant = true;

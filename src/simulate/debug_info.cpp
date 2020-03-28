@@ -27,7 +27,6 @@ namespace das
         {   Type::tEnumeration, "enumeration" },
         {   Type::tEnumeration8,"enumeration8" },
         {   Type::tEnumeration16, "enumeration16" },
-        {   Type::tEnumeration64, "enumeration64" },
         {   Type::tIterator,    "iterator" },
         {   Type::tArray,       "array" },
         {   Type::tTable,       "table" },
@@ -78,7 +77,6 @@ namespace das
             case tEnumeration:  return sizeof(int32_t);
             case tEnumeration8: return sizeof(int8_t);
             case tEnumeration16:return sizeof(int16_t);
-            case tEnumeration64:return sizeof(int64_t);
             case tInt:          return sizeof(int);
             case tInt2:         return sizeof(int2);
             case tInt3:         return sizeof(int3);
@@ -125,7 +123,6 @@ namespace das
             case tEnumeration:  return alignof(int32_t);
             case tEnumeration8: return alignof(int8_t);
             case tEnumeration16:return alignof(int16_t);
-            case tEnumeration64:return alignof(int64_t);
             case tInt:          return alignof(int32_t);
             case tInt2:         return alignof(int2);
             case tInt3:         return alignof(int3);
@@ -296,7 +293,7 @@ namespace das
 
         }
         if ( THIS->type==Type::tEnumeration || THIS->type==Type::tEnumeration8 ||
-            THIS->type==Type::tEnumeration16 || THIS->type==Type::tEnumeration64 ) {
+            THIS->type==Type::tEnumeration16 ) {
             if ( THIS->type != decl->type ) {
                 return false;
             }
@@ -392,7 +389,7 @@ namespace das
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {
             stream << debug_type(info->firstType) << " *";
-        } else if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 || info->type==Type::tEnumeration64 ) {
+        } else if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 ) {
             stream << info->enumType->name;
         } else if ( info->type==Type::tArray ) {
             stream << "Array<" << debug_type(info->firstType) << ">";

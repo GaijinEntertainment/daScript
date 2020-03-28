@@ -112,5 +112,4 @@ namespace das
     typedef EnumStubAny<int32_t> EnumStub;
     typedef EnumStubAny<int8_t>  EnumStub8;
     typedef EnumStubAny<int16_t> EnumStub16;
-    typedef EnumStubAny<int64_t> EnumStub64;
 }

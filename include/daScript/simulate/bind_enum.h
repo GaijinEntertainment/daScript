@@ -10,11 +10,7 @@
 #define DAS_BASE_BIND_ENUM_CAST(enum_name, das_enum_name)\
   namespace das \
   { \
-    template <>\
-    struct cast < enum_name > {\
-      static __forceinline enum_name to ( vec4f x )            { return (enum_name) v_extract_xi(v_cast_vec4i(x)); }\
-      static __forceinline vec4f from ( enum_name x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }\
-    };\
+    template <> struct cast < enum_name > : cast_enum < enum_name > {};\
   };
 
 // sample of enumeration

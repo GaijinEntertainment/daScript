@@ -650,11 +650,6 @@ namespace das
             if ( enumType ) {
                 ss << "#" << enumType->getMangledName();
             }
-        } else if ( baseType==Type::tEnumeration64 ) {
-            ss << "#enum64";
-            if ( enumType ) {
-                ss << "#" << enumType->getMangledName();
-            }
         } else if ( baseType==Type::tIterator ) {
             ss << "#iterator";
             if ( firstType ) {
@@ -1014,7 +1009,7 @@ namespace das
 
     bool TypeDecl::isEnumT() const {
         return (baseType==Type::tEnumeration) || (baseType==Type::tEnumeration8)
-            || (baseType==Type::tEnumeration16) || (baseType==Type::tEnumeration64);
+            || (baseType==Type::tEnumeration16);
     }
 
     bool TypeDecl::isEnum() const {
@@ -1145,7 +1140,6 @@ namespace das
             case Type::tEnumeration:
             case Type::tEnumeration8:
             case Type::tEnumeration16:
-            case Type::tEnumeration64:
             case Type::tRange:
             case Type::tURange:
                 return true;
@@ -1224,7 +1218,6 @@ namespace das
             case Type::tInt64:
             case Type::tUInt64:
             case Type::tEnumeration:
-            case Type::tEnumeration64:
             case Type::tInt:
             case Type::tInt2:
             case Type::tInt3:
@@ -1281,7 +1274,6 @@ namespace das
             case Type::tEnumeration:
             case Type::tEnumeration8:
             case Type::tEnumeration16:
-            case Type::tEnumeration64:
             case Type::tBool:
                 /*
             case Type::tInt8:
