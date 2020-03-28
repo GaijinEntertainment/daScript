@@ -135,6 +135,7 @@ namespace das {
         TypeDeclPtr             firstType;      // map.first or array, or pointer
         TypeDeclPtr             secondType;     // map.second
         vector<TypeDeclPtr>     argTypes;       // block arguments
+        vector<string>          argNames;
         vector<int32_t>         dim;
         vector<ExpressionPtr>   dimExpr;
         union {

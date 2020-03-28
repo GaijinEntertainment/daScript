@@ -1,7 +1,18 @@
 // options logCpp=true
 
+def testI ( arg : tuple < i : int; float > )
+    return arg.i == 1
+
+def testF ( arg : tuple < int; f : float > )
+    return arg.f == 3.14
+
 [export,unsafe]
 def test:bool
+    let ttt = [[auto 1, 3.14]]
+    assert(testI(ttt))
+    assert(testF(ttt))
+    assert(ttt._first==1)
+    assert(ttt._last==3.14)
     var t : tuple < int; float; string >
     assert(typeinfo(sizeof t)==16 | typeinfo(sizeof t)==12)	// 64 or 32 bit
     t._0 = 1

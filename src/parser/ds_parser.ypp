@@ -41,7 +41,7 @@
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
-    void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list );
+    void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = false );
     
     LineInfo tokAt ( const struct YYLTYPE & li );
     
@@ -1468,6 +1468,12 @@ tuple_type
     :   type_declaration [typeDecl] {
         $$ = new VariableDeclaration(tokAt(@typeDecl),nullptr,$typeDecl,nullptr);
     }
+    |   NAME[name] ':' type_declaration [typeDecl] {
+        auto na = new vector<string>();
+        na->push_back(*$name);
+        $$ = new VariableDeclaration(tokAt(@typeDecl),na,$typeDecl,nullptr);
+        delete $name;
+    }
     ;
 
 tuple_type_list
@@ -1999,7 +2005,7 @@ type_declaration
     |   DAS_TTUPLE[loc] '<' tuple_type_list[list] '>' {
         $$ = new TypeDecl(Type::tTuple);
         $$->at = tokAt(@loc);
-        varDeclToTypeDecl($$, $list);
+        varDeclToTypeDecl($$, $list, true);
         deleteVariableDeclarationList($list);
     }
     ;
@@ -2261,7 +2267,8 @@ Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
     }
 }
 
-void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list ) {
+void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames ) {
+    bool anyNames = false;
     for ( auto pDecl : *list ) {
         if ( pDecl->pTypeDecl ) {
             int count = pDecl->pNameList ? int(pDecl->pNameList->size()) : 1;
@@ -2272,6 +2279,22 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list )
                     pDecl->at,CompilationError::cant_initialize);
                 }
                 pType->argTypes.push_back(pVarType);
+                if ( needNames && pDecl->pNameList && !(*pDecl->pNameList)[ai].empty() ) {
+                    anyNames = true;
+                }
+            }
+        }
+    }
+    if ( anyNames ) {
+        for ( auto pDecl : *list ) {
+            if ( pDecl->pTypeDecl ) {
+                if ( pDecl->pNameList ) {
+                    for ( const auto & name : *pDecl->pNameList ) {
+                        pType->argNames.push_back(name);
+                    }
+                } else {
+                    pType->argNames.push_back(string());
+                }
             }
         }
     }

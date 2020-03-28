@@ -1178,6 +1178,18 @@ namespace das {
         if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
             return index;
         } else {
+            const auto & vtype = value->type;
+            if ( name=="_first" ) {
+                return 0;
+            } else if ( name=="_last" ) {
+                return int(vtype->argTypes.size())-1;
+            } else {
+                for ( size_t i=0; i!=vtype->argNames.size(); ++i ) {
+                    if ( vtype->argNames[i]==name ) {
+                        return int(i);
+                    }
+                }
+            }
             return -1;
         }
     }

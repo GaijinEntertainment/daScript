@@ -309,11 +309,17 @@ namespace das
         } else if ( baseType==Type::tTuple ) {
             stream << das_to_string(baseType) << "<";
             if ( argTypes.size() ) {
+                int ai = 0;
                 for ( const auto & arg : argTypes ) {
+                    if ( !argNames.empty() ) {
+                        const auto & argName = argNames[ai];
+                        if ( !argName.empty() ) stream << argName << ":";
+                    }
                     stream << arg->describe(extra);
                     if ( arg != argTypes.back() ) {
                         stream << ";";
                     }
+                    ai ++;
                 }
             }
             stream << ">";
@@ -399,6 +405,7 @@ namespace das
         for ( const auto & arg : decl.argTypes ) {
             argTypes.push_back(make_shared<TypeDecl>(*arg) );
         }
+        argNames = decl.argNames;
     }
 
     const TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) const {

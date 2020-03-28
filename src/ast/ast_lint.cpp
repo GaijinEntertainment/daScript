@@ -94,6 +94,21 @@ namespace das {
         bool isValidEnumValueName(const string & str) const {
             return !isCppKeyword(str);
         }
+        void lintType ( TypeDecl * td ) {
+            for ( auto & name : td->argNames ) {
+                if (!isValidVarName(name)) {
+                    program->error("invalid type argument name " + name,
+                        td->at, CompilationError::invalid_name );
+                }
+            }
+            if ( td->firstType ) lintType(td->firstType.get());
+            if ( td->secondType ) lintType(td->secondType.get());
+            for ( auto & arg : td->argTypes ) lintType(arg.get());
+        }
+        virtual void preVisit ( TypeDecl * td ) override {
+            Visitor::preVisit(td);
+            lintType(td);
+        }
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
             if (!isValidEnumName(enu->name)) {
