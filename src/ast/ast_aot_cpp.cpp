@@ -1066,9 +1066,6 @@ namespace das {
                 describeVarLocalCppType(ss, var->type);
                 ss << ")";
             }
-            if ( expr->type->aotAlias ) {
-                ss << "das_alias<" << expr->type->alias << ">::from(";
-            }
             if ( var->type->ref ) {
                 ss << "&(";
             }
@@ -1087,9 +1084,6 @@ namespace das {
                 ss << ")";
             }
             if ( var->type->ref ) {
-                ss << ")";
-            }
-            if ( expr->type->aotAlias ) {
                 ss << ")";
             }
             return Visitor::visitLetInit(let, var, expr);
@@ -1129,24 +1123,12 @@ namespace das {
         virtual void preVisit ( ExprCopy * that ) override {
             Visitor::preVisit(that);
             ss << "das_copy(";
-            if ( that->left->type->aotAlias ) {
-                ss << "das_alias<" << that->left->type->alias << ">::from(";
-            }
         }
         virtual void preVisitRight ( ExprCopy * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            if ( that->left->type->aotAlias ) {
-                ss << ")";
-            }
             ss << ",";
-            if ( that->right->type->aotAlias ) {
-                ss << "das_alias<" << that->right->type->alias << ">::from(";
-            }
         }
         virtual ExpressionPtr visit ( ExprCopy * that ) override {
-            if ( that->right->type->aotAlias ) {
-                ss << ")";
-            }
             ss << ")";
             return Visitor::visit(that);
         }
@@ -1167,24 +1149,12 @@ namespace das {
         virtual void preVisit ( ExprMove * that ) override {
             Visitor::preVisit(that);
             ss << "das_move(";
-            if ( that->left->type->aotAlias ) {
-                ss << "das_alias<" << that->left->type->alias << ">::from(";
-            }
         }
         virtual void preVisitRight ( ExprMove * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
-            if ( that->left->type->aotAlias ) {
-                ss << ")";
-            }
             ss << ",";
-            if ( that->right->type->aotAlias ) {
-                ss << "das_alias<" << that->right->type->alias << ">::from(";
-            }
         }
         virtual ExpressionPtr visit ( ExprMove * that ) override {
-            if ( that->right->type->aotAlias ) {
-                ss << ")";
-            }
             ss << ")";
             return Visitor::visit(that);
         }
@@ -1403,6 +1373,12 @@ namespace das {
             ss << "continue";
         }
     // var
+        virtual void preVisit ( ExprVar * var ) override {
+            Visitor::preVisit(var);
+            if ( var->type->aotAlias ) {
+                ss << "das_alias<" << var->type->alias << ">::from(";
+            }
+        }
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->local && var->variable->type->ref ) {
                 ss << "(*" << collector.getVarName(var->variable) << ")";
@@ -1412,6 +1388,9 @@ namespace das {
                 ss << (var->variable->global_shared ? "das_shared" : "das_global");
                 ss << "<" << describeCppType(var->variable->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
                     << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
+            }
+            if ( var->type->aotAlias ) {
+                ss << ")";
             }
             return Visitor::visit(var);
         }
@@ -1432,6 +1411,9 @@ namespace das {
     // safe field
         virtual void preVisit ( ExprSafeField * field ) override {
             Visitor::preVisit(field);
+            if ( field->type->aotAlias ) {
+                ss << "das_alias<" << field->type->alias << ">::from(";
+            }
             ss << "das_safe_navigation";
             auto vtype = field->value->type->firstType;
             if ( vtype->isGoodTupleType() ) ss << "_tuple";
@@ -1475,11 +1457,17 @@ namespace das {
                 field->value->type->annotation->aotVisitGetField(ss, field->name);
             } */
             ss << ")";
+            if ( field->type->aotAlias ) {
+                ss << ")";
+            }
             return Visitor::visit(field);
         }
     // field
         virtual void preVisit ( ExprField * field ) override {
             Visitor::preVisit(field);
+            if ( field->type->aotAlias ) {
+                ss << "das_alias<" << field->type->alias << ">::from(";
+            }
             if ( field->value->type->isTuple() ) {
                 ss << "das_get_tuple_field<"
                     << describeCppType(field->value->type->argTypes[field->tupleOrVariantIndex])
@@ -1539,6 +1527,9 @@ namespace das {
                 }
             } else {
                 ss << "." << field->name;
+            }
+            if ( field->type->aotAlias ) {
+                ss << ")";
             }
             return Visitor::visit(field);
         }
@@ -1776,14 +1767,8 @@ namespace das {
                     ss << ">::swizzle(";
                 }
             }
-            if ( expr->value->type->aotAlias ) {
-                ss << "das_alias<" << expr->value->type->alias << ">::from(";
-            }
         }
         virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
-            if ( expr->value->type->aotAlias ) {
-                ss << ")";
-            }
             if ( expr->type->ref ) {
                 ss << ")";
             } else {
