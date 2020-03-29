@@ -1331,7 +1331,7 @@ namespace das {
             auto argT = left->type;
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
-            } 
+            }
             ss << "(";
         }
         virtual void preVisitRight ( ExprOp3 * that, Expression * right ) override {
@@ -1340,7 +1340,7 @@ namespace das {
             auto argT = right->type;
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
-            } 
+            }
             ss << "(";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
@@ -2191,7 +2191,7 @@ namespace das {
                     if ( needsArgPass(arg) ) {
                         ss << "das_arg<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
                     }
-                } 
+                }
             }
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
@@ -2201,7 +2201,7 @@ namespace das {
                     if ( needsArgPass(arg) ) {
                         ss << ")";
                     }
-                } 
+                }
             }
             if ( !last ) {
                 if (call->name == "assert" || call->name=="verify" || call->name=="debug") {
@@ -2398,7 +2398,7 @@ namespace das {
                 if ( needsArgPass(arg) ) {
                     ss << "das_arg<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
                 }
-            } 
+            }
             if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
                 ss << "cast<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::from(";
             }
@@ -2418,7 +2418,7 @@ namespace das {
                 if ( needsArgPass(arg) ) {
                     ss << ")";
                 }
-            } 
+            }
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( funArgType->aotAlias ) ss << ")";
             if ( !last ) ss << ",";
