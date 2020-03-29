@@ -208,7 +208,7 @@ namespace das
             return info->structType->size;
         } else if ( info->type==Type::tTuple ) {
             return getTupleSize(info);
-        } else if ( info->type==Type::tTuple ) {
+        } else if ( info->type==Type::tVariant ) {
             return getVariantSize(info);
         } else {
             return getTypeBaseSize(info->type);
