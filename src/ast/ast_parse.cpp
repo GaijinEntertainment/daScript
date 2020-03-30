@@ -8,7 +8,21 @@ int das_yylex_destroy();
 
 namespace das {
 
+    bool isUtf8Text ( const char * src, uint32_t length ) {
+        if ( length>=3  ) { 
+            auto usrc = (const uint8_t *)src;
+            if ( usrc[0]==0xef && usrc[1]==0xbb && usrc[2]==0xbf) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     vector<string> getAllRequie ( const char * src, uint32_t length ) {
+        if ( isUtf8Text(src,length) ) { // skip utf8 byte order mark
+            src += 3;
+            length -= 3;
+        }
         vector<string> req;
         const char * src_end = src + length;
         bool wb = true;
@@ -182,7 +196,11 @@ namespace das {
         g_FileAccessStack.clear();
         if ( auto fi = access->getFileInfo(fileName) ) {
             g_FileAccessStack.push_back(fi);
-            das_yybegin(fi->source);
+            if (isUtf8Text(fi->source, fi->sourceLength)) {
+                das_yybegin(fi->source + 3);
+            } else {
+                das_yybegin(fi->source);
+            }
         } else {
             g_Program->error(fileName + " not found", LineInfo());
             g_Program.reset();
