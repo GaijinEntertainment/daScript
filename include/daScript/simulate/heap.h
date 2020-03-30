@@ -109,6 +109,11 @@ namespace das {
     public:
         HeapAllocator() : MemoryModel(default_page_size) {}
         char * allocateName ( const string & name );
+        virtual uint32_t growPages(uint32_t pages) const override {
+            return customGrow ? customGrow(pages) : pages * 2;
+        }
+    public:
+        function<int(int)>  customGrow;
     };
 
     struct StringHeader {
