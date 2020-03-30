@@ -117,16 +117,6 @@ XXD(src/builtin/fio.das)
 XXD(src/builtin/rtti.das)
 XXD(src/builtin/functional.das)
 
-IF(MSVC)
-set_source_files_properties(src/ast/ast_simulate.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-set_source_files_properties(src/builtin/module_builtin_vector.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-set_source_files_properties(src/builtin/module_builtin.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-set_source_files_properties(src/simulate/simulate_fusion_op2_set.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-set_source_files_properties(src/simulate/simulate_fusion_op2_set_vec.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-set_source_files_properties(src/simulate/simulate_fusion_op2_vec.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-set_source_files_properties(src/simulate/simulate_fusion_op2_bool.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-ENDIF()
-
 SET(MISC_SRC
 include/daScript/misc/enums.h
 include/daScript/misc/function_traits.h

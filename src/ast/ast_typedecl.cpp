@@ -82,8 +82,8 @@ namespace das
     }
 
     void TypeDecl::updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases ) {
-        if ( decl->baseType==Type::autoinfer && !decl->alias.empty() ) {
-            if ( aliases.find(decl->alias)==aliases.end() ) {
+        if ( decl->baseType==Type::autoinfer ) {
+            if ( !decl->alias.empty() && aliases.find(decl->alias)==aliases.end() ) {
                 auto TT = make_shared<TypeDecl>(*pass);
                 TT->alias = decl->alias;
                 TT->dim.clear();
@@ -91,6 +91,16 @@ namespace das
                 TT->temporary = false;
                 TT->ref = false;
                 aliases[decl->alias] = TT;
+            }
+        } else if ( pass->baseType==Type::autoinfer ) {
+            if ( !pass->alias.empty() && aliases.find(pass->alias)==aliases.end() ) {
+                auto TT = make_shared<TypeDecl>(*decl);
+                TT->alias = pass->alias;
+                TT->dim.clear();
+                TT->constant = false;
+                TT->temporary = false;
+                TT->ref = false;
+                aliases[pass->alias] = TT;
             }
         } else {
             if ( decl->firstType ) updateAliasMap(decl->firstType, pass->firstType, aliases);
@@ -163,7 +173,7 @@ namespace das
             }
         }
         // non-implicit temp can't be infered from non-temp, and non-temp from temp
-        if ( autoT->baseType!=autoinfer && !autoT->implicit ) {
+        if ( autoT->baseType!=autoinfer && !autoT->implicit && !initT->implicit ) {
             if ( autoT->temporary != initT->temporary )
                 return nullptr;
         }
