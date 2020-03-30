@@ -419,16 +419,28 @@ struct EventRegistrator : StructureAnnotation {
         return true;
     }
     bool look (const StructurePtr & /*st*/, ModuleGroup & /*libGroup*/,
-        const AnnotationArgumentList & /*args*/, string & /* err */ ) {
+        const AnnotationArgumentList & /*args*/, string & /* err */ ) override {
         return true;
     }
 };
 
+#if defined(__APPLE__)
+
+void builtin_printw(char * utf8string) {
+    fprintf(stdout, "%s", utf8string);
+    fflush(stdout);
+}
+
+#else
+
 #include <iostream>
 #include <codecvt>
 #include <locale>
-#include <io.h>
+
+#if defined(_MSC_VER)
 #include <fcntl.h>
+#include <io.h>
+#endif
 
 void builtin_printw(char * utf8string) {
     std::wstring_convert<std::codecvt_utf8<wchar_t>> utf8_conv;
@@ -444,6 +456,8 @@ void builtin_printw(char * utf8string) {
     _setmode(_fileno(stdout), _O_TEXT);
 #endif
 }
+
+#endif
 
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
