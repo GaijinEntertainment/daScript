@@ -320,7 +320,7 @@ vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
 int g_st = 0;
 int *getPtr() {return &g_st;}
 
-das::uint2 get_screen_dimensions() {return das::uint2{1280, 720};}
+uint2 get_screen_dimensions() {return uint2{1280, 720};}
 
 uint32_t CheckEid ( char * const name, Context * context ) {
     if (!name) context->throw_error("invalid id");
@@ -406,6 +406,25 @@ protected:
     Module * thisModule;
 };
 
+struct EventRegistrator : StructureAnnotation {
+    EventRegistrator() : StructureAnnotation("event") {}
+    bool touch ( const StructurePtr & st, ModuleGroup & /*libGroup*/,
+        const AnnotationArgumentList & /*args*/, string & /*err*/ ) override {
+        st->fields.emplace(st->fields.begin(), "eventFlags", make_shared<TypeDecl>(Type::tUInt16),
+            ExpressionPtr(), AnnotationArgumentList(), false, st->at);
+        st->fields.emplace(st->fields.begin(), "eventSize", make_shared<TypeDecl>(Type::tUInt16),
+            ExpressionPtr(), AnnotationArgumentList(), false, st->at);
+        st->fields.emplace(st->fields.begin(), "eventType", make_shared<TypeDecl>(Type::tUInt),
+            ExpressionPtr(), AnnotationArgumentList(), false, st->at);
+        return true;
+    }
+    bool look (const StructurePtr & /*st*/, ModuleGroup & /*libGroup*/,
+        const AnnotationArgumentList & /*args*/, string & /* err */ ) {
+        return true;
+    }
+};
+
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -420,6 +439,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<TestObjectNotLocalAnnotation>(lib));
     addAnnotation(make_shared<TestObjectFooAnnotation>(lib));
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
+    // events
+    addAnnotation(make_shared<EventRegistrator>());
     // register function
     addEquNeq<TestObjectFoo>(*this, lib);
     addExtern<DAS_BIND_FUN(complex_bind)>(*this, lib, "complex_bind", SideEffects::modifyExternal, "complex_bind");

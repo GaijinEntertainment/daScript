@@ -4461,7 +4461,7 @@ namespace das {
             }
             // see if we need to init fields
             if ( expr->makeType->structType ) {
-                expr->initAllFields = true;
+                expr->initAllFields = !expr->structs.empty();
                 for ( auto & st : expr->structs ) {
                     if ( st->size() == expr->makeType->structType->fields.size() ) {
                         for ( auto & va : *st ) {

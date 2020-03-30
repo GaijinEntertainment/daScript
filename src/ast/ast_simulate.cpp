@@ -406,8 +406,8 @@ namespace das
         // init with 0
         int total = int(structs.size());
         int stride = makeType->getStride();
-        if ( !doesNotNeedInit && !initAllFields ) {
-            int bytes = total * stride;
+        if ( !doesNotNeedInit && !initAllFields && stride ) {
+            int bytes = max(total,1) * stride;
             SimNode * init0;
             if ( useCMRES ) {
                 if ( bytes <= 32 ) {
