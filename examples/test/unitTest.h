@@ -125,3 +125,5 @@ __forceinline bool start_effect(const char *, const das::float3x4 &, float) {
     // THIS DOES ABSOLUTELY NOTHING, ITS HERE TO TEST DEFAULT ARGUMENTS
     return false;
 }
+
+void builtin_printw(char * utf8string);

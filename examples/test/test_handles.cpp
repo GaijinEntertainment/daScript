@@ -424,6 +424,26 @@ struct EventRegistrator : StructureAnnotation {
     }
 };
 
+#include <iostream>
+#include <codecvt>
+#include <locale>
+#include <io.h>
+#include <fcntl.h>
+
+void builtin_printw(char * utf8string) {
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> utf8_conv;
+    auto outs = utf8_conv.from_bytes(utf8string);
+#if defined(_MSC_VER)
+    _setmode(_fileno(stdout), _O_U8TEXT);
+#else
+    wcout.sync_with_stdio(false);
+    wcout.imbue(std::locale("en_US.utf8"));
+#endif
+    wcout << outs;
+#if defined(_MSC_VER)
+    _setmode(_fileno(stdout), _O_TEXT);
+#endif
+}
 
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
@@ -441,6 +461,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
     // events
     addAnnotation(make_shared<EventRegistrator>());
+    // utf8 print
+    addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw", SideEffects::modifyExternal, "builtin_printw");
     // register function
     addEquNeq<TestObjectFoo>(*this, lib);
     addExtern<DAS_BIND_FUN(complex_bind)>(*this, lib, "complex_bind", SideEffects::modifyExternal, "complex_bind");
