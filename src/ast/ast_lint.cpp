@@ -19,7 +19,7 @@ namespace das {
         ,"sizeof","static","static_assert","static_cast","struct","switch","synchronized","template","this"
         ,"thread_local","throw","true","try","typedef","typeid","typename","union","unsigned","using"
         ,"virtual","void","volatile","wchar_t","while","xor","xor_eq"
-        /* extra */    
+        /* extra */
         ,"override","final","import","module","transaction_safe","transaction_safe_dynamic"
     };
 
@@ -116,7 +116,7 @@ namespace das {
                     enu->at, CompilationError::invalid_name );
             }
         }
-        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override { 
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu,name,value,last);
             if (!isValidEnumValueName(name)) {
                 program->error("invalid enumeration value name " + name,
@@ -126,7 +126,7 @@ namespace das {
         bool isValidStructureName(const string & str) const {
             return !isCppKeyword(str);
         }
-        virtual void preVisit ( Structure * var ) override { 
+        virtual void preVisit ( Structure * var ) override {
             Visitor::preVisit(var);
             if (!isValidStructureName(var->name)) {
                 program->error("invalid structure name " + var->name,
