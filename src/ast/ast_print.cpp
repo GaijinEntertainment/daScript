@@ -650,6 +650,20 @@ namespace das {
             ss << ".?" << field->name;
             return Visitor::visit(field);
         }
+        virtual ExpressionPtr visit ( ExprIsVariant * field ) override {
+            if ( printRef && field->r2v ) ss << "@";
+            if ( printRef && field->r2cr ) ss << "$";
+            if ( printRef && field->write ) ss << "#";
+            ss << " is " << field->name;
+            return Visitor::visit(field);
+        }
+        virtual ExpressionPtr visit ( ExprAsVariant * field ) override {
+            if ( printRef && field->r2v ) ss << "@";
+            if ( printRef && field->r2cr ) ss << "$";
+            if ( printRef && field->write ) ss << "#";
+            ss << " as " << field->name;
+            return Visitor::visit(field);
+        }
     // addr
         virtual void preVisit ( ExprAddr * expr ) override {
             ss << "@@";

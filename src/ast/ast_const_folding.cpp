@@ -101,6 +101,18 @@ namespace das {
             expr->noSideEffects = true; // !expr->write;
             expr->noNativeSideEffects = true;
         }
+    // is variant
+        virtual void preVisit ( ExprIsVariant * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
+        }
+    // as variant
+        virtual void preVisit ( ExprAsVariant * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
+        }
     // null-coalescing
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects && expr->defaultValue->noSideEffects;

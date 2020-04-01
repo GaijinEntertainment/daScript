@@ -1188,6 +1188,34 @@ namespace das {
         return value->type->findArgumentIndex(name);
     }
 
+    // ExprIs
+
+    ExpressionPtr ExprIsVariant::visit(Visitor & vis) {
+        vis.preVisit(this);
+        value = value->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprIsVariant::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprIsVariant>(expr);
+        ExprIsVariant::clone(cexpr);
+        return cexpr;
+    }
+
+    // ExprAs
+
+    ExpressionPtr ExprAsVariant::visit(Visitor & vis) {
+        vis.preVisit(this);
+        value = value->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprAsVariant::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprAsVariant>(expr);
+        ExprAsVariant::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprSafeField
 
     ExpressionPtr ExprSafeField::visit(Visitor & vis) {

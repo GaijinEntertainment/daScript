@@ -67,4 +67,5 @@ namespace das {
     }
 
     __forceinline int32_t variant_index(const Variant & v) { return *(int32_t *)&v; }
+    __forceinline void set_variant_index(Variant & v, int32_t index) { *(int32_t *)&v = index; }
 }

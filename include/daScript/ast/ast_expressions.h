@@ -211,6 +211,28 @@ namespace das
         };
     };
 
+    struct ExprIsVariant : ExprField {
+        ExprIsVariant () = default;
+        ExprIsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+            : ExprField(a,val,n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isField() const override { return false; }
+        virtual bool rtti_isIsVariant() const override { return true; }
+    };
+
+    struct ExprAsVariant : ExprField {
+        ExprAsVariant () = default;
+        ExprAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+            : ExprField(a,val,n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isField() const override { return false; }
+        virtual bool rtti_isAsVariant() const override { return true; }
+    };
+
     struct ExprSwizzle : Expression {
         ExprSwizzle () = default;
         ExprSwizzle ( const LineInfo & a, const ExpressionPtr & val, const string & n )
@@ -240,8 +262,8 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-         virtual bool rtti_isField() const override { return false; }
-         virtual bool rtti_isSafeField() const override { return true; }
+        virtual bool rtti_isField() const override { return false; }
+        virtual bool rtti_isSafeField() const override { return true; }
         bool skipQQ = false;
     };
 

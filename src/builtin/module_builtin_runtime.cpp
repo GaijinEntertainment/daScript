@@ -542,6 +542,9 @@ namespace das
         addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info", SideEffects::modifyExternal, "dumpProfileInfo");
         // variant
         addExtern<DAS_BIND_FUN(variant_index)>(*this, lib, "variant_index", SideEffects::none, "variant_index");
+        auto svi = addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index", 
+            SideEffects::modifyArgument, "set_variant_index");
+        svi->unsafeOperation = true;
         // heap
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
                 SideEffects::modifyExternal, "heap_bytes_allocated");

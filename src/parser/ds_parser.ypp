@@ -371,7 +371,7 @@
 %left       '*' '/' '%'
 %right      QQ
 %right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
-%left       DAS_IS
+%left       DAS_IS DAS_AS
 %left       LPIPE RPIPE LBPIPE LAPIPE
 %left       POST_INC POST_DEC '.' '[' ']' '(' ')' RARROW QDOT DEREF
 %nonassoc   COLCOL
@@ -1369,6 +1369,10 @@ expr
         }
     |   expr[subexpr] DAS_IS[loc] DAS_TYPE type_declaration[decl] {
         $$ = new ExprIs(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
+    }
+    |   expr[subexpr] DAS_IS[loc] NAME[vname] {
+        $$ = new ExprIsVariant(tokAt(@loc),ExpressionPtr($subexpr),*$vname);
+		delete $vname;
     }
     |   expr_type_info[subexpr]                 { $$ = $subexpr; }
     |   expr_cast[subexpr]                      { $$ = $subexpr; }

@@ -44,6 +44,12 @@ namespace das {
                 efield->r2v = true;
                 efield->type->ref = false;
                 return efield;
+            } else if ( expr->subexpr->rtti_isAsVariant() ) {
+                reportFolding();
+                auto efield = static_pointer_cast<ExprAsVariant>(expr->subexpr);
+                efield->r2v = true;
+                efield->type->ref = false;
+                return efield;
             } else if ( expr->subexpr->rtti_isSwizzle() ) {
                 reportFolding();
                 auto eswiz = static_pointer_cast<ExprSwizzle>(expr->subexpr);
@@ -53,7 +59,7 @@ namespace das {
                     eswiz->value = Expression::autoDereference(eswiz->value);
                 }
                 return eswiz;
-            }else if ( expr->subexpr->rtti_isSafeField() ) {
+            } else if ( expr->subexpr->rtti_isSafeField() ) {
                 reportFolding();
                 auto efield = static_pointer_cast<ExprSafeField>(expr->subexpr);
                 efield->r2v = true;

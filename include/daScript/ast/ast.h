@@ -363,6 +363,8 @@ namespace das
         virtual bool rtti_isPtr2Ref() const { return false; }
         virtual bool rtti_isCast() const { return false; }
         virtual bool rtti_isField() const { return false; }
+        virtual bool rtti_isAsVariant() const { return false; }
+        virtual bool rtti_isIsVariant() const { return false; }
         virtual bool rtti_isSwizzle() const { return false; }
         virtual bool rtti_isSafeField() const { return false; }
         virtual bool rtti_isAt() const { return false; }

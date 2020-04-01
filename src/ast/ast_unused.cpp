@@ -117,7 +117,7 @@ namespace das {
                 if ( var->variable->source ) {
                     propagateRead(var->variable->source.get());
                 }
-            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() ) {
+            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() || expr->rtti_isAsVariant() || expr->rtti_isIsVariant() ) {
                 auto field = (ExprField *) expr;
                 field->r2cr = true;
                 propagateRead(field->value.get());
@@ -161,7 +161,7 @@ namespace das {
                 if ( var->variable->source ) {
                     propagateWrite(var->variable->source.get());
                 }
-            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() ) {
+            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() || expr->rtti_isAsVariant() ) {
                 auto field = (ExprField *) expr;
                 //if ( !field->value->type->isPointer() ) {
                     field->write = true;
@@ -248,21 +248,21 @@ namespace das {
             if ( var->type->ref ) propagateWrite(init);
         }
     // addr of expression
-    virtual void preVisit ( ExprRef2Ptr * expr ) override {
-        Visitor::preVisit(expr);
-        // TODO:
-        //  at some point we should do better data trackng for this type of aliasing
-        propagateWrite(expr);
-    }
-    // source in the For loop
-    virtual void preVisitForSource ( ExprFor * expr, Expression * subexpr, bool last ) override {
-        Visitor::preVisitForSource(expr, subexpr, last);
-        if (subexpr->type->isConst()) {
-            propagateRead(subexpr);
-        } else {
-            propagateWrite(subexpr);    // we really don't know, but we assume that it will write
+        virtual void preVisit ( ExprRef2Ptr * expr ) override {
+            Visitor::preVisit(expr);
+            // TODO:
+            //  at some point we should do better data trackng for this type of aliasing
+            propagateWrite(expr);
         }
-    }
+    // source in the For loop
+        virtual void preVisitForSource ( ExprFor * expr, Expression * subexpr, bool last ) override {
+            Visitor::preVisitForSource(expr, subexpr, last);
+            if (subexpr->type->isConst()) {
+                propagateRead(subexpr);
+            } else {
+                propagateWrite(subexpr);    // we really don't know, but we assume that it will write
+            }
+        }
     // ExprField
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);
@@ -270,6 +270,16 @@ namespace das {
         }
     // ExprSafeField
         virtual void preVisit ( ExprSafeField * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->r2v ) propagateRead(expr->value.get());
+        }
+    // ExprIsVariant
+        virtual void preVisit ( ExprIsVariant * expr ) override {
+            Visitor::preVisit(expr);
+            propagateRead(expr->value.get());
+        }
+    // ExprAsVariant
+        virtual void preVisit ( ExprAsVariant * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->r2v ) propagateRead(expr->value.get());
         }

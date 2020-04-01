@@ -1350,6 +1350,16 @@ namespace das
         }
     }
 
+    SimNode * ExprIsVariant::simulate(Context & context) const {
+        DAS_ASSERT(tupleOrVariantIndex != -1);
+        return context.code->makeNode<SimNode_IsVariant>(at, value->simulate(context), tupleOrVariantIndex);
+    }
+
+    SimNode * ExprAsVariant::simulate(Context & context) const {
+        DAS_ASSERT(0 && "todo: implement\n");
+        return nullptr;
+    }
+
     SimNode * ExprSafeField::simulate (Context & context) const {
         int fieldOffset = -1;
         if ( !annotation ) {

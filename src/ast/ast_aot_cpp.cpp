@@ -1400,6 +1400,26 @@ namespace das {
             ss << ")";
             return Visitor::visit(nc);
         }
+    // is variant
+        virtual void preVisit(ExprIsVariant * field) override {
+            Visitor::preVisit(field);
+            DAS_ASSERT(0 && "todo: implement");
+            ss << "(";
+        }
+        virtual ExpressionPtr visit ( ExprIsVariant * field ) override {
+            ss << ")";
+            return Visitor::visit(field);
+        }
+    // as variant
+        virtual void preVisit(ExprAsVariant * field) override {
+            Visitor::preVisit(field);
+            DAS_ASSERT(0 && "todo: implement");
+            ss << "(";
+        }
+        virtual ExpressionPtr visit ( ExprAsVariant * field ) override {
+            ss << ")";
+            return Visitor::visit(field);
+        }
     // safe field
         virtual void preVisit ( ExprSafeField * field ) override {
             Visitor::preVisit(field);

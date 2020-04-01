@@ -2245,6 +2245,22 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    struct SimNode_IsVariant : SimNode {
+        DAS_BOOL_NODE;
+        SimNode_IsVariant ( const LineInfo & at, SimNode * s, int32_t v ) 
+            : SimNode(at), subexpr(s), variant(v) {
+        }
+        virtual SimNode * visit(SimVisitor & vis) override;
+        __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            auto res = (int32_t *) subexpr->evalPtr(context);
+            return *res == variant;
+        }
+        SimNode *   subexpr;
+        int32_t     variant;
+    };
+
+
 #if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)
 #define _msc_inline_bug __declspec(noinline)
 #else

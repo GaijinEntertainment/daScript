@@ -163,6 +163,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_IsVariant::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(IsVariant);
+        V_SUB(subexpr);
+        V_ARG(variant);
+        V_END();
+    }
+
     SimNode * SimNode_At::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(At);
