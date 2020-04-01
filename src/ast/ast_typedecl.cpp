@@ -1647,6 +1647,13 @@ namespace das
         return getBaseSizeOf() * size;
     }
 
+    int TypeDecl::findArgumentIndex( const string & name ) const {
+        for (int index = 0; index != int(argNames.size()); ++index) {
+            if (argNames[index] == name) return index;
+        }
+        return -1;
+    }
+
     bool isCircularType ( const TypeDeclPtr & type, vector<const TypeDecl *> & all ) {
         if ( type->baseType==Type::tPointer ) {
             return false;

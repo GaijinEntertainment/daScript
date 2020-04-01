@@ -2158,6 +2158,25 @@ namespace das {
                         error("typeinfo(dim non_array) is prohibited, " + expr->typeexpr->describe(),
                               expr->at,CompilationError::typeinfo_dim);
                     }
+                } else if ( expr->trait=="variant_index" || expr->trait=="safe_variant_index" ) {
+                    if ( !expr->typeexpr->isGoodVariantType() ) {
+                        if (expr->trait == "variant_index") {
+                            error("variant_index only valid for variant, not for " + expr->typeexpr->describe(),
+                                expr->at, CompilationError::invalid_type);
+                        } else {
+                            reportGenericInfer();
+                            return make_shared<ExprConstInt>(expr->at, -1);
+                        }
+                    } else {
+                        int32_t index = expr->typeexpr->findArgumentIndex(expr->subtrait);
+                        if ( index!=-1 ||  expr->trait=="safe_variant_index" ) {
+                            reportGenericInfer();
+                            return make_shared<ExprConstInt>(expr->at, index);
+                        } else {
+                            error("variant_index variant " + expr->subtrait + " not found in " + expr->typeexpr->describe(),
+                                expr->at,CompilationError::typeinfo_undefined);
+                        }
+                    }
                 } else if ( expr->trait=="typename" ) {
                     reportGenericInfer();
                     return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no));
@@ -2984,6 +3003,11 @@ namespace das {
                     }
                     expr->tupleOrVariantIndex = index;
                 } else if ( valT->firstType->isGoodVariantType() ) {
+                    if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                        error("variant.field requires [unsafe]", expr->at,
+                            CompilationError::unsafe);
+                        return Visitor::visit(expr);
+                    }
                     int index = expr->variantFieldIndex();
                     if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
                         error("can't get variant field " + expr->name, expr->at, CompilationError::cant_get_field);
@@ -2999,6 +3023,11 @@ namespace das {
                 }
                 expr->tupleOrVariantIndex = index;
             } else if ( valT->isGoodVariantType() ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                    error("variant.field requires [unsafe]", expr->at,
+                        CompilationError::unsafe);
+                    return Visitor::visit(expr);
+                }
                 int index = expr->variantFieldIndex();
                 if ( index==-1 || index>=int(valT->argTypes.size()) ) {
                     error("can't get variant field " + expr->name, expr->at, CompilationError::cant_get_field);
@@ -3064,6 +3093,11 @@ namespace das {
                 expr->tupleOrVariantIndex = index;
                 expr->type = make_shared<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
             } else if ( valT->firstType->isGoodVariantType() ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                    error("variant?.field requires [unsafe]", expr->at,
+                        CompilationError::unsafe);
+                    return Visitor::visit(expr);
+                }
                 int index = expr->variantFieldIndex();
                 if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
                     error("can't get variant field " + expr->name, expr->at, CompilationError::cant_get_field);

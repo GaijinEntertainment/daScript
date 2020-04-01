@@ -1178,24 +1178,14 @@ namespace das {
             } else if ( name=="_last" ) {
                 return int(vtype->argTypes.size())-1;
             } else {
-                for ( size_t i=0; i!=vtype->argNames.size(); ++i ) {
-                    if ( vtype->argNames[i]==name ) {
-                        return int(i);
-                    }
-                }
+                return value->type->findArgumentIndex(name);
             }
             return -1;
         }
     }
 
     int ExprField::variantFieldIndex() const {
-        const auto & vtype = value->type;
-        for ( size_t i=0; i!=vtype->argNames.size(); ++i ) {
-            if ( vtype->argNames[i]==name ) {
-                return int(i);
-            }
-        }
-        return -1;
+        return value->type->findArgumentIndex(name);
     }
 
     // ExprSafeField
