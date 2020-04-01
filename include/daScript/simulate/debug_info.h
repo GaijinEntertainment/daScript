@@ -162,6 +162,7 @@ namespace das
         TypeInfo *          firstType;      // map  from, or array
         TypeInfo *          secondType;     // map  to
         TypeInfo **         argTypes;
+        char **             argNames;
         uint32_t            argCount;
         uint32_t            dimSize;
         uint32_t *          dim;

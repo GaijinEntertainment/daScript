@@ -251,6 +251,7 @@
 <normal>"lambda"                                        return DAS_TLAMBDA;
 <normal>"generator"                                     return DAS_GENERATOR;
 <normal>"tuple"                                         return DAS_TTUPLE;
+<normal>"variant"                                       return DAS_TVARIANT;
 <normal>"const"                                         return DAS_CONST;
 <normal>"continue"                                      return DAS_CONTINUE;
 <normal>"where"                                         return DAS_WHERE;

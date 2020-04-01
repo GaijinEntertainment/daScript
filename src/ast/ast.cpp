@@ -1189,6 +1189,12 @@ namespace das {
     }
 
     int ExprField::variantFieldIndex() const {
+        const auto & vtype = value->type;
+        for ( size_t i=0; i!=vtype->argNames.size(); ++i ) {
+            if ( vtype->argNames[i]==name ) {
+                return int(i);
+            }
+        }
         return -1;
     }
 

@@ -199,6 +199,7 @@
 %token  DAS_TINT16          "int16"
 %token  DAS_TUINT16         "uint16"
 %token  DAS_TTUPLE          "tuple"
+%token  DAS_TVARIANT        "variant"
 %token  DAS_GENERATOR       "generator"
 %token  DAS_YIELD           "yield"
 
@@ -273,6 +274,8 @@
 %type <pVarDecl>        let_variable_declaration
 %type <pVarDecl>        tuple_type
 %type <pVarDeclList>    tuple_type_list
+%type <pVarDecl>        variant_type
+%type <pVarDeclList>    variant_type_list
 %type <s>               name_in_namespace
 %type <s>               annotation_declaration_name
 %type <s>               function_name
@@ -1481,6 +1484,21 @@ tuple_type_list
     |   tuple_type_list[list] ';' tuple_type[decl]     { $$ = $list; $list->push_back($decl); }
     ;
 
+variant_type
+    :   NAME[name] ':' type_declaration [typeDecl] {
+        auto na = new vector<string>();
+        na->push_back(*$name);
+        $$ = new VariableDeclaration(tokAt(@typeDecl),na,$typeDecl,nullptr);
+        delete $name;
+    }
+    ;
+
+variant_type_list
+    :   variant_type[decl]                               { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   variant_type_list[list] ';' variant_type[decl]   { $$ = $list; $list->push_back($decl); }
+    ;
+
+
 copy_or_move
     :   '='         { $$ = false; }
     |   LARROW      { $$ = true; }
@@ -2002,6 +2020,12 @@ type_declaration
     }
     |   DAS_TTUPLE[loc] '<' tuple_type_list[list] '>' {
         $$ = new TypeDecl(Type::tTuple);
+        $$->at = tokAt(@loc);
+        varDeclToTypeDecl($$, $list, true);
+        deleteVariableDeclarationList($list);
+    }
+    |   DAS_TVARIANT[loc] '<' variant_type_list[list] '>' {
+        $$ = new TypeDecl(Type::tVariant);
         $$->at = tokAt(@loc);
         varDeclToTypeDecl($$, $list, true);
         deleteVariableDeclarationList($list);

@@ -148,6 +148,12 @@ namespace das {
                 for ( uint32_t i=0; i!=info->argCount; ++i ) {
                     info->argTypes[i] = makeTypeInfo(nullptr, type->argTypes[i]);
                 }
+                if ( type->baseType==Type::tVariant && !type->argNames.empty() ) {
+                    info->argNames = (char **) debugInfo->allocate(sizeof(char *) * info->argCount );
+                    for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                        info->argNames[i] = debugInfo->allocateName(type->argNames[i]);
+                    }
+                }
             } else {
                 info->argTypes = nullptr;
             }

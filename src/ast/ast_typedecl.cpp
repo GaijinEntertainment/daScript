@@ -336,7 +336,12 @@ namespace das
         } else if ( baseType==Type::tVariant ) {
             stream << das_to_string(baseType) << "<";
             if ( argTypes.size() ) {
+                int ai = 0;
                 for ( const auto & arg : argTypes ) {
+                    if ( !argNames.empty() ) {
+                        const auto & argName = argNames[ai];
+                        if ( !argName.empty() ) stream << argName << ":";
+                    }
                     stream << arg->describe(extra);
                     if ( arg != argTypes.back() ) {
                         stream << ";";
@@ -803,6 +808,18 @@ namespace das
             if ( firstType || argTypes.size() ) {    // if not any block or any function
                 if ( argTypes.size() != decl.argTypes.size() ) {
                     return false;
+                }
+                if (baseType == Type::tVariant) {
+                    if (argNames.size() != decl.argNames.size()) {
+                        return false;
+                    }
+                    for ( size_t i=0; i != argNames.size(); ++i ) {
+                        const auto & arg = argNames[i];
+                        const auto & declArg = decl.argNames[i];
+                        if ( arg != declArg ) {
+                            return false;
+                        }
+                    }
                 }
                 for ( size_t i=0; i != argTypes.size(); ++i ) {
                     const auto & arg = argTypes[i];
