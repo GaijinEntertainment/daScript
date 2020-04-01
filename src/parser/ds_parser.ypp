@@ -1374,6 +1374,10 @@ expr
         $$ = new ExprIsVariant(tokAt(@loc),ExpressionPtr($subexpr),*$vname);
 		delete $vname;
     }
+    |   expr[subexpr] DAS_AS[loc] NAME[vname] {
+        $$ = new ExprAsVariant(tokAt(@loc),ExpressionPtr($subexpr),*$vname);
+		delete $vname;
+    }
     |   expr_type_info[subexpr]                 { $$ = $subexpr; }
     |   expr_cast[subexpr]                      { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }

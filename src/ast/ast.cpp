@@ -1198,7 +1198,7 @@ namespace das {
 
     ExpressionPtr ExprIsVariant::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprIsVariant>(expr);
-        ExprIsVariant::clone(cexpr);
+        ExprField::clone(cexpr);
         return cexpr;
     }
 
@@ -1212,7 +1212,7 @@ namespace das {
 
     ExpressionPtr ExprAsVariant::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprAsVariant>(expr);
-        ExprAsVariant::clone(cexpr);
+        ExprField::clone(cexpr);
         return cexpr;
     }
 

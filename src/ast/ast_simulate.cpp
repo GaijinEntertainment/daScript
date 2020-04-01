@@ -1355,9 +1355,14 @@ namespace das
         return context.code->makeNode<SimNode_IsVariant>(at, value->simulate(context), tupleOrVariantIndex);
     }
 
-    SimNode * ExprAsVariant::simulate(Context & context) const {
-        DAS_ASSERT(0 && "todo: implement\n");
-        return nullptr;
+    SimNode * ExprAsVariant::simulate (Context & context) const {
+        int fieldOffset = value->type->getVariantFieldOffset(tupleOrVariantIndex);
+        auto simV = value->simulate(context);
+        if ( r2v ) {
+            return context.code->makeValueNode<SimNode_VariantFieldDerefR2V>(type->baseType, at, simV, fieldOffset, tupleOrVariantIndex);
+        } else {
+            return context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, tupleOrVariantIndex);
+        }
     }
 
     SimNode * ExprSafeField::simulate (Context & context) const {

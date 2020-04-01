@@ -139,6 +139,15 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_VariantFieldDeref::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(FieldDeref);
+        V_SUB(value);
+        V_ARG(offset);
+        V_ARG(variant);
+        V_END();
+    }
+
     SimNode * SimNode_PtrFieldDeref::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(PtrFieldDeref);

@@ -19,9 +19,23 @@ def test
 	assert(typeinfo(safe_variant_index<g> type int)==-1)
 
 	assert(t is i_value)
-
+	assert(t as i_value == 0x3f800000)
 	set_variant_index(t, typeinfo(variant_index<f_value> t))		// unsafe operation
-	assert(t is f_value)
+	assert(t as f_value == 1.0)
 
+	t as f_value = 2.0
+	set_variant_index(t, typeinfo(variant_index<i_value> t))		// unsafe operation
+	assert(t as i_value == 0x40000000)
+
+	t as i_value = 0x3f800000
+	set_variant_index(t, typeinfo(variant_index<f_value> t))		// unsafe operation
+	assert(t as f_value == 1.0)
+
+	var paniced = false
+	try
+		t as i_value = 0x40000000									// will assert, because t is f_value
+	recover
+		paniced = true
+	assert(paniced)
 
     return true

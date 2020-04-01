@@ -316,6 +316,49 @@ namespace das {
 #undef EVAL_NODE
     };
 
+    // VARIANT FIELD .
+    struct SimNode_VariantFieldDeref : SimNode {
+        DAS_PTR_NODE;
+        SimNode_VariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
+            : SimNode(at), value(rv), offset(of), variant(v) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            auto prv = value->evalPtr(context);
+            int32_t cv = *(int *)prv;
+            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i", variant, cv);
+            return prv + offset;
+        }
+        SimNode *   value;
+        uint32_t    offset;
+        int32_t     variant;
+    };
+
+    template <typename TT>
+    struct SimNode_VariantFieldDerefR2V : SimNode_VariantFieldDeref {
+        SimNode_VariantFieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
+            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            auto prv = value->evalPtr(context);
+            int32_t cv = *(int *)prv;
+            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i", variant, cv);
+            TT * pR = (TT *)( prv + offset );
+            return cast<TT>::from(*pR);
+
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            DAS_PROFILE_NODE \
+            auto prv = value->evalPtr(context);                     \
+            return * (CTYPE *)( prv + offset );                     \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
+
     // PTR FIELD .
     struct SimNode_PtrFieldDeref : SimNode {
         DAS_PTR_NODE;
