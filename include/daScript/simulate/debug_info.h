@@ -193,7 +193,7 @@ namespace das
         char *          sValue = nullptr;
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name, 
-                TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, uint32_t _argCount,
+                TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,
                 uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,
                 uint32_t _hash, const char * _name, uint32_t _offset ) {
                 type               = _type;
@@ -203,6 +203,7 @@ namespace das
                 firstType          = _firstType;
                 secondType         = _secondType;
                 argTypes           = _argTypes;
+                argNames           = _argNames;
                 argCount           = _argCount;
                 dimSize            = _dimSize;
                 dim                = _dim;

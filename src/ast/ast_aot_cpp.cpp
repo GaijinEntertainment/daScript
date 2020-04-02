@@ -495,10 +495,10 @@ namespace das {
             } else {
                 ss << "nullptr";
             }
-
-            // TODO: implement typeinfo 'argTypes'
-            ss << ", nullptr";
-            ss << ", " << info->argCount;
+            
+            ss << ", nullptr";                      // TODO: implement typeinfo 'argTypes'
+            ss << ", nullptr";                      // TODO: implement 'argNames'
+            ss << ", " << info->argCount;           
 
             ss << ", " << info->dimSize;
             ss << ", ";

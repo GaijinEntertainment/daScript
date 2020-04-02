@@ -170,7 +170,7 @@ def is_equal(a,b)
     return a == b
 
 def is_not_equal(a,b)
-    return a == b
+    return a != b
 
 def not(x)
     return !x
