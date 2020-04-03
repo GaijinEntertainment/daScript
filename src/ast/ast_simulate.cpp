@@ -2179,6 +2179,7 @@ namespace das
         buildMNLookup(context, logs);
         buildADLookup(context, logs);
         context.simEnd();
+        if (errors.size()) return false;
         fusion(context, logs);
         context.relocateCode();
         context.restart();
