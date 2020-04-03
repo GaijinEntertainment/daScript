@@ -85,9 +85,18 @@ def verifyObj(total:int;objects:NObject[10000])
         let npos = apos + avel*t
         assert(obj.position==npos)
 
+def verifyManagedInt
+	testManagedInt() <| $ ( arr )
+		assert(arr.length==10)
+		for x in range(0,10)
+			assert(arr[x]==x)
+		for x,y in range(0,10),arr
+			assert(x==y)
+
 [export]
 def test(var objects:ObjectArray)
 	// this is here for compilation testing purposes
+	verifyManagedInt()
 	perks_disabler_unset_es(objects,objects)
     // verifyObj
     init(nobjects)

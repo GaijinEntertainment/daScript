@@ -20,6 +20,16 @@ using namespace das;
 #define __noinline    __declspec(noinline)
 #endif
 
+void testManagedInt(const TBlock<void,const ManagedIntArray> & blk, Context * context) {
+    ManagedIntArray arr;
+    for (int32_t x = 0; x != 10; ++x) {
+        arr.push_back(x);
+    }
+    vec4f args[1];
+    args[0] = cast<ManagedIntArray *>::from(&arr);
+    context->invoke(blk, args, nullptr);
+}
+
 __noinline void updateObject ( Object & obj ) {
     obj.pos.x += obj.vel.x;
     obj.pos.y += obj.vel.y;
@@ -65,6 +75,7 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 
 MAKE_TYPE_FACTORY(Object, Object)
 MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
+MAKE_TYPE_FACTORY(ManagedIntArray, ManagedIntArray)
 
 namespace das {
 
@@ -888,13 +899,15 @@ public:
         // register types
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>(lib));
         addFunctionBasic<Object>(*this, lib);
-        addAnnotation(make_shared<ManagedVectorAnnotation<Object>>("ObjectArray",lib));
+        addAnnotation(make_shared<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
+        addAnnotation(make_shared<ManagedVectorAnnotation<ManagedIntArray>>("ManagedIntArray",lib));
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal,"updateObject");
         addExtern<DAS_BIND_FUN(updateTest)>(*this,lib,"interopUpdateTest",SideEffects::modifyExternal,"updateTest");
         addExtern<DAS_BIND_FUN(update10000)>(*this,lib,"update10000",SideEffects::modifyExternal,"update10000");
         addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks",SideEffects::modifyExternal,"update10000ks");
+        addExtern<DAS_BIND_FUN(testManagedInt)>(*this,lib,"testManagedInt",SideEffects::modifyExternal,"testManagedInt");
         // es
         initEsComponents();
         auto qes_annotation = make_shared<QueryEsFunctionAnnotation>();

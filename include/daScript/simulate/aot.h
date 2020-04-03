@@ -246,6 +246,22 @@ namespace das {
     template <typename TT>
     struct das_index;
 
+    template <typename TT, typename OT>
+    struct das_default_vector_index {
+        static __forceinline OT & at ( TT & value, int32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline const OT & at ( const TT & value, int32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline OT & at ( TT & value, uint32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline const OT & at ( const TT & value, uint32_t index, Context * ) {
+            return value[index];
+        }
+    };
+
     template <typename TT, typename VecT, uint32_t size>
     struct das_vec_index {
         static __forceinline TT & at ( VecT & value, int32_t index, Context * __context__ ) {

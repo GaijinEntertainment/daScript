@@ -18,6 +18,7 @@ struct Object {
 };
 
 typedef das::vector<Object> ObjectArray;
+typedef das::vector<int32_t> ManagedIntArray;
 
 namespace das {
     template<>
@@ -29,22 +30,11 @@ namespace das {
     };
 
     template <>
-    struct das_index<ObjectArray> {
-        static __forceinline Object & at ( ObjectArray & value, int32_t index, Context * ) {
-            return value[index];
-        }
-        static __forceinline const Object & at ( const ObjectArray & value, int32_t index, Context * ) {
-            return value[index];
-        }
-        static __forceinline Object & at ( ObjectArray & value, uint32_t index, Context * ) {
-            return value[index];
-        }
-        static __forceinline const Object & at ( const ObjectArray & value, uint32_t index, Context * ) {
-            return value[index];
-        }
-    };
-}
+    struct das_index<ObjectArray> : das_default_vector_index<ObjectArray, ObjectArray::value_type> {};
 
+    template <>
+    struct das_index<ManagedIntArray> : das_default_vector_index<ManagedIntArray, ManagedIntArray::value_type> {};
+}
 
 int AddOne(int a);
 
@@ -60,6 +50,8 @@ void testParticlesI(int count);
 int testPrimes(int n);
 void testTryCatch(das::Context * context);
 int testTree();
+
+void testManagedInt(const das::TBlock<void, const ManagedIntArray> & blk, das::Context * context);
 
 void updateObject(Object & obj);
 void updateTest(ObjectArray & objects);

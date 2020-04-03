@@ -505,7 +505,7 @@ namespace das {
             addAnnotation(make_shared<RttiProgramAnnotation>(lib));
             addEnumeration(make_shared<EnumerationType>());
             addAnnotation(make_shared<AnnotationArgumentAnnotation>(lib));
-            addAnnotation(make_shared<ManagedVectorAnnotation<AnnotationArgument>>("AnnotationArguments",lib));
+            addAnnotation(make_shared<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
             addAnnotation(make_shared<AnnotationAnnotation>(lib));
             addAnnotation(make_shared<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_shared<EnumValueInfoAnnotation>(lib));
