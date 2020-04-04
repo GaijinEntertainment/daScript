@@ -2146,13 +2146,6 @@ namespace das
                 gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
                 gfun.flags = 0;
                 gfun.fastcall = pfun->fastCall;
-                for ( const auto & an : pfun->annotations ) {
-                    auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
-                    if (!fna->simulate(&context, &gfun)) {
-                        error("function " + pfun->describe() + " annotation " + fna->name + " simulation failed", 
-                            LineInfo(), CompilationError::cant_initialize);
-                    }
-                }
             }
         }
         for (auto & pm : library.modules ) {
@@ -2190,6 +2183,22 @@ namespace das
         fusion(context, logs);
         context.relocateCode();
         context.restart();
+        // now call annotation simulate
+        for (auto & pm : library.modules) {
+            for (auto & it : pm->functions) {
+                auto pfun = it.second;
+                if (pfun->index < 0 || !pfun->used)
+                    continue;
+                auto & gfun = context.functions[pfun->index];
+                for ( const auto & an : pfun->annotations ) {
+                    auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
+                    if (!fna->simulate(&context, &gfun)) {
+                        error("function " + pfun->describe() + " annotation " + fna->name + " simulation failed", 
+                            LineInfo(), CompilationError::cant_initialize);
+                    }
+                }
+            }
+        }
         // verify code and string heaps
         DAS_ASSERTF(context.code->pagesAllocated()<=1, "code must come in one page");
         DAS_ASSERTF(context.constStringHeap->pagesAllocated()<=1, "strings must come in one page");
