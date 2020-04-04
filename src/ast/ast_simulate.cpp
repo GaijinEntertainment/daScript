@@ -2146,6 +2146,13 @@ namespace das
                 gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
                 gfun.flags = 0;
                 gfun.fastcall = pfun->fastCall;
+                for ( const auto & an : pfun->annotations ) {
+                    auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
+                    if (!fna->simulate(&context, &gfun)) {
+                        error("function " + pfun->describe() + " annotation " + fna->name + " simulation failed", 
+                            LineInfo(), CompilationError::cant_initialize);
+                    }
+                }
             }
         }
         for (auto & pm : library.modules ) {

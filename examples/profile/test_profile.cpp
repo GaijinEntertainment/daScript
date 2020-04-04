@@ -900,7 +900,7 @@ public:
         addAnnotation(make_shared<ObjectStructureTypeAnnotation>(lib));
         addFunctionBasic<Object>(*this, lib);
         addAnnotation(make_shared<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
-        addAnnotation(make_shared<ManagedVectorAnnotation<ManagedIntArray>>("ManagedIntArray",lib));
+        addAnnotation(make_shared<ManagedVectorAnnotation<ManagedIntArray,false>>("ManagedIntArray",lib));
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal,"updateObject");
