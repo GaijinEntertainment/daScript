@@ -448,10 +448,10 @@ void builtin_printw(char * utf8string) {
 #if defined(_MSC_VER)
     _setmode(_fileno(stdout), _O_U8TEXT);
 #else
-    wcout.sync_with_stdio(false);
-    wcout.imbue(std::locale("en_US.utf8"));
+    std::wcout.sync_with_stdio(false);
+    std::wcout.imbue(std::locale("en_US.utf8"));
 #endif
-    wcout << outs;
+    std::wcout << outs;
 #if defined(_MSC_VER)
     _setmode(_fileno(stdout), _O_TEXT);
 #endif
