@@ -10,7 +10,7 @@ namespace das {
     public:
         virtual void preVisit ( ExprVar * expr ) override {
             auto var = expr->variable;
-            if ( expr->local || expr->argument ) {
+            if ( expr->local || expr->argument || expr->block ) {
                 if ( expr->argument || (scope.find(var) != scope.end()) ) {
                     auto varT = var->type;
                     if ( !varT || varT->isAuto() || varT->isAlias() ) {
