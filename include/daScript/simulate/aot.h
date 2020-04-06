@@ -466,19 +466,6 @@ namespace das {
         char data[tupleSize];
     };
 
-    template <int variantSize, typename ...TA>
-    struct TVariant : Variant {
-        TVariant() {}
-        TVariant(const TVariant & arr) { moveT(arr); }
-        TVariant(TVariant && arr ) { moveT(arr); }
-        TVariant & operator = ( const TVariant & arr ) { moveT(arr); return *this; }
-        TVariant & operator = ( TVariant && arr ) { moveT(arr); return *this; }
-        __forceinline void moveT ( const TVariant & arr ) {
-            memcpy ( data, &arr, variantSize );
-        }
-        char data[variantSize];
-    };
-
     template <typename TT, int offset>
     struct das_get_tuple_field {
         static __forceinline TT & get ( const Tuple & t ) {
@@ -507,7 +494,47 @@ namespace das {
         }
     };
 
-    template <typename RR, int offset>
+    template <int variantSize, typename ...TA>
+    struct TVariant : Variant {
+        TVariant() {}
+        TVariant(const TVariant & arr) { moveT(arr); }
+        TVariant(TVariant && arr ) { moveT(arr); }
+        TVariant & operator = ( const TVariant & arr ) { moveT(arr); return *this; }
+        TVariant & operator = ( TVariant && arr ) { moveT(arr); return *this; }
+        __forceinline void moveT ( const TVariant & arr ) {
+            memcpy ( data, &arr, variantSize );
+        }
+        char data[variantSize];
+    };
+
+    template <typename TT, int offset, int variant>
+    struct das_get_variant_field {
+        static __forceinline TT & get ( const Variant & t ) {
+            char * data = (char *) &t;
+            return *(TT *)(data + offset);
+        }
+        static __forceinline TT & as ( const Variant & t, Context * __context__ ) {
+            char * data = (char *) &t;
+            auto cv = *(int32_t *)data;
+            if ( cv != variant ) __context__->throw_error_ex("variant mismatch %i, expecting %i", variant, cv);
+            return *(TT *)(data + offset);
+        }
+        static __forceinline bool is ( const Variant & t) {
+            char * data = (char *) &t;
+            auto cv = *(int32_t *)data;
+            return cv == variant;
+        }
+    };
+
+    template <typename TT, int offset, int variant>
+    struct das_get_variant_field_ptr {
+        static __forceinline TT & get ( const Variant * t ) {
+            char * data = (char *) t;
+            return *(TT *)(data + offset);
+        }
+    };
+
+    template <typename RR, int offset, int variant>
     struct das_safe_navigation_variant {
         static __forceinline RR * get ( const Variant * ptr ) {
             if ( ptr ) {

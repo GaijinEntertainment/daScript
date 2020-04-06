@@ -1,10 +1,3 @@
-// options log_infer_passes = true
-options log = true
-
-options optimize = false
-
-options log_cpp = true
-
 struct Foo
 	t	: variant<i_value:uint;f_value:float>?
 

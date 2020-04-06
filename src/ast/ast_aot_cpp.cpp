@@ -1403,8 +1403,13 @@ namespace das {
     // is variant
         virtual void preVisit(ExprIsVariant * field) override {
             Visitor::preVisit(field);
-            DAS_ASSERT(0 && "todo: implement");
-            ss << "(";
+            ss << "das_get_variant_field<"
+                << describeCppType(field->value->type->argTypes[field->tupleOrVariantIndex])
+                << ","
+                << field->value->type->getVariantFieldOffset(field->tupleOrVariantIndex)
+                << ","
+                << field->tupleOrVariantIndex
+                << ">::is(";
         }
         virtual ExpressionPtr visit ( ExprIsVariant * field ) override {
             ss << ")";
@@ -1413,11 +1418,22 @@ namespace das {
     // as variant
         virtual void preVisit(ExprAsVariant * field) override {
             Visitor::preVisit(field);
-            DAS_ASSERT(0 && "todo: implement");
-            ss << "(";
+            if ( field->type->aotAlias ) {
+                ss << "das_alias<" << field->type->alias << ">::from(";
+            }
+            ss << "das_get_variant_field<"
+                << describeCppType(field->value->type->argTypes[field->tupleOrVariantIndex])
+                << ","
+                << field->value->type->getVariantFieldOffset(field->tupleOrVariantIndex)
+                << ","
+                << field->tupleOrVariantIndex
+                << ">::as(";
         }
         virtual ExpressionPtr visit ( ExprAsVariant * field ) override {
-            ss << ")";
+            ss << ",__context__)";
+            if (field->type->aotAlias) {
+                ss << ")";
+            }
             return Visitor::visit(field);
         }
     // safe field
@@ -1450,7 +1466,9 @@ namespace das {
             } else if ( vtype->isGoodTupleType() ) {
                 ss << ", " << vtype->getTupleFieldOffset(field->tupleOrVariantIndex) <<  ">::get(";
             } else if ( vtype->isGoodVariantType() ) {
-                ss << ", " << vtype->getVariantFieldOffset(field->tupleOrVariantIndex) <<  ">::get(";
+                ss << ", " << vtype->getVariantFieldOffset(field->tupleOrVariantIndex) 
+                   << ", " << field->tupleOrVariantIndex 
+                   <<  ">::get(";
             } else {
                 ss << ",&" << vtype->structType->name;
             }
@@ -1491,6 +1509,8 @@ namespace das {
                     << describeCppType(field->value->type->argTypes[field->tupleOrVariantIndex])
                     << ","
                     << field->value->type->getVariantFieldOffset(field->tupleOrVariantIndex)
+                    << ","
+                    << field->tupleOrVariantIndex
                     << ">::get(";
             } else if ( field->value->type->isHandle() ) {
                 if (field->type->isString()) {
@@ -1511,6 +1531,8 @@ namespace das {
                         << describeCppType(field->value->type->firstType->argTypes[field->tupleOrVariantIndex])
                         << ","
                         << field->value->type->firstType->getVariantFieldOffset(field->tupleOrVariantIndex)
+                        << ","
+                        << field->tupleOrVariantIndex
                         << ">::get(";
                 }
             }

@@ -1172,20 +1172,23 @@ namespace das {
         if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
             return index;
         } else {
-            const auto & vtype = value->type;
+            auto vT = value->type->isPointer() ? value->type->firstType : value->type;
+            if (!vT) return -1;
             if ( name=="_first" ) {
                 return 0;
             } else if ( name=="_last" ) {
-                return int(vtype->argTypes.size())-1;
+                return int(vT->argTypes.size())-1;
             } else {
-                return value->type->findArgumentIndex(name);
+                return vT->findArgumentIndex(name);
             }
             return -1;
         }
     }
 
     int ExprField::variantFieldIndex() const {
-        return value->type->findArgumentIndex(name);
+        auto vT = value->type->isPointer() ? value->type->firstType : value->type;
+        if (!vT) return -1;
+        return vT->findArgumentIndex(name);
     }
 
     // ExprIs
