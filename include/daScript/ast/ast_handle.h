@@ -279,7 +279,7 @@ namespace das
         }
     };
 
-    template <typename OT, bool r2v=has_cast<OT::value_type>::value>
+    template <typename OT, bool r2v=has_cast<typename OT::value_type>::value>
     struct ManagedVectorAnnotation;
 
     template <typename VectorType>
