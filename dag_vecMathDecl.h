@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2019  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -179,30 +179,6 @@ struct bsph3f
   VECMATH_FINLINE bsph3f VECTORCALL &operator =(const bsph3f &b) { c_r = b.c_r; return *this; }
 };
 
-struct alignas(16) mat44f_align16: public mat44f
-{
-  VECMATH_FINLINE mat44f_align16 VECTORCALL &operator =(mat44f_cref m) {mat44f::operator = (m);return *this;}
-};
-
-struct alignas(16) mat43f_align16: public mat43f
-{
-  VECMATH_FINLINE mat43f_align16 VECTORCALL &operator =(mat43f_cref m) {mat43f::operator = (m);return *this;}
-};
-
-struct alignas(16) mat33f_align16: public mat33f
-{
-  VECMATH_FINLINE mat33f_align16 VECTORCALL &operator =(mat33f_cref m) {mat33f::operator = (m);return *this;}
-};
-
-struct alignas(16) bbox3f_align16: public bbox3f
-{
-  VECMATH_FINLINE bbox3f_align16 VECTORCALL &operator =(bbox3f_cref m) {bbox3f::operator = (m);return *this;}
-};
-
-struct alignas(16) bsph3f_align16: public bsph3f
-{
-  VECMATH_FINLINE bsph3f_align16 VECTORCALL &operator =(const bsph3f& m) {bsph3f::operator = (m);return *this;}
-};
 //! quaternion as 4D vector
 typedef vec4f quat4f;
 

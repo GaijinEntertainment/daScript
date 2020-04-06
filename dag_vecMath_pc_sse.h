@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2019  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -10,7 +10,7 @@
 #pragma once
 
 #if !defined(_TARGET_PC_LINUX) && !defined(_TARGET_PC_MACOSX) && !defined(_TARGET_PC_WIN)\
- && !defined(_TARGET_PS4)  && !defined(_TARGET_XBOXONE) && !defined(_TARGET_PC)
+ && !defined(_TARGET_PS4)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC)
   #if __linux__ || __unix__
     #define _TARGET_PC_LINUX 1
   #elif __APPLE_
@@ -103,7 +103,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_perm_xyxy(vec4f b){ return _mm_castpd_ps(_mm_
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xxzz(vec4f b){ return V_SHUFFLE_FWD(b, 0,0, 2,2); }
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xyxy(vec4f b){ return V_SHUFFLE_FWD(b, 0,1, 0,1); }
 #endif
-VECMATH_FINLINE vec4f VECTORCALL v_perm_wwyy(vec4f b){ return V_SHUFFLE_FWD(b, 3,3, 1,1); }
+VECMATH_FINLINE vec4f VECTORCALL v_perm_yyww(vec4f b){ return V_SHUFFLE_FWD(b, 1,1, 3,3); }
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xzxz(vec4f b){ return V_SHUFFLE_FWD(b, 0,2,0,2); }
 VECMATH_FINLINE vec4f VECTORCALL v_perm_zwzw(vec4f b){ return V_SHUFFLE_FWD(b, 2,3, 2,3); }
 VECMATH_FINLINE vec4f VECTORCALL v_perm_ywyw(vec4f b){ return V_SHUFFLE_FWD(b, 1,3,1,3); }

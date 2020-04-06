@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2019  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -255,7 +255,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_perm_xzxz(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xxyy(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_zzww(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xxzz(vec4f a);
-VECMATH_FINLINE vec4f VECTORCALL v_perm_wwyy(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_perm_yyww(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xyxy(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_yzxx(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_yzxy(vec4f a);
@@ -324,6 +324,12 @@ VECMATH_FINLINE plane3f VECTORCALL v_make_plane(vec3f p0, vec3f p1, vec3f p2);
 
 //! make plane from point and two dirs from point
 VECMATH_FINLINE plane3f VECTORCALL v_make_plane_dir(vec3f p0, vec3f dir0, vec3f dir1);
+
+//! make plane from point and normal of the plane
+VECMATH_FINLINE plane3f VECTORCALL v_make_plane_norm(vec3f p0, vec3f norm);
+
+//! transform plane with matrix
+VECMATH_FINLINE plane3f VECTORCALL v_transform_plane(plane3f plane, mat44f_cref transform);
 
 //! distance from point b to plane a: .xyzw = (a.x * b.x + a.y * b.y + a.z * b.z + a.w)
 VECMATH_FINLINE vec4f VECTORCALL v_distance3p(plane3f a, vec3f b);
