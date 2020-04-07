@@ -1431,7 +1431,32 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprAsVariant * field ) override {
             ss << ",__context__)";
-            if (field->type->aotAlias) {
+            if ( field->type->aotAlias ) {
+                ss << ")";
+            }
+            return Visitor::visit(field);
+        }
+    // safe as variant
+        virtual void preVisit(ExprSafeAsVariant * field) override {
+            Visitor::preVisit(field);
+            auto fieldT = field->value->type->isPointer() ? field->value->type->firstType :  field->value->type;
+            if ( fieldT->aotAlias ) {
+                ss << "das_alias<" << fieldT->alias << ">::from(";
+            }
+            ss << "das_get_variant_field<"
+                << describeCppType(fieldT->argTypes[field->tupleOrVariantIndex])
+                << ","
+                << fieldT->getVariantFieldOffset(field->tupleOrVariantIndex)
+                << ","
+                << field->tupleOrVariantIndex
+                << ">::safe_as"
+                << (field->skipQQ ? "_ptr" : "")
+                << "(";
+        }
+        virtual ExpressionPtr visit ( ExprSafeAsVariant * field ) override {
+            ss << ")";
+            auto fieldT = field->value->type->isPointer() ? field->value->type->firstType :  field->value->type;
+            if ( fieldT->aotAlias ) {
                 ss << ")";
             }
             return Visitor::visit(field);

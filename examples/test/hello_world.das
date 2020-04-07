@@ -30,6 +30,9 @@ def test
 	set_variant_index(t, typeinfo(variant_index<f_value> t))		// unsafe operation
 	assert(t as f_value == 1.0)
 
+    assert(t ?as f_value ?? 2.0 == 1.0)
+    assert(t ?as i_value ?? 1u == 1u)
+
 	t as f_value = 2.0
 	set_variant_index(t, typeinfo(variant_index<i_value> t))		// unsafe operation
 	assert(t as i_value == 0x40000000)
@@ -52,5 +55,6 @@ def test
 	assert ( fp?.t?.i_value ?? 14u == 14u )							// unsafe ?.i_value
 	f.t = addr(t)
 	assert ( fp?.t?.i_value ?? 15u == 0x3f800000 )					// unsafe ?.i_value
+    assert ( fp?.t ?as i_value ?? 15u == 15u )
 
     return true

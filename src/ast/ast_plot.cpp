@@ -473,6 +473,11 @@ namespace das {
             connect(field->value, field);
             return Visitor::visit(field);
         }
+        virtual ExpressionPtr visit(ExprSafeAsVariant * field) override {
+            label(field, "?as " + field->name);
+            connect(field->value, field);
+            return Visitor::visit(field);
+        }
         // ptr2ref
         virtual ExpressionPtr visit(ExprPtr2Ref * ptr2ref) override {
             label(ptr2ref, "->");

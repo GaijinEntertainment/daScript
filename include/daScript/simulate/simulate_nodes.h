@@ -334,6 +334,34 @@ namespace das {
         int32_t     variant;
     };
 
+    // SAFE VARIANT FIELD ?as
+    struct SimNode_SafeVariantFieldDeref : SimNode_VariantFieldDeref {
+        DAS_PTR_NODE;
+        SimNode_SafeVariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
+            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            auto prv = value->evalPtr(context);
+            int32_t cv = *(int *)prv;
+            return cv==variant ? (prv + offset) : nullptr;
+        }
+    };
+
+    // SAFE VARIANT FIELD ?as
+    struct SimNode_SafeVariantFieldDerefPtr : SimNode_VariantFieldDeref {
+        DAS_PTR_NODE;
+        SimNode_SafeVariantFieldDerefPtr ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
+            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            auto prv = (char **) value->evalPtr(context);
+            int32_t cv = *(int *)prv;
+            return cv==variant ? *(prv + offset) : nullptr;
+        }
+    };
+
     template <typename TT>
     struct SimNode_VariantFieldDerefR2V : SimNode_VariantFieldDeref {
         SimNode_VariantFieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )

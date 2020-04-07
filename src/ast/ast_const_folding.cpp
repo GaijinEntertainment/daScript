@@ -113,6 +113,12 @@ namespace das {
             expr->noSideEffects = true; // !expr->write;
             expr->noNativeSideEffects = true;
         }
+    // safe as variant
+        virtual void preVisit ( ExprSafeAsVariant * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
+        }
     // null-coalescing
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects && expr->defaultValue->noSideEffects;

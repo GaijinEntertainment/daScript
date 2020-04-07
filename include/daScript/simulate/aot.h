@@ -519,6 +519,28 @@ namespace das {
             if ( cv != variant ) __context__->throw_error_ex("variant mismatch %i, expecting %i", variant, cv);
             return *(TT *)(data + offset);
         }
+        static __forceinline TT * safe_as ( const Variant & t ) {
+            char * data = (char *) &t;
+            auto cv = *(int32_t *)data;
+            return cv==variant ? (TT *)(data + offset) : nullptr;
+        }
+        static __forceinline TT * safe_as ( const Variant * t ) {
+            char * data = (char *) t;
+            if ( !data ) return nullptr;
+            auto cv = *(int32_t *)data;
+            return cv==variant ? (TT *)(data + offset) : nullptr;
+        }
+        static __forceinline TT safe_as_ptr ( const Variant & t ) {
+            char * data = (char *) &t;
+            auto cv = *(int32_t *)data;
+            return cv==variant ? *(TT *)(data + offset) : nullptr;
+        }
+        static __forceinline TT safe_as_ptr ( const Variant * t ) {
+            char * data = (char *) t;
+            if ( !data ) return nullptr;
+            auto cv = *(int32_t *)data;
+            return cv==variant ? *(TT *)(data + offset) : nullptr;
+        }
         static __forceinline bool is ( const Variant & t) {
             char * data = (char *) &t;
             auto cv = *(int32_t *)data;

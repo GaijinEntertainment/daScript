@@ -182,6 +182,7 @@ namespace das {
         VISIT_EXPR(ExprSafeField)
         VISIT_EXPR(ExprIsVariant)
         VISIT_EXPR(ExprAsVariant)
+        VISIT_EXPR(ExprSafeAsVariant)
         VISIT_EXPR(ExprOp1)
         VISIT_EXPR(ExprOp2)
         VISIT_EXPR(ExprOp3)

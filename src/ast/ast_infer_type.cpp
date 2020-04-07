@@ -2997,6 +2997,34 @@ namespace das {
             propagateTempType(expr->value->type, expr->type);
             return Visitor::visit(expr);
         }
+    // ExprSafeAsVariant
+        virtual ExpressionPtr visit(ExprSafeAsVariant * expr) override {
+            if (!expr->value->type) return Visitor::visit(expr);
+            auto valT = expr->value->type->isPointer() ? expr->value->type->firstType : expr->value->type;
+            if ( !valT || !valT->isGoodVariantType() ) {
+                error(" ?as " + expr->name + " only allowed for variants or pointers to variants", expr->at,
+                    CompilationError::invalid_type);
+                return Visitor::visit(expr);
+
+            }
+            int index = valT->findArgumentIndex(expr->name);
+            if ( index==-1 || index>=int(valT->argTypes.size()) ) {
+                error("can't get variant field " + expr->name, expr->at,
+                    CompilationError::cant_get_field);
+                return Visitor::visit(expr);
+            }
+            expr->tupleOrVariantIndex = index;
+            expr->type = make_shared<TypeDecl>(*valT->argTypes[expr->tupleOrVariantIndex]);
+            expr->skipQQ = expr->type->isPointer();
+            if ( !expr->skipQQ ) {
+                auto fieldType = expr->type;
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = fieldType;
+            }
+            expr->type->constant |= valT->constant | expr->value->type->constant;
+            propagateTempType(expr->value->type, expr->type);
+            return Visitor::visit(expr);
+        }
     // ExprIsVariant
         virtual ExpressionPtr visit(ExprIsVariant * expr) override {
             if (!expr->value->type) return Visitor::visit(expr);

@@ -50,6 +50,12 @@ namespace das {
                 efield->r2v = true;
                 efield->type->ref = false;
                 return efield;
+            } else if ( expr->subexpr->rtti_isSafeAsVariant() ) {
+                reportFolding();
+                auto efield = static_pointer_cast<ExprSafeAsVariant>(expr->subexpr);
+                efield->r2v = true;
+                efield->type->ref = false;
+                return efield;
             } else if ( expr->subexpr->rtti_isSwizzle() ) {
                 reportFolding();
                 auto eswiz = static_pointer_cast<ExprSwizzle>(expr->subexpr);

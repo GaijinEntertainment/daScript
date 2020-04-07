@@ -233,6 +233,18 @@ namespace das
         virtual bool rtti_isAsVariant() const override { return true; }
     };
 
+    struct ExprSafeAsVariant : ExprField {
+        ExprSafeAsVariant () = default;
+        ExprSafeAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+            : ExprField(a,val,n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isField() const override { return false; }
+        virtual bool rtti_isSafeAsVariant() const override { return true; }
+        bool skipQQ = false;
+    };
+
     struct ExprSwizzle : Expression {
         ExprSwizzle () = default;
         ExprSwizzle ( const LineInfo & a, const ExpressionPtr & val, const string & n )

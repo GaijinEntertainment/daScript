@@ -664,6 +664,13 @@ namespace das {
             ss << " as " << field->name;
             return Visitor::visit(field);
         }
+        virtual ExpressionPtr visit ( ExprSafeAsVariant * field ) override {
+            if ( printRef && field->r2v ) ss << "@";
+            if ( printRef && field->r2cr ) ss << "$";
+            if ( printRef && field->write ) ss << "#";
+            ss << " ?as " << field->name;
+            return Visitor::visit(field);
+        }
     // addr
         virtual void preVisit ( ExprAddr * expr ) override {
             ss << "@@";

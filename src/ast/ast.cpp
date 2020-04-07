@@ -1205,7 +1205,7 @@ namespace das {
         return cexpr;
     }
 
-    // ExprAs
+    // ExprAsVariant
 
     ExpressionPtr ExprAsVariant::visit(Visitor & vis) {
         vis.preVisit(this);
@@ -1215,6 +1215,20 @@ namespace das {
 
     ExpressionPtr ExprAsVariant::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprAsVariant>(expr);
+        ExprField::clone(cexpr);
+        return cexpr;
+    }
+
+    // ExprSafeAsVariant
+
+    ExpressionPtr ExprSafeAsVariant::visit(Visitor & vis) {
+        vis.preVisit(this);
+        value = value->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprSafeAsVariant::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprSafeAsVariant>(expr);
         ExprField::clone(cexpr);
         return cexpr;
     }

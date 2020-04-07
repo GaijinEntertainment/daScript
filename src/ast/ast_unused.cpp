@@ -117,7 +117,9 @@ namespace das {
                 if ( var->variable->source ) {
                     propagateRead(var->variable->source.get());
                 }
-            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() || expr->rtti_isAsVariant() || expr->rtti_isIsVariant() ) {
+            } else if ( expr->rtti_isField() || expr->rtti_isSafeField()
+                       || expr->rtti_isAsVariant() || expr->rtti_isIsVariant()
+                       || expr->rtti_isSafeAsVariant() ) {
                 auto field = (ExprField *) expr;
                 field->r2cr = true;
                 propagateRead(field->value.get());
@@ -161,7 +163,8 @@ namespace das {
                 if ( var->variable->source ) {
                     propagateWrite(var->variable->source.get());
                 }
-            } else if ( expr->rtti_isField() || expr->rtti_isSafeField() || expr->rtti_isAsVariant() ) {
+            } else if ( expr->rtti_isField() || expr->rtti_isSafeField()
+                       || expr->rtti_isAsVariant() || expr->rtti_isSafeAsVariant() ) {
                 auto field = (ExprField *) expr;
                 //if ( !field->value->type->isPointer() ) {
                     field->write = true;
@@ -280,6 +283,11 @@ namespace das {
         }
     // ExprAsVariant
         virtual void preVisit ( ExprAsVariant * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->r2v ) propagateRead(expr->value.get());
+        }
+    // ExprSafeAsVariant
+        virtual void preVisit ( ExprSafeAsVariant * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->r2v ) propagateRead(expr->value.get());
         }

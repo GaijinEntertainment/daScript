@@ -1365,6 +1365,18 @@ namespace das
         }
     }
 
+    SimNode * ExprSafeAsVariant::simulate (Context & context) const {
+        int fieldOffset = value->type->isPointer() ?
+            value->type->firstType->getVariantFieldOffset(tupleOrVariantIndex) :
+            value->type->getVariantFieldOffset(tupleOrVariantIndex);
+        auto simV = value->simulate(context);
+        if ( skipQQ ) {
+            return context.code->makeNode<SimNode_SafeVariantFieldDerefPtr>(at,simV,fieldOffset, tupleOrVariantIndex);
+        } else {
+            return context.code->makeNode<SimNode_SafeVariantFieldDeref>(at,simV,fieldOffset, tupleOrVariantIndex);
+        }
+    }
+
     SimNode * ExprSafeField::simulate (Context & context) const {
         int fieldOffset = -1;
         if ( !annotation ) {
@@ -1388,12 +1400,7 @@ namespace das
                 }
                 return resN;
             } else {
-                auto resN = context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),fieldOffset);
-                if ( !resN ) {
-                    context.thisProgram->error("integration error, simulateSafeFieldDerefPtr returned null",
-                                               at, CompilationError::missing_node );
-                }
-                return resN;
+                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),fieldOffset);
             }
         } else {
             if ( annotation ) {
