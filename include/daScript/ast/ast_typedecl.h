@@ -279,6 +279,30 @@ namespace das {
     };
 
     template <typename TT>
+    struct TTemporary {};
+
+    template <typename TT>
+    struct typeFactory<TTemporary<TT>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT>::make(lib);
+            t->temporary = true;
+            return t;
+        }
+    };
+
+    template <typename TT>
+    struct TImplicit {};
+
+    template <typename TT>
+    struct typeFactory<TImplicit<TT>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT>::make(lib);
+            t->implicit = true;
+            return t;
+        }
+    };
+
+    template <typename TT>
     struct TArray;
 
     template <typename TT>

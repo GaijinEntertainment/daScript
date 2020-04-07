@@ -240,7 +240,7 @@ namespace das
         return res;
     }
 
-    void peek_das_string(const string & str, const TBlock<void,const char *> & block, Context * context) {
+    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context) {
         vec4f args[1];
         args[0] = cast<const char *>::from(str.c_str());
         context->invoke(block, args, nullptr);
