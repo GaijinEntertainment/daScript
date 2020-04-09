@@ -185,7 +185,7 @@ namespace das {
             return Visitor::visit(expr);
         }
     // make structure
-        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+        virtual ExpressionPtr visit ( ExprMakeStructureOrDefaultValue * expr ) override {
             expr->noSideEffects = true;
             expr->noNativeSideEffects = true;
             for ( const auto & mksp : expr->structs ) {

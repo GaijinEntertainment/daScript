@@ -214,7 +214,7 @@ namespace das {
         fn->at = str->at;
         fn->result = make_shared<TypeDecl>(str->shared_from_this());
         auto block = make_shared<ExprBlock>();
-        auto makeT = make_shared<ExprMakeStructure>(str->at);
+        auto makeT = make_shared<ExprMakeStructureOrDefaultValue>(str->at);
         makeT->useInitializer = true;
         makeT->makeType = make_shared<TypeDecl>(str->shared_from_this());
         makeT->structs.push_back(make_shared<MakeStruct>());
@@ -464,7 +464,7 @@ namespace das {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
-        auto makeS = make_shared<ExprMakeStructure>();
+        auto makeS = make_shared<ExprMakeStructureOrDefaultValue>();
         // makeS->useInitializer = true;
         makeS->at = at;
         makeS->makeType = make_shared<TypeDecl>(ls);

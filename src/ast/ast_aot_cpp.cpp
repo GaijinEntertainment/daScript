@@ -658,7 +658,7 @@ namespace das {
             }
         }
     // make structure
-        virtual void preVisit ( ExprMakeStructure * expr ) override {
+        virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
             auto block = getCurrentBlock();
             if ( !expr->doesNotNeedSp && expr->stackTop ) {
                 localTemps[block].push_back(expr);
@@ -2033,14 +2033,14 @@ namespace das {
         bool needTempSrc ( ExprMakeLocal * expr ) const {
             return !expr->doesNotNeedSp && expr->stackTop;
         }
-        string mksName ( ExprMakeStructure * expr ) const {
+        string mksName ( ExprMakeStructureOrDefaultValue * expr ) const {
             if ( needTempSrc(expr) ) {
                 return makeLocalTempName(expr);
             } else {
                 return "__mks_" + to_string(expr->at.line);
             }
         }
-        virtual void preVisit ( ExprMakeStructure * expr ) override {
+        virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
             Visitor::preVisit(expr);
             ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                 << (needTempSrc(expr) ? "&" : "") << " {\n";
@@ -2054,17 +2054,17 @@ namespace das {
             }
 
         }
-        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
             ss << string(tab,'\t') << mksName(expr);
             if ( expr->structs.size()!=1 ) ss << "(" << index << ",__context__)";
             ss << "." << decl->name << " = ";
         }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
             ss << ";\n";
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
-        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+        virtual ExpressionPtr visit ( ExprMakeStructureOrDefaultValue * expr ) override {
             ss << string(tab,'\t') << "return " << mksName(expr)<< ";\n";
             tab --;
             ss << string(tab,'\t') << "})())";

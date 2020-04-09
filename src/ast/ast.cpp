@@ -1736,8 +1736,8 @@ namespace das {
         return md;
     }
 
-    ExpressionPtr ExprMakeStructure::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprMakeStructure>(expr);
+    ExpressionPtr ExprMakeStructureOrDefaultValue::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeStructureOrDefaultValue>(expr);
         ExprMakeLocal::clone(cexpr);
         cexpr->structs.reserve ( structs.size() );
         for ( auto & fields : structs ) {
@@ -1758,7 +1758,7 @@ namespace das {
         return cexpr;
     }
 
-    ExpressionPtr ExprMakeStructure::visit(Visitor & vis) {
+    ExpressionPtr ExprMakeStructureOrDefaultValue::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( makeType ) {
             vis.preVisit(makeType.get());

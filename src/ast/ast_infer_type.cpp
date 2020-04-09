@@ -4470,15 +4470,19 @@ namespace das {
             return Visitor::visit(expr);
         }
     // make structure
-        virtual void preVisit ( ExprMakeStructure * expr ) override {
+        virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return;
             }
             verifyType(expr->makeType);
             if ( expr->makeType->baseType != Type::tStructure ) {
-                error("[[" + expr->makeType->describe() + "]] with non-structure type", expr->at, CompilationError::invalid_type);
-            } else if ( expr->makeType->dim.size()>1 ) {
+                if ( expr->structs.size() ) {
+                    error("[[" + expr->makeType->describe() + "]] with non-structure type",
+                          expr->at, CompilationError::invalid_type);
+                }
+            }
+            if ( expr->makeType->dim.size()>1 ) {
                 error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays", expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->structs.size()) ) {
                 error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
@@ -4488,7 +4492,7 @@ namespace das {
                 error("[[" + expr->makeType->describe() + "]] can't be reference", expr->at, CompilationError::invalid_type);
             }
         }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !decl->value->type ) {
                 return Visitor::visitMakeStructureField(expr,index,decl,last);
             }
@@ -4512,76 +4516,78 @@ namespace das {
             }
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
-        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+        virtual ExpressionPtr visit ( ExprMakeStructureOrDefaultValue * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visit(expr);
             }
             // see if there are any duplicate fields
-            bool anyDuplicates = false;
-            for ( auto & st : expr->structs ) {
-                das_set<string> fld;
-                for ( auto & fi : *st ) {
-                    if ( fld.find(fi->name) != fld.end() ) {
-                        error("field " + fi->name + " is already initialized", fi->at,
-                              CompilationError::field_already_initialized);
-                        anyDuplicates = true;
-                    } else {
-                        fld.insert(fi->name);
-                    }
-                }
-            }
-            if ( anyDuplicates ) return Visitor::visit(expr);
-            // see if we need to fill in missing fields
-            if ( expr->useInitializer && expr->makeType->structType ) {
-                for ( auto & stf : expr->makeType->structType->fields  ) {
-                    if ( stf.init  ) {
-                        if ( !stf.init->type || stf.init->type->isAuto() ) {
-                            error("not fully resolved yet", expr->at);
-                            return Visitor::visit(expr);
+            if ( expr->makeType->baseType == Type::tStructure ) {
+                bool anyDuplicates = false;
+                for ( auto & st : expr->structs ) {
+                    das_set<string> fld;
+                    for ( auto & fi : *st ) {
+                        if ( fld.find(fi->name) != fld.end() ) {
+                            error("field " + fi->name + " is already initialized", fi->at,
+                                  CompilationError::field_already_initialized);
+                            anyDuplicates = true;
+                        } else {
+                            fld.insert(fi->name);
                         }
                     }
                 }
-                bool anyInit = false;
-                for ( auto & st : expr->structs ) {
-                    for ( auto & fi : expr->makeType->structType->fields ) {
-                        if ( fi.init ) {
-                            anyInit = true;
-                            auto it = find_if(st->begin(), st->end(), [&](const MakeFieldDeclPtr & fd){
-                                return fd->name == fi.name;
-                            });
-                            if ( it==st->end() ) {
-                                auto msf = make_shared<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy());
-                                st->push_back(msf);
-                                reportGenericInfer();
+                if ( anyDuplicates ) return Visitor::visit(expr);
+                // see if we need to fill in missing fields
+                if ( expr->useInitializer && expr->makeType->structType ) {
+                    for ( auto & stf : expr->makeType->structType->fields  ) {
+                        if ( stf.init  ) {
+                            if ( !stf.init->type || stf.init->type->isAuto() ) {
+                                error("not fully resolved yet", expr->at);
+                                return Visitor::visit(expr);
                             }
                         }
                     }
+                    bool anyInit = false;
+                    for ( auto & st : expr->structs ) {
+                        for ( auto & fi : expr->makeType->structType->fields ) {
+                            if ( fi.init ) {
+                                anyInit = true;
+                                auto it = find_if(st->begin(), st->end(), [&](const MakeFieldDeclPtr & fd){
+                                    return fd->name == fi.name;
+                                });
+                                if ( it==st->end() ) {
+                                    auto msf = make_shared<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy());
+                                    st->push_back(msf);
+                                    reportGenericInfer();
+                                }
+                            }
+                        }
+                    }
+                    if ( !anyInit ) {
+                        error("[[" + expr->makeType->describe() + "() ]] does not have default initializer",
+                              expr->at, CompilationError::invalid_type);
+                    } else {
+                        expr->useInitializer = false;
+                    }
                 }
-                if ( !anyInit ) {
-                    error("[[" + expr->makeType->describe() + "() ]] does not have default initializer",
-                          expr->at, CompilationError::invalid_type);
+                // see if we need to init fields
+                if ( expr->makeType->structType ) {
+                    expr->initAllFields = !expr->structs.empty();
+                    for ( auto & st : expr->structs ) {
+                        if ( st->size() == expr->makeType->structType->fields.size() ) {
+                            for ( auto & va : *st ) {
+                                if ( va->value->rtti_isMakeLocal() ) {
+                                    auto mkl = static_pointer_cast<ExprMakeLocal>(va->value);
+                                    expr->initAllFields &= mkl->initAllFields;
+                                }
+                            }
+                        } else {
+                            expr->initAllFields = false;
+                            break;
+                        }
+                    }
                 } else {
-                    expr->useInitializer = false;
+                    expr->initAllFields = false;
                 }
-            }
-            // see if we need to init fields
-            if ( expr->makeType->structType ) {
-                expr->initAllFields = !expr->structs.empty();
-                for ( auto & st : expr->structs ) {
-                    if ( st->size() == expr->makeType->structType->fields.size() ) {
-                        for ( auto & va : *st ) {
-                            if ( va->value->rtti_isMakeLocal() ) {
-                                auto mkl = static_pointer_cast<ExprMakeLocal>(va->value);
-                                expr->initAllFields &= mkl->initAllFields;
-                            }
-                        }
-                    } else {
-                        expr->initAllFields = false;
-                        break;
-                    }
-                }
-            } else {
-                expr->initAllFields = false;
             }
             // result type
             auto resT = make_shared<TypeDecl>(*expr->makeType);

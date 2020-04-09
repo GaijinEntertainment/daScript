@@ -133,10 +133,10 @@ namespace das {
         virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
         virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that->shared_from_this(); }
         // MAKE STRUCTURE
-        virtual void preVisitMakeStructureIndex ( ExprMakeStructure * expr, int index, bool lastIndex ) {}
-        virtual void visitMakeStructureIndex ( ExprMakeStructure * expr, int index, bool lastField ) {}
-        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool lastField ) {
+        virtual void preVisitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastIndex ) {}
+        virtual void visitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastField ) {}
+        virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool lastField ) {
             return decl->shared_from_this(); }
         // MAKE ARRAY
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) {}
@@ -233,7 +233,7 @@ namespace das {
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWith)
         VISIT_EXPR(ExprWhile)
-        VISIT_EXPR(ExprMakeStructure)
+        VISIT_EXPR(ExprMakeStructureOrDefaultValue)
         VISIT_EXPR(ExprMakeArray)
         VISIT_EXPR(ExprMakeTuple)
         VISIT_EXPR(ExprArrayComprehension)

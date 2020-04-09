@@ -7108,7 +7108,7 @@ yyreduce:
   case 399:
 #line 2071 "ds_parser.ypp"
     {
-        auto msd = new ExprMakeStructure();
+        auto msd = new ExprMakeStructureOrDefaultValue();
         msd->structs.push_back(MakeStructPtr((yyvsp[0].pMakeStruct)));
         (yyval.pExpression) = msd;
     }
@@ -7118,7 +7118,7 @@ yyreduce:
   case 400:
 #line 2076 "ds_parser.ypp"
     {
-        ((ExprMakeStructure *) (yyvsp[-2].pExpression))->structs.push_back(MakeStructPtr((yyvsp[0].pMakeStruct)));
+        ((ExprMakeStructureOrDefaultValue *) (yyvsp[-2].pExpression))->structs.push_back(MakeStructPtr((yyvsp[0].pMakeStruct)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
 #line 7125 "ds_parser.cpp"
@@ -7127,7 +7127,7 @@ yyreduce:
   case 401:
 #line 2083 "ds_parser.ypp"
     {
-        ((ExprMakeStructure *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
+        ((ExprMakeStructureOrDefaultValue *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-4]));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
@@ -7137,7 +7137,7 @@ yyreduce:
   case 402:
 #line 2088 "ds_parser.ypp"
     {
-        auto msd = new ExprMakeStructure();
+        auto msd = new ExprMakeStructureOrDefaultValue();
         msd->makeType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
         msd->at = tokAt((yylsp[-3]));
         (yyval.pExpression) = msd;
@@ -7148,8 +7148,8 @@ yyreduce:
   case 403:
 #line 2094 "ds_parser.ypp"
     {
-        ((ExprMakeStructure *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
-        ((ExprMakeStructure *)(yyvsp[-2].pExpression))->useInitializer = true;
+        ((ExprMakeStructureOrDefaultValue *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+        ((ExprMakeStructureOrDefaultValue *)(yyvsp[-2].pExpression))->useInitializer = true;
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-6]));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
@@ -7159,7 +7159,7 @@ yyreduce:
   case 404:
 #line 2100 "ds_parser.ypp"
     {
-        ((ExprMakeStructure *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
+        ((ExprMakeStructureOrDefaultValue *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-4]));
         auto tam = g_Program->makeCall(tokAt((yylsp[-4])),"to_array_move");
         tam->arguments.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
@@ -7171,8 +7171,8 @@ yyreduce:
   case 405:
 #line 2107 "ds_parser.ypp"
     {
-        ((ExprMakeStructure *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
-        ((ExprMakeStructure *)(yyvsp[-2].pExpression))->useInitializer = true;
+        ((ExprMakeStructureOrDefaultValue *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+        ((ExprMakeStructureOrDefaultValue *)(yyvsp[-2].pExpression))->useInitializer = true;
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-6]));
         auto tam = g_Program->makeCall(tokAt((yylsp[-6])),"to_array_move");
         tam->arguments.push_back(ExpressionPtr((yyvsp[-2].pExpression)));

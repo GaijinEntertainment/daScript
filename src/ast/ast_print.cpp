@@ -855,26 +855,26 @@ namespace das {
             ss << " is type " << decl->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes);
         }
     // make structure
-        virtual void preVisit ( ExprMakeStructure * expr ) override {
+        virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
             Visitor::preVisit(expr);
             ss << "[[";
             if ( expr->type ) {
                 ss << expr->type->describe() << " ";
             }
         }
-        virtual void preVisitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
             ss << decl->name << (decl->moveSemantic ? " <- " : " = ");
         }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructure * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !last ) ss << ", ";
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
-        virtual void visitMakeStructureIndex ( ExprMakeStructure * expr, int index, bool lastField ) override {
+        virtual void visitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastField ) override {
             if ( !lastField ) ss << "; ";
             Visitor::visitMakeStructureIndex(expr, index, lastField);
         }
-        virtual ExpressionPtr visit ( ExprMakeStructure * expr ) override {
+        virtual ExpressionPtr visit ( ExprMakeStructureOrDefaultValue * expr ) override {
             ss << "]]";
             return Visitor::visit(expr);
         }
