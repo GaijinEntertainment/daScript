@@ -495,7 +495,11 @@ namespace das {
                         if ( expr->variable->init->constexpression ) {
                             if ( !expr->isGlobalVariable() || expr->variable->type->isConst() ) {
                                 reportFolding();
-                                return expr->variable->init->clone();
+                                auto cle = expr->variable->init->clone();
+                                if ( !cle->type ) {
+                                    cle->type = make_shared<TypeDecl>(*expr->variable->init->type);
+                                }
+                                return cle;
                             }
                         }
                     } else {

@@ -72,7 +72,7 @@ namespace das {
                 program->error(err,at,cerr);
             }
         }
-        void reportGenericInfer() {
+        void reportAstChanged() {
             needRestart = true;
         }
     protected:
@@ -1086,7 +1086,7 @@ namespace das {
     // type
         virtual void preVisit ( TypeDecl * type ) override {
             if ( inferTypeExpr(type) ) {
-                reportGenericInfer();
+                reportAstChanged();
             }
         }
 
@@ -1114,7 +1114,7 @@ namespace das {
             if ( !value ) {
                 if ( lastEnuValue ) {
                     if ( lastEnuValue->rtti_isConstant() && lastEnuValue->type && lastEnuValue->type->isInteger() ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         int64_t nextInt = getConstExprIntOrUInt(lastEnuValue->shared_from_this()) + 1;
                         auto nextValue = makeEnumConstValue(enu, nextInt);
                         lastEnuValue = nextValue.get();
@@ -1123,7 +1123,7 @@ namespace das {
                         error("enumeration value " + name + " can't be infered yet", enu->at);
                     }
                 } else {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto zeroValue = Program::makeConst(enu->at, enu->makeBaseType(), v_zero());
                     zeroValue->type = enu->makeBaseType();
                     lastEnuValue = zeroValue.get();
@@ -1139,7 +1139,7 @@ namespace das {
                     error("enumeration value " + name + " must be constant",
                           value->at, CompilationError::invalid_enumeration);
                 } else if (value->type->baseType != enu->baseType) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     int64_t thisInt = getConstExprIntOrUInt(value->shared_from_this());
                     auto thisValue = makeEnumConstValue(enu, thisInt);
                     lastEnuValue = thisValue.get();
@@ -1185,7 +1185,7 @@ namespace das {
                 if ( !pf->type->isAuto() && !pf->type->isAlias() ) {
                     decl.type = make_shared<TypeDecl>(*pf->type);
                     decl.parentType = false;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("not fully resolved yet", decl.at);
                 }
@@ -1194,7 +1194,7 @@ namespace das {
             if ( decl.type->isAlias() ) {
                 if ( auto aT = inferAlias(decl.type) ) {
                     decl.type = aT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("undefined type " + decl.type->describe(), decl.at, CompilationError::invalid_structure_field_type );
                 }
@@ -1209,7 +1209,7 @@ namespace das {
                     TypeDecl::applyAutoContracts(varT, decl.type);
                     decl.type = varT;
                     decl.type->ref = false;
-                    reportGenericInfer();
+                    reportAstChanged();
                 }
             }
             if ( isCircularType(decl.type) ) {
@@ -1240,7 +1240,7 @@ namespace das {
                     if ( decl.init->rtti_isCast() ) {
                         auto castExpr = static_pointer_cast<ExprCast>(decl.init);
                         if ( castExpr->castType->isAuto() ) {
-                            reportGenericInfer();
+                            reportAstChanged();
                             castExpr->castType = make_shared<TypeDecl>(*decl.type);
                         }
                     }
@@ -1271,7 +1271,7 @@ namespace das {
                     ctor->exports = program->options.getBoolOption("always_export_initializer", false);
                     extraFunctions.push_back(ctor);
                     var->genCtor = true;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("structure already has user defined initializer", var->at,
                           CompilationError::structure_already_has_initializer);
@@ -1305,7 +1305,7 @@ namespace das {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
                     var->type = varT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 }
             } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
                 error("global variable " + var->name + " initialization type mismatch, "
@@ -1328,7 +1328,7 @@ namespace das {
                 error("global variable " + var->name + " can't be cloned", var->at, CompilationError::cant_copy);
             } else {
                 if ( var->init_via_clone ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     var->init_via_clone = false;
                     var->init_via_move = true;
                     auto c2m = make_shared<ExprCall>(var->at,"clone_to_move");
@@ -1374,7 +1374,7 @@ namespace das {
             if ( var->type->isAlias() ) {
                 if ( auto aT = inferAlias(var->type) ) {
                     var->type = aT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("undefined type " + var->type->describe(), var->at, CompilationError::type_not_found );
                 }
@@ -1390,7 +1390,7 @@ namespace das {
                 } else {
                     TypeDecl::applyAutoContracts(varT, arg->type);
                     arg->type = varT;
-                    reportGenericInfer();
+                    reportAstChanged();
                     return Visitor::visitArgumentInit(f, arg, that);
                 }
             }
@@ -1419,7 +1419,7 @@ namespace das {
             if ( !func->hasReturn ) {
                 if ( func->result->isAuto() ) {
                     func->result = make_shared<TypeDecl>(Type::tVoid);
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else if ( !func->result->isVoid() ){
                     error("function does not return a value", func->at, CompilationError::expecting_return_value);
                 }
@@ -1427,7 +1427,7 @@ namespace das {
             if  ( func->result->isAlias() ) {
                 if ( auto aT = inferAlias(func->result) ) {
                     func->result = aT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("undefined type " + func->result->describe(), func->at, CompilationError::type_not_found );
                 }
@@ -1561,7 +1561,7 @@ namespace das {
                     auto aT = inferAlias(expr->funcType);
                     if (aT) {
                         expr->funcType = aT;
-                        reportGenericInfer();
+                        reportAstChanged();
                     } else {
                         error("udefined type " + expr->funcType->describe(), expr->at,
                             CompilationError::type_not_found);
@@ -1737,7 +1737,7 @@ namespace das {
                 auto aT = inferAlias(expr->iterType);
                 if ( aT ) {
                     expr->iterType = aT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("udefined type " + expr->iterType->describe(), expr->at,
                           CompilationError::type_not_found);
@@ -1812,7 +1812,7 @@ namespace das {
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, isUnsafe);
                                     if ( program->addFunction(pFnFin) ) {
-                                        reportGenericInfer();
+                                        reportAstChanged();
                                         auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
                                         // each ( [[ ]]] )
                                         auto cEach = make_shared<ExprCall>(block->at, makeRef ? "each_ref" : "each");
@@ -1867,7 +1867,7 @@ namespace das {
                             if ( program->addFunction(pFn) ) {
                                 auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, isUnsafe);
                                 if ( program->addFunction(pFnFin) ) {
-                                    reportGenericInfer();
+                                    reportAstChanged();
                                     auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
                                     return ms;
                                 } else {
@@ -1922,7 +1922,7 @@ namespace das {
                         if ( arg->rtti_isCast() && !passType ) {
                             auto argCast = static_pointer_cast<ExprCast>(arg);
                             if ( argCast->castType->isAuto() ) {
-                                reportGenericInfer();
+                                reportAstChanged();
                                 argCast->castType = make_shared<TypeDecl>(*argType);
                             }
                         }
@@ -2076,7 +2076,7 @@ namespace das {
             if ( expr->typeexpr->isAlias() ) {
                 if ( auto eT = inferAlias(expr->typeexpr) ) {
                     expr->typeexpr = eT;
-                    reportGenericInfer();
+                    reportAstChanged();
                     return Visitor::visit(expr);
                 } else {
                     error("udefined type " + expr->typeexpr->describe(),
@@ -2096,7 +2096,7 @@ namespace das {
             }
             verifyType(expr->typeexpr);
             if ( nErrors==program->errors.size() ) {
-                reportGenericInfer();
+                reportAstChanged();
                 bool isSame = expr->subexpr->type->isSameType(*expr->typeexpr, RefMatters::no, ConstMatters::no, TemporaryMatters::no);
                 return make_shared<ExprConstBool>(expr->at, isSame);
             }
@@ -2122,7 +2122,7 @@ namespace das {
             if ( expr->typeexpr->isAlias() ) {
                 if ( auto eT = inferAlias(expr->typeexpr) ) {
                     expr->typeexpr = eT;
-                    reportGenericInfer();
+                    reportAstChanged();
                     return Visitor::visit(expr);
                 } else {
                     error("udefined type " + expr->typeexpr->describe(),
@@ -2142,17 +2142,17 @@ namespace das {
             verifyType(expr->typeexpr);
             if ( nErrors==program->errors.size() ) {
                 if ( expr->trait=="sizeof" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
                 } else if ( expr->trait=="alignof" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getAlignOf());
                 } else if ( expr->trait=="is_dim" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->dim.size()!=0);
                 } else if ( expr->trait=="dim" ) {
                     if ( expr->typeexpr->dim.size() ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         return make_shared<ExprConstInt>(expr->at, expr->typeexpr->dim.back());
                     } else {
                         error("typeinfo(dim non_array) is prohibited, " + expr->typeexpr->describe(),
@@ -2164,13 +2164,13 @@ namespace das {
                             error("variant_index only valid for variant, not for " + expr->typeexpr->describe(),
                                 expr->at, CompilationError::invalid_type);
                         } else {
-                            reportGenericInfer();
+                            reportAstChanged();
                             return make_shared<ExprConstInt>(expr->at, -1);
                         }
                     } else {
                         int32_t index = expr->typeexpr->findArgumentIndex(expr->subtrait);
                         if ( index!=-1 ||  expr->trait=="safe_variant_index" ) {
-                            reportGenericInfer();
+                            reportAstChanged();
                             return make_shared<ExprConstInt>(expr->at, index);
                         } else {
                             error("variant_index variant " + expr->subtrait + " not found in " + expr->typeexpr->describe(),
@@ -2178,58 +2178,58 @@ namespace das {
                         }
                     }
                 } else if ( expr->trait=="typename" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no));
                 } else if ( expr->trait=="undecorated_typename" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::no));
                 } else if ( expr->trait=="fulltypename" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes));
                 } else if ( expr->trait=="is_pod" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPod());
                 } else if ( expr->trait=="is_raw" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRawPod());
                 } else if ( expr->trait=="is_struct" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isStructure());
                 } else if ( expr->trait=="is_enum" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isEnum());
                 } else if ( expr->trait=="is_handle" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isHandle());
                 } else if ( expr->trait=="is_ref" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRef());
                 } else if ( expr->trait=="is_ref_type" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRefType());
                 } else if ( expr->trait=="is_ref_value" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, bool(expr->typeexpr->ref));
                 } else if ( expr->trait=="is_const" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isConst());
                 } else if ( expr->trait=="is_temp" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isTemp());
                 } else if ( expr->trait=="is_temp_type" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isTempType());
                 } else if ( expr->trait=="is_pointer" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
                 } else if ( expr->trait=="is_string" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isString());
                 } else if ( expr->trait=="is_iterator" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isGoodIteratorType());
                 } else if ( expr->trait=="is_iterable" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     bool iterable = false;
                     if ( expr->typeexpr->dim.size() ) {
                         iterable = true;
@@ -2246,35 +2246,35 @@ namespace das {
                     } 
                     return make_shared<ExprConstBool>(expr->at, iterable);
                 } else if ( expr->trait=="is_vector" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isVectorType());
                 } else if ( expr->trait=="is_numeric" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumeric());
                 } else if ( expr->trait=="is_numeric_comparable" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumericComparable());
                 } else if ( expr->trait=="can_copy" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canCopy());
                 } else if ( expr->trait=="can_move" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
                 } else if ( expr->trait=="can_clone" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canClone());
                 } else if ( expr->trait=="can_delete" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canDelete());
                 } else if ( expr->trait=="need_delete" ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return make_shared<ExprConstBool>(expr->at, expr->typeexpr->needDelete());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         return make_shared<ExprConstBool>(expr->at, expr->typeexpr->structType->findField(expr->subtrait));
                     } else if ( expr->typeexpr->isHandle() ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         auto ft = expr->typeexpr->annotation->makeFieldType(expr->subtrait);
                         return make_shared<ExprConstBool>(expr->at, ft!=nullptr);
                     } else {
@@ -2288,7 +2288,7 @@ namespace das {
                     }
                 } else if ( expr->trait=="struct_has_annotation" || expr->trait=="struct_safe_has_annotation" ) {
                     if ( expr->typeexpr->isStructure() ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         const auto & ann = expr->typeexpr->structType->annotations;
                         auto it = find_if ( ann.begin(), ann.end(), [&](const AnnotationDeclarationPtr & pa){
                             return pa->annotation->name == expr->subtrait;
@@ -2318,7 +2318,7 @@ namespace das {
                                       expr->at, CompilationError::typeinfo_undefined);
                             }
                         } else {
-                            reportGenericInfer();
+                            reportAstChanged();
                             const auto & args = (*it)->arguments;
                             auto ita = find_if ( args.begin(), args.end(), [&](const AnnotationArgument & arg){
                                 return arg.name == expr->extratrait;
@@ -2356,16 +2356,16 @@ namespace das {
                             } else {
                                 switch ( ita->type ) {
                                     case Type::tBool:
-                                        reportGenericInfer();
+                                        reportAstChanged();
                                         return make_shared<ExprConstBool>(expr->at, ita->bValue);
                                     case Type::tInt:
-                                        reportGenericInfer();
+                                        reportAstChanged();
                                         return make_shared<ExprConstInt>(expr->at, ita->iValue);
                                     case Type::tFloat:
-                                        reportGenericInfer();
+                                        reportAstChanged();
                                         return make_shared<ExprConstFloat>(expr->at, ita->fValue);
                                     case Type::tString:
-                                        reportGenericInfer();
+                                        reportAstChanged();
                                         return make_shared<ExprConstString>(expr->at, ita->sValue);
                                     default:
                                         error("typeinfo(struct_get_annotation_argument<" + expr->subtrait
@@ -2383,7 +2383,7 @@ namespace das {
                     if ( expr->typeexpr->isStructure() ) {
                         auto decl = expr->typeexpr->structType->findField(expr->subtrait);
                         if ( isFullySealedType(expr->typeexpr) ) {
-                            reportGenericInfer();
+                            reportAstChanged();
                             return make_shared<ExprConstInt>(expr->at, decl->offset);
                         } else {
                             error("typeinfo(offsetof<" + expr->subtrait
@@ -2420,7 +2420,7 @@ namespace das {
                 auto fnList = getFinalizeFunc(expr->subexpr->type);
                 if ( fnList.size() ) {
                     if ( verifyFinalizeFunc(fnList, expr->at) ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         auto fn = fnList[0];
                         string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
                         auto finalizeFn = make_shared<ExprCall>(expr->at, finalizeName);
@@ -2459,32 +2459,32 @@ namespace das {
                             error("too many finalizers\n" + candidates, expr->at, CompilationError::function_already_declared);
                             return Visitor::visit(expr);
                         }
-                        reportGenericInfer();
+                        reportAstChanged();
                         expr->native = true;
                         auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(cloneFn);
                     } else {
-                        reportGenericInfer();
+                        reportAstChanged();
                         expr->native = true;
                     }
                 }
             } else {
                 auto finalizeType = expr->subexpr->type;
                 if ( finalizeType->isGoodIteratorType() ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "_builtin_iterator_delete");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( finalizeType->isGoodArrayType() || finalizeType->isGoodTableType() ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( finalizeType->isStructure() ) {
                     auto fnDel = generateStructureFinalizer(finalizeType->structType->shared_from_this());
                     if ( program->addFunction(fnDel) ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(cloneFn);
@@ -2493,7 +2493,7 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 } else if ( finalizeType->dim.size() ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "finalize_dim");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
@@ -2608,7 +2608,7 @@ namespace das {
                 auto aT = inferAlias(expr->castType);
                 if ( aT ) {
                     expr->castType = aT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("udefined type " + expr->castType->describe(), expr->at,
                           CompilationError::type_not_found);
@@ -2621,7 +2621,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             if ( expr->subexpr->type->isSameType(*expr->castType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
-                reportGenericInfer();
+                reportAstChanged();
                 return expr->subexpr;
             }
             if ( expr->reinterpret ) {
@@ -2680,7 +2680,7 @@ namespace das {
                     expr->typeexpr = make_shared<TypeDecl>(*aT);
                     expr->typeexpr->ref = false;      // drop a ref
                     expr->typeexpr->constant = false; // drop a const
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("undefined type " + expr->typeexpr->describe(),
                           expr->at, CompilationError::type_not_found);
@@ -2869,7 +2869,7 @@ namespace das {
                 auto aT = inferAlias(var->type);
                 if ( aT ) {
                     var->type = aT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("udefined type " + var->type->describe(), var->at, CompilationError::type_not_found);
                 }
@@ -2893,7 +2893,7 @@ namespace das {
                 } else {
                     TypeDecl::applyAutoContracts(argT, arg->type);
                     arg->type = argT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 }
             }
             if (!arg->type->isAuto()) {
@@ -2931,7 +2931,7 @@ namespace das {
                     block->returnType = make_shared<TypeDecl>(Type::tVoid);
                     block->type = make_shared<TypeDecl>(Type::tVoid);
                     setBlockCopyMoveFlags(block);
-                    reportGenericInfer();
+                    reportAstChanged();
                 }
                 if ( block->returnType && block->returnType->ref && !func->unsafe ) {
                     error("returning reference from block requires [unsafe]",
@@ -2948,7 +2948,7 @@ namespace das {
             }
             if ( block->needCollapse ) {
                 block->needCollapse = false;
-                if ( block->collapse() ) reportGenericInfer();
+                if ( block->collapse() ) reportAstChanged();
             }
             return Visitor::visit(block);
         }
@@ -3051,7 +3051,7 @@ namespace das {
             // infer
             auto valT = expr->value->type;
             if ( valT->isVectorType() ) {
-                reportGenericInfer();
+                reportAstChanged();
                 return make_shared<ExprSwizzle>(expr->at,expr->value,expr->name);
             } else if ( valT->isHandle() ) {
                 expr->annotation = valT->annotation;
@@ -3230,7 +3230,7 @@ namespace das {
             }
             // with
             if ( auto eW = hasMatchingWith(expr->name) ) {
-                reportGenericInfer();
+                reportAstChanged();
                 return make_shared<ExprField>(expr->at, eW->with->clone(), expr->name);
             }
             // block arguments
@@ -3312,7 +3312,7 @@ namespace das {
                     error("unsafe operator " + expr->name + " requires [unsafe]", expr->at, CompilationError::unsafe);
                 } else if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     if ( auto se = getConstExpr(expr->subexpr.get()) ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         expr->subexpr = se;
                         return evalAndFold(expr);
                     }
@@ -3384,7 +3384,7 @@ namespace das {
                     auto lcc = getConstExpr(expr->left.get());
                     auto rcc = getConstExpr(expr->right.get());
                     if ( lcc && rcc ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         expr->left = lcc;
                         expr->right = rcc;
                         return evalAndFold(expr);
@@ -3420,7 +3420,7 @@ namespace das {
                     auto lcc = getConstExpr(expr->left.get());
                     auto rcc = getConstExpr(expr->right.get());
                     if ( ccc && lcc && rcc ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         expr->subexpr = ccc;
                         expr->left = lcc;
                         expr->right = rcc;
@@ -3508,7 +3508,7 @@ namespace das {
                     expr->type = make_shared<TypeDecl>();  // we return nothing
                     return Visitor::visit(expr);
                 } else if ( cloneType->isString() && expr->right->type->isTemp() ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "clone_string");
                     cloneFn->arguments.push_back(expr->right->clone());
                     return make_shared<ExprCopy>(expr->at, expr->left->clone(), cloneFn);
@@ -3516,17 +3516,17 @@ namespace das {
                     if ( expr->right->type->isTemp(true,false) ) {
                         error("can't clone (copy) temporary value", expr->at, CompilationError::cant_pass_temporary);
                     } else {
-                        reportGenericInfer();
+                        reportAstChanged();
                         return make_shared<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
                     }
                 } else if ( cloneType->isGoodArrayType() || cloneType->isGoodTableType() ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( cloneType->isStructure() ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto stt = cloneType->structType;
                     fnList = getCloneFunc(cloneType,cloneType);
                     if ( verifyCloneFunc(fnList, expr->at) ) {
@@ -3543,7 +3543,7 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 } else if ( cloneType->dim.size() ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "clone_dim");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
@@ -3576,12 +3576,12 @@ namespace das {
                         resT->ref = false;
                         TypeDecl::applyAutoContracts(resT, resType);
                         resType = resT;
-                        reportGenericInfer();
+                        reportAstChanged();
                         return true;
                     }
                 } else {
                     resType = make_shared<TypeDecl>(Type::tVoid);
-                    reportGenericInfer();
+                    reportAstChanged();
                     return true;
                 }
             }
@@ -3683,7 +3683,7 @@ namespace das {
                 // TODO: verify yield type so that error is 'yield' error, not copy or move error
                 auto blk = generateYield(expr, func);
                 scopes.back()->needCollapse = true;
-                reportGenericInfer();
+                reportAstChanged();
                 return blk;
             }
             expr->type = make_shared<TypeDecl>();
@@ -3765,7 +3765,7 @@ namespace das {
             // now, for the static if
             if ( enableInferTimeFolding || expr->isStatic ) {
                 if ( auto constCond = getConstExpr(expr->cond.get()) ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     auto condR = static_pointer_cast<ExprConstBool>(constCond)->getValue();
                     if ( condR ) {
                         return expr->if_true;
@@ -3808,7 +3808,7 @@ namespace das {
                     }
                     auto blk = replaceGeneratorIfThenElse(expr, func);
                     scopes.back()->needCollapse = true;
-                    reportGenericInfer();
+                    reportAstChanged();
                     return blk;
                 }
             }
@@ -3875,7 +3875,7 @@ namespace das {
                 if ( tf & EvalFlags::yield ) { // only unwrap if it has "yield"
                     auto blk = replaceGeneratorWhile(expr, func);
                     scopes.back()->needCollapse = true;
-                    reportGenericInfer();
+                    reportAstChanged();
                     return blk;
                 }
             }
@@ -3965,7 +3965,7 @@ namespace das {
                 if ( tf & EvalFlags::yield ) { // only unwrap if it has "yield"
                     auto blk = replaceGeneratorFor(expr, func);
                     scopes.back()->needCollapse = true;
-                    reportGenericInfer();
+                    reportAstChanged();
                     return blk;
                 }
             }
@@ -3984,7 +3984,7 @@ namespace das {
                 auto aT = inferAlias(var->type);
                 if ( aT ) {
                     var->type = aT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 } else {
                     error("udefined type " + var->type->describe(), var->at, CompilationError::type_not_found);
                 }
@@ -4029,7 +4029,7 @@ namespace das {
                 if ( var->init && var->init->rtti_isCast() ) {
                     auto castExpr = static_pointer_cast<ExprCast>(var->init);
                     if ( castExpr->castType->isAuto() ) {
-                        reportGenericInfer();
+                        reportAstChanged();
                         castExpr->castType = make_shared<TypeDecl>(*var->type);
                     }
                 }
@@ -4052,7 +4052,7 @@ namespace das {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
                     var->type = varT;
-                    reportGenericInfer();
+                    reportAstChanged();
                 }
             } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
                 error("local variable " + var->name + " initialization type mismatch, "
@@ -4080,7 +4080,7 @@ namespace das {
                       var->at, CompilationError::cant_copy);
             } else {
                 if ( var->init_via_clone ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     var->init_via_clone = false;
                     var->init_via_move = true;
                     auto c2m = make_shared<ExprCall>(var->at,"clone_to_move");
@@ -4106,7 +4106,7 @@ namespace das {
                     }
                 }
                 expr->inScope = false;
-                reportGenericInfer();
+                reportAstChanged();
                 return Visitor::visit(expr);
             }
             if ( func && func->generator ) {
@@ -4124,7 +4124,7 @@ namespace das {
                 }
                 auto blk = replaceGeneratorLet(expr, func, scopes.back());
                 scopes.back()->needCollapse = true;
-                reportGenericInfer();
+                reportAstChanged();
                 return blk;
             }
             return Visitor::visit(expr);
@@ -4212,7 +4212,7 @@ namespace das {
                 reportExcess(expr, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
-                    reportGenericInfer();
+                    reportAstChanged();
                     return demoteCall(expr,generics.back());
                 } else {
                     reportMissing(expr, "no matching functions or generics ", true);
@@ -4226,7 +4226,7 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 }
-                reportGenericInfer();
+                reportAstChanged();
                 return demoteCall(expr,fun);
             }
             return Visitor::visit(expr);
@@ -4302,7 +4302,7 @@ namespace das {
                               + "\n" + ss.str(), expr->at);
                     } else if (instancedFunctions.size() == 1) {
                         expr->name = callCloneName(genName);
-                        reportGenericInfer();
+                        reportAstChanged();
                     } else if (instancedFunctions.size() == 0) {
                         auto clone = oneGeneric->clone();
                         clone->name = genName;
@@ -4366,13 +4366,13 @@ namespace das {
                             }
                         }
                         expr->name = callCloneName(clone->name);
-                        reportGenericInfer();
+                        reportAstChanged();
                     }
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
                             expr->name = das_to_string(aliasT->baseType);
-                            reportGenericInfer();
+                            reportAstChanged();
                         }
                     } else {
                         reportMissing(expr, types, "no matching functions or generics ", true);
@@ -4404,7 +4404,7 @@ namespace das {
                             block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);
                         }
                         setBlockCopyMoveFlags(block.get());
-                        reportGenericInfer();
+                        reportAstChanged();
                     }
                 }
                 // append default arguments
@@ -4439,7 +4439,7 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 }
-                reportGenericInfer();
+                reportAstChanged();
                 swap(cargs, expr->arguments);
                 return evalAndFold(expr);
             }
@@ -4453,7 +4453,7 @@ namespace das {
                             program->error("call annotated by " + fnAnn->name + " failed to transform, " + err,
                                            expr->at, CompilationError::annotation_failed);
                         } else if ( fexpr ) {
-                            reportGenericInfer();
+                            reportAstChanged();
                             return fexpr;
                         }
                     }
@@ -4557,7 +4557,7 @@ namespace das {
                                 if ( it==st->end() ) {
                                     auto msf = make_shared<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy());
                                     st->push_back(msf);
-                                    reportGenericInfer();
+                                    reportAstChanged();
                                 }
                             }
                         }
@@ -4601,6 +4601,31 @@ namespace das {
                 resT->dim.clear();
             }
             expr->type = resT;
+            if ( expr->type->isString() ) {
+                reportAstChanged();
+                auto ecs = make_shared<ExprConstString>(expr->at);
+                ecs->type = make_shared<TypeDecl>(Type::tString);
+                return ecs;
+            } else if ( expr->type->isEnumT() ) {
+                auto f0 = expr->type->enumType->find(0,"");
+                if ( !f0.empty() ) {
+                    reportAstChanged();
+                    auto et = make_shared<TypeDecl>(*expr->type);
+                    et->ref = false;
+                    auto ens = make_shared<ExprConstEnumeration>(expr->at, f0, et);
+                    ens->type = make_shared<TypeDecl>(*et);
+                    return ens;
+                } else {
+                    error("[[" + expr->makeType->describe() + "() ]] enumeration is missing 0 value",
+                          expr->at, CompilationError::invalid_type);
+                }
+            } else if ( expr->type->isWorkhorseType() ) {
+                expr->type->ref = false;
+                reportAstChanged();
+                auto ews = Program::makeConst(expr->at, expr->type, v_zero());
+                ews->type = make_shared<TypeDecl>(*expr->type);
+                return ews;
+            }
             verifyType(expr->type);
             return Visitor::visit(expr);
         }
@@ -4741,7 +4766,7 @@ namespace das {
                             mkt->constant = false;
                             TypeDecl::applyAutoContracts(mkt, init->type);
                             expr->makeType = mkt;
-                            reportGenericInfer();
+                            reportAstChanged();
                             return Visitor::visitMakeArrayIndex(expr,index,init,last);
                         }
                     } else {
@@ -4785,7 +4810,7 @@ namespace das {
                 resT->dim[0] = resDim;
             } else {
                 DAS_ASSERT(expr->values.size()==1);
-                reportGenericInfer();
+                reportAstChanged();
                 auto resExpr = expr->values[0];
                 if ( resExpr->rtti_isMakeTuple() ) {
                     auto mkt = static_pointer_cast<ExprMakeTuple>(resExpr);
@@ -4817,7 +4842,7 @@ namespace das {
                 } else {
                     auto pAC = expr->generatorSyntax ?
                         generateComprehensionIterator(expr) : generateComprehension(expr);
-                    reportGenericInfer();
+                    reportAstChanged();
                     return pAC;
                 }
             }
