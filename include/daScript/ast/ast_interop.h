@@ -17,7 +17,7 @@ namespace das
 #endif
         template <typename ArgumentsType, size_t... I>
         inline vector<TypeDeclPtr> makeArgs ( const ModuleLibrary & lib, index_sequence<I...> ) {
-            return { makeType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
+            return { makeArgumentType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
         }
 #ifdef _MSC_VER
 #pragma warning(pop)

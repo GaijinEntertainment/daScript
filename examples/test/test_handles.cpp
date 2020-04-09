@@ -459,6 +459,14 @@ void builtin_printw(char * utf8string) {
 
 #endif
 
+bool tempArrayExample( const TArray<char *> & arr, 
+    const TBlock<void, TTemporary<const TArray<char *>>> & blk, Context * context ) {
+    vec4f args[1];
+    args[0] = cast<void *>::from(&arr);
+    context->invoke(blk, args, nullptr);
+    return (arr.size == 1) && (strcmp(arr[0], "one") == 0);
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -513,6 +521,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     lintMacros.push_back(make_shared<LintEidMacro>(this));
     // extra tests
     addExtern<DAS_BIND_FUN(start_effect)>(*this, lib, "start_effect", SideEffects::modifyExternal, "start_effect");
+    addExtern<DAS_BIND_FUN(tempArrayExample)>(*this, lib, "temp_array_example", SideEffects::modifyExternal, "tempArrayExample");
     // compiled functions
     appendCompiledFunctions();
     // and verify

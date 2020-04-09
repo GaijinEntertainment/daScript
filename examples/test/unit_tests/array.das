@@ -3,6 +3,8 @@
 // options no_aot=true
 // options log_nodes=true
 
+require UnitTest
+
 [sideeffects]
 def make_test_array(var a:array<int>;extra:int=0)
     var i=0
@@ -80,6 +82,12 @@ def testIntArray
     erase(arr,3)
     verifyIntArray(arr,2,3,0)
 
+def testInterop
+	let res = temp_array_example([{ string[] "one" }]) <| $ ( arr )
+		assert(length(arr)==1)
+		assert(arr[0]=="one")
+	assert(res)
+
 [export]
 def test:bool
     if true
@@ -127,6 +135,7 @@ def test:bool
             verify_test_array(b,i++)
     testIntArray()
     testConstInArray()
+	testInterop()
     return true
 
 // this test bellow is only here to make sure AOT compiles and runs for array<blah const>

@@ -381,6 +381,13 @@ namespace das {
         return typeFactory<TT>::make(ctx);
     }
 
+    template <typename TT>
+    inline TypeDeclPtr makeArgumentType(const ModuleLibrary & ctx) {
+        auto tt = typeFactory<TT>::make(ctx);
+        if (tt->isRefType()) tt->ref = false;
+        return tt;
+    }
+
     das::TypeDeclPtr makeHandleType(const das::ModuleLibrary & library, const char * typeName);
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );

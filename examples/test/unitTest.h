@@ -127,3 +127,7 @@ __forceinline bool start_effect(const char *, const das::float3x4 &, float) {
 }
 
 void builtin_printw(char * utf8string);
+
+bool tempArrayExample(const das::TArray<char *> & arr, 
+    const das::TBlock<void, das::TTemporary<const das::TArray<char *>>> & blk, 
+    das::Context * context);
