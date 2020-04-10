@@ -57,6 +57,12 @@ namespace das
     template <typename OT>
     struct ManagedStructureAlignof {static constexpr size_t alignment = alignof(OT); } ;//we use due to MSVC inability to work with abstarct classes
 
+    template <typename OT, bool abstract>
+    struct ManagedStructureAlignofAuto {static constexpr size_t alignment = ManagedStructureAlignof<OT>::alignment; } ;//we use due to MSVC inability to work with abstarct classes
+
+    template <typename OT>
+    struct ManagedStructureAlignofAuto<OT, true> {static constexpr size_t alignment = sizeof(void*); } ;//we use due to MSVC inability to work with abstarct classes
+
     template <typename OT, bool canNewAndDelete = true>
     struct ManagedStructureAnnotation ;
 
@@ -84,7 +90,7 @@ namespace das
         }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
-        virtual size_t getAlignOf() const override { return ManagedStructureAlignof<ManagedType>::alignment; }
+        virtual size_t getAlignOf() const override { return ManagedStructureAlignof<ManagedType, is_abstract<ManagedType>::value>::alignment; }
         virtual bool isRefType() const override { return true; }
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
