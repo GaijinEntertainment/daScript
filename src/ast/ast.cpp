@@ -198,6 +198,14 @@ namespace das {
         return true;
     }
 
+    bool Structure::canMove() const {
+        for ( const auto & fd : fields ) {
+            if ( !fd.type->canMove() )
+                return false;
+        }
+        return true;
+    }
+
     bool Structure::canClone() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->canClone() )

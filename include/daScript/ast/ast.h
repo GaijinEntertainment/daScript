@@ -148,6 +148,7 @@ namespace das
         int getAlignOf() const;
         bool canCopy() const;
         bool canClone() const;
+        bool canMove() const;
         bool canAot() const;
         bool canAot( das_set<Structure *> & recAot ) const;
         bool isNoHeapType() const;

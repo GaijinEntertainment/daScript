@@ -127,6 +127,9 @@ namespace das {
                 ss << debug_type(ti);
                 if ( arr->shared ) ss << " /*shared*/ ";
             }
+            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+                ss << " data at 0x" << HEX << intptr_t(arr->data) << DEC;
+            }
         }
         virtual void afterArray ( Array *, TypeInfo * ) override {
             ss << "]]";
@@ -136,6 +139,9 @@ namespace das {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << debug_type(ti);
                 if ( tab->shared ) ss << " /*shared*/ ";
+            }
+            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+                ss << " data at 0x" << HEX << intptr_t(tab->data) << DEC;
             }
         }
         virtual void afterTable ( Table *, TypeInfo * ) override {

@@ -2433,6 +2433,7 @@ namespace das {
             }
             // infer
             if ( !expr->subexpr->type->canDelete() ) {
+                expr->subexpr->type->canDelete();
                 error("can't delete " + expr->subexpr->type->describe(),
                       expr->at, CompilationError::bad_delete);
             } else if ( !expr->subexpr->type->isRef() ) {
@@ -2483,6 +2484,17 @@ namespace das {
                     return ExpressionPtr(cloneFn);
                 } else if ( finalizeType->isStructure() ) {
                     auto fnDel = generateStructureFinalizer(finalizeType->structType->shared_from_this());
+                    if ( program->addFunction(fnDel) ) {
+                        reportAstChanged();
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        cloneFn->arguments.push_back(expr->subexpr->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
+                        return Visitor::visit(expr);
+                    }
+                } else if ( finalizeType->isTuple() ) {
+                    auto fnDel = generateTupleFinalizer(expr->at, finalizeType);
                     if ( program->addFunction(fnDel) ) {
                         reportAstChanged();
                         auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
@@ -3532,6 +3544,22 @@ namespace das {
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeClone(stt);
+                            clf->privateFunction = true;
+                            extraFunctions.push_back(clf);
+                        }
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                        cloneFn->arguments.push_back(expr->left->clone());
+                        cloneFn->arguments.push_back(expr->right->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                } else if ( cloneType->isTuple() ) {
+                    reportAstChanged();
+                    fnList = getCloneFunc(cloneType,cloneType);
+                    if ( verifyCloneFunc(fnList, expr->at) ) {
+                        if ( fnList.size()==0 ) {
+                            auto clf = makeCloneTuple(expr->at, cloneType);
                             clf->privateFunction = true;
                             extraFunctions.push_back(clf);
                         }

@@ -222,6 +222,7 @@ namespace das {
         returnDecl->moveSemantics = !str->canCopy();
         block->list.push_back(returnDecl);
         fn->body = block;
+        verifyGenerated(fn->body);
         return fn;
     }
 
@@ -256,6 +257,7 @@ namespace das {
             block->list.push_back(cl);
         }
         fn->body = block;
+        verifyGenerated(fn->body);
         return fn;
     }
 
@@ -382,7 +384,6 @@ namespace das {
         verifyGenerated(pFunc->body);
         return pFunc;
     }
-
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, bool needYield, bool isUnsafe ) {
@@ -954,6 +955,72 @@ namespace das {
         }
         verifyGenerated(blk);
         return blk;
+    }
+
+    FunctionPtr makeCloneTuple ( const LineInfo & at, const TypeDeclPtr & tupleType ) {
+        DAS_ASSERT(tupleType->isTuple() && "can only clone tuple");
+        auto fn = make_shared<Function>();
+        fn->generated = true;
+        fn->name = "clone";
+        fn->at = at;
+        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        auto arg0 = make_shared<Variable>();
+        arg0->name = "dest";
+        arg0->type = make_shared<TypeDecl>(*tupleType);
+        arg0->type->constant = false;
+        arg0->type->ref = false;
+        fn->arguments.push_back(arg0);
+        auto arg1 = make_shared<Variable>();
+        arg1->name = "src";
+        arg1->type = make_shared<TypeDecl>(*tupleType);
+        arg1->type->constant = true;
+        arg1->type->ref = false;
+        fn->arguments.push_back(arg1);
+        auto block = make_shared<ExprBlock>();
+        for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
+            string argn = "_" + to_string(argi);
+            auto lv = make_shared<ExprVar>(at, "dest");
+            auto lf = make_shared<ExprField>(at, lv, argn);
+            auto rv = make_shared<ExprVar>(at, "src");
+            auto rf = make_shared<ExprField>(at, rv, argn);
+            auto cl = make_shared<ExprClone>(at, lf, rf);
+            block->list.push_back(cl);
+        }
+        fn->body = block;
+        verifyGenerated(fn->body);
+        return fn;
+    }
+
+    FunctionPtr generateTupleFinalizer ( const LineInfo & at, const TypeDeclPtr & tupleType ) {
+        DAS_ASSERT(tupleType->isTuple() && "can only clone tuple");
+        auto fn = make_shared<Function>();
+        fn->generated = true;
+        fn->name = "finalize";
+        fn->at = at;
+        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        auto arg0 = make_shared<Variable>();
+        arg0->name = "__this";
+        arg0->type = make_shared<TypeDecl>(*tupleType);
+        arg0->type->constant = false;
+        arg0->type->ref = false;
+        fn->arguments.push_back(arg0);
+        auto block = make_shared<ExprBlock>();
+        for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
+            if (tupleType->argTypes[argi]->needDelete()) {
+                string argn = "_" + to_string(argi);
+                auto lv = make_shared<ExprVar>(at, "__this");
+                auto lf = make_shared<ExprField>(at, lv, argn);
+                auto cl = make_shared<ExprDelete>(at, lf);
+                block->list.push_back(cl);
+            }
+        }
+        auto mz = make_shared<ExprMemZero>(at, "memzero");
+        auto lvar = make_shared<ExprVar>(at, "__this");
+        mz->arguments.push_back(lvar);
+        block->list.push_back(mz);
+        fn->body = block;
+        verifyGenerated(fn->body);
+        return fn;
     }
 }
 

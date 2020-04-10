@@ -6,6 +6,22 @@ def testI ( arg : tuple < i : int; float > )
 def testF ( arg : tuple < int; f : float > )
     return arg.f == 3.14
 
+def testFinalizeAndClone
+	var x : tuple<int; float; array<int> >
+	x._0 = 1
+	x._1 = 2.0
+	x._2 <- [{for x in range(0,10); x}]
+	var y := x
+	assert(y._0==1 & y._1==2.0)
+	for t in range(0,10)
+		assert(y._2[t]==t)
+	delete x
+	assert(x._0==0 & x._1==0.0 & length(x._2)==0)
+	assert(y._0==1 & y._1==2.0)
+	for t in range(0,10)
+		assert(y._2[t]==t)
+	return true
+
 [export,unsafe]
 def test:bool
     let ttt = [[auto 1, 3.14]]
@@ -50,5 +66,7 @@ def test:bool
     assert(tt[0]._0==1 & tt[0]._1==2 & tt[1]._0==3 & tt[1]._1==4)
     let tq = [[auto 1, 2.0]]
     assert(tq._0==1 & tq._1==2.0)
+	// extra tests
+	testFinalizeAndClone()
     return true
 

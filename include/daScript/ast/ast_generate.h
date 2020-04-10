@@ -20,12 +20,19 @@ namespace das {
     FunctionPtr makeConstructor ( Structure * str );
 
     /*
-     def clone(a,b:STRUCT_NAME)
+     def clone(var a:STRUCT_NAME; b:STRUCT_NAME)
         a.f1 := b.f1
         a.f2 := b.f2
         ...
     */
     FunctionPtr makeClone ( Structure * str );
+
+    /*
+     def clone(var a:tuple<...>; var b:tuple<...>)
+      a._0 := b._0
+      a._1 := b._1
+    */
+    FunctionPtr makeCloneTuple(const LineInfo & at, const TypeDeclPtr & tupleType);
 
     /*
         delete var
@@ -57,6 +64,15 @@ namespace das {
             memzero(THIS)
      */
     FunctionPtr generateStructureFinalizer ( const StructurePtr & ls );
+
+    /*
+     tuple finalizer, i.e.
+      def __lambda_finalizer_at_line_xxx(var THIS:tuple<...>)
+        delete _0
+        delete _1
+        memzero(THIS)
+     */
+    FunctionPtr generateTupleFinalizer(const LineInfo & at, const TypeDeclPtr & tupleType);
 
     /*
      struct __lambda_at_line_xxx

@@ -488,6 +488,8 @@ namespace das
             return true;
         } else if ( baseType==Type::tIterator ) {
             return true;
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            return true;
         } else {
             return false;
         }
@@ -508,6 +510,8 @@ namespace das
             return true;
         } else if ( baseType==Type::tIterator ) {
             return true;
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            return false;
         } else {
             return false;
         }
@@ -535,33 +539,56 @@ namespace das
     }
 
     bool TypeDecl::canMove() const {
-        if ( baseType==Type::tHandle )
+        if (baseType == Type::tHandle) {
             return annotation->canMove();
-        if ( baseType==Type::tBlock )
+        } else if (baseType == Type::tBlock) {
             return false;
-        return true;
+        } else if (baseType == Type::tStructure && structType) {
+            return structType->canMove();
+        } else if (baseType == Type::tTuple || baseType == Type::tVariant) {
+            for (const auto & arg : argTypes) {
+                if (!arg->canMove()) return false;
+            }
+            return true;
+        } else {
+            return true;
+        }
     }
 
     bool TypeDecl::canClone() const {
-        if ( baseType==Type::tHandle )
+        if (baseType == Type::tHandle) {
             return annotation->canClone();
-        if ( baseType==Type::tStructure && structType )
+        } else if (baseType == Type::tStructure && structType) {
             return structType->canClone();
-        if ( baseType==Type::tBlock )
+        } else if (baseType == Type::tTuple || baseType == Type::tVariant) {
+            for (const auto & arg : argTypes) {
+                if (!arg->canClone()) return false;
+            }
+            return true;
+        } else if (baseType == Type::tBlock) {
             return false;
-        if ( baseType==Type::tIterator )
+        } else if (baseType == Type::tIterator) {
             return false;
-        return true;
+        } else {
+            return true;
+        }
     }
 
     bool TypeDecl::canCopy() const {
-        if ( baseType==Type::tHandle )
+        if ( baseType == Type::tHandle ) {
             return annotation->canCopy();
-        if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tBlock || baseType==Type::tIterator )
+        } else if (baseType == Type::tArray || baseType == Type::tTable || baseType == Type::tBlock || baseType == Type::tIterator) {
             return false;
-        if ( baseType==Type::tStructure && structType )
+        } else if (baseType == Type::tStructure && structType) {
             return structType->canCopy();
-        return true;
+        } else if (baseType == Type::tTuple || baseType == Type::tVariant) {
+            for (const auto & arg : argTypes) {
+                if (!arg->canCopy()) return false;
+            }
+            return true;
+        } else {
+            return true;
+        }
     }
 
         bool TypeDecl::isNoHeapType() const {
