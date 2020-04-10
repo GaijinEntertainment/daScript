@@ -90,7 +90,7 @@ namespace das
         }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
-        virtual size_t getAlignOf() const override { return ManagedStructureAlignof<ManagedType, is_abstract<ManagedType>::value>::alignment; }
+        virtual size_t getAlignOf() const override { return ManagedStructureAlignofAuto<ManagedType, is_abstract<ManagedType>::value>::alignment; }
         virtual bool isRefType() const override { return true; }
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
