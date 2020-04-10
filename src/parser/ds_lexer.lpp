@@ -58,6 +58,7 @@
 %x indent
 %x strb
 %x c_comment
+%x cpp_comment
 %x include
 %s normal
 
@@ -89,6 +90,11 @@
 <indent>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = false;
 <normal>"*/"                        das_yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <normal>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = true;
+<indent>"\/\/"                      BEGIN(cpp_comment);
+<normal>"\/\/"                      BEGIN(cpp_comment);
+<cpp_comment>.
+<cpp_comment>\n						BEGIN(normal); unput('\n');
+<cpp_comment><<EOF>>				BEGIN(normal);
 <c_comment>"/*"                     das_c_style_depth ++;
 <c_comment>"*/" {
     das_c_style_depth --;
@@ -494,7 +500,7 @@
 		return CBRCBRB;
 	}
 <normal>[ \t\r]                             /* skip white space */
-<normal>(\/\/.*)*\n                        {
+<normal>(\/\/.*)*\n {
     das_yycolumn = 1;
     if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
         bool ns = (das_current_line_indent!=0) && das_need_oxford_comma;
