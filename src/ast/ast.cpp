@@ -339,6 +339,7 @@ namespace das {
         pVar->at = at;
         pVar->flags = flags;
         pVar->initStackSize = initStackSize;
+        pVar->annotation = annotation;
         return pVar;
     }
 

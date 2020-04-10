@@ -822,6 +822,9 @@ function_declaration
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
+							if ( pDecl->annotation ) {
+								pVar->annotation = *pDecl->annotation;
+							}
                             pFunction->arguments.push_back(pVar);
                         } else {
                             das_yyerror("function argument is already declared " + name,pDecl->at,
@@ -1181,6 +1184,9 @@ expr_block
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
+							if ( pDecl->annotation ) {
+								pVar->annotation = *pDecl->annotation;
+							}
                             closure->arguments.push_back(pVar);
                         } else {
                             das_yyerror("block argument is already declared " + name,
@@ -1470,8 +1476,16 @@ struct_variable_declaration_list
     ;
 
 function_argument_declaration
-    :   variable_declaration[decl]          { $$ = $decl; $decl->pTypeDecl->constant = true; }
-    |   DAS_VAR variable_declaration[decl]  { $$ = $decl; $decl->pTypeDecl->removeConstant = true; }
+    :   optional_field_annotation[ann] variable_declaration[decl]          { 
+			$$ = $decl;
+			$decl->pTypeDecl->constant = true; 
+			$decl->annotation = $ann;
+		}
+    |   optional_field_annotation[ann] DAS_VAR variable_declaration[decl]  {
+			$$ = $decl; 
+			$decl->pTypeDecl->removeConstant = true;
+			$decl->annotation = $ann;
+		}
     ;
 
 function_argument_list
@@ -2069,44 +2083,44 @@ make_struct_fields
 
 make_struct_dim
     :   make_struct_fields[msf] {
-        auto msd = new ExprMakeStructure();
+        auto msd = new ExprMakeStructureOrDefaultValue();
         msd->structs.push_back(MakeStructPtr($msf));
         $$ = msd;
     }
     |   make_struct_dim[msd] ';' make_struct_fields[msf] {
-        ((ExprMakeStructure *) $msd)->structs.push_back(MakeStructPtr($msf));
+        ((ExprMakeStructureOrDefaultValue *) $msd)->structs.push_back(MakeStructPtr($msf));
         $$ = $msd;
     }
     ;
 
 make_struct_decl
     :   BRABRAB [loc] type_declaration[mkt] make_struct_dim[msd] ']' ']' {
-        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
     |   BRABRAB [loc] type_declaration[mkt] ']' ']' {
-        auto msd = new ExprMakeStructure();
+        auto msd = new ExprMakeStructureOrDefaultValue();
         msd->makeType = TypeDeclPtr($mkt);
         msd->at = tokAt(@loc);
         $$ = msd;
     }
     |   BRABRAB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] ']' ']' {
-        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStructure *)$msd)->useInitializer = true;
+        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStructureOrDefaultValue *)$msd)->useInitializer = true;
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
     |   BRACBRB [loc] type_declaration[mkt] make_struct_dim[msd] '}' ']' {
-        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
         $msd->at = tokAt(@loc);
         auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
     }
     |   BRACBRB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] '}' ']' {
-        ((ExprMakeStructure *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStructure *)$msd)->useInitializer = true;
+        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStructureOrDefaultValue *)$msd)->useInitializer = true;
         $msd->at = tokAt(@loc);
         auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
         tam->arguments.push_back(ExpressionPtr($msd));

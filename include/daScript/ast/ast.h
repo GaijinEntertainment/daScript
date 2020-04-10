@@ -208,6 +208,7 @@ namespace das
             };
             uint32_t access_flags = 0;
         };
+        AnnotationArgumentList  annotation;
     };
 
     struct ExprBlock;

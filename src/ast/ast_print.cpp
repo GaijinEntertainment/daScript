@@ -124,6 +124,23 @@ namespace das {
             return Visitor::visitEnumerationValue(enu, name, value, last);
         }
     // strcuture
+        void logAnnotationArguments(const AnnotationArgumentList & arguments) {
+            bool first = true;
+            for (const auto & aarg : arguments) {
+                if (first) first = false; else ss << ",";
+                ss << aarg.name << "=";
+                switch (aarg.type) {
+                case Type::tInt:    ss << aarg.iValue; break;
+                case Type::tFloat:  ss << aarg.fValue; break;
+                case Type::tBool:   ss << aarg.bValue; break;
+                case Type::tString: ss << "\"" << aarg.sValue << "\""; break;
+                default:
+                    DAS_ASSERT(0 && "we should not even be here. "
+                        "somehow annotation has unsupported argument type");
+                    break;
+                }
+            }
+        }
         void logAnnotations(const AnnotationList & annList) {
             if (!annList.empty()) {
                 ss << "[";
@@ -131,21 +148,7 @@ namespace das {
                     ss << ann->annotation->name;
                     if (!ann->arguments.empty()) {
                         ss << "(";
-                        bool first = true;
-                        for (const auto & aarg : ann->arguments) {
-                            if (first) first = false; else ss << ",";
-                            ss << aarg.name << "=";
-                            switch (aarg.type) {
-                            case Type::tInt:    ss << aarg.iValue; break;
-                            case Type::tFloat:  ss << aarg.fValue; break;
-                            case Type::tBool:   ss << aarg.bValue; break;
-                            case Type::tString: ss << "\"" << aarg.sValue << "\""; break;
-                            default:
-                                    DAS_ASSERT(0 && "we should not even be here. "
-                                               "somehow annotation has unsupported argument type");
-                                break;
-                            }
-                        }
+                        logAnnotationArguments(ann->arguments);
                         ss << ")";
                     }
                 }
@@ -253,6 +256,11 @@ namespace das {
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
+            if (!arg->annotation.empty()) {
+                ss << "[";
+                logAnnotationArguments(arg->annotation);
+                ss << "] ";
+            }
             if ( !arg->type->isConst() ) ss << "var ";
             if ( arg->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printVarAccess && !arg->access_ref ) ss << "$";
@@ -295,6 +303,12 @@ namespace das {
                 if ( block->returnType || block->arguments.size() ) {
                     ss << "$(";
                     for ( auto & arg : block->arguments ) {
+                        if (!arg->annotation.empty()) {
+                            ss << "[";
+                            logAnnotationArguments(arg->annotation);
+                            ss << "] ";
+                        }
+                        if ( !arg->type->isConst() ) ss << "var ";
                         ss << arg->name << ":" << arg->type->describe();
                         if ( arg != block->arguments.back() )
                             ss << "; ";
