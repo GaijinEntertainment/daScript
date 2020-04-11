@@ -1,4 +1,5 @@
-typedef module_info = tuple<string;string;string> const
+typedef
+	module_info = tuple<string;string;string> const
 
 var
     DAS_PAK_ROOT = "./"

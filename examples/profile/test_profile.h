@@ -31,9 +31,13 @@ namespace das {
 
     template <>
     struct das_index<ObjectArray> : das_default_vector_index<ObjectArray, ObjectArray::value_type> {};
+    template <>
+    struct das_index<ObjectArray const> : das_default_vector_index<ObjectArray, ObjectArray::value_type> {};
 
     template <>
     struct das_index<ManagedIntArray> : das_default_vector_index<ManagedIntArray, ManagedIntArray::value_type> {};
+    template <>
+    struct das_index<ManagedIntArray const> : das_default_vector_index<ManagedIntArray, ManagedIntArray::value_type> {};
 }
 
 int AddOne(int a);

@@ -1669,16 +1669,26 @@ enum_list
     }
     ;
 
-alias_declaration
-    :   DAS_TYPEDEF[loc] NAME[name] '=' type_declaration[tdecl] {
+
+single_alias
+    :   NAME[name] '=' type_declaration[tdecl] ';' {
 		das_checkName(*$name,tokAt(@name));
         $tdecl->alias = *$name;
         if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
-            das_yyerror("type alias is already defined "+*$name,tokAt(@loc),
+            das_yyerror("type alias is already defined "+*$name,tokAt(@name),
                 CompilationError::type_alias_already_declared);
         }
         delete $name;
     }
+    ;
+
+alias_list
+	:	single_alias
+	|	alias_list single_alias
+	;
+
+alias_declaration
+    :   DAS_TYPEDEF '{' alias_list '}'
     ;
 
 enum_declaration

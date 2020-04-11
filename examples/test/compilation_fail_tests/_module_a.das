@@ -3,7 +3,8 @@ var
     global_2 = "from a"
     global_3 = "from_a"
 
-typedef aliasInA = int
+typedef
+	aliasInA = int
 
 enum enumInA
     one = 1

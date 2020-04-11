@@ -1,6 +1,7 @@
 require UnitTest
 
-typedef EntityId = int;
+typedef
+	EntityId = int
 
 [event]
 struct NullEvent {}
