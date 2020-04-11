@@ -664,6 +664,13 @@ namespace das {
                 localTemps[block].push_back(expr);
             }
         }
+    // make variant
+        virtual void preVisit ( ExprMakeVariant * expr ) override {
+            auto block = getCurrentBlock();
+            if ( !expr->doesNotNeedSp && expr->stackTop ) {
+                localTemps[block].push_back(expr);
+            }
+        }
     // call with CMRES
         virtual void preVisit ( ExprCall * expr ) override {
             auto block = getCurrentBlock();
@@ -2029,10 +2036,56 @@ namespace das {
             }
             return Visitor::visit(enew);
         }
-    // make structure
+    // make variant
         bool needTempSrc ( ExprMakeLocal * expr ) const {
             return !expr->doesNotNeedSp && expr->stackTop;
         }
+        string mkvName ( ExprMakeVariant * expr ) const {
+            if ( needTempSrc(expr) ) {
+                return makeLocalTempName(expr);
+            } else {
+                return "__mkv_" + to_string(expr->at.line);
+            }
+        }
+        virtual void preVisit ( ExprMakeVariant * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+                << (needTempSrc(expr) ? "&" : "") << " {\n";
+            tab ++;
+            if ( !needTempSrc(expr) ) {
+                ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+                    << " " << mkvName(expr) << ";\n";
+            }
+            if ( expr->variants.empty() ) {
+                ss << string(tab,'\t') << "das_zero(" << mkvName(expr) << ");\n";
+            }
+        }
+        virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            Visitor::preVisitMakeVariantField(expr,index,decl,last);
+            auto variantIndex = expr->type->findArgumentIndex(decl->name);
+            DAS_ASSERT(variantIndex != -1 && "should not infer otherwise");
+            ss  << string(tab,'\t') << "das_get_variant_field<"
+                << describeCppType(expr->type->argTypes[variantIndex])
+                << ","
+                << expr->type->getVariantFieldOffset(variantIndex)
+                << ","
+                << variantIndex
+                << ">::set(";
+            ss << mkvName(expr);
+            if ( expr->variants.size()!=1 ) ss << "(" << index << ",__context__)";
+            ss <<  ") = ";
+        }
+        virtual MakeFieldDeclPtr visitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            ss << ";\n";
+            return Visitor::visitMakeVariantField(expr,index,decl,last);
+        }
+        virtual ExpressionPtr visit ( ExprMakeVariant * expr ) override {
+            ss << string(tab,'\t') << "return " << mkvName(expr)<< ";\n";
+            tab --;
+            ss << string(tab,'\t') << "})())";
+            return Visitor::visit(expr);
+        }
+    // make structure
         string mksName ( ExprMakeStructureOrDefaultValue * expr ) const {
             if ( needTempSrc(expr) ) {
                 return makeLocalTempName(expr);
@@ -2052,7 +2105,6 @@ namespace das {
             if ( !expr->initAllFields ) {
                 ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
             }
-
         }
         virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);

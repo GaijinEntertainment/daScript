@@ -371,6 +371,131 @@ namespace das
         return vector<SimNode *>();
     }
 
+    // variant
+
+    void ExprMakeVariant::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
+        ExprMakeLocal::setRefSp(ref, cmres, sp, off);
+        int stride = makeType->getStride();
+        // we go through all fields, and if its [[ ]] field
+        // we tell it to piggy-back on our current sp, with appropriate offset
+        int index = 0;
+        for ( const auto & decl : variants ) {
+            auto fieldVariant = makeType->findArgumentIndex(decl->name);
+            assert(fieldVariant!=-1 && "should have failed in type infer otherwise");
+            auto fieldType = makeType->argTypes[fieldVariant];
+            if ( decl->value->rtti_isMakeLocal() ) {
+                auto fieldOffset = makeType->getVariantFieldOffset(fieldVariant);
+                uint32_t offset =  extraOffset + index*stride + fieldOffset;
+                auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                mkl->setRefSp(ref, cmres, sp, offset);
+            } else if ( decl->value->rtti_isCall() ) {
+                auto cll = static_pointer_cast<ExprCall>(decl->value);
+                if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                    cll->doesNotNeedSp = true;
+                }
+            } else if ( decl->value->rtti_isInvoke() ) {
+                auto cll = static_pointer_cast<ExprInvoke>(decl->value);
+                if ( cll->isCopyOrMove() ) {
+                    cll->doesNotNeedSp = true;
+                }
+            }
+            index++;
+        }
+    }
+
+    vector<SimNode *> ExprMakeVariant::simulateLocal (Context & context) const {
+        vector<SimNode *> simlist;
+        int index = 0;
+        int stride = makeType->getStride();
+        // init with 0 it its 'default' initialization
+        if ( stride && variants.empty() ) {
+            int bytes = stride;
+            SimNode * init0;
+            if ( useCMRES ) {
+                if ( bytes <= 32 ) {
+                    init0 = context.code->makeNodeUnroll<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
+                } else {
+                    init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,bytes);
+                }
+            } else if ( useStackRef ) {
+                init0 = context.code->makeNode<SimNode_InitLocalRef>(at,stackTop,extraOffset,bytes);
+            } else {
+                init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,bytes);
+            }
+            simlist.push_back(init0);
+        }
+        // now fields
+        for ( const auto & decl : variants ) {
+            auto fieldVariant = makeType->findArgumentIndex(decl->name);
+            assert(fieldVariant!=-1 && "should have failed in type infer otherwise");
+            // lets set variant index
+            uint32_t voffset = extraOffset + index*stride;
+            auto vconst = make_shared<ExprConstInt>(at, int32_t(fieldVariant));
+            vconst->type = make_shared<TypeDecl>(Type::tInt);
+            SimNode * svi;
+            if ( useCMRES ) {
+                svi = makeLocalCMResCopy(at,context,voffset,vconst);
+            } else if (useStackRef) {
+                svi = makeLocalRefCopy(at,context,stackTop,voffset,vconst);
+            } else {
+                svi = makeLocalCopy(at,context,stackTop+voffset,vconst);
+            }
+            simlist.push_back(svi);
+            // field itself
+            auto fieldOffset = makeType->getVariantFieldOffset(fieldVariant);
+            uint32_t offset =  voffset + fieldOffset;
+            SimNode * cpy;
+            if ( decl->value->rtti_isMakeLocal() ) {
+                // so what happens here, is we ask it for the generated commands and append it to this list only
+                auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                auto lsim = mkl->simulateLocal(context);
+                simlist.insert(simlist.end(), lsim.begin(), lsim.end());
+                continue;
+            } else if ( useCMRES ) {
+                if ( decl->moveSemantic ){
+                    cpy = makeLocalCMResMove(at,context,offset,decl->value);
+                } else {
+                    cpy = makeLocalCMResCopy(at,context,offset,decl->value);
+                }
+            } else if ( useStackRef ) {
+                if ( decl->moveSemantic ){
+                    cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
+                } else {
+                    cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
+                }
+            } else {
+                if ( decl->moveSemantic ){
+                    cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
+                } else {
+                    cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
+                }
+            }
+            if ( !cpy ) {
+                context.thisProgram->error("internal compilation error, can't generate structure initialization", at);
+            }
+            simlist.push_back(cpy);
+            index++;
+        }
+        return simlist;
+    }
+
+    SimNode * ExprMakeVariant::simulate (Context & context) const {
+        SimNode_Block * block;
+        if ( useCMRES ) {
+            block = context.code->makeNode<SimNode_MakeLocalCMRes>(at);
+        } else {
+            block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
+        }
+        auto simlist = simulateLocal(context);
+        block->total = int(simlist.size());
+        block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
+        for ( uint32_t i = 0; i != block->total; ++i )
+            block->list[i] = simlist[i];
+        return block;
+    }
+
+    // structure
+
     void ExprMakeStructureOrDefaultValue::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
         ExprMakeLocal::setRefSp(ref, cmres, sp, off);
         int total = int(structs.size());

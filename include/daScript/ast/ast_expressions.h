@@ -973,6 +973,17 @@ namespace das
         bool                        useInitializer;
     };
 
+    struct ExprMakeVariant : ExprMakeLocal {
+        ExprMakeVariant() = default;
+        ExprMakeVariant ( const LineInfo & at ) : ExprMakeLocal(at) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
+        vector<MakeFieldDeclPtr>    variants;
+    };
+
     struct ExprMakeArray : ExprMakeLocal {
         ExprMakeArray() = default;
         ExprMakeArray ( const LineInfo & at ) : ExprMakeLocal(at) {}

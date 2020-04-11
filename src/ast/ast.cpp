@@ -1753,12 +1753,7 @@ namespace das {
             auto mfd = make_shared<MakeStruct>();
             mfd->reserve( fields->size() );
             for ( auto & fd : *fields ) {
-                auto cfd = make_shared<MakeFieldDecl>();
-                cfd->at = fd->at;
-                cfd->name = fd->name;
-                cfd->value = fd->value->clone();
-                cfd->moveSemantic = fd->moveSemantic;
-                mfd->push_back(cfd);
+                mfd->push_back(fd->clone());
             }
             cexpr->structs.push_back(mfd);
         }
@@ -1787,6 +1782,39 @@ namespace das {
                 if ( field ) ++it; else it = fields->erase(it);
             }
             vis.visitMakeStructureIndex(this, index, index==int(structs.size()-1));
+        }
+        return vis.visit(this);
+    }
+
+    // make variant
+
+    ExpressionPtr ExprMakeVariant::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprMakeVariant>(expr);
+        ExprMakeLocal::clone(cexpr);
+        cexpr->variants.reserve ( variants.size() );
+        for ( auto & fd : variants ) {
+            cexpr->variants.push_back(fd->clone());
+        }
+        cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        return cexpr;
+    }
+
+    ExpressionPtr ExprMakeVariant::visit(Visitor & vis) {
+        vis.preVisit(this);
+        if ( makeType ) {
+            vis.preVisit(makeType.get());
+            makeType = makeType->visit(vis);
+            makeType = vis.visit(makeType.get());
+        }
+        int index = 0;
+        for ( auto it = variants.begin(); it != variants.end(); index ++ ) {
+            auto & field = *it;
+            vis.preVisitMakeVariantField(this, index, field.get(), field==variants.back());
+            field->value = field->value->visit(vis);
+            if ( field ) {
+                field = vis.visitMakeVariantField(this, index, field.get(), field==variants.back());
+            }
+            if ( field ) ++it; else it = variants.erase(it);
         }
         return vis.visit(this);
     }

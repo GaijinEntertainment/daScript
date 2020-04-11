@@ -513,6 +513,11 @@ namespace das {
             char * data = (char *) &t;
             return *(TT *)(data + offset);
         }
+        static __forceinline TT & set ( const Variant & t ) {
+            char * data = (char *) &t;
+            *(int32_t *)data = int32_t(variant);
+            return *(TT *)(data + offset);
+        }
         static __forceinline TT & as ( const Variant & t, Context * __context__ ) {
             char * data = (char *) &t;
             auto cv = *(int32_t *)data;

@@ -87,7 +87,12 @@ namespace das {
                 ss << "at 0x" << HEX << intptr_t(ps) << DEC << " ";
             }
             if ( (int(flags) & int(PrintFlags::namesAndDimensions)) && ti->argNames) {
-                ss << ti->argNames[*(int32_t *)ps] << "=";
+                auto vindex = *(uint32_t *)ps;
+                if (vindex >= 0 && vindex < ti->argCount) {
+                    ss << ti->argNames[vindex] << "=";
+                } else {
+                    ss << "unknown=";
+                }
             }
 
         }

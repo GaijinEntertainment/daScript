@@ -873,6 +873,26 @@ namespace das {
             Visitor::preVisit(expr);
             ss << " is type " << decl->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes);
         }
+    // make variant
+        virtual void preVisit ( ExprMakeVariant * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "[[";
+            if ( expr->type ) {
+                ss << expr->type->describe() << " ";
+            }
+        }
+        virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            Visitor::preVisitMakeVariantField(expr,index,decl,last);
+            ss << decl->name << (decl->moveSemantic ? " <- " : " = ");
+        }
+        virtual MakeFieldDeclPtr visitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            if (!last) ss << "; ";
+            return Visitor::visitMakeVariantField(expr,index,decl,last);
+        }
+        virtual ExpressionPtr visit ( ExprMakeVariant * expr ) override {
+            ss << "]]";
+            return Visitor::visit(expr);
+        }
     // make structure
         virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
             Visitor::preVisit(expr);

@@ -196,6 +196,16 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // make variant
+        virtual ExpressionPtr visit ( ExprMakeVariant * expr ) override {
+            expr->noSideEffects = true;
+            expr->noNativeSideEffects = true;
+            for ( const auto & fld : expr->variants ) {
+                expr->noSideEffects &= fld->value->noSideEffects;
+                expr->noNativeSideEffects &= fld->value->noNativeSideEffects;
+            }
+            return Visitor::visit(expr);
+        }
     // looks like call
         /*
         virtual ExpressionPtr visit ( ExprLooksLikeCall * expr ) override {

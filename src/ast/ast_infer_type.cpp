@@ -4524,6 +4524,70 @@ namespace das {
             expr->type = make_shared<TypeDecl>(Type::tString);
             return Visitor::visit(expr);
         }
+    // make variant
+        virtual void preVisit ( ExprMakeVariant * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->makeType && expr->makeType->isExprType() ) {
+                return;
+            }
+            verifyType(expr->makeType);
+            if ( expr->makeType->baseType != Type::tVariant ) {
+                error("[[variant" + expr->makeType->describe() + "]] with non-variant type",
+                    expr->at, CompilationError::invalid_type);
+            }
+            if ( expr->makeType->dim.size()>1 ) {
+                error("[[" + expr->makeType->describe() + "]] can only initialize single dimension arrays", expr->at, CompilationError::invalid_type);
+            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->variants.size()) ) {
+                error("[[" + expr->makeType->describe() + "]] dimension mismatch, provided " +
+                    to_string(expr->variants.size()) + " elements", expr->at,
+                    CompilationError::invalid_type);
+            } else if ( expr->makeType->ref ) {
+                error("[[" + expr->makeType->describe() + "]] can't be reference", expr->at, CompilationError::invalid_type);
+            }
+        }
+        virtual MakeFieldDeclPtr visitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            if ( !decl->value->type ) {
+                return Visitor::visitMakeVariantField(expr,index,decl,last);
+            }
+            auto fieldVariant = expr->makeType->findArgumentIndex(decl->name);
+            if (fieldVariant != -1) {
+                auto fieldType = expr->makeType->argTypes[fieldVariant];
+                if (!fieldType->isSameType(*decl->value->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
+                    error("can't initialize field " + decl->name + "; expecting "
+                        + fieldType->describe() + ", passing " + decl->value->type->describe(),
+                        decl->value->at, CompilationError::invalid_type);
+                }
+                if (!fieldType->canCopy() && !decl->moveSemantic) {
+                    error("this field can't be copied, use <- instead",
+                        decl->at, CompilationError::invalid_type);
+                } else if (decl->moveSemantic && decl->value->type->isConst()) {
+                    error("can't move from a constant value\n\t" + decl->value->type->describe(),
+                        decl->value->at, CompilationError::cant_move);
+                }
+            } else {
+                error("field not found, " + decl->name, decl->at, CompilationError::cant_get_field);
+            }
+            return Visitor::visitMakeVariantField(expr,index,decl,last);
+        }
+        virtual ExpressionPtr visit ( ExprMakeVariant * expr ) override {
+            if ( expr->makeType && expr->makeType->isExprType() ) {
+                return Visitor::visit(expr);
+            }
+            // result type
+            auto resT = make_shared<TypeDecl>(*expr->makeType);
+            uint32_t resDim = uint32_t(expr->variants.size());
+            if ( resDim==0 ) {
+                resT->dim.clear();
+            } else if ( resDim!=1 ) {
+                resT->dim.resize(1);
+                resT->dim[0] = resDim;
+            } else {
+                resT->dim.clear();
+            }
+            expr->type = resT;
+            verifyType(expr->type);
+            return Visitor::visit(expr);
+        }
     // make structure
         virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
             Visitor::preVisit(expr);
@@ -4574,6 +4638,25 @@ namespace das {
         virtual ExpressionPtr visit ( ExprMakeStructureOrDefaultValue * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visit(expr);
+            }
+            // promote to make variant
+            if ( expr->makeType->baseType == Type::tVariant ) {
+                auto mkv = make_shared<ExprMakeVariant>(expr->at);
+                mkv->makeType = make_shared<TypeDecl>(*expr->makeType);
+                auto allGood = true;
+                for (auto & st : expr->structs) {
+                    if (st->size() != 1) {
+                        error("variant only supports one initializer", st->front()->at,
+                            CompilationError::field_already_initialized);
+                        allGood = false;
+                    } else {
+                        mkv->variants.push_back(st->front()->clone());
+                    }
+                }
+                if ( allGood ) {
+                    reportAstChanged();
+                    return mkv;
+                }
             }
             // see if there are any duplicate fields
             if ( expr->makeType->baseType == Type::tStructure ) {

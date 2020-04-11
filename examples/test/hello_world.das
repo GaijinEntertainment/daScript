@@ -1,17 +1,18 @@
 // options log_infer_passes = true
-options log = true
-
 
 struct Foo
 	t	: variant<i_value:uint;f_value:float>?
 
 typedef
-	IorA = variant< i:int;a:array<int>;t:table<int;int> >
+	IorA = variant< i:int;a:array<int>;f:float;t:table<int;int> >
+	U_F = variant<i_value:uint;f_value:float>
 
 [export,unsafe]
 def test
 
-	var t : variant<i_value:uint;f_value:float>
+	assert(typeinfo(sizeof type U_F)==8)
+
+	var t : U_F
 	assert(typeinfo(sizeof t)==8)
 	t.f_value = 1.0													// unsafe operation
 	assert(t.i_value==0x3f800000)									// unsafe operation
@@ -47,6 +48,16 @@ def test
 	recover
 		paniced = true
 	assert(paniced)
+
+	assert(t.f_value == 1.0)
+	t = [[U_F i_value = 0x40000000]]
+	assert(t as i_value == 0x40000000)
+	t = [[U_F f_value = 1.0]]
+
+	var t2 = [[U_F i_value=1u; f_value=2.0]]
+	assert(length(t2)==2)
+	assert(t2[0] is i_value & t2[0] as i_value==1u)
+	assert(t2[1] is f_value & t2[1] as f_value==2.0)
 
 	var f : Foo
 	var fp : Foo?

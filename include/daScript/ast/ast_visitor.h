@@ -132,7 +132,12 @@ namespace das {
         virtual void preVisitForBody ( ExprFor *, Expression * ) {}
         virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
         virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that->shared_from_this(); }
-        // MAKE STRUCTURE
+        // MAKE VARIANT
+        virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
+        virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField) {
+            return decl->shared_from_this(); 
+        }
+            // MAKE STRUCTURE
         virtual void preVisitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastIndex ) {}
         virtual void visitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastField ) {}
         virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
@@ -234,6 +239,7 @@ namespace das {
         VISIT_EXPR(ExprWith)
         VISIT_EXPR(ExprWhile)
         VISIT_EXPR(ExprMakeStructureOrDefaultValue)
+        VISIT_EXPR(ExprMakeVariant)
         VISIT_EXPR(ExprMakeArray)
         VISIT_EXPR(ExprMakeTuple)
         VISIT_EXPR(ExprArrayComprehension)
