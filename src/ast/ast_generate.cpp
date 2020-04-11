@@ -992,7 +992,7 @@ namespace das {
     }
 
     FunctionPtr generateTupleFinalizer ( const LineInfo & at, const TypeDeclPtr & tupleType ) {
-        DAS_ASSERT(tupleType->isTuple() && "can only clone tuple");
+        DAS_ASSERT(tupleType->isTuple() && "can only finalize tuple");
         auto fn = make_shared<Function>();
         fn->generated = true;
         fn->name = "finalize";
@@ -1014,6 +1014,108 @@ namespace das {
                 block->list.push_back(cl);
             }
         }
+        auto mz = make_shared<ExprMemZero>(at, "memzero");
+        auto lvar = make_shared<ExprVar>(at, "__this");
+        mz->arguments.push_back(lvar);
+        block->list.push_back(mz);
+        fn->body = block;
+        verifyGenerated(fn->body);
+        return fn;
+    }
+
+    FunctionPtr makeCloneVariant ( const LineInfo & at, const TypeDeclPtr & variantType ) {
+        DAS_ASSERT(variantType->isVariant() && "can only clone variant");
+        auto fn = make_shared<Function>();
+        fn->generated = true;
+        fn->name = "clone";
+        fn->at = at;
+        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        auto arg0 = make_shared<Variable>();
+        arg0->name = "dest";
+        arg0->type = make_shared<TypeDecl>(*variantType);
+        arg0->type->constant = false;
+        arg0->type->ref = false;
+        fn->arguments.push_back(arg0);
+        auto arg1 = make_shared<Variable>();
+        arg1->name = "src";
+        arg1->type = make_shared<TypeDecl>(*variantType);
+        arg1->type->constant = true;
+        arg1->type->ref = false;
+        fn->arguments.push_back(arg1);
+        auto block = make_shared<ExprBlock>();
+        shared_ptr<ExprIfThenElse> topIf, lastIf;
+        for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
+            const string & argn = variantType->argNames[argi];
+            auto cb = make_shared<ExprBlock>();
+            auto vd = make_shared<ExprVar>(at, "dest");
+            auto vi = make_shared<ExprConstInt>(at, int32_t(argi));
+            auto svi = make_shared<ExprCall>(at, "set_variant_index");
+            svi->alwaysSafe = true;
+            svi->arguments.push_back(vd);
+            svi->arguments.push_back(vi);
+            cb->list.push_back(svi);
+            auto lv = make_shared<ExprVar>(at, "dest");
+            auto lf = make_shared<ExprField>(at, lv, argn);
+            lf->alwaysSafe = true;
+            auto rv = make_shared<ExprVar>(at, "src");
+            auto rf = make_shared<ExprField>(at, rv, argn);
+            rf->alwaysSafe = true;
+            auto cl = make_shared<ExprClone>(at, lf, rf);
+            cb->list.push_back(cl);
+            auto av = make_shared<ExprVar>(at, "src");
+            auto isv = make_shared<ExprIsVariant>(at, av, argn);
+            auto thisIf = make_shared<ExprIfThenElse>(at, isv, cb, nullptr);
+            if ( lastIf ) {
+                lastIf->if_false = thisIf;
+                lastIf = thisIf;
+                thisIf.reset();
+            } else {
+                topIf = lastIf = thisIf;
+            }
+        }
+        if (topIf) block->list.push_back(topIf);
+        fn->body = block;
+        verifyGenerated(fn->body);
+        return fn;
+    }
+
+    FunctionPtr generateVariantFinalizer ( const LineInfo & at, const TypeDeclPtr & variantType ) {
+        DAS_ASSERT(variantType->isVariant() && "can only finalize variant");
+        auto fn = make_shared<Function>();
+        fn->generated = true;
+        fn->name = "finalize";
+        fn->at = at;
+        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        auto arg0 = make_shared<Variable>();
+        arg0->name = "__this";
+        arg0->type = make_shared<TypeDecl>(*variantType);
+        arg0->type->constant = false;
+        arg0->type->ref = false;
+        fn->arguments.push_back(arg0);
+        auto block = make_shared<ExprBlock>();
+        shared_ptr<ExprIfThenElse> topIf, lastIf;
+        for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
+            if (variantType->argTypes[argi]->needDelete()) {
+                const string & argn = variantType->argNames[argi];
+                auto lv = make_shared<ExprVar>(at, "__this");
+                auto lf = make_shared<ExprField>(at, lv, argn);
+                lf->alwaysSafe = true;
+                auto cl = make_shared<ExprDelete>(at, lf);
+                auto cb = make_shared<ExprBlock>();
+                cb->list.push_back(cl);
+                auto av = make_shared<ExprVar>(at, "__this");
+                auto isv = make_shared<ExprIsVariant>(at, av, argn);
+                auto thisIf = make_shared<ExprIfThenElse>(at, isv, cb, nullptr);
+                if ( lastIf ) {
+                    lastIf->if_false = thisIf;
+                    lastIf = thisIf;
+                    thisIf.reset();
+                } else {
+                    topIf = lastIf = thisIf;
+                }
+            }
+        }
+        if (topIf) block->list.push_back(topIf);
         auto mz = make_shared<ExprMemZero>(at, "memzero");
         auto lvar = make_shared<ExprVar>(at, "__this");
         mz->arguments.push_back(lvar);

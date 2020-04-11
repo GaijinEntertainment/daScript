@@ -414,7 +414,12 @@ namespace das {
         }
         virtual void preVisitElseBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitElseBlock(ifte, block);
-            ss << string(tab,'\t') << "else\n";
+            ss << string(tab,'\t');
+            if (block && block->rtti_isIfThenElse()) {
+                ss << "else ";
+            } else {
+                ss << "else\n";
+            }
         }
     // try-catch
         virtual void preVisit ( ExprTryCatch * tc ) override {

@@ -2504,6 +2504,17 @@ namespace das {
                         reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                         return Visitor::visit(expr);
                     }
+                } else if ( finalizeType->isVariant() ) {
+                    auto fnDel = generateVariantFinalizer(expr->at, finalizeType);
+                    if ( program->addFunction(fnDel) ) {
+                        reportAstChanged();
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        cloneFn->arguments.push_back(expr->subexpr->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
+                        return Visitor::visit(expr);
+                    }
                 } else if ( finalizeType->dim.size() ) {
                     reportAstChanged();
                     auto cloneFn = make_shared<ExprCall>(expr->at, "finalize_dim");
@@ -3560,6 +3571,22 @@ namespace das {
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeCloneTuple(expr->at, cloneType);
+                            clf->privateFunction = true;
+                            extraFunctions.push_back(clf);
+                        }
+                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                        cloneFn->arguments.push_back(expr->left->clone());
+                        cloneFn->arguments.push_back(expr->right->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                } else if ( cloneType->isVariant() ) {
+                    reportAstChanged();
+                    fnList = getCloneFunc(cloneType,cloneType);
+                    if ( verifyCloneFunc(fnList, expr->at) ) {
+                        if ( fnList.size()==0 ) {
+                            auto clf = makeCloneVariant(expr->at, cloneType);
                             clf->privateFunction = true;
                             extraFunctions.push_back(clf);
                         }

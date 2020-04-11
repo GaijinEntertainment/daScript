@@ -1,6 +1,9 @@
 struct Foo
 	t	: variant<i_value:uint;f_value:float>?
 
+typedef
+	IorA = variant< i:int;a:array<int>;t:table<int;int> >
+
 [export,unsafe]
 def test
 
@@ -49,5 +52,18 @@ def test
 	f.t = addr(t)
 	assert ( fp?.t?.i_value ?? 15u == 0x3f800000 )					// unsafe ?.i_value
     assert ( fp?.t ?as i_value ?? 15u == 15u )
+
+	var x : IorA
+	set_variant_index(x, 1)
+	x.a <- [{for t in range(0,10); t}]
+	var y := x
+	assert(y is a)
+	for t in range(0,10)
+		assert(y as a[t]==t)
+	delete x
+	assert(x is i)
+	assert(y is a)
+	for t in range(0,10)
+		assert(y as a[t]==t)
 
     return true

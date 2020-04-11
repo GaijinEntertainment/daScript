@@ -31,8 +31,19 @@ namespace das {
      def clone(var a:tuple<...>; var b:tuple<...>)
       a._0 := b._0
       a._1 := b._1
+      ...
     */
     FunctionPtr makeCloneTuple(const LineInfo & at, const TypeDeclPtr & tupleType);
+
+    /*
+     def clone(var a:tuple<...>; var b:tuple<...>)
+      if b is _0
+        a._0 := b._0
+      else if b is _1
+        a._1 := b._1
+      ...
+    */
+    FunctionPtr makeCloneVariant(const LineInfo & at, const TypeDeclPtr & variantType);
 
     /*
         delete var
@@ -73,6 +84,18 @@ namespace das {
         memzero(THIS)
      */
     FunctionPtr generateTupleFinalizer(const LineInfo & at, const TypeDeclPtr & tupleType);
+
+    /*
+     variant finalizer, i.e.
+      def __lambda_finalizer_at_line_xxx(var THIS:tuple<...>)
+        if THIS is _0
+            delete _0
+        elif THIS is _1
+            delete _1
+        ....
+        memzero(THIS)
+     */
+    FunctionPtr generateVariantFinalizer(const LineInfo & at, const TypeDeclPtr & variantType);
 
     /*
      struct __lambda_at_line_xxx
