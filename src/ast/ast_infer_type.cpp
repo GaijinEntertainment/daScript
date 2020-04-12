@@ -2799,6 +2799,10 @@ namespace das {
                 expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
                 expr->type->constant |= seT->constant;
             } else if ( seT->isPointer() ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                    error("index of the pointer requires [unsafe]", expr->at,
+                        CompilationError::unsafe);
+                }
                 if ( !ixT->isIndex() ) {
                     error("index must be int or uint, not " + ixT->describe(), expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
@@ -3023,6 +3027,10 @@ namespace das {
     // ExprSafeAsVariant
         virtual ExpressionPtr visit(ExprSafeAsVariant * expr) override {
             if (!expr->value->type) return Visitor::visit(expr);
+            if ( !expr->value->type->isPointer() && func && !func->unsafe && !expr->alwaysSafe ) {
+                error("variant ?as on non-pointer requires [unsafe]", expr->at,
+                    CompilationError::unsafe);
+            }
             auto valT = expr->value->type->isPointer() ? expr->value->type->firstType : expr->value->type;
             if ( !valT || !valT->isGoodVariantType() ) {
                 error(" ?as " + expr->name + " only allowed for variants or pointers to variants", expr->at,
