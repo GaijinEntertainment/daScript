@@ -328,14 +328,34 @@ namespace das {
 
     class AotDebugInfoHelper : public DebugInfoHelper {
     public:
-        void writeDim ( TextWriter & ss, TypeInfo * info ) const {
+        void writeDim ( TextWriter & ss, TypeInfo * info, const string & suffix = ""  ) const {
             if ( info->dimSize ) {
-                ss << "uint32_t " << typeInfoName(info) << "_dim[" << info->dimSize << "] = {";
+                ss << "uint32_t " << typeInfoName(info) << "_dim" << suffix << "[" << info->dimSize << "] = { ";
                 for ( uint32_t i=0; i!=info->dimSize; ++i ) {
-                    if ( i ) ss << ",";
+                    if ( i ) ss << ", ";
                     ss << info->dim[i];
                 }
-                ss << "};\n";
+                ss << " };\n";
+            }
+        }
+        void writeArgNames ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
+            if ( info->argCount && info->argNames ) {
+                ss << "const char * " << typeInfoName(info) << "_arg_names" << suffix << "[" << info->argCount << "] = { ";
+                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                    if ( i ) ss << ", ";
+                    ss << "\"" << info->argNames[i] << "\"";
+                }
+                ss << " };\n";
+            }
+        }
+        void writeArgTypes ( TextWriter & ss, TypeInfo * info, const string & suffix = ""  ) const {
+            if ( info->argCount && info->argTypes ) {
+                ss << "TypeInfo * " << typeInfoName(info) << "_arg_types" << suffix << "[" << info->argCount << "] = { ";
+                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                    if ( i ) ss << ", ";
+                    ss << "&" << typeInfoName(info->argTypes[i]);
+                }
+                ss << " };\n";
             }
         }
         string str() const {
@@ -349,7 +369,6 @@ namespace das {
             }
             for ( auto & ti : vmn2v ) {
                 ss << "extern VarInfo " << varInfoName(ti.second) << ";\n";
-                writeDim(ss, ti.second);
             }
             for ( auto & ti : fmn2f ) {
                 ss << "extern FuncInfo " << funcInfoName(ti.second) << ";\n";
@@ -371,48 +390,45 @@ namespace das {
                 ss << " };\n";
             }
             for ( auto & ti : tmn2t ) {
-                ss << "TypeInfo " << typeInfoName(ti.second) << " = { ";
-                describeCppTypeInfo(ss, ti.second);
+                auto tinfo = ti.second;
+                writeDim(ss, tinfo);
+                writeArgTypes(ss, tinfo);
+                writeArgNames(ss, tinfo);
+                ss << "TypeInfo " << typeInfoName(tinfo) << " = { ";
+                describeCppTypeInfo(ss, tinfo);
                 ss << " };\n";
-                writeDim(ss, ti.second);
             }
             ss << "\n";
             return ss.str();
         }
-
         string enumInfoName ( EnumInfo * info ) const {
             TextWriter ss;
             ss << "__enum_info__" << HEX << info->hash << DEC;
             return ss.str();
         }
-
         string funcInfoName ( FuncInfo * info ) const {
             TextWriter ss;
             ss << "__func_info__" << HEX << info->hash << DEC;
             return ss.str();
         }
-
         string varInfoName ( VarInfo * info ) const {
             TextWriter ss;
             ss << "__var_info__" << HEX << info->hash << DEC;
             return ss.str();
         }
-
         string structInfoName ( StructInfo * info ) const {
             TextWriter ss;
             ss << "__struct_info__" << HEX << info->hash << DEC;
             return ss.str();
         }
-
         string typeInfoName ( TypeInfo * info ) const {
             TextWriter ss;
             ss << "__type_info__" << HEX << info->hash << DEC;
             return ss.str();
         }
-
     protected:
         void describeCppVarInfo ( TextWriter & ss, VarInfo * info ) const {
-            describeCppTypeInfo(ss, info);
+            describeCppTypeInfo(ss, info, "_var");
             ss << ", \"" << info->name << "\", ";
             ss << info->offset;
 
@@ -420,6 +436,9 @@ namespace das {
         void describeCppStructInfoFields ( TextWriter & ss, StructInfo * info ) const {
             if ( !info->fields ) return;
             for ( uint32_t fi=0; fi!=info->count; ++fi ) {
+                writeDim(ss, info->fields[fi], "_var");
+                writeArgTypes(ss, info->fields[fi], "_var");
+                writeArgNames(ss, info->fields[fi], "_var");
                 ss << "VarInfo " << structInfoName(info) << "_field_" << fi << " =  { ";
                 describeCppVarInfo(ss, info->fields[fi]);
                 ss << " };\n";
@@ -464,7 +483,7 @@ namespace das {
                 << info->count << ", 0x" << HEX << info->hash << DEC;
         }
 
-        void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info ) const {
+        void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
             ss << "Type::" << das_to_cppCTypeString(info->type) << ", ";
             if ( info->structType ) {
                 ss << "&" << structInfoName(info->structType);
@@ -496,14 +515,22 @@ namespace das {
                 ss << "nullptr";
             }
             
-            ss << ", nullptr";                      // TODO: implement typeinfo 'argTypes'
-            ss << ", nullptr";                      // TODO: implement 'argNames'
+            if (info->argCount && info->argTypes) {
+                ss << ", (TypeInfo **)" << typeInfoName(info) << "_arg_types" << suffix;
+            } else {
+                ss << ", nullptr";
+            }
+            if (info->argCount && info->argNames) {
+                ss << ", (char **)" << typeInfoName(info) << "_arg_names" << suffix;
+            } else {
+                ss << ", nullptr";                      
+            }
             ss << ", " << info->argCount;           
 
             ss << ", " << info->dimSize;
             ss << ", ";
             if ( info->dimSize ) {
-                ss << typeInfoName(info) << "_dim";
+                ss << typeInfoName(info) << "_dim" << suffix;
             } else {
                 ss << "nullptr";
             }
