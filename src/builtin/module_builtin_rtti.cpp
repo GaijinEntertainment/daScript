@@ -24,7 +24,7 @@ DAS_BASE_BIND_ENUM_98(Type, Type,
     tPointer,       tFunction,      tLambda,        tIterator,
     tArray,         tTable,         tBlock,         tInt8,
     tUInt8,         tInt16,         tUInt16,        tTuple,
-    tEnumeration8,  tEnumeration16
+    tEnumeration8,  tEnumeration16, tVariant
 )
 namespace das {
     struct RttiProgram {
@@ -220,6 +220,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(annotation_or_name)>("annotation_or_name");
             this->template addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
             this->template addField<DAS_BIND_MANAGED_FIELD(dimSize)>("dimSize");
+            this->template addField<DAS_BIND_MANAGED_FIELD(argCount)>("argCount");
             this->template addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isRef)>("isRef");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isRefType)>("isRefType");
@@ -227,6 +228,7 @@ namespace das {
             this->template addProperty<DAS_BIND_MANAGED_PROP(isPod)>("isPod");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isRawPod)>("isRawPod");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isConst)>("isConst");
+            this->template addField<DAS_BIND_MANAGED_FIELD(argNames)>("argNames");
         }
         void init() {
             // this needs to be initialized separately
@@ -235,6 +237,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(structType)>("structType");
             this->template addField<DAS_BIND_MANAGED_FIELD(firstType)>("firstType");
             this->template addField<DAS_BIND_MANAGED_FIELD(secondType)>("secondType");
+            this->template addField<DAS_BIND_MANAGED_FIELD(argTypes)>("argTypes");
         }
     };
 
