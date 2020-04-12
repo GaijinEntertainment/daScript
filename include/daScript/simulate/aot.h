@@ -223,9 +223,9 @@ namespace das {
 
     template <typename TT, typename RR, RR TT::*Member>
     struct das_safe_navigation {
-        static __forceinline RR * get ( TT * ptr ) {
+        static __forceinline RR * get ( const TT * ptr ) {
             if ( ptr ) {
-                return &(ptr->*Member);
+                return (RR *) &(ptr->*Member);
             } else {
                 return nullptr;
             }
@@ -234,9 +234,9 @@ namespace das {
 
     template <typename TT, typename RR, RR TT::*Member>
     struct das_safe_navigation_ptr {
-        static __forceinline RR get ( TT * ptr ) {
+        static __forceinline RR get ( const TT * ptr ) {
             if ( ptr ) {
-                return ptr->*Member;
+                return (RR)(ptr->*Member);
             } else {
                 return nullptr;
             }
