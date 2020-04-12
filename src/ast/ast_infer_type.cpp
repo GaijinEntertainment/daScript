@@ -1659,6 +1659,14 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(*dvT);
                 expr->type->constant |= expr->subexpr->type->constant;
                 propagateTempType(expr->subexpr->type, expr->type);
+                // make a ?as b ?? c always safe, if a is not a pointer
+                if (!expr->subexpr->alwaysSafe && expr->subexpr->rtti_isSafeAsVariant()) {
+                    auto sav = static_pointer_cast<ExprSafeAsVariant>(expr->subexpr);
+                    if (!sav->value->type->isPointer()) {
+                        reportAstChanged();
+                        sav->alwaysSafe = true;
+                    }
+                }
             }
             return Visitor::visit(expr);
         }
