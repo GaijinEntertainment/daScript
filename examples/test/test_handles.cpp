@@ -522,6 +522,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // extra tests
     addExtern<DAS_BIND_FUN(start_effect)>(*this, lib, "start_effect", SideEffects::modifyExternal, "start_effect");
     addExtern<DAS_BIND_FUN(tempArrayExample)>(*this, lib, "temp_array_example", SideEffects::modifyExternal, "tempArrayExample");
+    // ptr2ref
+    addExtern<DAS_BIND_FUN(fooPtr2Ref),SimNode_ExtFuncCallRef>(*this, lib, "fooPtr2Ref", SideEffects::none, "fooPtr2Ref");
     // compiled functions
     appendCompiledFunctions();
     // and verify

@@ -131,3 +131,7 @@ void builtin_printw(char * utf8string);
 bool tempArrayExample(const das::TArray<char *> & arr, 
     const das::TBlock<void, das::TTemporary<const das::TArray<char *>>> & blk, 
     das::Context * context);
+
+__forceinline TestObjectFoo & fooPtr2Ref(TestObjectFoo * pMat) {
+    return *pMat;
+}

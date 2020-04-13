@@ -180,6 +180,43 @@ namespace das
         }
     };
 
+    struct ImplCallStaticFunctionRef {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline char * call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            return (char *) & ( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
+        }
+    };
+
+    template <typename FuncT, FuncT fn>
+    struct SimNode_ExtFuncCallRef : SimNode_CallBase {
+        DAS_PTR_NODE;
+        enum { IS_CMRES = false };
+        const char * extFnName = nullptr;
+        SimNode_ExtFuncCallRef ( const LineInfo & at, const char * fnName )
+            : SimNode_CallBase(at) { extFnName = fnName; }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_ExtFuncCallRef<FuncT,fn> *) SimNode_CallBase::copyNode(context, code);
+            that->extFnName = code->allocateName(extFnName);
+            return that;
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            vis.op(extFnName);
+            V_CALL();
+            V_END();
+        }
+        __forceinline char * compute(Context & context) {
+            DAS_PROFILE_NODE
+            using FunctionTrait = function_traits<FuncT>;
+            using Result = typename FunctionTrait::return_type;
+            using Arguments = typename FunctionTrait::arguments;
+            const int nargs = tuple_size<Arguments>::value;
+            using Indices = make_index_sequence<nargs>;
+            return ImplCallStaticFunctionRef::template
+                call<FuncT, Arguments>(*fn, context, arguments, Indices());
+        }
+    };
+
     typedef vec4f ( InteropFunction ) ( Context & context, SimNode_CallBase * node, vec4f * args );
 
     template <InteropFunction fn>
