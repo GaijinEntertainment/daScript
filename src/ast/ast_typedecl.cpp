@@ -748,6 +748,8 @@ namespace das
             }
         } else if ( isPointer() ) {
             return true;
+        } else if ( isIterator() ) {
+            return true;
         }
         if ( firstType && !firstType->isLocal(dep) ) {
             return false;
@@ -1059,6 +1061,10 @@ namespace das
 
     bool TypeDecl::isPointer() const {
         return (baseType==Type::tPointer) && (dim.size()==0);
+    }
+
+    bool TypeDecl::isIterator() const {
+        return (baseType==Type::tIterator) && (dim.size()==0);
     }
 
     bool TypeDecl::isEnumT() const {

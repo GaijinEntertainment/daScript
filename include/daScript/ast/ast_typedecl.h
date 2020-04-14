@@ -73,6 +73,7 @@ namespace das {
         bool isNumeric() const;
         bool isNumericComparable() const;
         bool isPointer() const;
+        bool isIterator() const;
         bool isEnum() const;
         bool isEnumT() const;
         bool isHandle() const;

@@ -552,6 +552,17 @@ namespace das
         virtual void walk ( DataWalker & ) { }
     };
 
+    struct PointerDimIterator : Iterator {
+        PointerDimIterator  ( char ** d, uint32_t cnt, uint32_t sz ) 
+            : data(d), data_end(d+cnt), size(sz) {}
+        virtual bool first(Context &, char * _value) override;
+        virtual bool next(Context &, char * _value) override;
+        virtual void close(Context & context, char * _value) override;
+        char ** data;
+        char ** data_end;
+        uint32_t size;
+    };
+
     struct Sequence {
         mutable Iterator * iter;
     };

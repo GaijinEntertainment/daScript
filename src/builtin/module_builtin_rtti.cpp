@@ -122,38 +122,9 @@ namespace das {
     };
 
     template <typename VT, typename ST>
-    struct DebugInfoIterator : Iterator {
-        DebugInfoIterator  ( ST * ar ) : info(ar) {}
-        virtual bool first ( Context &, char * _value ) override {
-            VT ** value = (VT **) _value;
-            data = info->fields;
-            data_end = info->fields + info->count;
-            if ( data != data_end ) {
-                *value = *data;
-                return true;
-            } else {
-                return false;
-            }
-        }
-        virtual bool next  ( Context &, char * _value ) override {
-            VT ** value = (VT **) _value;
-            if ( ++data != data_end ) {
-                *value = *data;
-                return true;
-            } else {
-                return false;
-            }
-        }
-        virtual void close ( Context & context, char * _value ) override {
-            if ( _value ) {
-                VT ** value = (VT **) _value;
-                *value = nullptr;
-            }
-            context.heap.free((char *)this, sizeof(DebugInfoIterator<VT,ST>));
-        }
-        VT ** data;
-        VT ** data_end;
-        ST * info;
+    struct DebugInfoIterator : PointerDimIterator {
+        DebugInfoIterator  ( ST * ar ) 
+            : PointerDimIterator((char **)ar->fields, ar->count, sizeof(DebugInfoIterator<VT,ST>)) {}
     };
 
     template <typename VT, typename ST>
@@ -245,6 +216,18 @@ namespace das {
         TypeInfoAnnotation(ModuleLibrary & ml) : ManagedTypeInfoAnnotation ("TypeInfo", ml) {
         }
     };
+
+    void builtin_make_arg_names_iterator ( Sequence & result, const TypeInfo & info, Context * context ) {
+        char * iter = context->heap.allocate(sizeof(PointerDimIterator));
+        new (iter) PointerDimIterator(info.argNames, info.argCount, sizeof(PointerDimIterator));
+        result = { (Iterator *) iter };
+    }
+
+    void builtin_make_arg_types_iterator ( Sequence & result, const TypeInfo & info, Context * context ) {
+        char * iter = context->heap.allocate(sizeof(PointerDimIterator));
+        new (iter) PointerDimIterator((char **)info.argTypes, info.argCount, sizeof(PointerDimIterator));
+        result = { (Iterator *) iter };
+    }
 
     struct VarInfoAnnotation : ManagedTypeInfoAnnotation <VarInfo> {
         VarInfoAnnotation(ModuleLibrary & ml) : ManagedTypeInfoAnnotation ("VarInfo", ml) {
@@ -552,6 +535,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(builtin_make_arg_names_iterator)>(*this, lib,  "_builtin_make_arg_names_iterator",
+                SideEffects::modifyArgumentAndExternal, "builtin_make_arg_names_iterator");
+            addExtern<DAS_BIND_FUN(builtin_make_arg_types_iterator)>(*this, lib,  "_builtin_make_arg_types_iterator",
+                SideEffects::modifyArgumentAndExternal, "builtin_make_arg_types_iterator");
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
         }

@@ -35,3 +35,12 @@ def is_same_type( a,b:TypeInfo;
 def is_compatible_cast( a,b:StructInfo )
     return builtin_is_compatible_cast(reinterpret<StructInfo const?>(a),reinterpret<StructInfo const?>(b))
 
+def rtti_arg_names ( info : TypeInfo ) : iterator<string>
+    var it : iterator<string>
+    _builtin_make_arg_names_iterator(it,info)
+    return <- it
+
+def rtti_arg_types ( info : TypeInfo ) : iterator<TypeInfo&>
+    var it : iterator<TypeInfo&>
+    _builtin_make_arg_types_iterator(it,info)
+    return <- it
