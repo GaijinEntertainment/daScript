@@ -29,6 +29,27 @@ MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
 
 MAKE_TYPE_FACTORY(SomeDummyType, SomeDummyType)
 
+namespace das {
+  template <>
+  struct typeFactory<SampleVariant> {
+      static TypeDeclPtr make(const ModuleLibrary & library ) {
+          auto vtype = make_shared<TypeDecl>(Type::tVariant);
+          vtype->alias = "SampleVariant";
+          vtype->aotAlias = true;
+          vtype->addVariant("i_value", typeFactory<decltype(SampleVariant::i_value)>::make(library));
+          vtype->addVariant("f_value", typeFactory<decltype(SampleVariant::f_value)>::make(library));
+          vtype->addVariant("s_value", typeFactory<decltype(SampleVariant::s_value)>::make(library));
+          // optional validation
+          DAS_ASSERT(sizeof(SampleVariant) == vtype->getSizeOf());
+          DAS_ASSERT(alignof(SampleVariant) == vtype->getAlignOf());
+          DAS_ASSERT(offsetof(SampleVariant, i_value) == vtype->getVariantFieldOffset(0));
+          DAS_ASSERT(offsetof(SampleVariant, f_value) == vtype->getVariantFieldOffset(1));
+          DAS_ASSERT(offsetof(SampleVariant, s_value) == vtype->getVariantFieldOffset(2));
+          return vtype;
+      }
+  };
+};
+
 /*
 namespace das {
     template <>
@@ -526,6 +547,11 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(fooPtr2Ref),SimNode_ExtFuncCallRef>(*this, lib, "fooPtr2Ref", SideEffects::none, "fooPtr2Ref");
     // compiled functions
     appendCompiledFunctions();
+    // add sample variant type
+    addAlias(typeFactory<SampleVariant>::make(lib));
+    addExtern<DAS_BIND_FUN(makeSampleI), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleI", SideEffects::none, "makeSampleI");
+    addExtern<DAS_BIND_FUN(makeSampleF), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleF", SideEffects::none, "makeSampleF");
+    addExtern<DAS_BIND_FUN(makeSampleS), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleS", SideEffects::none, "makeSampleS");
     // and verify
     verifyAotReady();
 }

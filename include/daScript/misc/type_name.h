@@ -38,4 +38,6 @@ namespace das {
     template <> struct typeName<Func>     { static string name() { return "Func"; } };
     template <> struct typeName<Lambda>   { static string name() { return "Lambda"; } };
     template <> struct typeName<Block>    { static string name() { return "Block"; } };
+    template <> struct typeName<Tuple>    { static string name() { return "Tuple"; } };
+    template <> struct typeName<Variant>  { static string name() { return "Variant"; } };
 }

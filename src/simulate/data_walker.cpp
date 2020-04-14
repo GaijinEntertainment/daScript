@@ -66,7 +66,7 @@ namespace das {
         DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
         int fieldOffset = getTypeBaseSize(Type::tInt);
         TypeInfo * vi = ti->argTypes[fidx];
-        auto fa = getTypeAlign(vi) - 1;
+        auto fa = getTypeAlign(ti) - 1;
         fieldOffset = (fieldOffset + fa) & ~fa;
         char * pf = ps + fieldOffset;
         if ( cancel ) return;

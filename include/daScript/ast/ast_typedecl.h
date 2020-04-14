@@ -129,6 +129,7 @@ namespace das {
         Type getRangeBaseType() const;
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         int findArgumentIndex(const string & name) const;
+        void addVariant(const string & name, const TypeDeclPtr & tt);
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
         EnumerationPtr          enumType;

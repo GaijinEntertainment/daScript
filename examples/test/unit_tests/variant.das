@@ -1,9 +1,23 @@
+require UnitTest
+
 struct Foo
 	t	: variant<i_value:uint;f_value:float>?
 
 typedef
 	IorA = variant< i:int;a:array<int>;f:float;t:table<int;int> >
 	U_F = variant<i_value:uint;f_value:float>
+
+[sideeffects]
+def test_ifs
+	let i = makeSampleI()
+	assert(i is i_value)
+	assert(i as i_value == 1)
+	let f = makeSampleF()
+	assert(f is f_value)
+	assert(f as f_value == 2.0)
+	let s = makeSampleS()
+	assert(s is s_value)
+	assert(s as s_value == "3")
 
 [export,unsafe]
 def test
@@ -78,5 +92,7 @@ def test
 	assert(y is a)
 	for t in range(0,10)
 		assert(y as a[t]==t)
+
+	test_ifs()
 
     return true

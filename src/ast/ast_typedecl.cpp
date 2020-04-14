@@ -1599,8 +1599,7 @@ namespace das
     int TypeDecl::getVariantFieldOffset ( int index ) const {
         DAS_ASSERT(baseType==Type::tVariant);
         DAS_ASSERT(index>=0 && index<int(argTypes.size()));
-        const auto & argT = argTypes[index];
-        int al = argT->getAlignOf() - 1;
+        int al = getVariantAlign() - 1;
         int offset = (getTypeBaseSize(Type::tInt) + al) & ~al;
         return offset;
     }
@@ -1608,13 +1607,12 @@ namespace das
     int TypeDecl::getVariantSize() const {
         DAS_ASSERT(baseType==Type::tVariant);
         int maxSize = 0;
+        int al = getVariantAlign() - 1;
         for ( const auto & argT : argTypes ) {
-            int al = argT->getAlignOf() - 1;
             int size = (getTypeBaseSize(Type::tInt) + al) & ~al;
             size += argT->getSizeOf();
             maxSize = das::max(size, maxSize);
         }
-        int al = getVariantAlign() - 1;
         maxSize = (maxSize + al) & ~al;
         return maxSize;
     }
@@ -1716,5 +1714,11 @@ namespace das
     bool isCircularType ( const TypeDeclPtr & type ) {
         vector<const TypeDecl *> all;
         return isCircularType(type, all);
+    }
+
+    void TypeDecl::addVariant(const string & name, const TypeDeclPtr & tt) {
+        DAS_ASSERT(find(argNames.begin(), argNames.end(), name) == argNames.end() && "duplicate variant");
+        argNames.push_back(name);
+        argTypes.push_back(tt);
     }
 }

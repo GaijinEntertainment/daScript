@@ -135,3 +135,36 @@ bool tempArrayExample(const das::TArray<char *> & arr,
 __forceinline TestObjectFoo & fooPtr2Ref(TestObjectFoo * pMat) {
     return *pMat;
 }
+
+struct SampleVariant {
+    int32_t _variant;
+    union {
+        int32_t     i_value;
+        float       f_value;
+        char *      s_value;
+    };
+};
+
+template <> struct das::das_alias<SampleVariant> 
+    : das::das_alias_ref<SampleVariant,TVariant<sizeof(SampleVariant),int32_t,float,char *>> {};
+
+__forceinline SampleVariant makeSampleI() {
+    SampleVariant v;
+    v._variant = 0;
+    v.i_value = 1;
+    return v;
+}
+
+__forceinline SampleVariant makeSampleF() {
+    SampleVariant v;
+    v._variant = 1;
+    v.f_value = 2.0f;
+    return v;
+}
+
+__forceinline SampleVariant makeSampleS() {
+    SampleVariant v;
+    v._variant = 2;
+    v.s_value = (char *)("3");
+    return v;
+}

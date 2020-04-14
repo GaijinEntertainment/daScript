@@ -190,13 +190,12 @@ namespace das
 
     int getVariantSize ( TypeInfo * info ) {
         int maxSize = 0;
+        int al = getVariantAlign(info) - 1;
         for ( uint32_t i=0; i!=info->argCount; ++i ) {
-            int al = getTypeAlign(info->argTypes[i]) - 1;
             int size = (getTypeBaseSize(Type::tInt) + al) & ~al;
             size += getTypeSize(info->argTypes[i]);
             maxSize = das::max(size, maxSize);
         }
-        int al = getVariantAlign(info) - 1;
         maxSize = (maxSize + al) & ~al;
         return maxSize;
     }
