@@ -208,7 +208,6 @@ namespace das
         __forceinline char * compute(Context & context) {
             DAS_PROFILE_NODE
             using FunctionTrait = function_traits<FuncT>;
-            using Result = typename FunctionTrait::return_type;
             using Arguments = typename FunctionTrait::arguments;
             const int nargs = tuple_size<Arguments>::value;
             using Indices = make_index_sequence<nargs>;
