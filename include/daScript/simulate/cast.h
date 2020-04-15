@@ -92,7 +92,7 @@ namespace das
     struct has_cast {
     private:
         static int detect(...);
-        template<typename U> 
+        template<typename U>
         static decltype(cast<U>::from(declval<U>())) detect(const U&);
     public:
         enum { value = is_same<vec4f, decltype(detect(declval<TT>()))>::value };

@@ -9,7 +9,7 @@ int das_yylex_destroy();
 namespace das {
 
     bool isUtf8Text ( const char * src, uint32_t length ) {
-        if ( length>=3  ) { 
+        if ( length>=3  ) {
             auto usrc = (const uint8_t *)src;
             if ( usrc[0]==0xef && usrc[1]==0xbb && usrc[2]==0xbf) {
                 return true;
@@ -298,7 +298,7 @@ namespace das {
             for ( auto & mis : circular ) {
                 err << "circular dependency " << mis << "\n";
             }
-            program->error(err.str()  + "module dependency graph:\n" + tw.str(), LineInfo(), 
+            program->error(err.str()  + "module dependency graph:\n" + tw.str(), LineInfo(),
                             CompilationError::module_not_found);
             return program;
         }

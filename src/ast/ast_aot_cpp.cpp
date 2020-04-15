@@ -514,7 +514,7 @@ namespace das {
             } else {
                 ss << "nullptr";
             }
-            
+
             if (info->argCount && info->argTypes) {
                 ss << ", (TypeInfo **)" << typeInfoName(info) << "_arg_types" << suffix;
             } else {
@@ -525,7 +525,7 @@ namespace das {
             } else {
                 ss << ", nullptr";                      
             }
-            ss << ", " << info->argCount;           
+            ss << ", " << info->argCount;
 
             ss << ", " << info->dimSize;
             ss << ", ";
@@ -1525,8 +1525,8 @@ namespace das {
             } else if ( vtype->isGoodTupleType() ) {
                 ss << ", " << vtype->getTupleFieldOffset(field->tupleOrVariantIndex) <<  ">::get(";
             } else if ( vtype->isGoodVariantType() ) {
-                ss << ", " << vtype->getVariantFieldOffset(field->tupleOrVariantIndex) 
-                   << ", " << field->tupleOrVariantIndex 
+                ss << ", " << vtype->getVariantFieldOffset(field->tupleOrVariantIndex)
+                   << ", " << field->tupleOrVariantIndex
                    <<  ">::get(";
             } else {
                 ss << ",&" << vtype->structType->name;
