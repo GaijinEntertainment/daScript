@@ -46,6 +46,8 @@
     LineInfo tokAt ( const struct YYLTYPE & li );
     
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
+
+    extern bool das_need_oxford_comma;
 }
 
 %{
@@ -389,6 +391,7 @@ program
     |   program require_declaration
 	|	program options_declaration
     |   program alias_declaration
+    |   program variant_alias_declaration
     |   program ';'
     ;
 
@@ -2065,6 +2068,27 @@ type_declaration
         $$->at = tokAt(@loc);
         varDeclToTypeDecl($$, $list, true);
         deleteVariableDeclarationList($list);
+    }
+    ;
+
+variant_keyword
+    : DAS_TVARIANT {
+        das_need_oxford_comma=false;
+    }
+    ;
+
+variant_alias_declaration
+    :   variant_keyword NAME[vname] '{' variant_type_list[list] ';' '}' {
+        auto vtype = make_shared<TypeDecl>(Type::tVariant);
+        vtype->alias = *$vname;
+        vtype->at = tokAt(@vname);
+        varDeclToTypeDecl(vtype.get(), $list, true);
+        deleteVariableDeclarationList($list);
+        if ( !g_Program->addAlias(vtype) ) {
+            das_yyerror("type alias is already defined "+*$vname,tokAt(@vname),
+                CompilationError::type_alias_already_declared);
+        }
+        delete $vname;
     }
     ;
 

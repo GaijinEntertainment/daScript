@@ -5,7 +5,10 @@ struct Foo
 
 typedef
 	IorA = variant< i:int;a:array<int>;f:float;t:table<int;int> >
-	U_F = variant<i_value:uint;f_value:float>
+
+variant U_F             // this is syntax sugar for typedef U_F = variant<...>
+    i_value : uint
+    f_value : float
 
 [sideeffects]
 def test_ifs
