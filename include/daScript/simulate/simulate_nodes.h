@@ -660,7 +660,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            Block * block = cast<Block *>::to(argValues[0]); 
+            Block * block = cast<Block *>::to(argValues[0]);
             if ( argCount>1 ) {
                 return context.invoke(*block, argValues + 1, cmres);
             } else {
@@ -2125,7 +2125,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     IMPLEMENT_PROPERTY(Int64,   int64_t);
     IMPLEMENT_PROPERTY(UInt64,  uint64_t);
     IMPLEMENT_PROPERTY(Float,   float);
-	
+
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
@@ -2318,7 +2318,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNode_IsVariant : SimNode {
         DAS_BOOL_NODE;
-        SimNode_IsVariant ( const LineInfo & at, SimNode * s, int32_t v ) 
+        SimNode_IsVariant ( const LineInfo & at, SimNode * s, int32_t v )
             : SimNode(at), subexpr(s), variant(v) {
         }
         virtual SimNode * visit(SimVisitor & vis) override;

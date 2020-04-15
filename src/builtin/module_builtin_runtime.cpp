@@ -72,7 +72,7 @@ namespace das
             return true;
         };
     };
-    
+
     struct RunAtCompileTimeFunctionAnnotation : MarkFunctionAnnotation {
         RunAtCompileTimeFunctionAnnotation() : MarkFunctionAnnotation("run") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -542,7 +542,7 @@ namespace das
         addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info", SideEffects::modifyExternal, "dumpProfileInfo");
         // variant
         addExtern<DAS_BIND_FUN(variant_index)>(*this, lib, "variant_index", SideEffects::none, "variant_index");
-        auto svi = addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index", 
+        auto svi = addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index",
             SideEffects::modifyArgument, "set_variant_index");
         svi->unsafeOperation = true;
         // heap

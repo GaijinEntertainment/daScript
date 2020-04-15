@@ -4,7 +4,7 @@
   daScript 0.1 Reference Manual
 #################################
 
-Copyright (c) 2018-2019 Gaijin Entertainment
+Copyright (c) 2018-2020 Gaijin Entertainment
 
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.

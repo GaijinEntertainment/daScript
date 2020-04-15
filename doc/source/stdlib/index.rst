@@ -4,7 +4,7 @@
   daScript Standard Library 0.1
 #################################
 
-Copyright (c) 2018-2019 Anton Yudintsev
+Copyright (c) 2018-2020 Anton Yudintsev
 
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
