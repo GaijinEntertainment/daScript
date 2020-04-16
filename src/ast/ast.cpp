@@ -400,7 +400,7 @@ namespace das {
 
     string Function::describe() const {
         TextWriter ss;
-        if ( !isalpha(name[0]) && name[0]!='_' ) {
+        if ( !isalpha(name[0]) && name[0]!='_' && name[0]!='`' ) {
             ss << "operator ";
         }
         ss << name;
@@ -476,7 +476,7 @@ namespace das {
             }
         }
         for ( auto & arg : arguments ) {
-            if ( arg->type->isAuto() ) {
+            if ( arg->type->isAuto() && !arg->init ) {
                 return true;
             }
         }

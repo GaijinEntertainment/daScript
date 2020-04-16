@@ -377,6 +377,30 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
     }
 };
 
+struct TestFunctionAnnotation : FunctionAnnotation {
+    TestFunctionAnnotation() : FunctionAnnotation("test_function") { }
+    virtual bool apply ( const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        TextPrinter tp;
+        tp << "test function: apply " << fn->describe() << "\n";
+        return true;
+    }
+    virtual bool finalize ( const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+        TextPrinter tp;
+        tp << "test function: finalize " << fn->describe() << "\n";
+        return true;
+    }
+    virtual bool apply ( ExprBlock * blk, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+        TextPrinter tp;
+        tp << "test function: apply to block at " << blk->at.describe() << "\n";
+        return true;
+    }
+    virtual bool finalize ( ExprBlock * blk, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
+        TextPrinter tp;
+        tp << "test function: finalize block at " << blk->at.describe() << "\n";
+        return true;
+    }
+};
+
 class CheckEid2Macro : public VisitorMacro {
 public:
     CheckEid2Macro ( Module * tm ) : VisitorMacro("CheckEid2") , thisModule(tm) {}
@@ -504,6 +528,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
     // events
     addAnnotation(make_shared<EventRegistrator>());
+    // test
+    addAnnotation(make_shared<TestFunctionAnnotation>());
     // utf8 print
     addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw", SideEffects::modifyExternal, "builtin_printw");
     // register function
