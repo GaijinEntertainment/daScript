@@ -319,7 +319,7 @@ namespace das {
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.cerr);
+                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
                 string istr = issues.str();
                 vec4f args[3] = {
@@ -435,7 +435,7 @@ namespace das {
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.cerr);
+                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
                 string istr = issues.str();
                 vec4f args[3] = {

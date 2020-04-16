@@ -1,84 +1,69 @@
-// options log_infer_passes = true
+options log = true
 
 struct Foo
-	t	: variant<i_value:uint;f_value:float>?
+	a : int
 
-typedef
-	IorA = variant< i:int;a:array<int>;f:float;t:table<int;int> >
-	U_F = variant<i_value:uint;f_value:float>
-
-[export,unsafe]
+[export]
 def test
+	let y : Foo
+	let x = y + 1
+	print("x = {x}\n")
+	let t = [{int 1;2;3}]
+	print("t = {t}\n")
+	return true
 
-	assert(typeinfo(sizeof type U_F)==8)
+/*
+options log_infer_passes = true
 
-	var t : U_F
-	assert(typeinfo(sizeof t)==8)
-	t.f_value = 1.0													// unsafe operation
-	assert(t.i_value==0x3f800000)									// unsafe operation
-	assert(variant_index(t)==0)
+require functional
 
-	assert(typeinfo(variant_index<i_value> t)==0)
-	assert(typeinfo(variant_index<f_value> t)==1)
+[unsafe]
+def islice2( var src : iterator<auto(TT)>; start,stop : int )
+    return <- generator<TT const &> () <| $ ()
+        for x,i in src,range(0,stop)
+            if i>=start
+                yield x
+        return false
 
-	assert(typeinfo(safe_variant_index<i_value> t)==0)
-	assert(typeinfo(safe_variant_index<f_value> t)==1)
-	assert(typeinfo(safe_variant_index<fg> t)==-1)
-	assert(typeinfo(safe_variant_index<g> type int)==-1)
+[private,unsafe]
+def filter_any2(var src:iterator<auto(TT)>; blk )
+    static_if !typeinfo(is_ref_type type TT)
+        return <- generator<TT delete &> () <| $ ()
+            for w in src
+                if invoke(blk,w)
+                    yield w
+            return false
+    else
+        return <- generator<TT const &> () <| $ ()
+            for w in src
+                if invoke(blk,w)
+                    yield w
+            return false
 
-	assert(t is i_value)
-	assert(t as i_value == 0x3f800000)
-	set_variant_index(t, typeinfo(variant_index<f_value> t))		// unsafe operation
-	assert(t as f_value == 1.0)
+def filter2(var src:iterator<auto(TT)>; blk:lambda<(what:TT delete &):bool> )
+    return <- filter_any2(src,blk)
 
-    assert(t ?as f_value ?? 2.0 == 1.0)
-    assert(t ?as i_value ?? 1u == 1u)
+// filter with function
+def filter2(var src:iterator<auto(TT)>; blk:function<(what:TT delete &):bool> )
+    return <- filter_any2(src,blk)
 
-	t as f_value = 2.0
-	set_variant_index(t, typeinfo(variant_index<i_value> t))		// unsafe operation
-	assert(t as i_value == 0x40000000)
+[export]
+def test
+    (   // filter and map with moveable type
+            [[for x in range(0,100); [{int x;2}] ]]
+        |>  filter2( @(x) => x[0] % 2==0 )
+        |>  echo()
+    )
 
-	t as i_value = 0x3f800000
-	set_variant_index(t, typeinfo(variant_index<f_value> t))		// unsafe operation
-	assert(t as f_value == 1.0)
+    // (   // islice
+    //         range(0,10)
+    //     |>  each()
+    //     |>  islice2(1,4)
+    //     |>  sum()
+    //     |>  is_equal(6)
+    //     |>  verify()
+    // )
 
-	var paniced = false
-	try
-		t as i_value = 0x40000000									// will assert, because t is f_value
-	recover
-		paniced = true
-	assert(paniced)
-
-	assert(t.f_value == 1.0)
-	t = [[U_F i_value = 0x40000000]]
-	assert(t as i_value == 0x40000000)
-	t = [[U_F f_value = 1.0]]
-
-	var t2 = [[U_F i_value=1u; f_value=2.0]]
-	assert(length(t2)==2)
-	assert(t2[0] is i_value & t2[0] as i_value==1u)
-	assert(t2[1] is f_value & t2[1] as f_value==2.0)
-
-	var f : Foo
-	var fp : Foo?
-	assert ( fp?.t?.i_value ?? 13u == 13u )							// unsafe ?.i_value
-	fp = addr(f)
-	assert ( fp?.t?.i_value ?? 14u == 14u )							// unsafe ?.i_value
-	f.t = addr(t)
-	assert ( fp?.t?.i_value ?? 15u == 0x3f800000 )					// unsafe ?.i_value
-    assert ( fp?.t ?as i_value ?? 15u == 15u )
-
-	var x : IorA
-	set_variant_index(x, 1)
-	x.a <- [{for t in range(0,10); t}]
-	var y := x
-	assert(y is a)
-	for t in range(0,10)
-		assert(y as a[t]==t)
-	delete x
-	assert(x is i)
-	assert(y is a)
-	for t in range(0,10)
-		assert(y as a[t]==t)
 
     return true
+*/

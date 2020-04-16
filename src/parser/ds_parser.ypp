@@ -2285,18 +2285,16 @@ array_comprehension
 
 void das_checkName(const string & name, const LineInfo &at) {
 	if ( name.length()>=2 && name[0]=='_' && name[1]=='_' ) {
-		g_Program->error("names starting with __ are reserved, " + name,at,CompilationError::invalid_name);
+		g_Program->error("names starting with __ are reserved, " + name,"","",at,CompilationError::invalid_name);
 	}
 }
 
 void das_yyerror(const string & error, const LineInfo & at, CompilationError cerr) {
-    // printf("ERROR %s\n", error.c_str());
-    g_Program->error(error,at,cerr);
+    g_Program->error(error,"","",at,cerr);
 }
 
 void das_yyerror(const string & error, CompilationError cerr) {
-    // printf("ERROR %s\n", error.c_str());
-    g_Program->error(error,LineInfo(g_FileAccessStack.back(),
+    g_Program->error(error,"","",LineInfo(g_FileAccessStack.back(),
         yylloc.first_column,yylloc.first_line),cerr);
 }
 

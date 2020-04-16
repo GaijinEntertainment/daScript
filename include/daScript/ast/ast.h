@@ -561,9 +561,26 @@ namespace das
     };
 
     struct Error {
-        Error ( const string & w, LineInfo a, CompilationError ce ) : what(w), at(a), cerr(ce)  {}
-        __forceinline bool operator < ( const Error & err ) const { return at==err.at ? what < err.what : at<err.at; };
+        Error ( const string & w, const string & e, const string & f, LineInfo a, CompilationError ce ) 
+            : what(w), extra(e), fixme(f), at(a), cerr(ce)  {}
+        __forceinline bool operator < ( const Error & err ) const { 
+            if (at == err.at) {
+                if (what == err.what) {
+                    if (extra == err.extra) {
+                        return fixme < err.fixme;
+                    } else {
+                        return extra < err.extra;
+                    }
+                } else {
+                    return what < err.what;
+                }
+            } else {
+                return at < err.at;
+            }
+        };
         string              what;
+        string              extra;
+        string              fixme;
         LineInfo            at;
         CompilationError    cerr;
     };
@@ -792,7 +809,7 @@ namespace das
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
         void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
-        void error ( const string & str, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
+        void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );

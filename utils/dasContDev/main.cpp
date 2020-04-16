@@ -47,7 +47,7 @@ bool compile_and_run ( const char * fn ) {
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.cerr );
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             return false;
         } else {
@@ -55,7 +55,7 @@ bool compile_and_run ( const char * fn ) {
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
             }

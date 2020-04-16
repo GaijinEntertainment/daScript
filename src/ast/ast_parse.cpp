@@ -202,7 +202,7 @@ namespace das {
                 das_yybegin(fi->source);
             }
         } else {
-            g_Program->error(fileName + " not found", LineInfo());
+            g_Program->error(fileName + " not found", "","",LineInfo());
             g_Program.reset();
             g_Access.reset();
             g_FileAccessStack.clear();
@@ -298,7 +298,7 @@ namespace das {
             for ( auto & mis : circular ) {
                 err << "circular dependency " << mis << "\n";
             }
-            program->error(err.str()  + "module dependency graph:\n" + tw.str(), LineInfo(),
+            program->error(err.str(),"module dependency graph:\n" + tw.str(), "", LineInfo(),
                             CompilationError::module_not_found);
             return program;
         }

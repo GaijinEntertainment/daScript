@@ -143,21 +143,24 @@ namespace das
         return stst;
     }
 
-    string reportError(const struct LineInfo & at, const string & message, CompilationError erc) {
+    string reportError(const struct LineInfo & at, const string & message, 
+        const string & extra, const string & fixme, CompilationError erc) {
         return reportError(
                 at.fileInfo ? at.fileInfo->source : nullptr,
                 at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
-                at.line, at.column, message, erc );
+                at.line, at.column, message, extra, fixme, erc );
     }
 
-    string reportErrorJson(const struct LineInfo & at, const string & message, CompilationError erc) {
+    string reportErrorJson(const struct LineInfo & at, const string & message,
+        const string & extra, const string & fixme, CompilationError erc) {
         return reportErrorJson(
             at.fileInfo ? at.fileInfo->source : nullptr,
             at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
-            at.line, at.column, message, erc );
+            at.line, at.column, message, extra,fixme, erc );
     }
 
-    string reportError ( const char * st, const char * fileName, int row, int col, const string & message, CompilationError erc ) {
+    string reportError ( const char * st, const char * fileName, int row, int col, const string & message, 
+        const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
         if ( row && col ) {
             auto text = st ? getFewLines(st, row, col ) : "";
@@ -168,10 +171,13 @@ namespace das
             if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
             ssw << "error, " << message << "\n";
         }
+        if (!extra.empty()) ssw << extra << "\n";
+        if (!fixme.empty()) ssw << "\t" << fixme << "\n";
         return ssw.str();
     }
 
-    string reportErrorJson ( const char * st, const char * fileName, int row, int col, const string & message, CompilationError erc ) {
+    string reportErrorJson ( const char *, const char * fileName, int row, int col, const string & message,
+        const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
         int line = das::max(row - 1, 0);
         int character = das::max(col - 1, 0);
@@ -203,7 +209,8 @@ namespace das
             <<  "     character: " << character << "\n"
             <<  "    }\n"
             <<  "   },\n"
-            <<  "   message : \"" << escapeString(message) <<  "\",\n" 
+            <<  "   message : \"" << escapeString(extra) <<  "\",\n" 
+            <<  "   fixme : \"" << escapeString(fixme) <<  "\",\n" 
             <<  "  }\n"
             <<  " ]\n"
             <<  "}\n"

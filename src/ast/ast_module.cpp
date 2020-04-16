@@ -317,7 +317,7 @@ namespace das {
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.cerr);
+                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
                 DAS_FATAL_LOG("%s\n", issues.str().c_str());
                 DAS_FATAL_LOG("builtin module did not compile %s\n", modName.c_str());

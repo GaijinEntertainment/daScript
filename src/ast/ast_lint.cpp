@@ -74,16 +74,13 @@ namespace das {
             checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
             checkUnsafe = program->policies.no_unsafe;
         }
-        void error ( const string & err, const LineInfo & at, CompilationError cerr = CompilationError::unspecified ) const {
-            program->error(err,at,cerr);
-        }
     protected:
         void verifyOnlyFastAot ( Function * func, const LineInfo & at ) {
             if ( !checkOnlyFastAot ) return;
             if ( func && func->builtIn ) {
                 auto bif = (BuiltInFunction *) func;
                 if ( bif->cppName.empty() ) {
-                    program->error(func->describe() + " has no cppName while onlyFastAot option is set", at,
+                    program->error(func->describe() + " has no cppName while onlyFastAot option is set", "", "", at,
                                    CompilationError::only_fast_aot_no_cpp_name );
                 }
             }
@@ -97,7 +94,7 @@ namespace das {
         void lintType ( TypeDecl * td ) {
             for ( auto & name : td->argNames ) {
                 if (!isValidVarName(name)) {
-                    program->error("invalid type argument name " + name,
+                    program->error("invalid type argument name " + name, "", "",
                         td->at, CompilationError::invalid_name );
                 }
             }
@@ -112,14 +109,14 @@ namespace das {
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
             if (!isValidEnumName(enu->name)) {
-                program->error("invalid enumeration name " + enu->name,
+                program->error("invalid enumeration name " + enu->name, "", "",
                     enu->at, CompilationError::invalid_name );
             }
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu,name,value,last);
             if (!isValidEnumValueName(name)) {
-                program->error("invalid enumeration value name " + name,
+                program->error("invalid enumeration value name " + name, "", "",
                     enu->at, CompilationError::invalid_name );
             }
         }
@@ -129,7 +126,7 @@ namespace das {
         virtual void preVisit ( Structure * var ) override {
             Visitor::preVisit(var);
             if (!isValidStructureName(var->name)) {
-                program->error("invalid structure name " + var->name,
+                program->error("invalid structure name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
             }
         }
@@ -139,14 +136,14 @@ namespace das {
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(var, decl, last);
             if (!isValidVarName(decl.name)) {
-                program->error("invalid structure field name " + decl.name,
+                program->error("invalid structure field name " + decl.name, "", "",
                     var->at, CompilationError::invalid_name );
             }
         }
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
             if (!isValidVarName(var->name)) {
-                program->error("invalid variable name " + var->name,
+                program->error("invalid variable name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
             }
         }
@@ -154,7 +151,7 @@ namespace das {
             Visitor::preVisit(expr);
             for (const auto & var : expr->variables) {
                 if (!isValidVarName(var->name)) {
-                    program->error("invalid variable name " + var->name,
+                    program->error("invalid variable name " + var->name, "", "",
                         var->at, CompilationError::invalid_name );
                 }
             }
@@ -162,13 +159,13 @@ namespace das {
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             if ( checkNoGlobalHeap ) {
                 if ( !init->type->isNoHeapType() ) {
-                    program->error("variable " + var->name + " uses heap, which is disabled via option no_global_heap",
+                    program->error("variable " + var->name + " uses heap, which is disabled via option no_global_heap", "", "",
                         var->at, CompilationError::no_global_heap );
                 }
             }
             if ( checkNoGlobalVariables ) {
                 if ( !var->type->isConst() ) {
-                    program->error("variable " + var->name + " is not a constant, which is disabled via option no_global_variables",
+                    program->error("variable " + var->name + " is not a constant, which is disabled via option no_global_variables", "", "",
                         var->at, CompilationError::no_global_variables );
                 }
             }
@@ -183,7 +180,7 @@ namespace das {
                     auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann);
                     string err;
                     if ( !fnAnn->verifyCall(expr, annDecl->arguments, err) ) {
-                        program->error("call annotated by " + fnAnn->name + " failed, " + err,
+                        program->error("call annotated by " + fnAnn->name + " failed", err, "",
                                        expr->at, CompilationError::annotation_failed);
                     }
                 }
@@ -192,8 +189,8 @@ namespace das {
                 if ( expr->arguments.size()>1 ) {
                     for ( auto & arg : expr->arguments ) {
                         if ( !arg->noNativeSideEffects ) {
-                            program->error("side effects may affect function " + expr->func->name + " evaluation order", expr->at,
-                                           CompilationError::aot_side_effects );
+                            program->error("side effects may affect function " + expr->func->name + " evaluation order", "", "",
+                                expr->at, CompilationError::aot_side_effects );
                             break;
                         }
                     }
@@ -209,7 +206,7 @@ namespace das {
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
-                    program->error("side effects may affect evaluation order", expr->at,
+                    program->error("side effects may affect evaluation order", "", "", expr->at,
                                    CompilationError::aot_side_effects );
                 }
             }
@@ -219,7 +216,7 @@ namespace das {
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
                 if ( !expr->subexpr->noNativeSideEffects || !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
-                    program->error("side effects may affect evaluation order", expr->at,
+                    program->error("side effects may affect evaluation order", "", "", expr->at,
                                    CompilationError::aot_side_effects );
                 }
             }
@@ -242,8 +239,8 @@ namespace das {
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
-                    program->error("side effects may affect move evaluation order", expr->at,
-                                   CompilationError::aot_side_effects );
+                    program->error("side effects may affect move evaluation order", "", "",
+                        expr->at, CompilationError::aot_side_effects );
                 }
             }
         }
@@ -252,16 +249,16 @@ namespace das {
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
-                    program->error("side effects may affect clone evaluation order", expr->at,
-                                   CompilationError::aot_side_effects );
+                    program->error("side effects may affect clone evaluation order", "", "",
+                        expr->at, CompilationError::aot_side_effects );
                 }
             }
         }
         virtual void preVisit ( ExprAssert * expr ) override {
             Visitor::preVisit(expr);
             if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
-                error("assert expressions can't have side-effects (use verify instead)", expr->at,
-                      CompilationError::assert_with_side_effects);
+                program->error("assert expressions can't have side-effects (use verify instead)", "", "",
+                    expr->at, CompilationError::assert_with_side_effects);
             }
         }
         bool isValidFunctionName(const string & str) const {
@@ -271,37 +268,36 @@ namespace das {
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
             if (!isValidFunctionName(fn->name)) {
-                program->error("invalid function name " + fn->name,
+                program->error("invalid function name " + fn->name, "", "",
                     fn->at, CompilationError::invalid_name );
             }
             auto fnMod = fn->fromGeneric ? fn->fromGeneric->module : fn->module;
             if ( fnMod == program->thisModule.get() ) {
                 anyUnsafe |= fn->unsafe;
                 if ( fn->unsafe && checkUnsafe ) {
-                    error("unsafe function " + fn->getMangledName() +
-                            "\nunsafe functions are prohibited by CodeOfPolicies", fn->at,
-                            CompilationError::unsafe_function);
+                    program->error("unsafe function " + fn->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "", 
+                        fn->at, CompilationError::unsafe_function);
                 }
             }
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
             if (!isValidVarName(var->name)) {
-                program->error("invalid argument variable name " + var->name,
+                program->error("invalid argument variable name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
             }
             if ( checkUnusedArgument ) {
                 if ( !var->marked_used && var->isAccessUnused() ) {
-                    error("unused function argument " + var->name +
-                          "; use [unused_argument(" + var->name + ")] if intentional", var->at,
-                            CompilationError::unused_function_argument);
+                    program->error("unused function argument " + var->name, "",
+                          "use [unused_argument(" + var->name + ")] if intentional", 
+                        var->at, CompilationError::unused_function_argument);
                 }
             }
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
             if (!isValidVarName(var->name)) {
-                program->error("invalid block argument variable name " + var->name,
+                program->error("invalid block argument variable name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
             }
         }
@@ -391,8 +387,8 @@ namespace das {
             auto fn = fnT.second;
             if ( !fn->result->isVoid() && !fn->result->isAuto() ) {
                 if ( !exprReturns(fn->body) ) {
-                    error("not all control paths return value", fn->at,
-                          CompilationError::not_all_paths_return_value);
+                    error("not all control paths return value",  "", "",
+                        fn->at, CompilationError::not_all_paths_return_value);
                 }
             }
         }
@@ -412,11 +408,11 @@ namespace das {
             if ( optT!=Type::none && optT!=opt.type ) {
                 error("invalid option type for " + opt.name
                       + ", unexpected " + das_to_string(opt.type)
-                      + ", expecting " + das_to_string(optT),
+                      + ", expecting " + das_to_string(optT), "", "",
                         LineInfo(), CompilationError::invalid_option);
             } else if ( optT==Type::none ){
-                error("invalid option " + opt.name, LineInfo(),
-                      CompilationError::invalid_option);
+                error("invalid option " + opt.name,  "", "",
+                    LineInfo(), CompilationError::invalid_option);
             }
         }
         libGroup.foreach([&](Module * mod) -> bool {

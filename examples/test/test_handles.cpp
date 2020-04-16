@@ -418,7 +418,7 @@ protected:
                     reportFolding();
                     return call->shared_from_this();
                 } else {
-                    program->error("EID can't be an empty string", 
+                    program->error("EID can't be an empty string", "", "",
                         call->at, CompilationError::invalid_argument_type);
                 }
             }
@@ -440,7 +440,7 @@ protected:
             if (call->arguments[0]->rtti_isStringConstant()) {
                 auto cst = static_pointer_cast<ExprConstString>(call->arguments[0]);
                 if (cst->getValue().empty()) {
-                    program->error("EID can't be an empty string", 
+                    program->error("EID can't be an empty string", "", "",
                         call->at, CompilationError::invalid_argument_type);
                 }
             }

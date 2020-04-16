@@ -47,7 +47,7 @@ bool compilation_fail_test ( const string & fn, bool ) {
             for ( auto err : program->errors ) {
                 int count = -- errors[err.cerr];
                 if ( g_reportCompilationFailErrors || count<0 ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
                 if ( count <0 ) {
                     failed = true;
@@ -97,7 +97,7 @@ bool unit_test ( const string & fn, bool useAot ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.cerr );
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             return false;
         } else {
@@ -106,7 +106,7 @@ bool unit_test ( const string & fn, bool useAot ) {
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
             }
@@ -152,7 +152,7 @@ bool exception_test ( const string & fn, bool useAot ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.cerr );
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             return false;
         } else {
@@ -160,7 +160,7 @@ bool exception_test ( const string & fn, bool useAot ) {
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
             }
@@ -249,7 +249,7 @@ bool run_module_test ( const string & path, const string & main, bool usePak ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.cerr );
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             return false;
         } else {
@@ -257,7 +257,7 @@ bool run_module_test ( const string & path, const string & main, bool usePak ) {
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
             }
@@ -305,7 +305,7 @@ int main() {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Functional);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/circular_module_dependency.das",true);
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/const_ref.das",true);
     Module::Shutdown();
     return 0;
 #endif

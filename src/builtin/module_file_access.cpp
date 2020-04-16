@@ -16,7 +16,7 @@ namespace das {
         if ( auto program = compileDaScript(pak, access, tout, dummyLibGroup) ) {
             if ( program->failed() ) {
                 for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 DAS_FATAL_LOG("failed to compile: %s\n", pak.c_str());
                 DAS_FATAL_LOG("%s", tout.str().c_str());
@@ -26,7 +26,7 @@ namespace das {
                 if ( !program->simulate(*context, tout) ) {
                     tout << "failed to simulate\n";
                     for ( auto & err : program->errors ) {
-                        tout << reportError(err.at, err.what, err.cerr );
+                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                     }
                     delete context;
                     context = nullptr;

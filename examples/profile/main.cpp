@@ -39,7 +39,7 @@ bool unit_test ( const string & fn, bool useAOT ) {
         if ( program->failed() ) {
             tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.cerr );
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             return false;
         } else {
@@ -48,7 +48,7 @@ bool unit_test ( const string & fn, bool useAOT ) {
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
             }

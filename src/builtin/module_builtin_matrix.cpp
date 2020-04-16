@@ -168,7 +168,8 @@ namespace das {
                 auto idxCE = static_pointer_cast<ExprConst>(index);
                 uint32_t idxC = cast<uint32_t>::to(idxCE->value);
                 if ( idxC >= RowC ) {
-                    context.thisProgram->error("matrix index out of range", subexpr->at, CompilationError::index_out_of_range);
+                    context.thisProgram->error("matrix index out of range", "", "",
+                        subexpr->at, CompilationError::index_out_of_range);
                     return nullptr;
                 }
                 uint32_t stride = sizeof(float)*ColC;

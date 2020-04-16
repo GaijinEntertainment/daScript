@@ -674,7 +674,7 @@ namespace das {
         virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
             auto cond = expr->arguments[0];
             if (!cond->constexpression && !cond->rtti_isConstant()) {
-                program->error("static assert condition is not constexpr or const", expr->at);
+                program->error("static assert condition is not constexpr or const", "","",expr->at);
                 return nullptr;
             }
             bool result = false;
@@ -682,7 +682,7 @@ namespace das {
                 bool failed;
                 vec4f resB = eval(cond.get(), failed);
                 if ( failed ) {
-                    program->error("exception while computing static assert condition", expr->at);
+                    program->error("exception while computing static assert condition", "","",expr->at);
                 }
                 result = cast<bool>::to(resB);
             } else {
@@ -695,7 +695,7 @@ namespace das {
                     bool failed;
                     vec4f resM = eval(expr->arguments[1].get(), failed);
                     if ( failed ) {
-                        program->error("exception while computing static assert message", expr->at);
+                        program->error("exception while computing static assert message","","", expr->at);
                         message = "";
                     } else {
                         message = cast<char *>::to(resM);
@@ -705,17 +705,19 @@ namespace das {
                 }
                 if ( iscf ) {
                     LineInfo atC = expr->at;
+                    string extra;
                     if ( func ) {
-                        message += "\nconcept_assert at " + expr->at.describe();
-                        message += func->getLocationExtra();
+                        extra = "\nconcept_assert at " + expr->at.describe();
+                        extra += func->getLocationExtra();
                         atC = func->getConceptLocation(atC);
                     }
-                    program->error(message, atC, CompilationError::concept_failed);
+                    program->error(message, extra,"",atC, CompilationError::concept_failed);
                 } else {
+                    string extra;
                     if ( func ) {
-                        message += func->getLocationExtra();
+                        extra = func->getLocationExtra();
                     }
-                    program->error(message, expr->at, CompilationError::static_assert_failed);
+                    program->error(message, extra,"",expr->at, CompilationError::static_assert_failed);
                 }
             }
             return cond->constexpression ? nullptr : Visitor::visit(expr);
@@ -725,10 +727,10 @@ namespace das {
             Visitor::preVisit(expr);
             if ( expr->func && expr->func->hasToRunAtCompileTime ) {
                 if ( expr->func->sideEffectFlags ) {
-                    program->error("function did not run at compilation time because it has side-effects",
+                    program->error("function did not run at compilation time because it has side-effects","","",
                                    expr->at, CompilationError::run_failed);
                 } else {
-                    program->error("function did not run at compilation time",
+                    program->error("function did not run at compilation time","","",
                                    expr->at, CompilationError::run_failed);
                 }
             }

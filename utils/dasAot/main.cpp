@@ -20,6 +20,7 @@ void operator delete(void * p) throw()
 #endif
 
 static bool quiet = false;
+static bool json = false;
 
 TextPrinter tout;
 
@@ -43,7 +44,11 @@ bool compile ( const string & fn, const string & cppFn ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.cerr );
+                if (json) {
+                    tout << reportErrorJson(err.at, err.what, err.extra, err.fixme, err.cerr);
+                } else {
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+                }
             }
             return false;
         } else {
@@ -51,7 +56,11 @@ bool compile ( const string & fn, const string & cppFn ) {
             if ( !program->simulate(ctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.cerr );
+                    if (json) {
+                        tout << reportErrorJson(err.at, err.what, err.extra, err.fixme, err.cerr);
+                    } else {
+                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+                    }
                 }
                 return false;
             }
@@ -169,6 +178,8 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
         for (int ai = 3; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
+            } else if ( strcmp(argv[ai],"-j")==0 ) {
+                json = true;
             } else {
                 tout << "unsupported option " << argv[ai];
                 return -1;

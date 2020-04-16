@@ -64,14 +64,14 @@ namespace das {
             for ( auto & fn : functions ) {
                 if ( fn.second->used ) {
                     if ( !mod.addFunction(fn.second, true) ) {
-                        program->error("internal error, failed to add function " + fn.first, fn.second->at );
+                        program->error("internal error, failed to add function " + fn.first,"","", fn.second->at );
                     }
                 }
             }
             for ( auto & var : globalsInOrder ) {
                 if ( var->used ) {
                     if ( !mod.addVariable(var, true) ) {
-                        program->error("internal error, failed to add variable " + var->name, var->at );
+                        program->error("internal error, failed to add variable " + var->name,"","", var->at );
                     }
                 }
             }

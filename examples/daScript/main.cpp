@@ -11,7 +11,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.cerr );
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
         } else {
             if ( outputProgramCode )

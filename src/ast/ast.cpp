@@ -1990,8 +1990,8 @@ namespace das {
         return library.findStructure(name,thisModule.get());
     }
 
-    void Program::error ( const string & str, const LineInfo & at, CompilationError cerr ) {
-        errors.emplace_back(str,at,cerr);
+    void Program::error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr ) {
+        errors.emplace_back(str,extra,fixme,at,cerr);
         failToCompile = true;
     }
 
@@ -2044,11 +2044,11 @@ namespace das {
             if ( annotation->create(st,arg,err) ) {
                 return thisModule->addAnnotation(annotation, true);
             } else {
-                error("can't create structure handle "+ann->name + "\n" + err,st->at,CompilationError::invalid_annotation);
+                error("can't create structure handle "+ann->name,err,"",st->at,CompilationError::invalid_annotation);
                 return false;
             }
         } else {
-            error("not a structure annotation "+ann->name,st->at,CompilationError::invalid_annotation);
+            error("not a structure annotation "+ann->name,"","",st->at,CompilationError::invalid_annotation);
             return false;
         }
     }
@@ -2069,7 +2069,8 @@ namespace das {
             candidates += describeCandidates(handles, false);
             candidates += describeCandidates(enums, false);
             candidates += describeCandidates(aliases, false);
-            error("undefined type "+name + "\n" + candidates,at,CompilationError::type_not_found);
+            error("undefined type "+name,candidates,"",
+                at,CompilationError::type_not_found);
             return nullptr;
         } else if ( structs.size() ) {
             if ( structs.size()==1 ) {
@@ -2078,7 +2079,8 @@ namespace das {
                 return pTD;
             } else {
                 string candidates = describeCandidates(structs);
-                error("too many options for "+name + "\n" + candidates,at,CompilationError::structure_not_found);
+                error("too many options for "+name,candidates,"",
+                    at,CompilationError::structure_not_found);
                 return nullptr;
             }
         } else if ( handles.size() ) {
@@ -2089,12 +2091,14 @@ namespace das {
                     pTD->at = at;
                     return pTD;
                 } else {
-                    error("not a handled type annotation "+name,at,CompilationError::handle_not_found);
+                    error("not a handled type annotation "+name,"","",
+                        at,CompilationError::handle_not_found);
                     return nullptr;
                 }
             } else {
                 string candidates = describeCandidates(handles);
-                error("too many options for "+name + "\n" + candidates,at,CompilationError::handle_not_found);
+                error("too many options for "+name, candidates, "",
+                    at,CompilationError::handle_not_found);
                 return nullptr;
             }
         } else if ( enums.size() ) {
@@ -2105,7 +2109,8 @@ namespace das {
                 return pTD;
             } else {
                 string candidates = describeCandidates(enums);
-                error("too many options for "+name + "\n" + candidates,at,CompilationError::enumeration_not_found);
+                error("too many options for "+name,candidates,"",
+                    at,CompilationError::enumeration_not_found);
                 return nullptr;
             }
         } else if ( aliases.size() ) {
@@ -2115,7 +2120,8 @@ namespace das {
                 return pTD;
             } else {
                 string candidates = describeCandidates(aliases);
-                error("too many options for "+name + "\n" + candidates,at,CompilationError::type_alias_not_found);
+                error("too many options for "+name,candidates,"",
+                    at,CompilationError::type_alias_not_found);
                 return nullptr;
             }
         } else {
@@ -2140,7 +2146,7 @@ namespace das {
         } else if ( ptr.size()==0 ) {
             return new ExprCall(at,name);
         } else {
-            error("too many options for " + name, at, CompilationError::function_not_found);
+            error("too many options for " + name,"","", at, CompilationError::function_not_found);
             return new ExprCall(at,name);
         }
     }
@@ -2318,7 +2324,7 @@ namespace das {
                 for ( const auto & pm : mod->optimizationMacros ) {
                     this->visit(*pm);
                     if ( failed() ) {                       // if macro failed, we report it, and we are done
-                        error("optimization macro " + mod->name + "::" + pm->macroName() + " failed", LineInfo());
+                        error("optimization macro " + mod->name + "::" + pm->macroName() + " failed", "","",LineInfo());
                         return false;
                     }
                     last |= pm->didAnything();
