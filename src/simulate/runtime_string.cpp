@@ -150,6 +150,13 @@ namespace das
                 at.line, at.column, message, erc );
     }
 
+    string reportErrorJson(const struct LineInfo & at, const string & message, CompilationError erc) {
+        return reportErrorJson(
+            at.fileInfo ? at.fileInfo->source : nullptr,
+            at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
+            at.line, at.column, message, erc );
+    }
+
     string reportError ( const char * st, const char * fileName, int row, int col, const string & message, CompilationError erc ) {
         TextWriter ssw;
         if ( row && col ) {
@@ -161,6 +168,46 @@ namespace das
             if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
             ssw << "error, " << message << "\n";
         }
+        return ssw.str();
+    }
+
+    string reportErrorJson ( const char * st, const char * fileName, int row, int col, const string & message, CompilationError erc ) {
+        TextWriter ssw;
+        int line = das::max(row - 1, 0);
+        int character = das::max(col - 1, 0);
+        ssw <<  "{\n"
+            <<  " range: {\n"
+            <<  "  start: {\n"
+            <<  "   line: " << line << ",\n"
+            <<  "   character: " << character << "\n"
+            <<  "  },\n"
+            <<  "  end: {\n"
+            <<  "   line: " << line << ",\n"
+            <<  "   character: " << character << "\n"
+            <<  "  }\n"
+            <<  " },\n"
+            <<  " message : \"" << escapeString(message) <<  "\",\n" 
+            <<  " severity : 1,\n"
+            <<  " code : " << int(erc) << ",\n"
+            <<  " relatedInformation : [\n"
+            <<  "  {\n"
+            <<  "   location : {\n"
+            <<  "   uri : \"" << escapeString(fileName ? fileName : "") << "\",\n"
+            <<  "   range: {\n"
+            <<  "    start: {\n"
+            <<  "     line: " << line << ",\n"
+            <<  "     character: " << character << "\n"
+            <<  "    },\n"
+            <<  "    end: {\n"
+            <<  "     line: " << line << ",\n"
+            <<  "     character: " << character << "\n"
+            <<  "    }\n"
+            <<  "   },\n"
+            <<  "   message : \"" << escapeString(message) <<  "\",\n" 
+            <<  "  }\n"
+            <<  " ]\n"
+            <<  "}\n"
+            ;
         return ssw.str();
     }
 

@@ -286,7 +286,7 @@ namespace das
         void autoDereference();
         virtual SimNode * simulate (Context &) const override { return nullptr; }
         virtual ExpressionPtr visit(Visitor & vis) override;
-        string describe() const;
+        virtual string describe() const;
         virtual bool rtti_isCallLikeExpr() const override { return true; }
         string                  name;
         vector<ExpressionPtr>   arguments;
@@ -317,6 +317,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return subexpr->tail(); }
         virtual bool rtti_isOp1() const override { return true; }
+        virtual string describe() const override;
         ExpressionPtr   subexpr;
     };
 
@@ -330,6 +331,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return right->tail(); }
         virtual bool rtti_isOp2() const override { return true; }
+        virtual string describe() const override;
         ExpressionPtr   left, right;
     };
 
@@ -383,6 +385,7 @@ namespace das
         virtual Expression * tail() override { return right->tail(); }
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isOp3() const override { return true; }
+        virtual string describe() const override;
         ExpressionPtr   subexpr, left, right;
     };
 

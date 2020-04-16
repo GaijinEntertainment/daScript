@@ -1330,6 +1330,18 @@ namespace das {
         return cexpr;
     }
 
+    string ExprOp1::describe() const {
+        TextWriter stream;
+        stream << name << " ( ";
+        if ( subexpr && subexpr->type ) {
+            stream << *subexpr->type;
+        } else {
+            stream << "???";
+        }
+        stream << " )";
+        return stream.str();
+    }
+
     // ExprOp2
 
     ExpressionPtr ExprOp2::visit(Visitor & vis) {
@@ -1346,6 +1358,24 @@ namespace das {
         cexpr->left = left->clone();
         cexpr->right = right->clone();
         return cexpr;
+    }
+
+    string ExprOp2::describe() const {
+        TextWriter stream;
+        stream << name << " ( ";
+        if ( left && left->type ) {
+            stream << *left->type;
+        } else {
+            stream << "???";
+        }
+        stream << ", ";
+        if ( right && right->type ) {
+            stream << *right->type;
+        } else {
+            stream << "???";
+        }
+        stream << " )";
+        return stream.str();
     }
 
     // ExprOp3
@@ -1368,6 +1398,31 @@ namespace das {
         cexpr->right = right->clone();
         return cexpr;
     }
+
+    string ExprOp3::describe() const {
+        TextWriter stream;
+        stream << name << " ( ";
+        if ( subexpr && subexpr->type ) {
+            stream << *subexpr->type;
+        } else {
+            stream << "???";
+        }
+        stream << ", ";
+        if ( left && left->type ) {
+            stream << *left->type;
+        } else {
+            stream << "???";
+        }
+        stream << ", ";
+        if ( right && right->type ) {
+            stream << *right->type;
+        } else {
+            stream << "???";
+        }
+        stream << " )";
+        return stream.str();
+    }
+
 
     // ExprMove
 
