@@ -85,6 +85,7 @@ namespace das {
         pVar->type->removeConstant = true;
         pVar->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
         pVar->type->firstType->ref = false;
+        pVar->type->firstType->constant = false;
         // let temp
         auto pLet = make_shared<ExprLet>();
         pLet->at = expr->at;
@@ -653,10 +654,11 @@ namespace das {
             if ( isRef ) {
                 auto pvtd = make_shared<TypeDecl>(Type::tPointer);
                 pvtd->firstType = vtd;
-                pvtd->constant = vtd->constant;
                 vtd->ref = false;
                 vtd = pvtd;
                 replaceRef2Ptr(scope->shared_from_this(), var->name);
+            } else {
+                vtd->constant = false;
             }
             AnnotationArgumentList aaList;
             if ( isRef || var->do_not_delete ) {
@@ -668,7 +670,10 @@ namespace das {
                                          aaList,
                                          false,
                                          expr->at);
-            auto lvar = make_shared<ExprVar>(var->at, var->name);
+            capture->fields.back().capturedConstant = var->type->constant;
+            auto cvar = make_shared<ExprVar>(var->at, func->arguments[0]->name);
+            auto lvar = make_shared<ExprField>(var->at, cvar, var->name);
+            lvar->ignoreCaptureConst = true;
             if ( var->init ) {
                 auto rini = var->init->clone();
                 if ( isRef ) {
@@ -867,6 +872,7 @@ namespace das {
                 srcv->do_not_delete = true;
                 srcv->type = make_shared<TypeDecl>(Type::tPointer);
                 srcv->type->firstType = make_shared<TypeDecl>(*iterv->type);
+                srcv->type->firstType->constant |= src->type->constant;
                 srcv->type->firstType->ref = false;
                 if ( bodyBlock ) {
                     replaceRef2Ptr(bodyBlock, iterv->name);
@@ -875,8 +881,8 @@ namespace das {
                 }
             } else {
                 srcv->type = make_shared<TypeDecl>(*iterv->type);
+                srcv->type->constant |= src->type->constant;
             }
-            srcv->type->constant = false;
             srci->variables.push_back(srcv);
             blk->list.push_back(srci);
             // let pvar0 = reinterpret_cast<void?>(addr(it0))
@@ -887,6 +893,7 @@ namespace das {
             pvoid->firstType = make_shared<TypeDecl>(Type::tVoid);
             auto rein = make_shared<ExprCast>(expr->at, adri, pvoid);
             rein->reinterpret = true;
+            rein->alwaysSafe = true;
             auto veqt = make_shared<ExprLet>();
             veqt->at = expr->at;
             auto vvar = make_shared<Variable>();

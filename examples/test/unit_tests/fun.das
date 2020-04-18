@@ -1,5 +1,5 @@
 //options log_infer_passes = true
-//options log = true
+options log = true
 //options log_nodes = true
 // options log_cpp = true
 // options log_aot = true
@@ -44,7 +44,7 @@ def verify_14 ( t )
     for x,y in range(1,4),t
         assert(y[0]==x & y[1]==2)
 
-[export,unsafe]
+[export]
 def test
     // compehension
     verify_even() <| [[for x in range(0,100); x; where x % 2==0]]

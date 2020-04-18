@@ -2734,7 +2734,7 @@ namespace das {
             } else {
                 expr->type = castStruct(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             }
-            if ( (expr->upcast || expr->reinterpret) && func && !func->unsafe ) {
+            if ( (expr->upcast || expr->reinterpret) && func && !func->unsafe && !expr->alwaysSafe ) {
                 error("cast requires [unsafe]",  "", "",
                     expr->at, CompilationError::unsafe);
             }
@@ -4123,6 +4123,7 @@ namespace das {
                 } else if ( src->type->isRange() ) {
                     pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
                     pVar->type->ref = false;
+                    pVar->type->constant = true;
                 } else if ( src->type->isString() ) {
                     pVar->type = make_shared<TypeDecl>(Type::tInt);
                     pVar->type->ref = false;

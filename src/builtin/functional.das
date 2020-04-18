@@ -2,7 +2,7 @@ options indenting=4
 
 require functional
 
-[private,unsafe]
+[private]
 def filter_any(var src:iterator<auto(TT)>; blk )
     static_if !typeinfo(is_ref_type type TT)
         return <- generator<TT delete &> () <| $ ()
@@ -11,10 +11,10 @@ def filter_any(var src:iterator<auto(TT)>; blk )
                     yield w
             return false
     else
-        return <- generator<TT const &> () <| $ ()
+        return <- generator<TT&> () <| $ ()
             for w in src
                 if invoke(blk,w)
-                    yield reinterpret<TT const &>(w)
+                    yield w
             return false
 
 def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT delete &):bool> )
@@ -24,7 +24,7 @@ def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT delete &):bool> )
 def filter(var src:iterator<auto(TT)>; blk:function<(what:TT delete &):bool> )
     return <- filter_any(src,blk)
 
-[private,unsafe]
+[private]
 def map_any(var src:iterator<auto(TT)>; blk)
     static_if typeinfo(can_copy type QQ)
         return <- generator<QQ delete &> () <| $ ()
@@ -65,18 +65,15 @@ def reduce_any(it:iterator<auto(TT)>;functor)
         panic("can't reduce empty sequence")
     return left
 
- // reduce with lambda
-[unsafe]
+// reduce with lambda
 def reduce(it:iterator<auto(TT)>;blk:lambda<(left,right:TT delete &):TT const delete &>)
     return reduce_any(it,blk)
 
- // reduce with function
-[unsafe]
+// reduce with function
 def reduce(it:iterator<auto(TT)>;blk:function<(left,right:TT delete &):TT const delete &>)
     return reduce_any(it,blk)
 
- // reduce with block
-[unsafe]
+// reduce with block
 def reduce(it:iterator<auto(TT)>;blk:block<(left,right:TT delete &):TT const delete &>)
     return reduce_any(it,blk)
 
@@ -110,7 +107,6 @@ def all ( it )
                 return false
         return true
 
-[unsafe]
 def cycle(var src:iterator<auto(TT)>)
     static_if !typeinfo(is_ref_type type TT)
         return <- generator<TT delete &> () <| $ ()
@@ -123,17 +119,16 @@ def cycle(var src:iterator<auto(TT)>)
                     yield x
             return false
     else
-        return <- generator<TT const &> () <| $ ()
+        return <- generator<TT &> () <| $ ()
             var arr : array<TT delete &>
             for x in src
-                yield reinterpret<TT const &>(x)
+                yield x
                 push_clone(arr,x)
             while true
                 for x in arr
-                    yield reinterpret<TT const &>(x)
+                    yield x
             return false
 
-[unsafe]
 def islice( var src : iterator<auto(TT)>; start,stop : int )
     static_if !typeinfo(is_ref_type type TT)
         return <- generator<TT delete &> () <| $ ()
@@ -142,10 +137,10 @@ def islice( var src : iterator<auto(TT)>; start,stop : int )
                     yield x
             return false
     else
-        return <- generator<TT const &> () <| $ ()
+        return <- generator<TT &> () <| $ ()
             for x,i in src,range(0,stop)
                 if i>=start
-                    yield reinterpret<TT const &>(x)
+                    yield x
             return false
 
 // [[ start; start+step; start+2*step ]]
