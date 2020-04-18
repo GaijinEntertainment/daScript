@@ -129,14 +129,22 @@ namespace das
             TypeDeclPtr             type;
             ExpressionPtr           init;
             AnnotationArgumentList  annotation;
-            bool                    moveSemantic;
             LineInfo                at;
             int                     offset = 0;
-            bool                    parentType = false;
+            union {
+                struct {
+                    bool            moveSemantic : 1;
+                    bool            parentType : 1;
+                    bool            capturedConstant : 1;
+                };
+                uint32_t            flags = 0;
+            };
             FieldDeclaration() = default;
             FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i,
                              const AnnotationArgumentList & alist, bool ms, const LineInfo & a )
-                : name(n), type(t), init(i), annotation(alist), moveSemantic(ms), at(a) {}
+                : name(n), type(t), init(i), annotation(alist), at(a) {
+                moveSemantic = ms;
+            }
         };
     public:
         Structure ( const string & n ) : name(n) {}

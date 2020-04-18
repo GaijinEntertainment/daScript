@@ -188,6 +188,7 @@ namespace das {
             }
         }
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
+            if ( decl.capturedConstant ) ss << " // captured constant";
             ss << "\n";
             if ( last ) ss << "\n";
             Visitor::visitStructureField(var, decl, last);

@@ -5,7 +5,7 @@ def addValue(a,blk)
 
 [export]
 def test
-    let CNT = 0
+    var CNT = 0
     let counter = @ <| (extra:int) : int
         let e1 = addValue(1) <| $ (extraBlock:int) : int
             return extraBlock + CNT

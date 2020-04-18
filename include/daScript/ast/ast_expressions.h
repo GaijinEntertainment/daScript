@@ -199,8 +199,14 @@ namespace das
         string          name;
         const Structure::FieldDeclaration * field = nullptr;
         int             tupleOrVariantIndex = -1;
-        bool            unsafeDeref = false;
         TypeAnnotationPtr annotation;
+        union {
+            struct {
+                bool        unsafeDeref : 1;
+                bool        ignoreCaptureConst : 1;
+            };
+            uint32_t derefFlags = 0;
+        };
         union {
             struct {
                 bool        r2v : 1;

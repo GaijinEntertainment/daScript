@@ -310,26 +310,22 @@ namespace das {
         pFunc->unsafe = true;
         auto fb = make_shared<ExprBlock>();
         fb->at = ls->at;
-        auto with = make_shared<ExprWith>(ls->at);
-        with->with = make_shared<ExprVar>(ls->at, "__this");
-        auto bbl = make_shared<ExprBlock>();
-        with->body = bbl;
-        with->body->at = ls->at;
         // now finalize
         for ( const auto & fl : ls->fields ) {
             if ( fl.type->needDelete() ) {
                 if ( !fl.annotation.getBoolOption("do_not_delete", false) ) {
-                    auto fld = make_shared<ExprVar>(fl.at, fl.name);
+                    auto fva = make_shared<ExprVar>(fl.at, "__this");
+                    auto fld = make_shared<ExprField>(fl.at, fva, fl.name);
+                    fld->ignoreCaptureConst = true;
                     auto delf = make_shared<ExprDelete>(fl.at, fld);
-                    bbl->list.emplace_back(delf);
+                    fb->list.emplace_back(delf);
                 }
             }
         }
         auto mz = make_shared<ExprMemZero>(ls->at, "memzero");
         auto lvar = make_shared<ExprVar>(ls->at, "__this");
         mz->arguments.push_back(lvar);
-        bbl->list.push_back(mz);
-        fb->list.push_back(with);
+        fb->list.push_back(mz);
         pFunc->body = fb;
         pFunc->result = make_shared<TypeDecl>(Type::tVoid);
         auto cTHIS = make_shared<Variable>();
@@ -456,6 +452,7 @@ namespace das {
             td->ref = false;
             td->constant = false;
             pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
+            pStruct->fields.back().capturedConstant = var->type->constant;
         }
         return pStruct;
     }

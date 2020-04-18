@@ -3243,6 +3243,9 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(*expr->field->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
+                if ( !expr->ignoreCaptureConst ) {
+                    expr->type->constant |= expr->field->capturedConstant;
+                }
             } else if ( expr->tupleOrVariantIndex!=-1 ) {
                 auto tupleT = valT->isPointer() ? valT->firstType : valT;
                 expr->type = make_shared<TypeDecl>(*tupleT->argTypes[expr->tupleOrVariantIndex]);
