@@ -3243,6 +3243,9 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(*expr->field->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
+                if ( valT->isPointer() && valT->firstType ) {
+                    expr->type->constant |= valT->firstType->constant;
+                }
                 if ( !expr->ignoreCaptureConst ) {
                     expr->type->constant |= expr->field->capturedConstant;
                 }
