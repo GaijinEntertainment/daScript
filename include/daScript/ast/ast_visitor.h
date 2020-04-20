@@ -103,6 +103,8 @@ namespace das {
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * , Expression * ) {}
         // AT
         virtual void preVisitAtIndex ( ExprAt *, Expression * ) {}
+        // SAFE AT
+        virtual void preVisitSafeAtIndex ( ExprSafeAt *, Expression * ) {}
         // IS
         virtual void preVisitType ( ExprIs *, TypeDecl * ) {}
         // OP2
@@ -180,6 +182,7 @@ namespace das {
         VISIT_EXPR(ExprNew)
         VISIT_EXPR(ExprDelete)
         VISIT_EXPR(ExprAt)
+        VISIT_EXPR(ExprSafeAt)
         VISIT_EXPR(ExprBlock)
         VISIT_EXPR(ExprVar)
         VISIT_EXPR(ExprSwizzle)

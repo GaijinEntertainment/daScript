@@ -776,6 +776,19 @@ namespace das {
             ss << "]";
             return Visitor::visit(that);
         }
+    // safe at
+        virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
+            Visitor::preVisitAtIndex(expr, index);
+            if ( printRef && expr->r2v ) ss << "@";
+            if ( printRef && expr->r2cr ) ss << "$";
+            if ( printRef && expr->write ) ss << "#";
+            ss << "?[";
+
+        }
+        virtual ExpressionPtr visit ( ExprSafeAt * that ) override {
+            ss << "]";
+            return Visitor::visit(that);
+        }
     // op1
         virtual void preVisit ( ExprOp1 * that ) override {
             Visitor::preVisit(that);

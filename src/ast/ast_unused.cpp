@@ -127,10 +127,16 @@ namespace das {
                 auto swiz = (ExprSwizzle *) expr;
                 swiz->r2cr = true;
                 propagateRead(swiz->value.get());
-            }else if ( expr->rtti_isAt() ) {
+            } else if ( expr->rtti_isAt() ) {
                 auto at = (ExprAt *) expr;
                 at->r2cr = true;
                 propagateRead(at->subexpr.get());
+                propagateRead(at->index.get());
+            } else if ( expr->rtti_isSafeAt() ) {
+                auto at = (ExprSafeAt *) expr;
+                at->r2cr = true;
+                propagateRead(at->subexpr.get());
+                propagateRead(at->index.get());
             } else if ( expr->rtti_isOp3() ) {
                 auto op3 = (ExprOp3 *) expr;
                 propagateRead(op3->left.get());
@@ -293,6 +299,11 @@ namespace das {
         }
     // ExprAt
         virtual void preVisit ( ExprAt * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->r2v ) propagateRead(expr->subexpr.get());
+        }
+    // ExprSafeAt
+        virtual void preVisit ( ExprSafeAt * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->r2v ) propagateRead(expr->subexpr.get());
         }

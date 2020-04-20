@@ -975,6 +975,24 @@ namespace das {
         return cexpr;
     }
 
+    // ExprSafeAt
+
+    ExpressionPtr ExprSafeAt::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr = subexpr->visit(vis);
+        vis.preVisitSafeAtIndex(this, index.get());
+        index = index->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprSafeAt::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprSafeAt>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->index = index->clone();
+        return cexpr;
+    }
+
     // ExprBlock
 
     bool ExprBlock::collapse() {

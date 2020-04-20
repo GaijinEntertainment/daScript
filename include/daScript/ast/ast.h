@@ -380,6 +380,7 @@ namespace das
         virtual bool rtti_isSwizzle() const { return false; }
         virtual bool rtti_isSafeField() const { return false; }
         virtual bool rtti_isAt() const { return false; }
+        virtual bool rtti_isSafeAt() const { return false; }
         virtual bool rtti_isOp1() const { return false; }
         virtual bool rtti_isOp2() const { return false; }
         virtual bool rtti_isOp3() const { return false; }

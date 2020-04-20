@@ -503,6 +503,13 @@ namespace das {
             connect(expr->subexpr, expr);
             connect(expr->index, expr);
         }
+        // safe at
+        virtual void preVisit(ExprSafeAt * expr) override {
+            Visitor::preVisit(expr);
+            label(expr, "?[]");
+            connect(expr->subexpr, expr);
+            connect(expr->index, expr);
+        }
         // op1
         virtual void preVisit(ExprOp1 * that) override {
             Visitor::preVisit(that);

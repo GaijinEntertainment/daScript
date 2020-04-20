@@ -131,6 +131,12 @@ namespace das {
             expr->noSideEffects = true; // !expr->write;
             expr->noNativeSideEffects = true;
         }
+    // at
+        virtual void preVisit ( ExprSafeAt * expr ) override {
+            Visitor::preVisit(expr);
+            expr->noSideEffects = true; // !expr->write;
+            expr->noNativeSideEffects = true;
+        }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects && (expr->func->sideEffectFlags==0);
