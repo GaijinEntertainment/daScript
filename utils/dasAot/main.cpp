@@ -40,28 +40,45 @@ bool saveToFile ( const string & fname, const string & str ) {
 bool compile ( const string & fn, const string & cppFn ) {
     auto access = get_file_access();
     ModuleGroup dummyGroup;
+    bool firstError = true;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {
-            tout << "failed to compile\n";
+            if (json)
+                tout << "{ \"result\": \"failed to compile\",\n\"diagnostics\": [\n";
+            else
+                tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
                 if (json) {
+                    if (!firstError)
+                        tout << ",\n";
+                    firstError = false;
                     tout << reportErrorJson(err.at, err.what, err.extra, err.fixme, err.cerr);
                 } else {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
             }
+            if (json)
+                tout << "]\n}";
             return false;
         } else {
             Context ctx(program->getContextStackSize());
             if ( !program->simulate(ctx, tout) ) {
-                tout << "failed to simulate\n";
+                if (json)
+                    tout << "{ \"result\": \"failed to simulate\",\n\"diagnostics\": [\n";
+                else
+                    tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
                     if (json) {
+                        if (!firstError) 
+                            tout << ",\n";
+                        firstError = false;
                         tout << reportErrorJson(err.at, err.what, err.extra, err.fixme, err.cerr);
                     } else {
                         tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                     }
                 }
+                if (json)
+                    tout << "]\n}";
                 return false;
             }
             // AOT time
@@ -171,7 +188,7 @@ bool compile ( const string & fn, const string & cppFn ) {
 
 int MAIN_FUNC_NAME(int argc, const char * argv[]) {
     if ( argc<3 ) {
-        tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-nlvs|-lvs]\n";
+        tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-j]\n";
         return -1;
     }
     if ( argc>3  ) {
