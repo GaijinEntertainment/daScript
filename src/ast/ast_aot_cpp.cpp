@@ -1647,6 +1647,30 @@ namespace das {
             ss << ",__context__)";
             return Visitor::visit(that);
         }
+    // safe at
+        virtual void preVisit ( ExprSafeAt * expr ) override {
+            Visitor::preVisit(expr);
+            DAS_VERIFY(0 && "TODO: implement");
+            if ( !(expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType()) ) {
+                ss << "das_safe_index<" << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
+                    << ">::at(";
+            }
+        }
+        virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
+            DAS_VERIFY(0 && "TODO: implement");
+            Visitor::preVisitSafeAtIndex(expr, index);
+            if ( expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType() ) {
+                ss << "(";
+            } else {
+                ss << ",";
+            }
+
+        }
+        virtual ExpressionPtr visit ( ExprSafeAt * that ) override {
+            DAS_VERIFY(0 && "TODO: implement");
+            ss << ",__context__)";
+            return Visitor::visit(that);
+        }
     // const
         virtual ExpressionPtr visit(ExprFakeContext * c) override {
             ss << "__context__";

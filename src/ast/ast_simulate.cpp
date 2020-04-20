@@ -354,7 +354,7 @@ namespace das
         }
     }
 
-    SimNode * Expression::trySimulate (Context &, uint32_t, Type ) const {
+    SimNode * Expression::trySimulate (Context &, uint32_t, Type) const {
         return nullptr;
     }
 
@@ -1260,7 +1260,16 @@ namespace das
             }
         }
     }
-    
+
+    SimNode * ExprSafeAt::trySimulate (Context &, uint32_t, Type) const {
+        return nullptr;
+    }
+
+    SimNode * ExprSafeAt::simulate (Context & context) const {
+        DAS_VERIFY(0 && "TODO: implement");
+        return nullptr;
+    }
+
     vector<SimNode *> ExprBlock::collectExpressions ( Context & context,
                                                      const vector<ExpressionPtr> & lis,
                                                      das_map<int32_t,uint32_t> * ofsmap ) const {
@@ -1501,6 +1510,10 @@ namespace das
         } else {
             return context.code->makeNode<SimNode_SafeVariantFieldDeref>(at,simV,fieldOffset, tupleOrVariantIndex);
         }
+    }
+
+    SimNode * ExprSafeField::trySimulate(Context &, uint32_t, Type) const {
+        return nullptr;
     }
 
     SimNode * ExprSafeField::simulate (Context & context) const {

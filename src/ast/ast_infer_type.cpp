@@ -4110,7 +4110,10 @@ namespace das {
             int idx = 0;
             expr->iteratorVariables.clear();
             for ( auto & src : expr->sources ) {
-                if ( !src->type ) continue;
+                if (!src->type) {
+                    idx++;
+                    continue;
+                }
                 auto pVar = make_shared<Variable>();
                 pVar->name = expr->iterators[idx];
                 pVar->at = expr->at;
@@ -4444,6 +4447,9 @@ namespace das {
     // ExprCall
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
+            if (call->name == "int") {
+                printf("here\n");
+            }
             call->argumentsFailedToInfer = false;
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {

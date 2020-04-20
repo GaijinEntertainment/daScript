@@ -77,6 +77,12 @@ namespace das {
                 eat->r2v = true;
                 eat->type->ref = false;
                 return eat;
+            } else if ( expr->subexpr->rtti_isSafeAt() ) {
+                reportFolding();
+                auto eat = static_pointer_cast<ExprSafeAt>(expr->subexpr);
+                eat->r2v = true;
+                eat->type->ref = false;
+                return eat;
             } else if ( expr->subexpr->rtti_isOp3() ) {
                 reportFolding();
                 auto op3 = static_pointer_cast<ExprOp3>(expr->subexpr);

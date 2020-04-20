@@ -228,6 +228,7 @@
 %token  LARROW              "<-"
 %token  QQ                  "??"
 %token  QDOT                "?."
+%token  QBRA                "?["
 %token  LPIPE               "<|"
 %token  LBPIPE              " <|"
 %token  LAPIPE              "@ <|"
@@ -1342,6 +1343,7 @@ expr
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),"---", ExpressionPtr($subexpr)); }
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
+	|   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), ExpressionPtr($subexpr), *$name); delete $name; }
 	|	func_addr_expr[subexpr]					 { $$ = $subexpr; }

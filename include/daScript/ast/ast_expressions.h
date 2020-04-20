@@ -112,6 +112,19 @@ namespace das
         };
     };
 
+    struct ExprSafeAt : ExprAt {
+        ExprSafeAt() = default;
+        ExprSafeAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
+            : ExprAt(a,s,i) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isAt() const override { return false; }
+        virtual bool rtti_isSafeAt() const override { return true; }
+    };
+
+
     struct ExprBlock : Expression {
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -279,6 +292,7 @@ namespace das
             : ExprField(a,val,n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return false; }
         virtual bool rtti_isSafeField() const override { return true; }
