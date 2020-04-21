@@ -23,6 +23,12 @@ def module_for_each_generic(pmod:RttiModule const?;subexpr:block<(info:FuncInfo)
 def structure_for_each_annotation(st:StructInfo;subexpr:block<(ann:Annotation;args:AnnotationArguments):void>)
     rtti_builtin_structure_for_each_annotation(st,subexpr)
 
+def program_for_each_module(pmod:RttiProgram;subexpr:block<(pmod:RttiModule const?):void>)
+    rtti_builtin_program_for_each_module(pmod,subexpr)
+
+def program_for_each_registered_module(subexpr:block<(pmod:RttiModule const?):void>)
+    rtti_builtin_program_for_each_registered_module(subexpr)
+
 [unsafe]
 def is_same_type( a,b:TypeInfo;
         refMatters:RefMatters=RefMatters yes;
