@@ -1685,12 +1685,20 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(*dvT);
                 expr->type->constant |= expr->subexpr->type->constant;
                 propagateTempType(expr->subexpr->type, expr->type);
-                // make a ?as b ?? c always safe, if a is not a pointer
-                if (!expr->subexpr->alwaysSafe && expr->subexpr->rtti_isSafeAsVariant()) {
-                    auto sav = static_pointer_cast<ExprSafeAsVariant>(expr->subexpr);
-                    if (!sav->value->type->isPointer()) {
+                if (!expr->subexpr->alwaysSafe) {
+                    // make a ?as b ?? c always safe, if a is not a pointer
+                    if (expr->subexpr->rtti_isSafeAsVariant()) {
+                        auto sav = static_pointer_cast<ExprSafeAsVariant>(expr->subexpr);
+                        if (!sav->value->type->isPointer()) {
+                            reportAstChanged();
+                            sav->alwaysSafe = true;
+                        }
+                    }
+                    // make a ?[b] ?? c always safe
+                    else if (expr->subexpr->rtti_isSafeAt()) {
+                        auto sat = static_pointer_cast<ExprSafeAt>(expr->subexpr);
                         reportAstChanged();
-                        sav->alwaysSafe = true;
+                        sat->alwaysSafe = true;
                     }
                 }
             }
@@ -2860,7 +2868,7 @@ namespace das {
             if ( seT->isGoodTableType() ) {
                 if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
                     error("table index type mismatch, " 
-                        + expr->index->type->describe() + " vs " + ixT->describe(),  "", "",
+                        +seT->firstType->describe() + " vs " + ixT->describe(),  "", "",
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
@@ -2913,10 +2921,6 @@ namespace das {
                     expr->type = make_shared<TypeDecl>(*seT->firstType);
                     expr->type->ref = true;
                     expr->type->constant |= seT->constant;
-                } else if ( !seT->isRef() ) {
-                    error("can only index a reference type, not " + seT->describe(),  "", "",
-                        expr->subexpr->at, CompilationError::cant_index);
-                    return Visitor::visit(expr);
                 } else if ( !seT->dim.size() ) {
                     error("type can't be indexed " + seT->describe(),  "", "",
                         expr->subexpr->at, CompilationError::cant_index);
@@ -2925,7 +2929,114 @@ namespace das {
                     expr->type = make_shared<TypeDecl>(*seT);
                     expr->type->ref = true;
                     expr->type->dim.pop_back();
+                    expr->type->constant |= seT->constant;
                 }
+            }
+            propagateTempType(expr->subexpr->type, expr->type);
+            return Visitor::visit(expr);
+        }
+    // ExprSafeAt
+        virtual ExpressionPtr visit ( ExprSafeAt * expr ) override {
+            if ( !expr->subexpr->type || !expr->index->type) return Visitor::visit(expr);
+            // infer
+            expr->subexpr = Expression::autoDereference(expr->subexpr);
+            expr->index = Expression::autoDereference(expr->index);
+            auto ixT = expr->index->type;
+            if ( expr->subexpr->type->isPointer() ) {
+                if (!expr->subexpr->type->firstType) {
+                    error("can't index void pointer", "", "",
+                        expr->index->at, CompilationError::cant_index);
+                    return Visitor::visit(expr);
+                }
+                auto seT = expr->subexpr->type->firstType;
+                if (seT->isGoodTableType()) {
+                    if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                        error("safe-index of array<> requires [unsafe]",  "", "",
+                            expr->at, CompilationError::unsafe);
+                    }
+                    if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                        error("table safe-index type mismatch, " 
+                            + seT->firstType->describe() + " vs " + ixT->describe(),  "", "",
+                            expr->index->at, CompilationError::invalid_index_type);
+                        return Visitor::visit(expr);
+                    }
+                    expr->type = make_shared<TypeDecl>(Type::tPointer);
+                    expr->type->firstType = make_shared<TypeDecl>(*seT->secondType);
+                    expr->type->constant |= seT->constant;
+                } else if (seT->isHandle()) {
+                    // TODO: support handle safe index
+                    // if (!seT->annotation->isIndexable(ixT)) {
+                        error("handle " + seT->annotation->name + " does not support safe index type " + ixT->describe(), "", "",
+                            expr->index->at, CompilationError::invalid_index_type);
+                        return Visitor::visit(expr);
+                    // }
+                    // expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
+                    // expr->type->constant |= seT->constant;
+                }
+                else if (seT->isPointer()) {
+                    error("safe-index of pointer is not supported", "", "",
+                        expr->index->at, CompilationError::cant_index);
+                    return Visitor::visit(expr);
+                }
+                else {
+                    if (!ixT->isIndex()) {
+                        expr->type.reset();
+                        error("index must be int or uint, not " + ixT->describe(), "", "",
+                            expr->index->at, CompilationError::invalid_index_type);
+                        return Visitor::visit(expr);
+                    }
+                    else if (seT->isVectorType()) {
+                        expr->type = make_shared<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
+                        expr->type->firstType->constant = seT->constant;
+                    } else if (seT->isGoodArrayType()) {
+                        if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                            error("safe-index of array<> requires [unsafe]",  "", "",
+                                expr->at, CompilationError::unsafe);
+                        }
+                        expr->type = make_shared<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_shared<TypeDecl>(*seT->firstType);
+                        expr->type->firstType->constant |= seT->constant;
+                    } else if ( !seT->dim.size() ) {
+                        error("type can't be safe-indexed " + seT->describe(), "", "",
+                            expr->subexpr->at, CompilationError::cant_index);
+                        return Visitor::visit(expr);
+                    }
+                    else {
+                        expr->type = make_shared<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_shared<TypeDecl>(*seT);
+                        expr->type->firstType->dim.pop_back();
+                        expr->type->firstType->constant |= seT->constant;
+                    }
+                }
+            } else if ( expr->subexpr->type->isGoodArrayType() ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                    error("safe-index of array<> requires [unsafe]",  "", "",
+                        expr->at, CompilationError::unsafe);
+                }
+                auto seT = expr->subexpr->type;
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(*seT->firstType);
+                expr->type->firstType->constant |= seT->constant;
+            } else if ( expr->subexpr->type->isGoodTableType() ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                    error("safe-index of array<> requires [unsafe]",  "", "",
+                        expr->at, CompilationError::unsafe);
+                }
+                const auto & seT = expr->subexpr->type;
+                if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                    error("table safe-index type mismatch, " 
+                        + seT->firstType->describe() + " vs " + ixT->describe(),  "", "",
+                        expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
+                }
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(*seT->secondType);
+                expr->type->constant |= seT->constant;
+            } else {
+                error("type can't be safe-indexed " + expr->subexpr->type->describe(), "", "",
+                    expr->subexpr->at, CompilationError::cant_index);
+                return Visitor::visit(expr);
             }
             propagateTempType(expr->subexpr->type, expr->type);
             return Visitor::visit(expr);
@@ -4447,9 +4558,6 @@ namespace das {
     // ExprCall
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
-            if (call->name == "int") {
-                printf("here\n");
-            }
             call->argumentsFailedToInfer = false;
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {

@@ -52,6 +52,22 @@ namespace das
 #undef EVAL_NODE
     };
 
+    // AT (INDEX)
+    struct SimNode_SafeArrayAt : SimNode_ArrayAt {
+        DAS_PTR_NODE;
+        SimNode_SafeArrayAt ( const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz, uint32_t o)
+            : SimNode_ArrayAt(at,ll,rr,sz,o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            Array * pA = (Array *) l->evalPtr(context);
+            if ( !pA ) return nullptr;
+            auto idx = uint32_t(r->evalInt(context));
+            if (idx >= pA->size) return nullptr;
+            return pA->data + idx*stride + offset;
+        }
+    };
+
     struct GoodArrayIterator : Iterator {
         GoodArrayIterator ( Array * arr, uint32_t st ) : array(arr), stride(st) {}
         virtual bool first ( Context & context, char * value ) override;

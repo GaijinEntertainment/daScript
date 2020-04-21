@@ -1218,7 +1218,6 @@ namespace das
     }
 
     SimNode * ExprAt::simulate (Context & context) const {
-
         if ( subexpr->type->isVectorType() ) {
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
@@ -1266,7 +1265,37 @@ namespace das
     }
 
     SimNode * ExprSafeAt::simulate (Context & context) const {
-        DAS_VERIFY(0 && "TODO: implement");
+        if ( subexpr->type->isPointer() ) {
+            const auto & seT = subexpr->type->firstType;
+            if ( seT->isGoodArrayType() ) {
+                auto prv = subexpr->simulate(context);
+                auto pidx = index->simulate(context);
+                uint32_t stride = seT->firstType->getSizeOf();
+                return context.code->makeNode<SimNode_SafeArrayAt>(at, prv, pidx, stride, 0);
+            } else if ( seT->isGoodTableType() ) {
+                auto prv = subexpr->simulate(context);
+                auto pidx = index->simulate(context);
+                uint32_t valueTypeSize = seT->secondType->getSizeOf();
+                return context.code->makeValueNode<SimNode_SafeTableIndex>(seT->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
+            } else {
+                DAS_VERIFY(0 && "TODO: safe-at not implemented");
+            }
+        } else {
+            const auto & seT = subexpr->type;
+            if ( seT->isGoodArrayType() ) {
+                auto prv = subexpr->simulate(context);
+                auto pidx = index->simulate(context);
+                uint32_t stride = seT->firstType->getSizeOf();
+                return context.code->makeNode<SimNode_SafeArrayAt>(at, prv, pidx, stride, 0);
+            } else if ( subexpr->type->isGoodTableType() ) {
+                auto prv = subexpr->simulate(context);
+                auto pidx = index->simulate(context);
+                uint32_t valueTypeSize = seT->secondType->getSizeOf();
+                return context.code->makeValueNode<SimNode_SafeTableIndex>(seT->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
+            } else {
+                DAS_VERIFY(0 && "TODO: safe-at not implemented");
+            }
+        }
         return nullptr;
     }
 

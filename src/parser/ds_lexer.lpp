@@ -457,6 +457,10 @@
 }
 <normal>"\<\|"                              return LPIPE;
 <normal>"\?\?"                              return QQ;
+<normal>"\?\["                              {
+	das_nested_square_braces ++;
+	return QBRA;
+}
 <normal>"\?\."                              return QDOT;
 <normal>"\:\="                              return CLONEEQU;
 <normal>"\-\>"                              return RARROW;

@@ -829,6 +829,16 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_SafeArrayAt::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(SafeArrayAt);
+        V_SUB(l);
+        V_SUB(r);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_END();
+    }
+
     SimNode * SimNode_GoodArrayIterator::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(GoodArrayIterator);

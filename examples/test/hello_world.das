@@ -1,29 +1,55 @@
-options log_infer_passes = true
+options log = true
 
-enum DeviceAnimState
-    DEVICE_STATE_DISABLED
-    DEVICE_STATE_DISABLED2
-    DEVICE_STATE_DISABLED3
-    DEVICE_STATE_DISABLED4
-    DEVICE_STATE_DISABLED5
+[unsafe]
+def safe_addr(var a)
+	return addr(a)
 
-[export,unsafe]
-def test
-	for enum_indx, anim_state in each_enum(DeviceAnimState DEVICE_STATE_DISABLED), [[string[5] "device_disabled"; "device_prepare"; "device_use"; "device_fire"; "device_post"]]
-		debug(" {int(enum_indx)} {anim_state}")
-	return true
-
-/*
-struct Foo
-	a : array<int>
-
-[export,unsafe]
+[export]
 def test()
-	var f : Foo
-	resize(f.a, 1)
-	var pf : Foo? = addr(f)
+
+	var ar : array<int>
 	var dummy : int
-	pf?.a?[0] ?? dummy = 1
-	print("f = {f}\n")
+	ar?[0] ?? dummy = 1
+	assert(dummy==1)
+	resize(ar,1)
+	ar?[0] ?? dummy = 2
+	assert(length(ar)==1 & ar[0]==2)
+	assert(dummy==1)
+
+	var par = safe_addr(ar)
+	clear(ar)
+	dummy = 0
+	par?[0] ?? dummy = 1
+	assert(dummy==1)
+	resize(ar,1)
+	par?[0] ?? dummy = 2
+	assert(length(ar)==1 & ar[0]==2)
+	assert(dummy==1)
+	par = null
+	par?[0] ?? dummy = 3
+	assert(dummy==3)
+
+	var ta : table<string;int>
+	dummy = 0
+	ta?["one"] ?? dummy = 1
+	assert(dummy==1)
+	ta["one"] = 0
+	ta?["one"] ?? dummy = 2
+	assert(length(ta)==1 & ta["one"]==2)
+	assert(dummy==1)
+
+	var pta = safe_addr(ta)
+	clear(ta)
+	dummy = 0
+	pta?["one"] ?? dummy = 1
+	assert(dummy==1)
+	assert(length(ta)==0)
+	ta["one"] = 1
+	pta?["one"] ?? dummy = 2
+	assert(length(ta)==1 & ta["one"]==2)
+	assert(dummy==1)
+	pta = null
+	pta?["one"] ?? dummy = 3
+	assert(dummy==3)
+
 	return true
-*/

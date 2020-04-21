@@ -66,6 +66,7 @@ namespace das {
                 }
                 return eswiz;
             } else if ( expr->subexpr->rtti_isSafeField() ) {
+                DAS_ASSERTF(false, "we should not be here. R2V of ?. is strange indeed");
                 reportFolding();
                 auto efield = static_pointer_cast<ExprSafeField>(expr->subexpr);
                 efield->r2v = true;
@@ -78,6 +79,7 @@ namespace das {
                 eat->type->ref = false;
                 return eat;
             } else if ( expr->subexpr->rtti_isSafeAt() ) {
+                DAS_ASSERTF(false, "we should not be here. R2V of ?[ is strange indeed");
                 reportFolding();
                 auto eat = static_pointer_cast<ExprSafeAt>(expr->subexpr);
                 eat->r2v = true;

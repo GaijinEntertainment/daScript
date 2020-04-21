@@ -57,6 +57,33 @@ namespace das
     };
 
     template <typename KeyType>
+    struct SimNode_SafeTableIndex : SimNode_TableIndex<KeyType> {
+        DAS_PTR_NODE;
+        SimNode_SafeTableIndex(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts, uint32_t o)
+            : SimNode_TableIndex<KeyType>(at,t,k,vts,o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            using TT = KeyType;
+            V_BEGIN();
+            V_OP_TT(SafeTableIndex);
+            V_SUB(tabExpr);
+            V_SUB(keyExpr);
+            V_ARG(valueTypeSize);
+            V_ARG(offset);
+            V_END();
+        }
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            Table * tab = (Table *) tabExpr->evalPtr(context);
+            if (!tab) return nullptr;
+            auto key = EvalTT<KeyType>::eval(context,keyExpr);
+            TableHash<KeyType> thh(&context,valueTypeSize);
+            auto hfn = hash_function(context, key);
+            int index = thh.find(*tab, key, hfn);
+            return index!=-1 ? tab->data + index * valueTypeSize : nullptr;
+        }
+    };
+
+    template <typename KeyType>
     struct SimNode_TableErase : SimNode_Table {
         DAS_BOOL_NODE;
         SimNode_TableErase(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
