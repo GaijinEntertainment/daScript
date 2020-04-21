@@ -1283,6 +1283,12 @@ namespace das
                 auto prv = subexpr->simulate(context);
                 auto pidx = index->simulate(context);
                 return context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range);
+            } else if ( seT->isVectorType() ) {
+                auto prv = subexpr->simulate(context);
+                auto pidx = index->simulate(context);
+                uint32_t range = seT->getVectorDim();
+                uint32_t stride = type->getSizeOf();
+                return context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range);
             } else {
                 DAS_VERIFY(0 && "TODO: safe-at not implemented");
             }
@@ -1303,6 +1309,12 @@ namespace das
                 uint32_t stride = seT->getStride();
                 auto prv = subexpr->simulate(context);
                 auto pidx = index->simulate(context);
+                return context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range);
+            } else if ( seT->isVectorType() && seT->ref ) {
+                auto prv = subexpr->simulate(context);
+                auto pidx = index->simulate(context);
+                uint32_t range = seT->getVectorDim();
+                uint32_t stride = type->getSizeOf();
                 return context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range);
             } else {
                 DAS_VERIFY(0 && "TODO: safe-at not implemented");

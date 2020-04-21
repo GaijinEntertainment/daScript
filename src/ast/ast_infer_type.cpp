@@ -2939,7 +2939,9 @@ namespace das {
         virtual ExpressionPtr visit ( ExprSafeAt * expr ) override {
             if ( !expr->subexpr->type || !expr->index->type) return Visitor::visit(expr);
             // infer
-            expr->subexpr = Expression::autoDereference(expr->subexpr);
+            if ( !expr->subexpr->type->isVectorType() ) {
+                expr->subexpr = Expression::autoDereference(expr->subexpr);
+            }
             expr->index = Expression::autoDereference(expr->index);
             auto ixT = expr->index->type;
             if ( expr->subexpr->type->isPointer() ) {
@@ -2983,10 +2985,7 @@ namespace das {
                         error("index must be int or uint, not " + ixT->describe(), "", "",
                             expr->index->at, CompilationError::invalid_index_type);
                         return Visitor::visit(expr);
-                    }
-                    else if (seT->isVectorType()) {
-                        // TODO: support safe index of vector
-                        DAS_VERIFY(0 && "TODO: implement");
+                    } else if (seT->isVectorType()) {
                         expr->type = make_shared<TypeDecl>(Type::tPointer);
                         expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
                         expr->type->firstType->constant = seT->constant;
@@ -3003,6 +3002,10 @@ namespace das {
                         expr->type->firstType = make_shared<TypeDecl>(*seT);
                         expr->type->firstType->dim.pop_back();
                         expr->type->firstType->constant |= seT->constant;
+                    } else if ( seT->isVectorType() ) {
+                        expr->type = make_shared<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
+                        expr->type->firstType->constant = seT->constant;
                     } else {
                         error("type can't be safe-indexed " + seT->describe(), "", "",
                             expr->subexpr->at, CompilationError::cant_index);
@@ -3043,6 +3046,11 @@ namespace das {
                 expr->type->firstType = make_shared<TypeDecl>(*seT);
                 expr->type->firstType->dim.pop_back();
                 expr->type->firstType->constant |= seT->constant;
+            } else if ( expr->subexpr->type->isVectorType() && expr->subexpr->type->isRef() ) {
+                const auto & seT = expr->subexpr->type;
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
+                expr->type->firstType->constant = seT->constant;
             } else {
                 error("type can't be safe-indexed " + expr->subexpr->type->describe(), "", "",
                     expr->subexpr->at, CompilationError::cant_index);

@@ -4,6 +4,11 @@ options log = true
 def safe_addr(var a)
 	return addr(a)
 
+[unsafe]
+def safe_addr_val(var a : auto&)
+	return addr(a)
+
+
 [export]
 def test()
 
@@ -70,6 +75,26 @@ def test()
 	assert(dummy==1)
 	pdi = null
 	pdi?[0] ?? dummy = 3
+	assert(dummy==3)
+
+	var vec = int3(1,2,3)
+	dummy = 0
+	vec?[3] ?? dummy = 1
+	assert(dummy==1)
+	vec?[0] ?? dummy = 2
+	assert(vec[0]==2)
+	assert(dummy==1)
+
+	var pvec = safe_addr_val(vec)
+	dummy = 0
+	pvec?[3] ?? dummy = 1
+	assert(dummy==1)
+	vec[0] = 0
+	pvec?[0] ?? dummy = 2
+	assert(vec[0]==2)
+	assert(dummy==1)
+	pvec = null
+	pvec?[0] ?? dummy = 3
 	assert(dummy==3)
 
 	return true
