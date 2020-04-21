@@ -88,7 +88,7 @@ namespace das {
             }
             if ( (int(flags) & int(PrintFlags::namesAndDimensions)) && ti->argNames) {
                 auto vindex = *(uint32_t *)ps;
-                if (vindex >= 0 && vindex < ti->argCount) {
+                if ( vindex < ti->argCount ) {
                     ss << ti->argNames[vindex] << "=";
                 } else {
                     ss << "unknown=";
