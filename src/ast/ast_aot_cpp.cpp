@@ -1650,24 +1650,28 @@ namespace das {
     // safe at
         virtual void preVisit ( ExprSafeAt * expr ) override {
             Visitor::preVisit(expr);
-            DAS_VERIFY(0 && "TODO: implement");
-            if ( !(expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType()) ) {
-                ss << "das_safe_index<" << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
-                    << ">::at(";
+            bool isPtr = expr->subexpr->type->isPointer();
+            const auto & seT = isPtr ? expr->subexpr->type->firstType : expr->subexpr->type;
+            if ( !(seT->dim.size() || seT->isGoodArrayType() || seT->isGoodTableType()) ) {
+                ss << "das_index<" << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
+                    << ">::safe_at(";
+                if (isPtr) ss << "*(";
             }
         }
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
-            DAS_VERIFY(0 && "TODO: implement");
             Visitor::preVisitSafeAtIndex(expr, index);
-            if ( expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType() ) {
-                ss << "(";
+            bool isPtr = expr->subexpr->type->isPointer();
+            const auto & seT = isPtr ? expr->subexpr->type->firstType : expr->subexpr->type;
+            if ( seT->dim.size() || seT->isGoodArrayType() || seT->isGoodTableType() ) {
+                ss << (expr->subexpr->type->isPointer() ? "->" : ".")
+                   << "safe_index(";
             } else {
+                if (isPtr) ss << ")";
                 ss << ",";
             }
 
         }
         virtual ExpressionPtr visit ( ExprSafeAt * that ) override {
-            DAS_VERIFY(0 && "TODO: implement");
             ss << ",__context__)";
             return Visitor::visit(that);
         }

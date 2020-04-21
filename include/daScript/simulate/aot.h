@@ -264,6 +264,7 @@ namespace das {
 
     template <typename TT, typename VecT, uint32_t size>
     struct das_vec_index {
+    // index
         static __forceinline TT & at ( VecT & value, int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
@@ -281,6 +282,29 @@ namespace das {
         static __forceinline const TT & at ( const VecT & value, uint32_t idx, Context * __context__ ) {
             if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
             return (&value.x)[idx];
+        }
+    // safe index
+        static __forceinline TT * safe_at ( VecT & value, int32_t index, Context * ) {
+            if (!&value) return nullptr;
+            uint32_t idx = uint32_t(index);
+            if (idx >= size) return nullptr;
+            return (&value.x) + idx;
+        }
+        static __forceinline const TT * safe_at ( const VecT & value, int32_t index, Context * ) {
+            if (!&value) return nullptr;
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) return nullptr;
+            return (&value.x) + idx;
+        }
+        static __forceinline TT * safe_at ( VecT & value, uint32_t idx, Context * ) {
+            if (!&value) return nullptr;
+            if ( idx>=size ) return nullptr;
+            return (&value.x) + idx;
+        }
+        static __forceinline const TT * safe_at ( const VecT & value, uint32_t idx, Context * ) {
+            if (!&value) return nullptr;
+            if ( idx>=size ) return nullptr;
+            return (&value.x) + idx;
         }
     };
 
@@ -351,6 +375,7 @@ namespace das {
         __forceinline const TT & operator [] ( int32_t index ) const {
             return data[index];
         }
+    // index
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error_ex("index out of range, %u of %u", idx, size);
@@ -368,6 +393,29 @@ namespace das {
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
             if ( idx>=size ) __context__->throw_error_ex("index out of range, %u of %u", idx, size);
             return data[idx];
+        }
+    // safe index
+        __forceinline TT * safe_index ( int32_t index, Context * ) {
+            if (!this) return nullptr;
+            uint32_t idx = uint32_t(index);
+            if (idx >= size) return nullptr;
+            return data + index;
+        }
+        __forceinline const TT * safe_index ( int32_t index, Context * ) const {
+            if (!this) return nullptr;
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) return nullptr;
+            return data + index;
+        }
+        __forceinline TT * safe_index ( uint32_t idx, Context * ) {
+            if (!this) return nullptr;
+            if ( idx>=size ) return nullptr;
+            return data + idx;
+        }
+        __forceinline const TT * safe_index ( uint32_t idx, Context * ) const {
+            if (!this) return nullptr;
+            if ( idx>=size ) return nullptr;
+            return data + idx;
         }
     };
 
@@ -407,6 +455,7 @@ namespace das {
         __forceinline const TT & operator [] ( int32_t index ) const {
             return ((TT *)data)[index];
         }
+    // index
         __forceinline TT & operator () ( int32_t index, Context * __context__ ) {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
@@ -415,7 +464,7 @@ namespace das {
         __forceinline const TT & operator () ( int32_t index, Context * __context__ ) const {
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
-            return ((TT *)data)[index];
+            return ((const TT *)data)[index];
         }
         __forceinline TT & operator () ( uint32_t idx, Context * __context__ ) {
             if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
@@ -423,7 +472,30 @@ namespace das {
         }
         __forceinline const TT & operator () ( uint32_t idx, Context * __context__ ) const {
             if ( idx>=size ) __context__->throw_error_ex("array index out of range, %u of %u", idx, size);
-            return ((TT *)data)[idx];
+            return ((const TT *)data)[idx];
+        }
+    // safe index
+        __forceinline TT * safe_index ( int32_t index, Context * ) {
+            if (!this) return nullptr;
+            uint32_t idx = uint32_t(index);
+            if (idx >= size) return nullptr;
+            return ((TT *)data) + index;
+        }
+        __forceinline const TT  * safe_index ( int32_t index, Context * ) const {
+            if (!this) return nullptr;
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) return nullptr;
+            return ((const TT *)data) + index;
+        }
+        __forceinline TT * safe_index ( uint32_t idx, Context * ) {
+            if (!this) return nullptr;
+            if ( idx>=size ) return nullptr;
+            return ((TT *)data) + idx;
+        }
+        __forceinline const TT  * safe_index ( uint32_t idx, Context * ) const {
+            if (!this) return nullptr;
+            if ( idx>=size ) return nullptr;
+            return ((const TT *)data) + idx;
         }
     };
 
@@ -450,6 +522,20 @@ namespace das {
             auto hfn = hash_function(*__context__, key);
             int index = thh.reserve(*this, key, hfn);
             return ((TV *)data)[index];
+        }
+        __forceinline TV * safe_index ( const TK & key, Context * __context__ ) {
+            if (!this) return nullptr;
+            TableHash<TK> thh(__context__,sizeof(TV));
+            auto hfn = hash_function(*__context__, key);
+            int index = thh.find(*this, key, hfn);
+            return index==-1 ? nullptr : ((TV *)data) + index;
+        }
+        __forceinline const TV * safe_index ( const TK & key, Context * __context__ ) const {
+            if (!this) return nullptr;
+            TableHash<TK> thh(__context__,sizeof(TV));
+            auto hfn = hash_function(*__context__, key);
+            int index = thh.find(*this, key, hfn);
+            return index==-1 ? nullptr : ((const TV *)data) + index;
         }
     };
 

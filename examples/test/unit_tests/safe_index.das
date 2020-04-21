@@ -1,6 +1,3 @@
-options log = true
-options log_cpp = true
-
 [unsafe]
 def safe_addr(var a)
 	return addr(a)
@@ -8,7 +5,6 @@ def safe_addr(var a)
 [unsafe]
 def safe_addr_val(var a : auto&)
 	return addr(a)
-
 
 [export]
 def test()
