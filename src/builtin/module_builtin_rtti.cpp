@@ -53,6 +53,7 @@ namespace das {
 
     struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RttiModule", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
 
@@ -352,12 +353,20 @@ namespace das {
         return Module::require(name);
     }
 
-    void rtti_builtin_program_for_each_module ( const RttiProgram & prog, const Block & block, Context * context ) {
+    void rtti_builtin_program_for_each_module ( const RttiProgram & prog, const TBlock<void,const Module *> & block, Context * context ) {
         prog.program->library.foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
             context->invoke(block, args, nullptr);
             return true;
         }, "*");
+    }
+
+    void rtti_builtin_program_for_each_registered_module ( const TBlock<void,const Module *> & block, Context * context ) {
+        Module::foreach([&](Module * pm) -> bool {
+            vec4f args[1] = { cast<Module *>::from(pm) };
+            context->invoke(block, args, nullptr);
+            return true;
+        });
     }
 
     void rtti_builtin_module_for_each_enumeration ( const Module * module, const Block & block, Context * context ) {
@@ -528,6 +537,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "get_module",
                 SideEffects::modifyExternal, "rtti_get_builtin_module");
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "rtti_builtin_program_for_each_module", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_registered_module)>(*this, lib, "rtti_builtin_program_for_each_registered_module", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_structure)>(*this, lib, "rtti_builtin_module_for_each_structure", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "rtti_builtin_module_for_each_enumeration", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_function)>(*this, lib, "rtti_builtin_module_for_each_function", SideEffects::modifyExternal);
