@@ -187,8 +187,12 @@ namespace das
         union {
             vec4f       value = v_zero();
             bool        bValue;
-            int         iValue;
+            int32_t     iValue;
+            uint32_t    uValue;
+            int64_t     i64Value;
+            uint64_t    u64Value;
             float       fValue;
+            double      dfValue;
         };
         char *          sValue = nullptr;
         VarInfo() = default;

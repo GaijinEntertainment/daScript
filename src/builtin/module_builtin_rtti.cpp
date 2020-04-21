@@ -240,7 +240,11 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
             addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
             addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
+            addField<DAS_BIND_MANAGED_FIELD(uValue)>("uValue");
+            addField<DAS_BIND_MANAGED_FIELD(i64Value)>("i64Value");
+            addField<DAS_BIND_MANAGED_FIELD(u64Value)>("u64Value");
             addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
+            addField<DAS_BIND_MANAGED_FIELD(dfValue)>("dfValue");
         }
     };
 
@@ -434,6 +438,19 @@ namespace das {
         }
     }
 
+    void rtti_builtin_module_for_each_global ( const Module * module, const TBlock<void,const VarInfo *> & block, Context * context ) {
+        DebugInfoHelper helper;
+        helper.rtti = true;
+        for ( auto & it : module->globals ) {
+            auto varName = it.first;
+            VarInfo * info = helper.makeVariableDebugInfo(*it.second);
+            vec4f args[1] = {
+                cast<VarInfo *>::from(info)
+            };
+            context->invoke(block, args, nullptr);
+        }
+    }
+
 #if !DAS_NO_FILEIO
 
     void rtti_builtin_compile_file ( char * modName, const Block & block, Context * context ) {
@@ -542,6 +559,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "rtti_builtin_module_for_each_enumeration", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_function)>(*this, lib, "rtti_builtin_module_for_each_function", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_generic)>(*this, lib, "rtti_builtin_module_for_each_generic", SideEffects::modifyExternal);
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_global)>(*this, lib, "rtti_builtin_module_for_each_global", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type", SideEffects::modifyExternal);
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast", SideEffects::modifyExternal);
