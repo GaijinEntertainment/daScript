@@ -209,6 +209,17 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_SafeAt::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(SafeAt);
+        V_SUB(value);
+        V_SUB(index);
+        V_ARG(stride);
+        V_ARG(offset);
+        V_ARG(range);
+        V_END();
+    }
+
     SimNode * SimNode_StringBuilder::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(StringBuilder);

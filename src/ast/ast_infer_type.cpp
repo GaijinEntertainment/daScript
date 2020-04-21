@@ -2977,8 +2977,7 @@ namespace das {
                     error("safe-index of pointer is not supported", "", "",
                         expr->index->at, CompilationError::cant_index);
                     return Visitor::visit(expr);
-                }
-                else {
+                } else {
                     if (!ixT->isIndex()) {
                         expr->type.reset();
                         error("index must be int or uint, not " + ixT->describe(), "", "",
@@ -2986,6 +2985,8 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                     else if (seT->isVectorType()) {
+                        // TODO: support safe index of vector
+                        DAS_VERIFY(0 && "TODO: implement");
                         expr->type = make_shared<TypeDecl>(Type::tPointer);
                         expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
                         expr->type->firstType->constant = seT->constant;
@@ -2997,17 +2998,16 @@ namespace das {
                         expr->type = make_shared<TypeDecl>(Type::tPointer);
                         expr->type->firstType = make_shared<TypeDecl>(*seT->firstType);
                         expr->type->firstType->constant |= seT->constant;
-                    } else if ( !seT->dim.size() ) {
-                        error("type can't be safe-indexed " + seT->describe(), "", "",
-                            expr->subexpr->at, CompilationError::cant_index);
-                        return Visitor::visit(expr);
-                    }
-                    else {
+                    } else if ( seT->dim.size() ) {
                         expr->type = make_shared<TypeDecl>(Type::tPointer);
                         expr->type->firstType = make_shared<TypeDecl>(*seT);
                         expr->type->firstType->dim.pop_back();
                         expr->type->firstType->constant |= seT->constant;
-                    }
+                    } else {
+                        error("type can't be safe-indexed " + seT->describe(), "", "",
+                            expr->subexpr->at, CompilationError::cant_index);
+                        return Visitor::visit(expr);
+                    } 
                 }
             } else if ( expr->subexpr->type->isGoodArrayType() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
@@ -3033,6 +3033,16 @@ namespace das {
                 expr->type = make_shared<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_shared<TypeDecl>(*seT->secondType);
                 expr->type->constant |= seT->constant;
+            } else if ( expr->subexpr->type->dim.size() ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                    error("safe-index of [] requires [unsafe]",  "", "",
+                        expr->at, CompilationError::unsafe);
+                }
+                const auto & seT = expr->subexpr->type;
+                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_shared<TypeDecl>(*seT);
+                expr->type->firstType->dim.pop_back();
+                expr->type->firstType->constant |= seT->constant;
             } else {
                 error("type can't be safe-indexed " + expr->subexpr->type->describe(), "", "",
                     expr->subexpr->at, CompilationError::cant_index);

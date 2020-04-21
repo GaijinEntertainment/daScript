@@ -52,4 +52,24 @@ def test()
 	pta?["one"] ?? dummy = 3
 	assert(dummy==3)
 
+	var di : int[2]
+	dummy = 0
+	di?[3] ?? dummy = 1
+	assert(dummy==1)
+	di?[0] ?? dummy = 2
+	assert(di[0]==2)
+	assert(dummy==1)
+
+	var pdi = safe_addr(di)
+	dummy = 0
+	pdi?[3] ?? dummy = 1
+	assert(dummy==1)
+	di[0] = 0
+	pdi?[0] ?? dummy = 2
+	assert(di[0]==2)
+	assert(dummy==1)
+	pdi = null
+	pdi?[0] ?? dummy = 3
+	assert(dummy==3)
+
 	return true

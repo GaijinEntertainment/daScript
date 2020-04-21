@@ -468,6 +468,22 @@ namespace das {
         uint32_t  stride, offset, range;
     };
 
+    // AT (INDEX)
+    struct SimNode_SafeAt : SimNode_At {
+        DAS_PTR_NODE;
+        SimNode_SafeAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
+            : SimNode_At(at,rv,idx,strd,o,rng) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            auto pValue = value->evalPtr(context);
+            if (!pValue) return nullptr;
+            uint32_t idx = uint32_t(index->evalInt(context));
+            if (idx >= range) return nullptr;
+            return pValue + idx*stride + offset;
+        }
+    };
+
     template <typename TT>
     struct SimNode_AtR2V : SimNode_At {
         SimNode_AtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
