@@ -11,42 +11,9 @@ State 192 conflicts: 1 shift/reduce
 State 299 conflicts: 2 shift/reduce
 State 331 conflicts: 1 shift/reduce
 State 354 conflicts: 6 shift/reduce
-State 363 conflicts: 1 shift/reduce
-State 364 conflicts: 1 shift/reduce
-State 373 conflicts: 1 shift/reduce
-State 374 conflicts: 1 shift/reduce
-State 375 conflicts: 1 shift/reduce
-State 376 conflicts: 1 shift/reduce
-State 377 conflicts: 1 shift/reduce
 State 509 conflicts: 1 shift/reduce
-State 521 conflicts: 1 shift/reduce
-State 522 conflicts: 1 shift/reduce
-State 523 conflicts: 1 shift/reduce
-State 524 conflicts: 1 shift/reduce
-State 525 conflicts: 1 shift/reduce
-State 526 conflicts: 1 shift/reduce
-State 528 conflicts: 1 shift/reduce
-State 531 conflicts: 1 shift/reduce
-State 532 conflicts: 1 shift/reduce
-State 533 conflicts: 1 shift/reduce
-State 534 conflicts: 1 shift/reduce
-State 537 conflicts: 1 shift/reduce
-State 538 conflicts: 1 shift/reduce
-State 539 conflicts: 1 shift/reduce
-State 540 conflicts: 1 shift/reduce
-State 541 conflicts: 1 shift/reduce
-State 542 conflicts: 1 shift/reduce
-State 543 conflicts: 1 shift/reduce
-State 544 conflicts: 1 shift/reduce
-State 545 conflicts: 1 shift/reduce
-State 546 conflicts: 1 shift/reduce
 State 643 conflicts: 5 shift/reduce
-State 691 conflicts: 1 shift/reduce
-State 692 conflicts: 1 shift/reduce
-State 693 conflicts: 1 shift/reduce
-State 718 conflicts: 1 shift/reduce
 State 745 conflicts: 31 shift/reduce
-State 761 conflicts: 1 shift/reduce
 
 
 Grammar
@@ -3222,10 +3189,10 @@ State 225
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -3727,10 +3694,10 @@ State 242
     '!'                               shift, and go to state 293
     ']'                               shift, and go to state 335
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4226,10 +4193,10 @@ State 277
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4310,10 +4277,10 @@ State 278
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4497,10 +4464,10 @@ State 281
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4634,10 +4601,10 @@ State 289
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4718,10 +4685,10 @@ State 290
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4802,10 +4769,10 @@ State 291
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4886,10 +4853,10 @@ State 292
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -4970,10 +4937,10 @@ State 293
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -5054,10 +5021,10 @@ State 294
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -5856,10 +5823,10 @@ State 345
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -5970,12 +5937,12 @@ State 347
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
+    '$'                               shift, and go to state 295
+    '@'                               shift, and go to state 296
     COLCOL                            shift, and go to state 41
     ';'                               shift, and go to state 455
     '{'                               shift, and go to state 255
     '}'                               shift, and go to state 456
-    '$'                               shift, and go to state 295
-    '@'                               shift, and go to state 296
 
     string_builder           go to state 297
     expression_label         go to state 457
@@ -6140,10 +6107,10 @@ State 353
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -6283,10 +6250,10 @@ State 357
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -6461,10 +6428,10 @@ State 360
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -6632,7 +6599,6 @@ State 363
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 245 (expr)]
     $default  reduce using rule 245 (expr)
 
 
@@ -6686,7 +6652,6 @@ State 364
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 246 (expr)]
     $default  reduce using rule 246 (expr)
 
 
@@ -6781,10 +6746,10 @@ State 366
     '['                               shift, and go to state 242
     ']'                               shift, and go to state 491
     '('                               shift, and go to state 492
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
     '#'                               shift, and go to state 244
 
     string_builder          go to state 297
@@ -6903,10 +6868,10 @@ State 368
     '!'                               shift, and go to state 293
     '['                               shift, and go to state 242
     '('                               shift, and go to state 501
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
     '#'                               shift, and go to state 244
 
     string_builder          go to state 297
@@ -7087,7 +7052,6 @@ State 373
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 226 (expr)]
     $default  reduce using rule 226 (expr)
 
 
@@ -7141,7 +7105,6 @@ State 374
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 225 (expr)]
     $default  reduce using rule 225 (expr)
 
 
@@ -7183,9 +7146,10 @@ State 375
   276     | expr . "<|" expr
   277     | expr . "|>" expr
 
+    "?."  shift, and go to state 395
     "?["  shift, and go to state 396
+    '['   shift, and go to state 413
 
-    "?["      [reduce using rule 259 (expr)]
     $default  reduce using rule 259 (expr)
 
 
@@ -7239,7 +7203,6 @@ State 376
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 224 (expr)]
     $default  reduce using rule 224 (expr)
 
 
@@ -7293,7 +7256,6 @@ State 377
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 223 (expr)]
     $default  reduce using rule 223 (expr)
 
 
@@ -7451,10 +7413,10 @@ State 381
     '['                               shift, and go to state 513
     '('                               shift, and go to state 294
     ')'                               shift, and go to state 514
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -7563,10 +7525,10 @@ State 385
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -7647,10 +7609,10 @@ State 386
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -7745,10 +7707,10 @@ State 389
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -7829,10 +7791,10 @@ State 390
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -7913,10 +7875,10 @@ State 391
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -7997,10 +7959,10 @@ State 392
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8089,10 +8051,10 @@ State 394
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8180,10 +8142,10 @@ State 396
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8264,10 +8226,10 @@ State 397
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8348,10 +8310,10 @@ State 398
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8432,10 +8394,10 @@ State 399
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8516,10 +8478,10 @@ State 400
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8602,10 +8564,10 @@ State 401
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8686,10 +8648,10 @@ State 402
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8770,10 +8732,10 @@ State 403
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8854,10 +8816,10 @@ State 404
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -8938,10 +8900,10 @@ State 405
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9022,10 +8984,10 @@ State 406
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9106,10 +9068,10 @@ State 407
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9190,10 +9152,10 @@ State 408
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9274,10 +9236,10 @@ State 409
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9358,10 +9320,10 @@ State 410
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9442,10 +9404,10 @@ State 411
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9533,10 +9495,10 @@ State 413
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9626,10 +9588,10 @@ State 415
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
     ')'                               shift, and go to state 549
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -9947,9 +9909,9 @@ State 436
 
   142 expr_pipe: "@ <|" . expr_block
 
-    '{'  shift, and go to state 255
     '$'  shift, and go to state 295
     '@'  shift, and go to state 558
+    '{'  shift, and go to state 255
 
     expression_block  go to state 298
     block_or_lambda   go to state 303
@@ -10140,10 +10102,10 @@ State 441
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -10253,11 +10215,11 @@ State 445
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
+    '$'                               shift, and go to state 295
+    '@'                               shift, and go to state 296
     COLCOL                            shift, and go to state 41
     ';'                               shift, and go to state 579
     '{'                               shift, and go to state 255
-    '$'                               shift, and go to state 295
-    '@'                               shift, and go to state 296
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -10356,10 +10318,10 @@ State 448
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -10440,10 +10402,10 @@ State 449
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -10547,10 +10509,10 @@ State 453
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -10636,10 +10598,10 @@ State 454
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -10753,10 +10715,10 @@ State 459
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -11069,10 +11031,10 @@ State 478
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -11269,10 +11231,10 @@ State 481
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
     ')'                               shift, and go to state 607
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -11361,10 +11323,10 @@ State 482
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -11735,10 +11697,10 @@ State 492
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
     ')'                               shift, and go to state 621
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -11957,10 +11919,10 @@ State 501
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
     ')'                               shift, and go to state 629
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -12059,10 +12021,10 @@ State 504
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -12143,10 +12105,10 @@ State 505
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -12242,10 +12204,10 @@ State 508
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -12571,7 +12533,6 @@ State 521
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 227 (expr)]
     $default  reduce using rule 227 (expr)
 
 
@@ -12631,7 +12592,6 @@ State 522
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 228 (expr)]
     $default  reduce using rule 228 (expr)
 
 
@@ -12695,7 +12655,6 @@ State 523
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 240 (expr)]
     $default  reduce using rule 240 (expr)
 
 
@@ -12759,7 +12718,6 @@ State 524
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 241 (expr)]
     $default  reduce using rule 241 (expr)
 
 
@@ -12827,7 +12785,6 @@ State 525
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 238 (expr)]
     $default  reduce using rule 238 (expr)
 
 
@@ -12895,7 +12852,6 @@ State 526
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 239 (expr)]
     $default  reduce using rule 239 (expr)
 
 
@@ -12958,7 +12914,6 @@ State 528
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 264 (expr)]
     $default  reduce using rule 264 (expr)
 
 
@@ -13085,7 +13040,6 @@ State 531
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 276 (expr)]
     $default  reduce using rule 276 (expr)
 
 
@@ -13133,7 +13087,6 @@ State 532
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 277 (expr)]
     $default  reduce using rule 277 (expr)
 
 
@@ -13193,7 +13146,6 @@ State 533
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 229 (expr)]
     $default  reduce using rule 229 (expr)
 
 
@@ -13253,7 +13205,6 @@ State 534
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 230 (expr)]
     $default  reduce using rule 230 (expr)
 
 
@@ -13404,7 +13355,6 @@ State 537
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 243 (expr)]
     $default  reduce using rule 243 (expr)
 
 
@@ -13475,7 +13425,6 @@ State 538
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 244 (expr)]
     $default  reduce using rule 244 (expr)
 
 
@@ -13545,7 +13494,6 @@ State 539
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 242 (expr)]
     $default  reduce using rule 242 (expr)
 
 
@@ -13609,7 +13557,6 @@ State 540
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 236 (expr)]
     $default  reduce using rule 236 (expr)
 
 
@@ -13673,7 +13620,6 @@ State 541
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 237 (expr)]
     $default  reduce using rule 237 (expr)
 
 
@@ -13731,7 +13677,6 @@ State 542
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 232 (expr)]
     $default  reduce using rule 232 (expr)
 
 
@@ -13789,7 +13734,6 @@ State 543
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 231 (expr)]
     $default  reduce using rule 231 (expr)
 
 
@@ -13844,7 +13788,6 @@ State 544
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 233 (expr)]
     $default  reduce using rule 233 (expr)
 
 
@@ -13899,7 +13842,6 @@ State 545
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 234 (expr)]
     $default  reduce using rule 234 (expr)
 
 
@@ -13954,7 +13896,6 @@ State 546
     '.'   shift, and go to state 412
     '['   shift, and go to state 413
 
-    "?["      [reduce using rule 235 (expr)]
     $default  reduce using rule 235 (expr)
 
 
@@ -14196,10 +14137,10 @@ State 557
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14240,9 +14181,9 @@ State 560
 
   141 expr_pipe: expr_assign " <|" . expr_block
 
-    '{'  shift, and go to state 255
     '$'  shift, and go to state 295
     '@'  shift, and go to state 558
+    '{'  shift, and go to state 255
 
     expression_block  go to state 298
     block_or_lambda   go to state 303
@@ -14307,10 +14248,10 @@ State 561
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14391,10 +14332,10 @@ State 562
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14475,10 +14416,10 @@ State 563
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14559,10 +14500,10 @@ State 564
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14643,10 +14584,10 @@ State 565
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14727,10 +14668,10 @@ State 566
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14811,10 +14752,10 @@ State 567
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14895,10 +14836,10 @@ State 568
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -14979,10 +14920,10 @@ State 569
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -15063,10 +15004,10 @@ State 570
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -15147,10 +15088,10 @@ State 571
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -15231,10 +15172,10 @@ State 572
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -15315,10 +15256,10 @@ State 573
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -15399,10 +15340,10 @@ State 574
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -15483,10 +15424,10 @@ State 575
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -15652,10 +15593,10 @@ State 578
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -16107,10 +16048,10 @@ State 589
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -16447,10 +16388,10 @@ State 602
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -16533,10 +16474,10 @@ State 603
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -16888,10 +16829,10 @@ State 613
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -16972,10 +16913,10 @@ State 614
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -17063,10 +17004,10 @@ State 616
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -17155,10 +17096,10 @@ State 618
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -17240,10 +17181,10 @@ State 619
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -17364,10 +17305,10 @@ State 625
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -17455,10 +17396,10 @@ State 627
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -17542,10 +17483,10 @@ State 628
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -17868,10 +17809,10 @@ State 640
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -18006,10 +17947,10 @@ State 644
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
     ')'                               shift, and go to state 716
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -18105,10 +18046,10 @@ State 647
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -19392,10 +19333,10 @@ State 669
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -19782,10 +19723,10 @@ State 684
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -19866,10 +19807,10 @@ State 685
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -20012,7 +19953,6 @@ State 691
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 168 (expr_cast)]
     $default  reduce using rule 168 (expr_cast)
 
 
@@ -20076,7 +20016,6 @@ State 692
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 169 (expr_cast)]
     $default  reduce using rule 169 (expr_cast)
 
 
@@ -20140,7 +20079,6 @@ State 693
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 170 (expr_cast)]
     $default  reduce using rule 170 (expr_cast)
 
 
@@ -20204,10 +20142,10 @@ State 694
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
     ')'                               shift, and go to state 734
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -20631,10 +20569,10 @@ State 713
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -20757,7 +20695,6 @@ State 718
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 265 (expr)]
     $default  reduce using rule 265 (expr)
 
 
@@ -20869,12 +20806,12 @@ State 723
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
+    '$'                               shift, and go to state 295
+    '@'                               shift, and go to state 296
     COLCOL                            shift, and go to state 41
     ';'                               shift, and go to state 455
     '{'                               shift, and go to state 255
     '}'                               shift, and go to state 748
-    '$'                               shift, and go to state 295
-    '@'                               shift, and go to state 296
 
     string_builder           go to state 297
     expression_label         go to state 457
@@ -20997,10 +20934,10 @@ State 727
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -21233,10 +21170,10 @@ State 732
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -21404,10 +21341,10 @@ State 736
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -21495,10 +21432,10 @@ State 738
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -21579,10 +21516,10 @@ State 739
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -21694,10 +21631,10 @@ State 744
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -22378,7 +22315,6 @@ State 761
     '.'    shift, and go to state 412
     '['    shift, and go to state 413
 
-    "?["      [reduce using rule 181 (block_or_simple_block)]
     $default  reduce using rule 181 (block_or_simple_block)
 
 
@@ -22498,10 +22434,10 @@ State 766
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
@@ -22736,10 +22672,10 @@ State 774
     '~'                               shift, and go to state 292
     '!'                               shift, and go to state 293
     '('                               shift, and go to state 294
-    COLCOL                            shift, and go to state 41
-    '{'                               shift, and go to state 255
     '$'                               shift, and go to state 295
     '@'                               shift, and go to state 296
+    COLCOL                            shift, and go to state 41
+    '{'                               shift, and go to state 255
 
     string_builder          go to state 297
     expression_block        go to state 298
