@@ -2488,11 +2488,11 @@ namespace das {
                     }
                 }
             }
-            if ( call->func->result->aotAlias ) {
-                ss << "das_alias<" << call->func->result->alias << ">::from(";
-            }
             if ( isCallWithTemp(call) ) {
                 ss << "(" << makeLocalTempName(call) << " = (";
+            }
+            if ( call->func->result->aotAlias ) {
+                ss << "das_alias<" << call->func->result->alias << ">::from(";
             }
             if ( call->func->builtIn ) {
                 if ( call->func->result->isString() ) {
@@ -2612,11 +2612,11 @@ namespace das {
             if ( call->func->builtIn && call->func->result->isString() ) {
                 ss << "))";
             }
-            if ( isCallWithTemp(call) ) {
-                ss << "))";
-            }
             if ( call->func->result->aotAlias ) {
                 ss << ")";
+            }
+            if ( isCallWithTemp(call) ) {
+                ss << "))";
             }
         }
         virtual void preVisit ( ExprCall * call ) override {

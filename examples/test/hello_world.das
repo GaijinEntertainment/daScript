@@ -39,15 +39,9 @@ def describeType(info)
 	elif info.basicType==Type tEnumeration | info.basicType==Type tEnumeration8 | info.basicType==Type tEnumeration16
 		res = info.enumType?.name ?? "enumeration"
 	elif info.basicType==Type tPointer
-		if info.firstType!=null
-			res = "{describeType(*(info.firstType))}?"
-		else
-			res = "void?"
+		res = info.firstType!=null ? "{describeType(*(info.firstType))}?" : "void?"
 	elif info.basicType==Type tArray
-		if info.firstType!=null
-			res = "array<{describeType(*(info.firstType))}>"
-		else
-			res = "array"
+		res = info.firstType!=null ? "array<{describeType(*(info.firstType))}>" : "array"
 	elif info.basicType==Type tTable
 		if info.firstType!=null & info.secondType!=null
 			res = "table<{describeType(deref(info.firstType))};{describeType(deref(info.secondType))}>"
@@ -55,28 +49,12 @@ def describeType(info)
 			res = "table"
 	elif info.basicType==Type tTuple
 		if info.argTypes!=null
-			res = "tuple<"
-			var first = true
-			for argtype in arg_types(info)
-				if first
-					first = false
-				else
-					res += ";"
-				res += "{describeType(argtype)}"
-			res += ">"
+			res = "tuple<" + join([{for argtype in arg_types(info); describeType(argtype)}],";") + ">"
 		else
 			res += "tuple"
 	elif info.basicType==Type tVariant
 		if info.argTypes!=null & info.argNames!=null
-			res = "variant<"
-			var first = true
-			for argname,argtype in arg_names(info),arg_types(info)
-				if first
-					first = false
-				else
-					res += ";"
-				res += "{argname}:{describeType(argtype)}"
-			res += ">"
+			res = "variant<" +  join([{for argname,argtype in arg_names(info),arg_types(info); "{argname}:{describeType(argtype)}"}],";") + ">"
 		else
 			res += "variant"
 	else
@@ -89,78 +67,47 @@ def describeType(info)
 		res += " const"
 	if info.isRef
 		res += " &"
+	if info.isTemp
+		res += "#"
+	if info.isImplicit
+		res += " implicit"
 	return res
 
 def describeFunction(finfo)
 	print("def {finfo.name} ")
 	if finfo.count != 0u
-		print("( ")
-		var first = true
-		for arg in finfo
-			if first
-				first = false
-			else
-				print("; ")
-			print("{arg.name}:{describeType(arg)}")
-		print(" ) ")
+		let argT = join([{for arg in finfo; "{arg.name}:{describeType(arg)}"}],"; ")
+		print("( {argT} ) ")
 	if finfo.result != null
 		print ( ": {describeType(*(finfo.result))}")
 	print("\n")
 
-def describeVariable(glob)
-	print("{glob.name} : {describeType(glob)}")
-	let value = get_variable_value(glob)
+def describeValue(value)
 	if value is nothing
-		pass
+		return ""
 	elif value is tString
-		print(" = \"{value}\"")
+		return "=\"{value}\""
 	else
-		print(" = {value}")
-	print("\n")
+		return "={value}"
+
+def describeVariable(glob;extra="")
+	print("{extra}{glob.name} : {describeType(glob)}{describeValue(get_variable_value(glob))}\n")
 
 def describeStructure(sinfo)
 	var anyAnn = false
 	structure_for_each_annotation(sinfo) <| $(ann; annArgs)
-		anyAnn = true
-		print("[{ann.name}")
-		var first = true
-		for arg in annArgs
-			if first
-				print("(")
-				first = false
-			else
-				print(",")
-			let value = get_annotation_argument_value(arg)
-			print("{arg.name}")
-			if value is nothing
-				pass
-			elif value is tString
-				print("=\"{value}\"")
-			else
-				print("={value}")
-		if !first
-			print(")")
-		print("]")
-	if anyAnn
-		print("\n")
+		let argT = join([{for arg in annArgs; "{arg.name}{describeValue(get_annotation_argument_value(arg))}"}],",")
+		print("[{ann.name}({argT})]\n")
 	print("struct {sinfo.name}\n")
 	for sfield in sinfo
-		print("    ")
-		describeVariable(sfield)
+		describeVariable(sfield,"\t")
 
 def describeEnumeration(einfo)
 	print("enum {einfo.name}\n")
 	for eitem in einfo
-		print("    {eitem.name} = {eitem.value}\n")
+		print("\t{eitem.name} = {eitem.value}\n")
 
 def describeModule(mod)
-	var name = string(mod.name)
-	if name=="$"
-		print("// modulde BUILTIN\n")
-	elif name==""
-		print("// modulde THIS\n")
-	else
-		print("// modulde {name}\n")
 	module_for_each_enumeration(mod) <| $ ( einfo )
 		describeEnumeration(einfo)
 	module_for_each_structure(mod) <| $ ( sinfo )
@@ -174,12 +121,10 @@ def describeModule(mod)
 	
 [export]
 def test()
-
 	// global modules
 	program_for_each_registered_module() <| $ ( mod )
 		describeModule(mod)
 	describeModule(get_module("$"))
-
 	// sampel program
 	compile("sample",sample) <| $ ( ok; prog; errors )
 		if ok
@@ -191,7 +136,6 @@ def test()
 		else
 			print("failed to compile:\n{errors}\n")
 			assert(false)
-
 	// current context
 	for fni in range(0,get_total_functions())
 		let finfo & = get_function_info(fni)
@@ -199,5 +143,4 @@ def test()
 	for vi in range(0,get_total_variables())
 		let vinfo & = get_variable_info(vi)
 		describeVariable(vinfo)
-
 	return true

@@ -228,6 +228,8 @@ namespace das {
             this->template addProperty<DAS_BIND_MANAGED_PROP(isPod)>("isPod");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isRawPod)>("isRawPod");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isConst)>("isConst");
+            this->template addProperty<DAS_BIND_MANAGED_PROP(isTemp)>("isTemp");
+            this->template addProperty<DAS_BIND_MANAGED_PROP(isImplicit)>("isImplicit");
             this->template addField<DAS_BIND_MANAGED_FIELD(argNames)>("argNames");
         }
         void init() {
