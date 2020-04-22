@@ -443,6 +443,7 @@ namespace das {
             nada._variant = 7; 
             nada.sValue = context->stringHeap.allocateName(info.sValue); 
             break;
+        default:;
         }
         return nada;
     }
@@ -462,6 +463,7 @@ namespace das {
             case Type::tFloat:  nada._variant = 5; break;
             case Type::tDouble: nada._variant = 6; break;
             case Type::tString: nada._variant = 7; break;
+            default:;
             }
             if (nada._variant != 8) {
                 if (nada._variant != 7) {

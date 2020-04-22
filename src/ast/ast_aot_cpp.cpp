@@ -1664,8 +1664,6 @@ namespace das {
         }
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
             Visitor::preVisitSafeAtIndex(expr, index);
-            bool isPtr = expr->subexpr->type->isPointer();
-            const auto & seT = isPtr ? expr->subexpr->type->firstType : expr->subexpr->type;
             ss << "),";
         }
         virtual ExpressionPtr visit ( ExprSafeAt * that ) override {
