@@ -1653,24 +1653,20 @@ namespace das {
             Visitor::preVisit(expr);
             bool isPtr = expr->subexpr->type->isPointer();
             const auto & seT = isPtr ? expr->subexpr->type->firstType : expr->subexpr->type;
-            if ( !(seT->dim.size() || seT->isGoodArrayType() || seT->isGoodTableType()) ) {
+            if ((seT->dim.size() || seT->isGoodArrayType() || seT->isGoodTableType())) {
+                ss << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << "::safe_index(";
+                if (isPtr) ss << "("; else ss << "&(";
+            } else {
                 ss << "das_index<" << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
                     << ">::safe_at(";
-                if (isPtr) ss << "*(";
+                if (isPtr) ss << "*("; else ss << "(";
             }
         }
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
             Visitor::preVisitSafeAtIndex(expr, index);
             bool isPtr = expr->subexpr->type->isPointer();
             const auto & seT = isPtr ? expr->subexpr->type->firstType : expr->subexpr->type;
-            if ( seT->dim.size() || seT->isGoodArrayType() || seT->isGoodTableType() ) {
-                ss << (expr->subexpr->type->isPointer() ? "->" : ".")
-                   << "safe_index(";
-            } else {
-                if (isPtr) ss << ")";
-                ss << ",";
-            }
-
+            ss << "),";
         }
         virtual ExpressionPtr visit ( ExprSafeAt * that ) override {
             ss << ",__context__)";

@@ -367,6 +367,7 @@ namespace das {
 
     template <typename TT, uint32_t size>
     struct TDim {
+        using THIS_TYPE = TDim<TT, size>;
         enum { capacity = size };
         TT  data[size];
         __forceinline TT & operator [] ( int32_t index ) {
@@ -395,27 +396,27 @@ namespace das {
             return data[idx];
         }
     // safe index
-        __forceinline TT * safe_index ( int32_t index, Context * ) {
-            if (!this) return nullptr;
+        static __forceinline TT * safe_index ( THIS_TYPE * that, int32_t index, Context * ) {
+            if (!that) return nullptr;
             uint32_t idx = uint32_t(index);
             if (idx >= size) return nullptr;
-            return data + index;
+            return that->data + index;
         }
-        __forceinline const TT * safe_index ( int32_t index, Context * ) const {
-            if (!this) return nullptr;
+        static __forceinline const TT * safe_index ( const THIS_TYPE * that, int32_t index, Context * ) {
+            if (!that) return nullptr;
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) return nullptr;
-            return data + index;
+            return that->data + index;
         }
-        __forceinline TT * safe_index ( uint32_t idx, Context * ) {
-            if (!this) return nullptr;
+        static __forceinline TT * safe_index ( THIS_TYPE * that, uint32_t idx, Context * ) {
+            if (!that) return nullptr;
             if ( idx>=size ) return nullptr;
-            return data + idx;
+            return that->data + idx;
         }
-        __forceinline const TT * safe_index ( uint32_t idx, Context * ) const {
-            if (!this) return nullptr;
+        static __forceinline const TT * safe_index ( const THIS_TYPE * that, uint32_t idx, Context * ) {
+            if (!that) return nullptr;
             if ( idx>=size ) return nullptr;
-            return data + idx;
+            return that->data + idx;
         }
     };
 
@@ -437,6 +438,7 @@ namespace das {
 
     template <typename TT>
     struct TArray : Array {
+        using THIS_TYPE = TArray<TT>;
         TArray()  {}
         TArray(TArray & arr) { moveA(arr); }
         TArray(TArray && arr ) { moveA(arr); }
@@ -475,32 +477,33 @@ namespace das {
             return ((const TT *)data)[idx];
         }
     // safe index
-        __forceinline TT * safe_index ( int32_t index, Context * ) {
-            if (!this) return nullptr;
+        static __forceinline TT * safe_index ( THIS_TYPE * that, int32_t index, Context * ) {
+            if (!that) return nullptr;
             uint32_t idx = uint32_t(index);
-            if (idx >= size) return nullptr;
-            return ((TT *)data) + index;
+            if (idx >= that->size) return nullptr;
+            return ((TT *)that->data) + index;
         }
-        __forceinline const TT  * safe_index ( int32_t index, Context * ) const {
-            if (!this) return nullptr;
+        static __forceinline const TT  * safe_index ( const THIS_TYPE * that, int32_t index, Context * ) {
+            if (!that) return nullptr;
             uint32_t idx = uint32_t(index);
-            if ( idx>=size ) return nullptr;
-            return ((const TT *)data) + index;
+            if ( idx>=that->size ) return nullptr;
+            return ((const TT *)that->data) + index;
         }
-        __forceinline TT * safe_index ( uint32_t idx, Context * ) {
-            if (!this) return nullptr;
-            if ( idx>=size ) return nullptr;
-            return ((TT *)data) + idx;
+        static __forceinline TT * safe_index ( THIS_TYPE * that, uint32_t idx, Context * ) {
+            if (!that) return nullptr;
+            if ( idx>=that->size ) return nullptr;
+            return ((TT *)that->data) + idx;
         }
-        __forceinline const TT  * safe_index ( uint32_t idx, Context * ) const {
-            if (!this) return nullptr;
-            if ( idx>=size ) return nullptr;
-            return ((const TT *)data) + idx;
+        static __forceinline const TT  * safe_index ( const THIS_TYPE * that, uint32_t idx, Context * ) {
+            if (!that) return nullptr;
+            if ( idx>=that->size ) return nullptr;
+            return ((const TT *)that->data) + idx;
         }
     };
 
     template <typename TK, typename TV>
     struct TTable : Table {
+        using THIS_TYPE = TTable<TK, TV>;
         TTable()  {}
         TTable(TTable & arr) { moveT(arr); }
         TTable(TTable && arr ) { moveT(arr); }
@@ -523,19 +526,19 @@ namespace das {
             int index = thh.reserve(*this, key, hfn);
             return ((TV *)data)[index];
         }
-        __forceinline TV * safe_index ( const TK & key, Context * __context__ ) {
-            if (!this) return nullptr;
+        static __forceinline TV * safe_index ( THIS_TYPE * that, const TK & key, Context * __context__ ) {
+            if (!that) return nullptr;
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
-            int index = thh.find(*this, key, hfn);
-            return index==-1 ? nullptr : ((TV *)data) + index;
+            int index = thh.find(*that, key, hfn);
+            return index==-1 ? nullptr : ((TV *)that->data) + index;
         }
-        __forceinline const TV * safe_index ( const TK & key, Context * __context__ ) const {
-            if (!this) return nullptr;
+        static __forceinline const TV * safe_index ( const THIS_TYPE * that, const TK & key, Context * __context__ ) {
+            if (!that) return nullptr;
             TableHash<TK> thh(__context__,sizeof(TV));
             auto hfn = hash_function(*__context__, key);
-            int index = thh.find(*this, key, hfn);
-            return index==-1 ? nullptr : ((const TV *)data) + index;
+            int index = thh.find(*that, key, hfn);
+            return index==-1 ? nullptr : ((const TV *)that->data) + index;
         }
     };
 

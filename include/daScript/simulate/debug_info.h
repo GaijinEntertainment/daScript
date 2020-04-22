@@ -186,17 +186,8 @@ namespace das
         char *                      name;
         uint32_t                    offset;
         void *                      annotation_arguments = nullptr;
-        union {
-            vec4f       value = v_zero();
-            bool        bValue;
-            int32_t     iValue;
-            uint32_t    uValue;
-            int64_t     i64Value;
-            uint64_t    u64Value;
-            float       fValue;
-            double      dfValue;
-        };
-        char *          sValue = nullptr;
+        vec4f                       value = v_zero();
+        char *                      sValue = nullptr;
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name, 
                 TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,

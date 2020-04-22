@@ -280,13 +280,7 @@ namespace das {
                         offsetof(VarInfo, annotation_arguments), makeType<const AnnotationArguments *>(ml) );
             // default values
             addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
-            addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
-            addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
-            addField<DAS_BIND_MANAGED_FIELD(uValue)>("uValue");
-            addField<DAS_BIND_MANAGED_FIELD(i64Value)>("i64Value");
-            addField<DAS_BIND_MANAGED_FIELD(u64Value)>("u64Value");
-            addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
-            addField<DAS_BIND_MANAGED_FIELD(dfValue)>("dfValue");
+            addField<DAS_BIND_MANAGED_FIELD(value)>("value");
         }
     };
 
