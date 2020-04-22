@@ -230,7 +230,7 @@ namespace das
             walker.walk(argValues[i], types[i]);
         }
         auto pStr = writer.c_str();
-        if ( !pStr ) {
+        if ( !pStr && writer.tellp()!=0 ) {
             context.throw_error("can't allocate string builder result, out of heap");
         }
         return cast<char *>::from(pStr);

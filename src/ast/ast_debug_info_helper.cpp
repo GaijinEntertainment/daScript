@@ -186,6 +186,7 @@ namespace das {
             } else {
                 vi->value = v_zero();
             }
+            vi->flags |= TypeInfo::flag_hasInitValue;
         } else {
             vi->value = v_zero();
         }
@@ -201,6 +202,20 @@ namespace das {
         makeTypeInfo(vi, var.type);
         vi->name = debugInfo->allocateName(var.name);
         vi->offset = 0;
+        if ( rtti && var.init && var.init->constexpression ) {
+            if ( var.init->rtti_isStringConstant() ) {
+                auto sval = static_pointer_cast<ExprConstString>(var.init);
+                vi->sValue = debugInfo->allocateName(sval->text);
+            } else if ( var.init->rtti_isConstant() ) {
+                auto cval = static_pointer_cast<ExprConst>(var.init);
+                vi->value = cval->value;
+            } else {
+                vi->value = v_zero();
+            }
+            vi->flags |= TypeInfo::flag_hasInitValue;
+        } else {
+            vi->value = v_zero();
+        }
         vmn2v[mangledName] = vi;
         return vi;
     }

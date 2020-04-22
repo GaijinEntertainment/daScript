@@ -173,13 +173,11 @@ def describeModule(mod)
 		describeVariable(glob)
 	
 [export]
-def test()
-
+def main
 	// global modules
 	program_for_each_registered_module() <| $ ( mod )
 		describeModule(mod)
 	describeModule(get_module("$"))
-
 	// sampel program
 	compile("sample",sample) <| $ ( ok; prog; errors )
 		if ok
@@ -191,7 +189,6 @@ def test()
 		else
 			print("failed to compile:\n{errors}\n")
 			assert(false)
-
 	// current context
 	for fni in range(0,get_total_functions())
 		let finfo & = get_function_info(fni)
@@ -199,5 +196,8 @@ def test()
 	for vi in range(0,get_total_variables())
 		let vinfo & = get_variable_info(vi)
 		describeVariable(vinfo)
+	return true
 
+[export]
+def test
 	return true

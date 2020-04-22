@@ -479,6 +479,7 @@ namespace das
         pVar->type->constant = true;
         pVar->init = Program::makeConst(LineInfo(),pVar->type,cast<TT>::from(value));
         pVar->init->type = make_shared<TypeDecl>(*pVar->type);
+        pVar->init->constexpression = true;
         pVar->initStackSize = sizeof(Prologue);
         if ( !mod.addVariable(pVar) ) {
             DAS_FATAL_LOG("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());

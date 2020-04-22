@@ -54,6 +54,7 @@ namespace das {
     };
 
     Enum<Type> g_cppTypeTable = {
+        {   Type::anyArgument,  "vec4f"    },
         {   Type::tVoid,        "void"     },
         {   Type::tBool,        "bool"     },
         {   Type::tInt8,        "int8_t"   },

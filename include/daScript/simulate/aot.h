@@ -1152,7 +1152,7 @@ namespace das {
         StringBuilderWriter writer(__context__->stringHeap);
         writer << x;
         auto pStr = writer.c_str();
-        if ( !pStr ) {
+        if ( !pStr && writer.tellp()!=0 ) {
             __context__->throw_error("can't allocate string builder result, out of heap");
         }
         return pStr;
@@ -1165,7 +1165,7 @@ namespace das {
             walker.walk(node.argumentValues[i], node.types[i]);
         }
         auto pStr = writer.c_str();
-        if ( !pStr ) {
+        if ( !pStr && writer.tellp()!=0 ) {
             __context__->throw_error("can't allocate string builder result, out of heap");
         }
         return pStr;

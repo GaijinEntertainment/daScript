@@ -62,6 +62,7 @@ namespace das
 
     int getTypeBaseSize ( Type type ) {
         switch ( type ) {
+            case anyArgument:   return sizeof(vec4f);
             case tPointer:      return sizeof(void *);
             case tIterator:     return sizeof(Sequence);
             case tHandle:       DAS_ASSERTF(0, "we should not be here. if this happens, iterator was somehow placed on stack. how?");
@@ -108,6 +109,7 @@ namespace das
 
     int getTypeBaseAlign ( Type type ) {
         switch ( type ) {
+            case anyArgument:   return alignof(vec4f);
             case tPointer:      return alignof(void *);
             case tIterator:     return alignof(Sequence);          
             case tHandle:       DAS_ASSERTF(0, "we should not be here. if this happens iterator was somehow placed on stack. how?");

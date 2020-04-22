@@ -154,6 +154,7 @@ namespace das
             flag_isTemp = 1<<6,
             flag_isImplicit = 1<<7,
             flag_refValue = 1<<8,
+            flag_hasInitValue = 1<<9
         };
         Type                type;
         StructInfo *        structType;
@@ -170,6 +171,7 @@ namespace das
         uint32_t            hash;
         __forceinline bool isRef() const { return flags & flag_ref; }
         __forceinline bool isRefType() const { return flags & flag_refType; }
+        __forceinline bool isRefValue() const { return flags & flag_refValue; }
         __forceinline bool canCopy() const { return flags & flag_canCopy; }
         __forceinline bool isPod() const { return flags & flag_isPod; }
         __forceinline bool isRawPod() const { return flags & flag_isRawPod; }

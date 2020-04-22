@@ -229,6 +229,7 @@ namespace das {
                     afterHandle(pa, info);
                     break;
                 case Type::tVoid:       break;  // skip void
+                case Type::anyArgument: break;  // skip any argument
                 default:                DAS_ASSERTF(0, "unsupported print type"); break;
             }
         }

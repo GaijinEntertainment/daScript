@@ -2,32 +2,8 @@ options indenting=4
 
 require rtti
 
-def compile(mod_name,text:string;subexpr:block<(ok:bool;prog:RttiProgram;issues:das_string):void>)
-    rtti_builtin_compile(mod_name,text,subexpr)
-
-def compile_file(mod_name:string;subexpr:block<(ok:bool;prog:RttiProgram;issues:das_string):void>)
-    rtti_builtin_compile_file(mod_name,subexpr)
-
-def module_for_each_enumeration(pmod:RttiModule const?;subexpr:block<(info:EnumInfo):void>)
-    rtti_builtin_module_for_each_enumeration(pmod,subexpr)
-
-def module_for_each_structure(pmod:RttiModule const?;subexpr:block<(info:StructInfo):void>)
-    rtti_builtin_module_for_each_structure(pmod,subexpr)
-
-def module_for_each_function(pmod:RttiModule const?;subexpr:block<(info:FuncInfo):void>)
-    rtti_builtin_module_for_each_function(pmod,subexpr)
-
-def module_for_each_generic(pmod:RttiModule const?;subexpr:block<(info:FuncInfo):void>)
-    rtti_builtin_module_for_each_generic(pmod,subexpr)
-
 def structure_for_each_annotation(st:StructInfo;subexpr:block<(ann:Annotation;args:AnnotationArguments):void>)
     rtti_builtin_structure_for_each_annotation(st,subexpr)
-
-def program_for_each_module(pmod:RttiProgram;subexpr:block<(pmod:RttiModule const?):void>)
-    rtti_builtin_program_for_each_module(pmod,subexpr)
-
-def program_for_each_registered_module(subexpr:block<(pmod:RttiModule const?):void>)
-    rtti_builtin_program_for_each_registered_module(subexpr)
 
 [unsafe]
 def is_same_type( a,b:TypeInfo;
@@ -41,12 +17,22 @@ def is_same_type( a,b:TypeInfo;
 def is_compatible_cast( a,b:StructInfo )
     return builtin_is_compatible_cast(reinterpret<StructInfo const?>(a),reinterpret<StructInfo const?>(b))
 
-def rtti_arg_names ( info : TypeInfo ) : iterator<string>
+def arg_names ( info : TypeInfo ) : iterator<string>
     var it : iterator<string>
     _builtin_make_arg_names_iterator(it,info)
     return <- it
 
-def rtti_arg_types ( info : TypeInfo ) : iterator<TypeInfo&>
+def arg_types ( info : TypeInfo ) : iterator<TypeInfo&>
+    var it : iterator<TypeInfo&>
+    _builtin_make_arg_types_iterator(it,info)
+    return <- it
+
+def arg_names ( info : VarInfo ) : iterator<string>
+    var it : iterator<string>
+    _builtin_make_arg_names_iterator(it,info)
+    return <- it
+
+def arg_types ( info : VarInfo ) : iterator<TypeInfo&>
     var it : iterator<TypeInfo&>
     _builtin_make_arg_types_iterator(it,info)
     return <- it
