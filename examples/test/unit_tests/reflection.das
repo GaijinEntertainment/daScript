@@ -58,7 +58,7 @@ def describeType(info)
 		else
 			res += "variant"
 	else
-		res = "{get_das_type_name(info.basicType)}"	// TODO: FIXME. this is crashing without "{}"
+		res = get_das_type_name(info.basicType)
 	if info.dimSize !=0u
 		for index in range(0,int(info.dimSize))
 			let d = get_dim(info,index)

@@ -155,6 +155,8 @@ namespace das {
         void forEachString ( function<void (const char *)> && fn );
         char * intern ( const char * str ) const;
         void recognize ( char * str );
+    private:
+        __forceinline char * allocateName(const string &) { return nullptr; }   // no longer accessible
     protected:
         das_string_set internMap;
         bool needIntern = false;
