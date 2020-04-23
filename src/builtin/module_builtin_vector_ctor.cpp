@@ -32,8 +32,7 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValue;
             evalArgs(context, &argValue);
-            auto X = cast<TT>::to(argValue);
-            return Policy::setXYZW(X, X, X, X);
+            return vec_splats(cast<TT>::to(argValue));
         }
     };
 
@@ -51,10 +50,10 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValues[2];
             evalArgs(context, argValues);
-            return Policy::setXYZW(cast<TT>::to(argValues[0]),
-                                   cast<TT>::to(argValues[1]),
-                                   0,
-                                   0);
+            alignas(16) TT ret[2];
+            ret[0] = cast<TT>::to(argValues[0]);
+            ret[1] = cast<TT>::to(argValues[1]);
+            return vec_loadu_half(ret);
         }
     };
 
@@ -73,10 +72,12 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValues[3];
             evalArgs(context, argValues);
-            return Policy::setXYZW(cast<TT>::to(argValues[0]),
-                                   cast<TT>::to(argValues[1]),
-                                   cast<TT>::to(argValues[2]),
-                                   0);
+            alignas(16) TT ret[4];
+            ret[0] = cast<TT>::to(argValues[0]);
+            ret[1] = cast<TT>::to(argValues[1]);
+            ret[2] = cast<TT>::to(argValues[2]);
+            ret[3] = 0;
+            return vec_load(ret);
         }
     };
 
@@ -96,10 +97,12 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValues[4];
             evalArgs(context, argValues);
-            return Policy::setXYZW(cast<TT>::to(argValues[0]),
-                                   cast<TT>::to(argValues[1]),
-                                   cast<TT>::to(argValues[2]),
-                                   cast<TT>::to(argValues[3]));
+            alignas(16) TT ret[4];
+            ret[0] = cast<TT>::to(argValues[0]);
+            ret[1] = cast<TT>::to(argValues[1]);
+            ret[2] = cast<TT>::to(argValues[2]);
+            ret[3] = cast<TT>::to(argValues[3]);
+            return vec_load(ret);
         }
     };
 
