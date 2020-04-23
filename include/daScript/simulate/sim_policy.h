@@ -233,6 +233,15 @@ namespace  das {
         static __forceinline vec4f setXYZW ( float x, float y, float z, float w ) {
             return v_make_vec4f(x, y, z, w);
         }
+        static __forceinline vec4f setAligned ( const float *__restrict x ) { return v_ld(x); }
+        static __forceinline vec4f setAligned ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ld_w(x)); }
+        static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
+        static __forceinline vec4f setXY ( const float *__restrict x ) { return v_ldu_half(x); }
+        static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldu_half_w(x)); }
+        static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
+        static __forceinline vec4f splats ( float x ) { return v_splats(x); }
+        static __forceinline vec4f splats ( int32_t  x ) { return v_splats((float)x); }
+        static __forceinline vec4f splats ( uint32_t x ) { return v_splats((float)x); }
         // basic
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
             return (v_signmask(v_cmp_eq(a,b)) & mask) == mask;
@@ -315,6 +324,15 @@ namespace  das {
         static __forceinline vec4f setXYZW ( int32_t x, int32_t y, int32_t z, int32_t w ) {
             return v_cast_vec4f(v_make_vec4i(x, y, z, w));
         }
+        static __forceinline vec4f setAligned ( const float *__restrict x ) { return v_cvt_vec4i(v_ld(x)); }
+        static __forceinline vec4f setAligned ( const int32_t *__restrict x ) { return v_cast_vec4f(v_ld_w(x)); }
+        static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
+        static __forceinline vec4f setXY ( const float *__restrict x ) { return v_cvt_vec4i(v_ldu_half(x)); }
+        static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldu_half_w(x)); }
+        static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
+        static __forceinline vec4f splats ( float x ) { return v_cast_vec4f(v_splatsi((int)x)); }
+        static __forceinline vec4f splats ( int32_t  x ) { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f splats ( uint32_t x ) { return v_cast_vec4f(v_splatsi(x)); }
         // basic
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
             return (v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(a),v_cast_vec4i(b)))) & mask) == mask;

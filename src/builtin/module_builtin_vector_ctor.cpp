@@ -32,7 +32,7 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValue;
             evalArgs(context, &argValue);
-            return vec_splats(cast<TT>::to(argValue));
+            return Policy::splats(cast<TT>::to(argValue));
         }
     };
 
@@ -53,7 +53,7 @@ namespace das
             alignas(16) TT ret[2];
             ret[0] = cast<TT>::to(argValues[0]);
             ret[1] = cast<TT>::to(argValues[1]);
-            return vec_loadu_half(ret);
+            return Policy::setXY(ret);
         }
     };
 
@@ -77,7 +77,7 @@ namespace das
             ret[1] = cast<TT>::to(argValues[1]);
             ret[2] = cast<TT>::to(argValues[2]);
             ret[3] = 0;
-            return vec_load(ret);
+            return Policy::setAligned(ret);
         }
     };
 
@@ -102,7 +102,7 @@ namespace das
             ret[1] = cast<TT>::to(argValues[1]);
             ret[2] = cast<TT>::to(argValues[2]);
             ret[3] = cast<TT>::to(argValues[3]);
-            return vec_load(ret);
+            return Policy::setAligned(ret);
         }
     };
 
