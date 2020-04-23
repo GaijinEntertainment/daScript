@@ -52,6 +52,17 @@ struct Point3 { float x, y, z; };
 
 template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {};
 
+typedef das::vector<Point3> Point3Array;
+
+namespace das {
+    template <>
+    struct das_index<Point3Array> : das_default_vector_index<Point3Array, Point3Array::value_type> {};
+    template <>
+    struct das_index<Point3Array const> : das_default_vector_index<Point3Array, Point3Array::value_type> {};
+}
+
+void testPoint3Array(const das::TBlock<void, const Point3Array> & blk, das::Context * context);
+
 struct SomeDummyType {
     int32_t foo;
     float   bar;

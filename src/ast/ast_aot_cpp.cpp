@@ -2657,7 +2657,13 @@ namespace das {
                 if (var != ffor->iteratorVariables.front()) {
                     ss << " && ";
                 }
-                ss << forSrcName(var->name) << ".next(__context__," << collector.getVarName(var) << ")";
+                ss << forSrcName(var->name) << ".next(__context__,";
+                if (var->type->aotAlias) {
+                    ss  << "reinterpret_cast<" 
+                        << (var->type->constant ? "const " : "")
+                        << var->type->alias << " *&>";
+                }
+                ss << "(" << collector.getVarName(var) << "))";
             }
             ss << " )\n";
             ss << string(tab,'\t');
@@ -2692,14 +2698,27 @@ namespace das {
                 << " " << collector.getVarName(var) << ";\n";
             // loop
             auto nl = needLoopName(ffor);
-            ss << string(tab,'\t') << nl << " = " << forSrcName(var->name)
-                << ".first(__context__," << collector.getVarName(var) << ") && " << nl << ";\n";
+            ss << string(tab, '\t') << nl << " = " << forSrcName(var->name)
+                << ".first(__context__,";
+            if (var->type->aotAlias) {
+                ss  << "reinterpret_cast<" 
+                    << (var->type->constant ? "const " : "")
+                    << var->type->alias << " *&>";
+            }
+            ss << "(" << collector.getVarName(var) << ")";
+            ss << ") && " << nl << ";\n";
             return Visitor::visitForSource(ffor, that, last);
         }
         virtual ExpressionPtr visit ( ExprFor * ffor ) override {
             ss << "\n";
             for ( auto & var : ffor->iteratorVariables ) {
-                ss << string(tab,'\t') << forSrcName(var->name) << ".close(__context__," << collector.getVarName(var) << ");\n";
+                ss << string(tab, '\t') << forSrcName(var->name) << ".close(__context__,";
+                if (var->type->aotAlias) {
+                    ss  << "reinterpret_cast<" 
+                        << (var->type->constant ? "const " : "")
+                        << var->type->alias << " *&>";
+                }
+                ss << "(" << collector.getVarName(var) << "));\n";
             }
             tab --;
             ss << string(tab,'\t') << "}";

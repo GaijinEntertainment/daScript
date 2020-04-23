@@ -416,7 +416,20 @@ namespace das
             if ( na=="length" ) return context.code->makeNode<SimNode_VectorLength>(at,value->simulate(context));
             return nullptr;
         }
-        TypeDeclPtr vecType;
+        virtual void walk ( DataWalker & walker, void * vec ) override {
+            if ( !ati ) {
+                auto dimType = make_shared<TypeDecl>(*vecType);
+                dimType->ref = 0;
+                dimType->dim.push_back(1234);
+                ati = helpA.makeTypeInfo(nullptr, dimType);
+            }
+            auto pVec = (VectorType *)vec;
+            ati->dim[ati->dimSize - 1] = uint32_t(pVec->size());
+            walker.walk_dim((char *)pVec->data(), ati);
+        }
+        TypeDeclPtr                vecType;
+        DebugInfoHelper            helpA;
+        TypeInfo *                 ati = nullptr;
     };
 
     template <typename VectorType>

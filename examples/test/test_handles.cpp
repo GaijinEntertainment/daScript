@@ -18,6 +18,8 @@ namespace das {
 	        return t;
 	    }
 	};
+
+    template <> struct typeName<Point3>   { static string name() { return "Point3"; } };
 }
 
 DAS_BASE_BIND_ENUM_98(SomeEnum_16, SomeEnum_16, SomeEnum_16_zero, SomeEnum_16_one, SomeEnum_16_two)
@@ -28,6 +30,7 @@ MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
 
 MAKE_TYPE_FACTORY(SomeDummyType, SomeDummyType)
+MAKE_TYPE_FACTORY(Point3Array, Point3Array)
 
 namespace das {
   template <>
@@ -512,6 +515,20 @@ bool tempArrayExample( const TArray<char *> & arr,
     return (arr.size == 1) && (strcmp(arr[0], "one") == 0);
 }
 
+void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * context) {
+    Point3Array arr;
+    for (int32_t x = 0; x != 10; ++x) {
+        Point3 p;
+        p.x = 1.0f;
+        p.y = 2.0f;
+        p.z = 3.0f;
+        arr.push_back(p);
+    }
+    vec4f args[1];
+    args[0] = cast<Point3Array *>::from(&arr);
+    context->invoke(blk, args, nullptr);
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -530,6 +547,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_shared<EventRegistrator>());
     // test
     addAnnotation(make_shared<TestFunctionAnnotation>());
+    // point3 array
+    addAnnotation(make_shared<ManagedVectorAnnotation<Point3Array>>("Point3Array",lib));
+    addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array", 
+        SideEffects::modifyExternal, "testPoint3Array");
     // utf8 print
     addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw", SideEffects::modifyExternal, "builtin_printw");
     // register function
