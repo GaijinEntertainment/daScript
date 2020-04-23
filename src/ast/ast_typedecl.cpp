@@ -499,7 +499,7 @@ namespace das
         if ( baseType==Type::tHandle ) {
             return annotation->needDelete();
         } else if ( baseType==Type::tPointer ) {
-            return true;
+            return canDelete();
         } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             return true;
         } else if ( baseType==Type::tString ) {

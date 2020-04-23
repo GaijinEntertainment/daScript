@@ -4695,6 +4695,26 @@ namespace das {
                                 argT = resT;
                             }
                         }
+                        // resolve tail-end types
+                        for ( size_t ai = types.size(); ai!= clone->arguments.size(); ++ai ) {
+                            auto & arg = clone->arguments[ai];
+                            if ( arg->type->isAuto() ) {
+                                if ( arg->init ) {
+                                    arg->init = arg->init->visit(*this);
+                                    if (arg->init->type && !arg->init->type->isAlias() && !arg->init->type->isAuto()) {
+                                        arg->type = make_shared<TypeDecl>(*arg->init->type);
+                                        continue;
+                                    }
+                                } 
+                                error("unknown type of argument " + clone->arguments[ai]->name
+                                    + "; can't instance " + oneGeneric->describe(), "", 
+                                    "provide argument type explicitly",
+                                    expr->at, CompilationError::invalid_type);
+                                return nullptr;
+                            }
+                        }
+
+                        // now we verify if tail end can indeed be fully infered
                         if (!program->addFunction(clone)) {
                             auto exf = program->thisModule->functions[clone->getMangledName()];
                             DAS_VERIFYF(exf, "if we can't add, this means there is function with exactly this mangled name");

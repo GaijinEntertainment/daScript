@@ -36,3 +36,20 @@ def arg_types ( info : VarInfo ) : iterator<TypeInfo&>
     var it : iterator<TypeInfo&>
     _builtin_make_arg_types_iterator(it,info)
     return <- it
+
+def context_for_each_function( blk:block<(info:FuncInfo):void> )
+	for fni in range(0,get_total_functions())
+		invoke(blk,get_function_info(fni))
+
+def context_for_each_variable( blk:block<(info:VarInfo):void> )
+	for vi in range(0,get_total_variables())
+		invoke(blk,get_variable_info(vi))
+
+[unsafe]
+def each_dim(info)
+	var pinfo = addr(info)
+	return <- generator<int>() <| $()
+		for index in range(0,int(pinfo.dimSize))
+			yield get_dim(*pinfo,index)
+		return false
+

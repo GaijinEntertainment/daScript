@@ -59,10 +59,7 @@ def describeType(info)
 			res += "variant"
 	else
 		res = get_das_type_name(info.basicType)
-	if info.dimSize !=0u
-		for index in range(0,int(info.dimSize))
-			let d = get_dim(info,index)
-			res += d!=-1 ? "[{d}]" : "[]"
+	res += join([{for d in each_dim(info); d!=-1 ? "[{d}]" : "[]"}],"")
 	if info.isConst
 		res += " const"
 	if info.isRef
@@ -137,11 +134,9 @@ def main
 			print("failed to compile:\n{errors}\n")
 			assert(false)
 	// current context
-	for fni in range(0,get_total_functions())
-		let finfo & = get_function_info(fni)
+	context_for_each_function() <| $ ( finfo )
 		describeFunction(finfo)
-	for vi in range(0,get_total_variables())
-		let vinfo & = get_variable_info(vi)
+	context_for_each_variable() <| $ ( vinfo )
 		describeVariable(vinfo)
 	return true
 
