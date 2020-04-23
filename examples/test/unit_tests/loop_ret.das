@@ -1,5 +1,3 @@
-options log = true
-
 require random
 
 var

@@ -704,23 +704,29 @@ namespace das {
     struct das_iterator<TArray<TT>> {
         __forceinline das_iterator(TArray<TT> & r) {
             that = &r;
-            array_end = (TT *)(that->data + that->size*sizeof(TT));
+            array_end = (TT *)(that->data + that->size * sizeof(TT));
         }
-        __forceinline bool first ( Context * __context__, TT * & i ) {
+        __forceinline bool first(Context * __context__, TT * & i) {
+            context = __context__;
             array_lock(*__context__, *that);
-            i = (TT *) that->data;
-            return i!=array_end;
+            i = (TT *)that->data;
+            return i != array_end;
         }
-        __forceinline bool next  ( Context *, TT * & i ) {
+        __forceinline bool next(Context *, TT * & i) {
             i++;
-            return i!=array_end;
+            return i != array_end;
         }
-        __forceinline void close ( Context * __context__, TT * & i ) {
+        __forceinline void close(Context * __context__, TT * & i) {
             array_unlock(*__context__, *that);
-            i = nullptr;
+            context = nullptr;
+            if ( &i ) i = nullptr;
+        }
+        ~das_iterator() {
+            if (context) close(context, *(TT **)nullptr);
         }
         Array * that;
         TT * array_end;
+        Context * context = nullptr;
     };
 
     template <typename TT>
@@ -730,6 +736,7 @@ namespace das {
             array_end = (TT *)(that->data + that->size*sizeof(TT));
         }
         __forceinline bool first ( Context * __context__, const TT * & i ) {
+            context = __context__;
             array_lock(*__context__, *(Array *)(that)); // technically we don't need for the const array, but...
             i = (const TT *) that->data;
             return i!=array_end;
@@ -740,10 +747,15 @@ namespace das {
         }
         __forceinline void close ( Context * __context__, const TT * & i ) {
             array_unlock(*__context__, *(Array *)(that));  // technically we don't need for the const array, but...
-            i = nullptr;
+            context = nullptr;
+            if ( &i ) i = nullptr;
+        }
+        ~das_iterator() {
+            if (context) close(context, *(const TT **)nullptr);
         }
         const Array * that;
         const TT * array_end;
+        Context * context = nullptr;
     };
 
     template <typename TT, uint32_t size>
@@ -1568,23 +1580,25 @@ namespace das {
                 r.iter = nullptr;
             }
         }
-        __forceinline ~das_iterator() {
-            // delete that;
-            // that = nullptr;
+        template <typename TT>
+        __forceinline bool first ( Context * __context__, TT & i ) {
+            context = __context__;
+            return that->first(*__context__, (char *)&i);
         }
         template <typename TT>
-        __forceinline bool first ( Context * context, TT & i ) {
-            return that->first(*context, (char *)&i);
+        __forceinline bool next  ( Context * __context__, TT & i ) {
+            return that->next(*__context__,(char *)&i);
         }
         template <typename TT>
-        __forceinline bool next  ( Context * context, TT & i ) {
-            return that->next(*context,(char *)&i);
+        __forceinline void close ( Context * __context__, TT & i ) {
+            that->close(*__context__,(char *)&i);
+            context = nullptr;
         }
-        template <typename TT>
-        __forceinline void close ( Context * context, TT & i ) {
-            that->close(*context,(char *)&i);
+        ~das_iterator() {
+            if (context) that->close(*context, nullptr);
         }
         Iterator * that = nullptr;
+        Context * context = nullptr;
     };
 
     template <>
