@@ -32,8 +32,7 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValue;
             evalArgs(context, &argValue);
-            auto X = cast<TT>::to(argValue);
-            return Policy::setXYZW(X, X, X, X);
+            return vec_splats(cast<TT>::to(argValue));
         }
     };
 
@@ -51,10 +50,10 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValues[2];
             evalArgs(context, argValues);
-            return Policy::setXYZW(cast<TT>::to(argValues[0]),
-                                   cast<TT>::to(argValues[1]),
-                                   0,
-                                   0);
+            alignas(16) TT ret[2];
+            ret[0] = cast<TT>::to(argValues[0]);
+            ret[1] = cast<TT>::to(argValues[1]);
+            return vec_loadu_half(ret);
         }
     };
 
@@ -73,10 +72,12 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValues[3];
             evalArgs(context, argValues);
-            return Policy::setXYZW(cast<TT>::to(argValues[0]),
-                                   cast<TT>::to(argValues[1]),
-                                   cast<TT>::to(argValues[2]),
-                                   0);
+            alignas(16) TT ret[4];
+            ret[0] = cast<TT>::to(argValues[0]);
+            ret[1] = cast<TT>::to(argValues[1]);
+            ret[2] = cast<TT>::to(argValues[2]);
+            ret[3] = 0;
+            return vec_load(ret);
         }
     };
 
@@ -96,10 +97,12 @@ namespace das
             DAS_PROFILE_NODE
             vec4f argValues[4];
             evalArgs(context, argValues);
-            return Policy::setXYZW(cast<TT>::to(argValues[0]),
-                                   cast<TT>::to(argValues[1]),
-                                   cast<TT>::to(argValues[2]),
-                                   cast<TT>::to(argValues[3]));
+            alignas(16) TT ret[4];
+            ret[0] = cast<TT>::to(argValues[0]);
+            ret[1] = cast<TT>::to(argValues[1]);
+            ret[2] = cast<TT>::to(argValues[2]);
+            ret[3] = cast<TT>::to(argValues[3]);
+            return vec_load(ret);
         }
     };
 
@@ -111,30 +114,22 @@ namespace das
 addFunction ( make_shared<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib,"v_zero",false) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,1>,VTYPE,float>>   (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,1>,VTYPE,int32_t>> (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,VTYPE,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,1>,VTYPE,int64_t>> (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,1>,VTYPE,uint64_t>>(#VTYPE,lib,VNAME,false) );
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,VTYPE,uint32_t>>(#VTYPE,lib,VNAME,false) );
 
 #define ADD_VEC_CTOR_2(VTYPE,VNAME) \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,2>,VTYPE,float,float>>      (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,2>,VTYPE,int32_t,int32_t>>  (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,2>,VTYPE,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,2>,VTYPE,int64_t,int64_t>>  (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,2>,VTYPE,uint64_t,uint64_t>>(#VTYPE,lib,VNAME,false) );
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,2>,VTYPE,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
 
 #define ADD_VEC_CTOR_3(VTYPE,VNAME) \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,3>,VTYPE,float,float,float>>         (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,3>,VTYPE,int32_t,int32_t,int32_t>>   (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,3>,VTYPE,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,3>,VTYPE,int64_t,int64_t,int64_t>>   (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,3>,VTYPE,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib,VNAME,false) );
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,3>,VTYPE,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
 
 #define ADD_VEC_CTOR_4(VTYPE,VNAME) \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,4>,VTYPE,float,float,float,float>>            (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,4>,VTYPE,int32_t,int32_t,int32_t,int32_t>>    (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,VTYPE,uint32_t,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,4>,VTYPE,int64_t,int64_t,int64_t,int64_t>>    (#VTYPE,lib,VNAME,false) ); \
-addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,4>,VTYPE,uint64_t,uint64_t,uint64_t,uint64_t>>(#VTYPE,lib,VNAME,false) );
+addFunction ( make_shared<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,VTYPE,uint32_t,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
 
     struct SimNode_Int4ToFloat4 : SimNode_CallBase {
         SimNode_Int4ToFloat4(const LineInfo & at) : SimNode_CallBase(at) {}
