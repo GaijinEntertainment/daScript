@@ -555,7 +555,7 @@ namespace das {
     }
 
     TypeDeclPtr ModuleLibrary::makeStructureType ( const string & name ) const {
-        auto t = make_shared<TypeDecl>(Type::tStructure);
+        auto t = make_smart<TypeDecl>(Type::tStructure);
         auto structs = findStructure(name,nullptr);
         if ( structs.size()==1 ) {
             t->structType = structs.back().get();
@@ -568,7 +568,7 @@ namespace das {
     }
 
     TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
-        auto t = make_shared<TypeDecl>(Type::tHandle);
+        auto t = make_smart<TypeDecl>(Type::tHandle);
         auto handles = findAnnotation(name,nullptr);
         if ( handles.size()==1 ) {
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {

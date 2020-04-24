@@ -1,9 +1,11 @@
 #pragma once
 
+#include "daScript/misc/smart_ptr.h"
+
 namespace das {
 
     struct TypeDecl;
-    typedef shared_ptr<TypeDecl> TypeDeclPtr;
+    typedef smart_ptr<TypeDecl> TypeDeclPtr;
 
     class Structure;
     typedef shared_ptr<Structure> StructurePtr;
@@ -28,7 +30,7 @@ namespace das {
     class ModuleLibrary;
     class ModuleGroup;
 
-    struct TypeDecl : enable_shared_from_this<TypeDecl> {
+    struct TypeDecl : ptr_ref_count {
         enum {
             dimAuto = -1,
             dimConst = -2,
@@ -206,7 +208,7 @@ namespace das {
     template <typename TT>
     struct typeFactory {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>();
+            auto t = make_smart<TypeDecl>();
             t->baseType = Type( ToBasicType<TT>::type );
             t->constant = is_const<TT>::value;
             return t;
@@ -216,7 +218,7 @@ namespace das {
     template <>
     struct typeFactory<char *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tString);
+            auto t = make_smart<TypeDecl>(Type::tString);
             return t;
         }
     };
@@ -224,7 +226,7 @@ namespace das {
     template <>
     struct typeFactory<const char *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tString);
+            auto t = make_smart<TypeDecl>(Type::tString);
             t->constant = true;
             return t;
         }
@@ -233,7 +235,7 @@ namespace das {
     template <>
     struct typeFactory<Array *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tArray);
+            auto t = make_smart<TypeDecl>(Type::tArray);
             return t;
         }
     };
@@ -241,7 +243,7 @@ namespace das {
     template <>
     struct typeFactory<Iterator *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tIterator);
+            auto t = make_smart<TypeDecl>(Type::tIterator);
             return t;
         }
     };
@@ -249,7 +251,7 @@ namespace das {
     template <>
     struct typeFactory<const Iterator *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tIterator);
+            auto t = make_smart<TypeDecl>(Type::tIterator);
             t->constant = true;
             return t;
         }
@@ -258,7 +260,7 @@ namespace das {
     template <>
     struct typeFactory<Table *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_shared<TypeDecl>(Type::tTable);
+            auto t = make_smart<TypeDecl>(Type::tTable);
             return t;
         }
     };
@@ -266,14 +268,14 @@ namespace das {
     template <>
     struct typeFactory<Context *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
-            return make_shared<TypeDecl>(Type::fakeContext);
+            return make_smart<TypeDecl>(Type::fakeContext);
         }
     };
 
     template <typename ResultType, typename ...Args>
     struct typeFactory< TBlock<ResultType,Args...> > {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = make_shared<TypeDecl>(Type::tBlock);
+            auto t = make_smart<TypeDecl>(Type::tBlock);
             t->firstType = typeFactory<ResultType>::make(lib);
             t->argTypes = { typeFactory<Args>::make(lib)... };
             return t;
@@ -310,7 +312,7 @@ namespace das {
     template <typename TT>
     struct typeFactory< TArray<TT> > {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto t = make_shared<TypeDecl>(Type::tArray);
+            auto t = make_smart<TypeDecl>(Type::tArray);
             t->firstType = typeFactory<TT>::make(lib);
             return t;
         }
@@ -329,7 +331,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<TT *> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto pt = make_shared<TypeDecl>(Type::tPointer);
+            auto pt = make_smart<TypeDecl>(Type::tPointer);
             if ( !is_void<TT>::value ) {
                 pt->firstType = typeFactory<TT>::make(lib);
             }
@@ -340,7 +342,7 @@ namespace das {
     template <typename TT>
     struct typeFactory<const TT *> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
-            auto pt = make_shared<TypeDecl>(Type::tPointer);
+            auto pt = make_smart<TypeDecl>(Type::tPointer);
             if ( !is_void<TT>::value ) {
                 pt->firstType = typeFactory<TT>::make(lib);
                 pt->firstType->constant = true;

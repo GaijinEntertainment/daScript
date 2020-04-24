@@ -48,7 +48,7 @@ namespace das
         for ( auto & argType : argTypes ) {
             argType = argType->visit(vis);
         }
-        return shared_from_this();
+        return this;
     }
 
     void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
@@ -84,7 +84,7 @@ namespace das
     void TypeDecl::updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases ) {
         if ( decl->baseType==Type::autoinfer ) {
             if ( !decl->alias.empty() && aliases.find(decl->alias)==aliases.end() ) {
-                auto TT = make_shared<TypeDecl>(*pass);
+                auto TT = make_smart<TypeDecl>(*pass);
                 TT->alias = decl->alias;
                 TT->dim.clear();
                 TT->constant = false;
@@ -94,7 +94,7 @@ namespace das
             }
         } else if ( pass->baseType==Type::autoinfer ) {
             if ( !pass->alias.empty() && aliases.find(pass->alias)==aliases.end() ) {
-                auto TT = make_shared<TypeDecl>(*decl);
+                auto TT = make_smart<TypeDecl>(*decl);
                 TT->alias = pass->alias;
                 TT->dim.clear();
                 TT->constant = false;
@@ -127,7 +127,7 @@ namespace das
         // can't infer from the type, which is already 'auto'
         if (initT->isAuto()) {
             if (!autoT->isAuto()) {
-                return make_shared<TypeDecl>(*autoT);
+                return make_smart<TypeDecl>(*autoT);
             } else if (autoT->baseType == Type::tBlock || autoT->baseType == Type::tFunction
                 || autoT->baseType == Type::tLambda || autoT->baseType == Type::tTuple
                 || autoT->baseType == Type::tVariant ) {
@@ -137,7 +137,7 @@ namespace das
                 if ( aliases && !autoT->alias.empty() ) {
                     auto it = aliases->find(autoT->alias);
                     if ( it != aliases->end() ) {
-                        return make_shared<TypeDecl>(*it->second);
+                        return make_smart<TypeDecl>(*it->second);
                     }
                 }
                 */
@@ -147,7 +147,7 @@ namespace das
         // if its not an auto type, return as is
         if ( !autoT->isAuto() ) {
             if ( autoT->isSameType(*initT, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
-                return make_shared<TypeDecl>(*autoT);
+                return make_smart<TypeDecl>(*autoT);
             } else {
                 return nullptr;
             }
@@ -198,7 +198,7 @@ namespace das
                 return nullptr;
         }
         // now, lets make the type
-        auto TT = make_shared<TypeDecl>(*initT);
+        auto TT = make_smart<TypeDecl>(*initT);
         TT->at = autoT->at;
         TT->aotAlias = autoT->aotAlias;
         TT->alias = autoT->alias;
@@ -414,11 +414,11 @@ namespace das
         at = decl.at;
         module = decl.module;
         if ( decl.firstType )
-            firstType = make_shared<TypeDecl>(*decl.firstType);
+            firstType = make_smart<TypeDecl>(*decl.firstType);
         if ( decl.secondType )
-            secondType = make_shared<TypeDecl>(*decl.secondType);
+            secondType = make_smart<TypeDecl>(*decl.secondType);
         for ( const auto & arg : decl.argTypes ) {
-            argTypes.push_back(make_shared<TypeDecl>(*arg) );
+            argTypes.push_back(make_smart<TypeDecl>(*arg) );
         }
         argNames = decl.argNames;
     }

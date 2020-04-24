@@ -312,7 +312,7 @@ namespace das {
                     }
                 }
                 if ( aT ) {
-                    auto resT = make_shared<TypeDecl>(*aT);
+                    auto resT = make_smart<TypeDecl>(*aT);
                     resT->at = decl->at;
                     resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
@@ -328,7 +328,7 @@ namespace das {
                     return nullptr;
                 }
             }
-            auto resT = make_shared<TypeDecl>(*decl);
+            auto resT = make_smart<TypeDecl>(*decl);
             if ( decl->baseType==Type::tPointer ) {
                 if ( decl->firstType ) {
                     resT->firstType = inferAlias(decl->firstType,fptr,aliases);
@@ -384,7 +384,7 @@ namespace das {
                     }
                 }
                 if ( aT ) {
-                    auto resT = make_shared<TypeDecl>(*aT);
+                    auto resT = make_smart<TypeDecl>(*aT);
                     resT->at = decl->at;
                     resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
@@ -400,7 +400,7 @@ namespace das {
                     return decl;
                 }
             }
-            auto resT = make_shared<TypeDecl>(*decl);
+            auto resT = make_smart<TypeDecl>(*decl);
             if ( decl->baseType==Type::tPointer ) {
                 if ( decl->firstType ) {
                     resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
@@ -1002,8 +1002,8 @@ namespace das {
 
         vector<FunctionPtr> getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
             vector<TypeDeclPtr> argDummy;
-            argDummy.push_back(make_shared<TypeDecl>(*left));
-            argDummy.push_back(make_shared<TypeDecl>(*right));
+            argDummy.push_back(make_smart<TypeDecl>(*left));
+            argDummy.push_back(make_smart<TypeDecl>(*right));
             return findMatchingFunctions("clone", argDummy);
         }
 
@@ -1013,7 +1013,7 @@ namespace das {
 
         vector<FunctionPtr> getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
             vector<TypeDeclPtr> argDummy;
-            argDummy.push_back(make_shared<TypeDecl>(*subexpr));
+            argDummy.push_back(make_smart<TypeDecl>(*subexpr));
             return findMatchingFunctions("_::finalize", argDummy);
         }
 
@@ -1170,7 +1170,7 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             fieldOffset = 0;
-            auto tp = make_shared<TypeDecl>(that->shared_from_this());
+            auto tp = make_smart<TypeDecl>(that->shared_from_this());
             cppLayout = that->cppLayout;
             cppLayoutPod = that->cppLayoutPod;
             cppLayoutParent = nullptr;
@@ -1189,7 +1189,7 @@ namespace das {
             if ( decl.parentType ) {
                 auto pf = st->parent->findField(decl.name);
                 if ( !pf->type->isAuto() && !pf->type->isAlias() ) {
-                    decl.type = make_shared<TypeDecl>(*pf->type);
+                    decl.type = make_smart<TypeDecl>(*pf->type);
                     decl.parentType = false;
                     reportAstChanged();
                 } else {
@@ -1250,7 +1250,7 @@ namespace das {
                         auto castExpr = static_pointer_cast<ExprCast>(decl.init);
                         if ( castExpr->castType->isAuto() ) {
                             reportAstChanged();
-                            castExpr->castType = make_shared<TypeDecl>(*decl.type);
+                            castExpr->castType = make_smart<TypeDecl>(*decl.type);
                         }
                     }
                 }
@@ -1286,7 +1286,7 @@ namespace das {
                           var->at, CompilationError::structure_already_has_initializer);
                 }
             }
-            auto tt = make_shared<TypeDecl>(Type::tStructure);
+            auto tt = make_smart<TypeDecl>(Type::tStructure);
             tt->structType = var;
             if ( isCircularType(tt) ) {
                 error("type creates circular dependency",  "", "",
@@ -1436,7 +1436,7 @@ namespace das {
             // if function got no 'result', function is a void function
             if ( !func->hasReturn ) {
                 if ( func->result->isAuto() ) {
-                    func->result = make_shared<TypeDecl>(Type::tVoid);
+                    func->result = make_smart<TypeDecl>(Type::tVoid);
                     reportAstChanged();
                 } else if ( !func->result->isVoid() ){
                     error("function does not return a value", "", "",
@@ -1505,7 +1505,7 @@ namespace das {
                 c->type = cE->enumType->makeEnumType();
                 c->type->constant = true;
             } else {
-                c->type = make_shared<TypeDecl>(c->baseType);
+                c->type = make_smart<TypeDecl>(c->baseType);
                 c->type->constant = true;
             }
             return Visitor::visit(c);
@@ -1568,7 +1568,7 @@ namespace das {
                 error("can only dereference a simple type, not a " + expr->subexpr->type->describe(),  "", "",
                     expr->at, CompilationError::invalid_type);
             } else {
-                expr->type = make_shared<TypeDecl>(*expr->subexpr->type);
+                expr->type = make_smart<TypeDecl>(*expr->subexpr->type);
                 expr->type->ref = false;
             }
             return Visitor::visit(expr);
@@ -1603,11 +1603,11 @@ namespace das {
             if ( fns.size()==1 ) {
                 expr->func = fns.back().get();
                 expr->func->addr = true;
-                expr->type = make_shared<TypeDecl>(Type::tFunction);
-                expr->type->firstType = make_shared<TypeDecl>(*expr->func->result);
+                expr->type = make_smart<TypeDecl>(Type::tFunction);
+                expr->type->firstType = make_smart<TypeDecl>(*expr->func->result);
                 expr->type->argTypes.reserve ( expr->func->arguments.size() );
                 for ( auto & arg : expr->func->arguments ) {
-                    auto at = make_shared<TypeDecl>(*arg->type);
+                    auto at = make_smart<TypeDecl>(*arg->type);
                     expr->type->argTypes.push_back(at);
                 }
                 verifyType(expr->type);
@@ -1633,7 +1633,7 @@ namespace das {
                 error("can only dereference a pointer to something",  "", "",
                     expr->at, CompilationError::cant_dereference);
             } else {
-                expr->type = make_shared<TypeDecl>(*expr->subexpr->type->firstType);
+                expr->type = make_smart<TypeDecl>(*expr->subexpr->type->firstType);
                 expr->type->ref = true;
                 expr->type->constant |= expr->subexpr->type->constant;
                 propagateTempType(expr->subexpr->type, expr->type); // deref(Foo#?) is Foo#
@@ -1652,8 +1652,8 @@ namespace das {
                     error("address of reference requires [unsafe]",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
                 expr->type->firstType->ref = false;
                 expr->type->constant |= expr->subexpr->type->constant;
                 propagateTempType(expr->subexpr->type, expr->type); // addr(Foo#) is Foo#?#
@@ -1682,7 +1682,7 @@ namespace das {
                       + dvT->describe(),  "", "",
                     expr->at, CompilationError::cant_dereference);
             } else {
-                expr->type = make_shared<TypeDecl>(*dvT);
+                expr->type = make_smart<TypeDecl>(*dvT);
                 expr->type->constant |= expr->subexpr->type->constant;
                 propagateTempType(expr->subexpr->type, expr->type);
                 if (!expr->subexpr->alwaysSafe) {
@@ -1722,7 +1722,7 @@ namespace das {
                     expr->at, CompilationError::invalid_argument_type);
                 return nullptr;
             }
-            expr->type = make_shared<TypeDecl>(Type::tVoid);
+            expr->type = make_smart<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
     // ExprAssert
@@ -1742,7 +1742,7 @@ namespace das {
                 error("assert comment must be string constant",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
             }
-            expr->type = make_shared<TypeDecl>(Type::tVoid);
+            expr->type = make_smart<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
     // ExprDebug
@@ -1758,7 +1758,7 @@ namespace das {
                 error("debug comment must be string constant",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
             }
-            expr->type = make_shared<TypeDecl>(*expr->arguments[0]->type);
+            expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
             return Visitor::visit(expr);
         }
     // ExprMemZero
@@ -1778,7 +1778,7 @@ namespace das {
                 error("memzero argument can't be constant",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
             }
-            expr->type = make_shared<TypeDecl>();
+            expr->type = make_smart<TypeDecl>();
             return Visitor::visit(expr);
         }
     // ExprMakeGenerator
@@ -1847,14 +1847,14 @@ namespace das {
                             if ( !expr->iterType->isVoid() ) {
                                 auto yva = make_shared<Variable>();
                                 if ( expr->iterType->ref ) {
-                                    yva->type = make_shared<TypeDecl>(Type::tPointer);
-                                    yva->type->firstType = make_shared<TypeDecl>(*expr->iterType);
+                                    yva->type = make_smart<TypeDecl>(Type::tPointer);
+                                    yva->type->firstType = make_smart<TypeDecl>(*expr->iterType);
                                     yva->type->firstType->ref = false;
                                     yva->type->constant = false;
                                     yva->type->ref = true;
                                     makeRef = true;
                                 } else {
-                                    yva->type = make_shared<TypeDecl>(*expr->iterType);
+                                    yva->type = make_smart<TypeDecl>(*expr->iterType);
                                     yva->type->constant = false;
                                     yva->type->ref = !expr->iterType->isRefType();
                                 }
@@ -1990,7 +1990,7 @@ namespace das {
                             auto argCast = static_pointer_cast<ExprCast>(arg);
                             if ( argCast->castType->isAuto() ) {
                                 reportAstChanged();
-                                argCast->castType = make_shared<TypeDecl>(*argType);
+                                argCast->castType = make_smart<TypeDecl>(*argType);
                             }
                         }
                     }
@@ -2057,9 +2057,9 @@ namespace das {
                     expr->arguments[i+1] = Expression::autoDereference(expr->arguments[i+1]);
             }
             if ( blockT->firstType ) {
-                expr->type = make_shared<TypeDecl>(*blockT->firstType);
+                expr->type = make_smart<TypeDecl>(*blockT->firstType);
             } else {
-                expr->type = make_shared<TypeDecl>();
+                expr->type = make_smart<TypeDecl>();
             }
             return Visitor::visit(expr);
         }
@@ -2079,7 +2079,7 @@ namespace das {
                 if ( !containerType->firstType->isSameType(*valueType,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
                     error("key must be of the same type as table<key,...>",  "", "",
                         expr->at, CompilationError::invalid_argument_type);
-                expr->type = make_shared<TypeDecl>(Type::tBool);
+                expr->type = make_smart<TypeDecl>(Type::tBool);
             } else {
                 error("first argument must be fully qualified table",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
@@ -2103,8 +2103,8 @@ namespace das {
                 if ( !containerType->firstType->isSameType(*valueType,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
                     error("key must be of the same type as table<key,...>",  "", "",
                         expr->at, CompilationError::invalid_argument_type);
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*containerType->secondType);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*containerType->secondType);
             } else {
                 error("first argument must be fully qualified table",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
@@ -2129,7 +2129,7 @@ namespace das {
                 if ( !containerType->firstType->isSameType(*valueType,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
                     error("key must be of the same type as table<key,...>",  "", "",
                         expr->at, CompilationError::invalid_argument_type);
-                expr->type = make_shared<TypeDecl>(Type::tBool);
+                expr->type = make_smart<TypeDecl>(Type::tBool);
             } else {
                 error("first argument must be fully qualified table",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
@@ -2190,7 +2190,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             if ( expr->subexpr && expr->subexpr->type ) {
-                expr->typeexpr = make_shared<TypeDecl>(*expr->subexpr->type);
+                expr->typeexpr = make_smart<TypeDecl>(*expr->subexpr->type);
                 expr->typeexpr->ref = false;
             }
             // verify
@@ -2493,7 +2493,7 @@ namespace das {
         void reportMissingFinalizer ( const string & message, const LineInfo & at, const TypeDeclPtr & ftype ) {
             auto fakeCall = make_shared<ExprCall>(at, "_::finalize");
             auto fakeVar = make_shared<ExprVar>(at, "this");
-            fakeVar->type = make_shared<TypeDecl>(*ftype);
+            fakeVar->type = make_smart<TypeDecl>(*ftype);
             fakeCall->arguments.push_back(fakeVar);
             vector<TypeDeclPtr> fakeTypes;
             fakeTypes.push_back(ftype);
@@ -2608,7 +2608,7 @@ namespace das {
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
                 } else {
-                    expr->type = make_shared<TypeDecl>();
+                    expr->type = make_smart<TypeDecl>();
                     return Visitor::visit(expr);
                 }
             }
@@ -2627,7 +2627,7 @@ namespace das {
                         compatibleCast = cT->structType->isCompatibleCast(*seT->structType);
                     }
                     if ( compatibleCast ) {
-                        auto exprType = make_shared<TypeDecl>(*cT);
+                        auto exprType = make_smart<TypeDecl>(*cT);
                         exprType->ref = seT->ref;
                         exprType->constant = seT->constant;
                         return exprType;
@@ -2649,7 +2649,7 @@ namespace das {
                         compatibleCast = cT->firstType->structType->isCompatibleCast(*seT->firstType->structType);
                     }
                     if ( compatibleCast ) {
-                        auto exprType = make_shared<TypeDecl>(*cT);
+                        auto exprType = make_smart<TypeDecl>(*cT);
                         exprType->ref = seT->ref;
                         exprType->constant = seT->constant;
                         return exprType;
@@ -2674,7 +2674,7 @@ namespace das {
                 return nullptr;
             }
             // result
-            auto funT = make_shared<TypeDecl>(*seTF);
+            auto funT = make_smart<TypeDecl>(*seTF);
             auto cresT = cTF->firstType;
             auto resT = funT->firstType;
             if ( !cresT->isSameType(*resT,RefMatters::yes, ConstMatters::no, TemporaryMatters::no) ) {
@@ -2735,7 +2735,7 @@ namespace das {
                 return expr->subexpr;
             }
             if ( expr->reinterpret ) {
-                expr->type = make_shared<TypeDecl>(*expr->castType);
+                expr->type = make_smart<TypeDecl>(*expr->castType);
                 expr->type->ref = expr->subexpr->type->ref;
             } else if ( expr->castType->isGoodBlockType() ||  expr->castType->isGoodFunctionType() || expr->castType->isGoodLambdaType() ) {
                 expr->type = castFunc(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
@@ -2763,10 +2763,10 @@ namespace das {
                     expr->at, CompilationError::invalid_new_type);
             }
             if ( expr->ascType ) {
-                expr->type = make_shared<TypeDecl>(*expr->ascType);
+                expr->type = make_smart<TypeDecl>(*expr->ascType);
             } else {
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
                 expr->type->firstType->ref = false;
             }
             return Visitor::visit(expr);
@@ -2788,7 +2788,7 @@ namespace das {
             // infer
             if ( expr->typeexpr->isAlias() ) {
                 if ( auto aT = findAlias(expr->typeexpr->alias) ) {
-                    expr->typeexpr = make_shared<TypeDecl>(*aT);
+                    expr->typeexpr = make_smart<TypeDecl>(*aT);
                     expr->typeexpr->ref = false;      // drop a ref
                     expr->typeexpr->constant = false; // drop a const
                     reportAstChanged();
@@ -2804,15 +2804,15 @@ namespace das {
                 error("can't new a reference",  "", "",
                     expr->at, CompilationError::invalid_new_type);
             } else if ( expr->typeexpr->baseType==Type::tStructure ) {
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
                 expr->type->firstType->dim.clear();
                 expr->type->dim = expr->typeexpr->dim;
                 expr->name = expr->typeexpr->structType->getMangledName();
             } else if ( expr->typeexpr->baseType==Type::tHandle ) {
                 if ( expr->typeexpr->annotation->canNew() ) {
-                    expr->type = make_shared<TypeDecl>(Type::tPointer);
-                    expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                    expr->type = make_smart<TypeDecl>(Type::tPointer);
+                    expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
                     expr->type->firstType->dim.clear();
                     expr->type->dim = expr->typeexpr->dim;
                 } else {
@@ -2820,14 +2820,14 @@ namespace das {
                           expr->at, CompilationError::invalid_new_type);
                 }
             } else if ( expr->typeexpr->baseType==Type::tTuple ) {
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
                 expr->type->firstType->dim.clear();
                 expr->type->dim = expr->typeexpr->dim;
                 expr->name = expr->typeexpr->getMangledName();
             } else if ( expr->typeexpr->baseType==Type::tVariant ) {
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*expr->typeexpr);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
                 expr->type->firstType->dim.clear();
                 expr->type->dim = expr->typeexpr->dim;
                 expr->name = expr->typeexpr->getMangledName();
@@ -2877,7 +2877,7 @@ namespace das {
                         expr->index->at, CompilationError::invalid_table_type);
                     return Visitor::visit(expr);
                 }
-                expr->type = make_shared<TypeDecl>(*seT->secondType);
+                expr->type = make_smart<TypeDecl>(*seT->secondType);
                 expr->type->ref = true;
                 expr->type->constant |= seT->constant;
             } else if ( seT->isHandle() ) {
@@ -2903,7 +2903,7 @@ namespace das {
                     return Visitor::visit(expr);
                 } else {
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
-                    expr->type = make_shared<TypeDecl>(*seT->firstType);
+                    expr->type = make_smart<TypeDecl>(*seT->firstType);
                     expr->type->ref = true;
                     expr->type->constant |= seT->constant;
                 }
@@ -2914,11 +2914,11 @@ namespace das {
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 } else if ( seT->isVectorType() ) {
-                    expr->type = make_shared<TypeDecl>(seT->getVectorBaseType());
+                    expr->type = make_smart<TypeDecl>(seT->getVectorBaseType());
                     expr->type->ref = seT->ref;
                     expr->type->constant = seT->constant;
                 } else if ( seT->isGoodArrayType() ) {
-                    expr->type = make_shared<TypeDecl>(*seT->firstType);
+                    expr->type = make_smart<TypeDecl>(*seT->firstType);
                     expr->type->ref = true;
                     expr->type->constant |= seT->constant;
                 } else if ( !seT->dim.size() ) {
@@ -2926,7 +2926,7 @@ namespace das {
                         expr->subexpr->at, CompilationError::cant_index);
                     return Visitor::visit(expr);
                 } else {
-                    expr->type = make_shared<TypeDecl>(*seT);
+                    expr->type = make_smart<TypeDecl>(*seT);
                     expr->type->ref = true;
                     expr->type->dim.pop_back();
                     expr->type->constant |= seT->constant;
@@ -2962,8 +2962,8 @@ namespace das {
                             expr->index->at, CompilationError::invalid_index_type);
                         return Visitor::visit(expr);
                     }
-                    expr->type = make_shared<TypeDecl>(Type::tPointer);
-                    expr->type->firstType = make_shared<TypeDecl>(*seT->secondType);
+                    expr->type = make_smart<TypeDecl>(Type::tPointer);
+                    expr->type->firstType = make_smart<TypeDecl>(*seT->secondType);
                     expr->type->constant |= seT->constant;
                 } else if (seT->isHandle()) {
                     // TODO: support handle safe index
@@ -2986,25 +2986,25 @@ namespace das {
                             expr->index->at, CompilationError::invalid_index_type);
                         return Visitor::visit(expr);
                     } else if (seT->isVectorType()) {
-                        expr->type = make_shared<TypeDecl>(Type::tPointer);
-                        expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
+                        expr->type = make_smart<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
                         expr->type->firstType->constant = seT->constant;
                     } else if (seT->isGoodArrayType()) {
                         if ( func && !func->unsafe && !expr->alwaysSafe ) {
                             error("safe-index of array<> requires [unsafe]",  "", "",
                                 expr->at, CompilationError::unsafe);
                         }
-                        expr->type = make_shared<TypeDecl>(Type::tPointer);
-                        expr->type->firstType = make_shared<TypeDecl>(*seT->firstType);
+                        expr->type = make_smart<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_smart<TypeDecl>(*seT->firstType);
                         expr->type->firstType->constant |= seT->constant;
                     } else if ( seT->dim.size() ) {
-                        expr->type = make_shared<TypeDecl>(Type::tPointer);
-                        expr->type->firstType = make_shared<TypeDecl>(*seT);
+                        expr->type = make_smart<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_smart<TypeDecl>(*seT);
                         expr->type->firstType->dim.pop_back();
                         expr->type->firstType->constant |= seT->constant;
                     } else if ( seT->isVectorType() ) {
-                        expr->type = make_shared<TypeDecl>(Type::tPointer);
-                        expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
+                        expr->type = make_smart<TypeDecl>(Type::tPointer);
+                        expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
                         expr->type->firstType->constant = seT->constant;
                     } else {
                         error("type can't be safe-indexed " + seT->describe(), "", "",
@@ -3018,8 +3018,8 @@ namespace das {
                         expr->at, CompilationError::unsafe);
                 }
                 auto seT = expr->subexpr->type;
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*seT->firstType);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*seT->firstType);
                 expr->type->firstType->constant |= seT->constant;
             } else if ( expr->subexpr->type->isGoodTableType() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
@@ -3033,8 +3033,8 @@ namespace das {
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*seT->secondType);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*seT->secondType);
                 expr->type->constant |= seT->constant;
             } else if ( expr->subexpr->type->dim.size() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
@@ -3042,14 +3042,14 @@ namespace das {
                         expr->at, CompilationError::unsafe);
                 }
                 const auto & seT = expr->subexpr->type;
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(*seT);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(*seT);
                 expr->type->firstType->dim.pop_back();
                 expr->type->firstType->constant |= seT->constant;
             } else if ( expr->subexpr->type->isVectorType() && expr->subexpr->type->isRef() ) {
                 const auto & seT = expr->subexpr->type;
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_shared<TypeDecl>(seT->getVectorBaseType());
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
+                expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
                 expr->type->firstType->constant = seT->constant;
             } else {
                 error("type can't be safe-indexed " + expr->subexpr->type->describe(), "", "",
@@ -3082,7 +3082,7 @@ namespace das {
             block->hasReturn = false;
             if ( block->isClosure ) {
                 blocks.push_back(block);
-                block->type = make_shared<TypeDecl>(*block->returnType);
+                block->type = make_smart<TypeDecl>(*block->returnType);
             }
             scopes.push_back(block);
             pushVarStack();
@@ -3176,8 +3176,8 @@ namespace das {
                     }
                 }
                 if ( !block->hasReturn && block->type->isAuto() ) {
-                    block->returnType = make_shared<TypeDecl>(Type::tVoid);
-                    block->type = make_shared<TypeDecl>(Type::tVoid);
+                    block->returnType = make_smart<TypeDecl>(Type::tVoid);
+                    block->type = make_smart<TypeDecl>(Type::tVoid);
                     setBlockCopyMoveFlags(block);
                     reportAstChanged();
                 }
@@ -3211,7 +3211,7 @@ namespace das {
             } else {
                 auto bt = valT->getVectorBaseType();
                 auto rt = TypeDecl::getVectorType(bt, int(expr->fields.size()));
-                expr->type = make_shared<TypeDecl>(rt);
+                expr->type = make_smart<TypeDecl>(rt);
                 expr->type->constant = valT->constant;
                 expr->type->ref = valT->ref;
                 if ( expr->type->ref ) {
@@ -3240,7 +3240,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->tupleOrVariantIndex = index;
-            expr->type = make_shared<TypeDecl>(*valT->argTypes[expr->tupleOrVariantIndex]);
+            expr->type = make_smart<TypeDecl>(*valT->argTypes[expr->tupleOrVariantIndex]);
             expr->type->ref = true;
             expr->type->constant |= valT->constant;
             propagateTempType(expr->value->type, expr->type);
@@ -3267,11 +3267,11 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->tupleOrVariantIndex = index;
-            expr->type = make_shared<TypeDecl>(*valT->argTypes[expr->tupleOrVariantIndex]);
+            expr->type = make_smart<TypeDecl>(*valT->argTypes[expr->tupleOrVariantIndex]);
             expr->skipQQ = expr->type->isPointer();
             if ( !expr->skipQQ ) {
                 auto fieldType = expr->type;
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = fieldType;
             }
             expr->type->constant |= valT->constant | expr->value->type->constant;
@@ -3295,7 +3295,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->tupleOrVariantIndex = index;
-            expr->type = make_shared<TypeDecl>(Type::tBool);
+            expr->type = make_smart<TypeDecl>(Type::tBool);
             return Visitor::visit(expr);
         }
     // ExprField
@@ -3369,7 +3369,7 @@ namespace das {
             }
             // handle
             if ( expr->field ) {
-                expr->type = make_shared<TypeDecl>(*expr->field->type);
+                expr->type = make_smart<TypeDecl>(*expr->field->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
                 if ( valT->isPointer() && valT->firstType ) {
@@ -3380,7 +3380,7 @@ namespace das {
                 }
             } else if ( expr->tupleOrVariantIndex!=-1 ) {
                 auto tupleT = valT->isPointer() ? valT->firstType : valT;
-                expr->type = make_shared<TypeDecl>(*tupleT->argTypes[expr->tupleOrVariantIndex]);
+                expr->type = make_smart<TypeDecl>(*tupleT->argTypes[expr->tupleOrVariantIndex]);
                 expr->type->ref = true;
                 expr->type->constant |= tupleT->constant;
             } else if ( !expr->type ) {
@@ -3411,7 +3411,7 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                expr->type = make_shared<TypeDecl>(*expr->field->type);
+                expr->type = make_smart<TypeDecl>(*expr->field->type);
             } else if ( valT->firstType->isHandle() ) {
                 expr->annotation = valT->firstType->annotation;
                 expr->type = expr->annotation->makeSafeFieldType(expr->name);
@@ -3428,7 +3428,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 expr->tupleOrVariantIndex = index;
-                expr->type = make_shared<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
+                expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
             } else if ( valT->firstType->isGoodVariantType() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
                     error("variant?.field requires [unsafe]", "", "",
@@ -3442,7 +3442,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 expr->tupleOrVariantIndex = index;
-                expr->type = make_shared<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
+                expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
             } else {
                 error("can only safe dereference a pointer to a tuple, a structure or a handle " + valT->describe(), "", "",
                       expr->at, CompilationError::cant_get_field);
@@ -3451,7 +3451,7 @@ namespace das {
             expr->skipQQ = expr->type->isPointer();
             if ( !expr->skipQQ ) {
                 auto fieldType = expr->type;
-                expr->type = make_shared<TypeDecl>(Type::tPointer);
+                expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = fieldType;
             }
             expr->type->constant |= valT->constant;
@@ -3490,7 +3490,7 @@ namespace das {
                 if ( var->name==expr->name ) {
                     expr->variable = var;
                     expr->local = true;
-                    expr->type = make_shared<TypeDecl>(*var->type);
+                    expr->type = make_smart<TypeDecl>(*var->type);
                     expr->type->ref = true;
                     return Visitor::visit(expr);
                 }
@@ -3512,7 +3512,7 @@ namespace das {
                         if ( blocks.rbegin() == it ) {
                             expr->thisBlock = true;
                         }
-                        expr->type = make_shared<TypeDecl>(*arg->type);
+                        expr->type = make_smart<TypeDecl>(*arg->type);
                         if (!expr->type->isRefType())
                             expr->type->ref = true;
                         expr->pBlock = static_pointer_cast<ExprBlock>(block->shared_from_this());
@@ -3529,7 +3529,7 @@ namespace das {
                         expr->variable = arg;
                         expr->argumentIndex = argumentIndex;
                         expr->argument = true;
-                        expr->type = make_shared<TypeDecl>(*arg->type);
+                        expr->type = make_smart<TypeDecl>(*arg->type);
                         if (!expr->type->isRefType())
                             expr->type->ref = true;
                         return Visitor::visit(expr);
@@ -3542,7 +3542,7 @@ namespace das {
             if ( vars.size()==1 ) {
                 auto var = vars.back();
                 expr->variable = var;
-                expr->type = make_shared<TypeDecl>(*var->type);
+                expr->type = make_smart<TypeDecl>(*var->type);
                 expr->type->ref = true;
                 return Visitor::visit(expr);
 
@@ -3574,7 +3574,7 @@ namespace das {
                     expr->at, CompilationError::operator_not_found);
             } else {
                 expr->func = functions[0].get();
-                expr->type = make_shared<TypeDecl>(*expr->func->result);
+                expr->type = make_smart<TypeDecl>(*expr->func->result);
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
                 // lets try to fold it
@@ -3647,7 +3647,7 @@ namespace das {
             }
             else {
                 expr->func = functions[0].get();
-                expr->type = make_shared<TypeDecl>(*expr->func->result);
+                expr->type = make_smart<TypeDecl>(*expr->func->result);
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->left = Expression::autoDereference(expr->left);
                 if ( !expr->func->arguments[1]->type->isRef() )
@@ -3690,7 +3690,7 @@ namespace das {
                     expr->left = Expression::autoDereference(expr->left);
                     expr->right = Expression::autoDereference(expr->right);
                 }
-                expr->type = make_shared<TypeDecl>(*expr->left->type);
+                expr->type = make_smart<TypeDecl>(*expr->left->type);
                 expr->type->constant |= expr->right->type->constant;
                 // lets try to fold it
                 if ( enableInferTimeFolding ) {
@@ -3734,7 +3734,7 @@ namespace das {
                 error("can't move temporary value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_pass_temporary);
             }
-            expr->type = make_shared<TypeDecl>();  // we return nothing
+            expr->type = make_smart<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
         }
     // ExprCopy
@@ -3761,7 +3761,7 @@ namespace das {
                 error("this type can't be copied"+copyErrorInfo(expr), 
                     "", "use move (<-) or clone (:=) instead", expr->at, CompilationError::cant_copy);
             }
-            expr->type = make_shared<TypeDecl>();  // we return nothing
+            expr->type = make_smart<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
         }
     // ExprClone
@@ -3797,7 +3797,7 @@ namespace das {
             } else {
                 auto cloneType = expr->left->type;
                 if ( cloneType->isHandle() ) {
-                    expr->type = make_shared<TypeDecl>();  // we return nothing
+                    expr->type = make_smart<TypeDecl>();  // we return nothing
                     return Visitor::visit(expr);
                 } else if ( cloneType->isString() && expr->right->type->isTemp() ) {
                     reportAstChanged();
@@ -3906,7 +3906,7 @@ namespace das {
                         return true;
                     }
                 } else {
-                    resType = make_shared<TypeDecl>(Type::tVoid);
+                    resType = make_smart<TypeDecl>(Type::tVoid);
                     reportAstChanged();
                     return true;
                 }
@@ -3969,7 +3969,7 @@ namespace das {
                     expr->returnInBlock = true;
                 }
                 if ( inferReturnType(block->type, expr) ) {
-                    block->returnType = make_shared<TypeDecl>(*block->type);
+                    block->returnType = make_smart<TypeDecl>(*block->type);
                     setBlockCopyMoveFlags(block);
                 }
                 if ( block->moveOnReturn && !expr->moveSemantics ) {
@@ -3993,7 +3993,7 @@ namespace das {
                           expr->at, CompilationError::invalid_return_semantics );
                 }
             }
-            expr->type = make_shared<TypeDecl>();
+            expr->type = make_smart<TypeDecl>();
             return Visitor::visit(expr);
         }
     // ExprYield
@@ -4015,7 +4015,7 @@ namespace das {
                 reportAstChanged();
                 return blk;
             }
-            expr->type = make_shared<TypeDecl>();
+            expr->type = make_smart<TypeDecl>();
             return Visitor::visit(expr);
         }
 
@@ -4247,24 +4247,24 @@ namespace das {
                 pVar->name = expr->iterators[idx];
                 pVar->at = expr->at;
                 if ( src->type->dim.size() ) {
-                    pVar->type = make_shared<TypeDecl>(*src->type);
+                    pVar->type = make_smart<TypeDecl>(*src->type);
                     pVar->type->ref = true;
                     pVar->type->dim.pop_back();
                 } else if ( src->type->isGoodIteratorType() ) {
-                    pVar->type = make_shared<TypeDecl>(*src->type->firstType);
+                    pVar->type = make_smart<TypeDecl>(*src->type->firstType);
                 } else if ( src->type->isGoodArrayType() ) {
-                    pVar->type = make_shared<TypeDecl>(*src->type->firstType);
+                    pVar->type = make_smart<TypeDecl>(*src->type->firstType);
                     pVar->type->ref = true;
                 } else if ( src->type->isRange() ) {
-                    pVar->type = make_shared<TypeDecl>(src->type->getRangeBaseType());
+                    pVar->type = make_smart<TypeDecl>(src->type->getRangeBaseType());
                     pVar->type->ref = false;
                     pVar->type->constant = true;
                 } else if ( src->type->isString() ) {
-                    pVar->type = make_shared<TypeDecl>(Type::tInt);
+                    pVar->type = make_smart<TypeDecl>(Type::tInt);
                     pVar->type->ref = false;
                     pVar->type->constant = true;
                 } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
-                    pVar->type = make_shared<TypeDecl>(*src->type->annotation->makeIteratorType(src));
+                    pVar->type = make_smart<TypeDecl>(*src->type->annotation->makeIteratorType(src));
                 } else {
                     error("unsupported iteration type for the loop variable " + pVar->name + ", iterating over " + src->type->describe(), "", "",
                         expr->at, CompilationError::invalid_iteration_source);
@@ -4371,7 +4371,7 @@ namespace das {
                     auto castExpr = static_pointer_cast<ExprCast>(var->init);
                     if ( castExpr->castType->isAuto() ) {
                         reportAstChanged();
-                        castExpr->castType = make_shared<TypeDecl>(*var->type);
+                        castExpr->castType = make_smart<TypeDecl>(*var->type);
                     }
                 }
             }
@@ -4702,7 +4702,7 @@ namespace das {
                                 if ( arg->init ) {
                                     arg->init = arg->init->visit(*this);
                                     if (arg->init->type && !arg->init->type->isAlias() && !arg->init->type->isAuto()) {
-                                        arg->type = make_shared<TypeDecl>(*arg->init->type);
+                                        arg->type = make_smart<TypeDecl>(*arg->init->type);
                                         continue;
                                     }
                                 } 
@@ -4749,7 +4749,7 @@ namespace das {
                         return nullptr;
                     }
                 }
-                expr->type = make_shared<TypeDecl>(*funcC->result);
+                expr->type = make_smart<TypeDecl>(*funcC->result);
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
@@ -4760,9 +4760,9 @@ namespace das {
                         auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
                         DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                         TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
-                        block->returnType = make_shared<TypeDecl>(*retT->firstType);
+                        block->returnType = make_smart<TypeDecl>(*retT->firstType);
                         for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
-                            block->arguments[ba]->type = make_shared<TypeDecl>(*retT->argTypes[ba]);
+                            block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
                         }
                         setBlockCopyMoveFlags(block.get());
                         reportAstChanged();
@@ -4828,7 +4828,7 @@ namespace das {
             return Expression::autoDereference(expr->shared_from_this());
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
-            expr->type = make_shared<TypeDecl>(Type::tString);
+            expr->type = make_smart<TypeDecl>(Type::tString);
             return Visitor::visit(expr);
         }
     // make variant
@@ -4884,7 +4884,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             // result type
-            auto resT = make_shared<TypeDecl>(*expr->makeType);
+            auto resT = make_smart<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->variants.size());
             if ( resDim==0 ) {
                 resT->dim.clear();
@@ -4955,7 +4955,7 @@ namespace das {
             // promote to make variant
             if ( expr->makeType->baseType == Type::tVariant ) {
                 auto mkv = make_shared<ExprMakeVariant>(expr->at);
-                mkv->makeType = make_shared<TypeDecl>(*expr->makeType);
+                mkv->makeType = make_smart<TypeDecl>(*expr->makeType);
                 auto allGood = true;
                 for (auto & st : expr->structs) {
                     if (st->size() != 1) {
@@ -5041,7 +5041,7 @@ namespace das {
                 }
             }
             // result type
-            auto resT = make_shared<TypeDecl>(*expr->makeType);
+            auto resT = make_smart<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->structs.size());
             if ( resDim==0 ) {
                 resT->dim.clear();
@@ -5055,16 +5055,16 @@ namespace das {
             if ( expr->type->isString() ) {
                 reportAstChanged();
                 auto ecs = make_shared<ExprConstString>(expr->at);
-                ecs->type = make_shared<TypeDecl>(Type::tString);
+                ecs->type = make_smart<TypeDecl>(Type::tString);
                 return ecs;
             } else if ( expr->type->isEnumT() ) {
                 auto f0 = expr->type->enumType->find(0,"");
                 if ( !f0.empty() ) {
                     reportAstChanged();
-                    auto et = make_shared<TypeDecl>(*expr->type);
+                    auto et = make_smart<TypeDecl>(*expr->type);
                     et->ref = false;
                     auto ens = make_shared<ExprConstEnumeration>(expr->at, f0, et);
-                    ens->type = make_shared<TypeDecl>(*et);
+                    ens->type = make_smart<TypeDecl>(*et);
                     return ens;
                 } else {
                     error("[[" + expr->makeType->describe() + "() ]] enumeration is missing 0 value", "", "",
@@ -5074,7 +5074,7 @@ namespace das {
                 expr->type->ref = false;
                 reportAstChanged();
                 auto ews = Program::makeConst(expr->at, expr->type, v_zero());
-                ews->type = make_shared<TypeDecl>(*expr->type);
+                ews->type = make_smart<TypeDecl>(*expr->type);
                 return ews;
             }
             verifyType(expr->type);
@@ -5120,7 +5120,7 @@ namespace das {
                         expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
                 }
-                auto mkt = make_shared<TypeDecl>(Type::tTuple);
+                auto mkt = make_smart<TypeDecl>(Type::tTuple);
                 for ( size_t ai=0; ai!=argCount; ++ai ) {
                     const auto & val = expr->values[ai];
                     const auto & argT = expr->recordType->argTypes[ai];
@@ -5129,22 +5129,22 @@ namespace das {
                                 argT->describe() + ", passing " + val->type->describe(), "", "",
                               expr->at, CompilationError::invalid_type);
                     }
-                    auto valT = make_shared<TypeDecl>(*argT);
+                    auto valT = make_smart<TypeDecl>(*argT);
                     valT->ref = false;
                     valT->constant = false;
                     mkt->argTypes.push_back(valT);
                 }
                 expr->makeType = mkt;
             } else {
-                expr->makeType = make_shared<TypeDecl>(Type::tTuple);
+                expr->makeType = make_smart<TypeDecl>(Type::tTuple);
                 for ( auto & val : expr->values ) {
-                    auto valT = make_shared<TypeDecl>(*val->type);
+                    auto valT = make_smart<TypeDecl>(*val->type);
                     valT->ref = false;
                     valT->constant = false;
                     expr->makeType->argTypes.push_back(valT);
                 }
             }
-            expr->type = make_shared<TypeDecl>(*expr->makeType);
+            expr->type = make_smart<TypeDecl>(*expr->makeType);
             verifyType(expr->type);
             if ( expr->isKeyValue ) {
                 auto keyType = expr->makeType->argTypes[0];
@@ -5186,7 +5186,7 @@ namespace das {
                 error("[[" + expr->makeType->describe() + "]] can't be reference", "", "",
                     expr->at, CompilationError::invalid_type);
             }
-            expr->recordType = make_shared<TypeDecl>(*expr->makeType);
+            expr->recordType = make_smart<TypeDecl>(*expr->makeType);
             expr->recordType->dim.clear();
             expr->initAllFields = true;
         }
@@ -5201,7 +5201,7 @@ namespace das {
                         TypeDeclPtr mkt;
                         if ( expr->makeType->dim.size() && !init->type->dim.size() ) {
                             if (expr->makeType->dim.size() == 1 && expr->makeType->dim[0] == TypeDecl::dimAuto) {
-                                auto infT = make_shared<TypeDecl>(*expr->makeType);
+                                auto infT = make_smart<TypeDecl>(*expr->makeType);
                                 infT->dim.clear();
                                 mkt = TypeDecl::inferGenericType(infT, init->type);
                                 if (mkt) {
@@ -5258,7 +5258,7 @@ namespace das {
                 error("array element has to be copyable or moveable", "", "",
                     expr->at, CompilationError::invalid_type);
             }
-            auto resT = make_shared<TypeDecl>(*expr->makeType);
+            auto resT = make_smart<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->values.size());
             if ( resDim!=1 || expr->makeType->dim.size() ) {
                 resT->dim.resize(1);
@@ -5269,7 +5269,7 @@ namespace das {
                 auto resExpr = expr->values[0];
                 if ( resExpr->rtti_isMakeTuple() ) {
                     auto mkt = static_pointer_cast<ExprMakeTuple>(resExpr);
-                    mkt->recordType = make_shared<TypeDecl>(*expr->recordType);
+                    mkt->recordType = make_smart<TypeDecl>(*expr->recordType);
                     mkt->makeType.reset();
                 }
                 return resExpr;

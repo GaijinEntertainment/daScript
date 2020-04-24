@@ -12,7 +12,7 @@ namespace das {
 	template <>
 	struct typeFactory<Point3> {
 	    static TypeDeclPtr make(const ModuleLibrary &) {
-	        auto t = make_shared<TypeDecl>(Type::tFloat3);
+	        auto t = make_smart<TypeDecl>(Type::tFloat3);
 	        t->alias = "Point3";
 	        t->aotAlias = true;
 	        return t;
@@ -36,7 +36,7 @@ namespace das {
   template <>
   struct typeFactory<SampleVariant> {
       static TypeDeclPtr make(const ModuleLibrary & library ) {
-          auto vtype = make_shared<TypeDecl>(Type::tVariant);
+          auto vtype = make_smart<TypeDecl>(Type::tVariant);
           vtype->alias = "SampleVariant";
           vtype->aotAlias = true;
           vtype->addVariant("i_value", typeFactory<decltype(SampleVariant::i_value)>::make(library));
@@ -109,7 +109,7 @@ struct CheckRange : StructureAnnotation {
         // this is here for the 'example' purposes 
         // lets add a sample 'dummy' field
         if (args.getBoolOption("dummy",false) && !st->findField("dummy")) {
-            st->fields.emplace_back("dummy", make_shared<TypeDecl>(Type::tInt), 
+            st->fields.emplace_back("dummy", make_smart<TypeDecl>(Type::tInt), 
                 nullptr /*init*/, AnnotationArgumentList(), false /*move_to_init*/, LineInfo());
         }
         return true;
@@ -266,7 +266,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
     }
     virtual TypeDeclPtr makeSafeFieldType ( const string & na ) const override {
         auto pF = structureType->findField(na);
-        return pF ? make_shared<TypeDecl>(*pF->type) : nullptr;
+        return pF ? make_smart<TypeDecl>(*pF->type) : nullptr;
     }
     virtual SimNode * simulateGetField ( const string & na, Context & context,
                                         const LineInfo & at, const ExpressionPtr & rv ) const  override {
@@ -367,7 +367,7 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
             if (!starg->getValue().empty()) {
                 uint32_t hv = hash_blockz32((uint8_t *)starg->text.c_str());
                 auto hconst = make_shared<ExprConstUInt>(arg->at, hv);
-                hconst->type = make_shared<TypeDecl>(Type::tUInt);
+                hconst->type = make_smart<TypeDecl>(Type::tUInt);
                 hconst->type->constant = true;
                 auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
                 newCall->arguments.insert(newCall->arguments.begin() + 1, hconst);
@@ -458,11 +458,11 @@ struct EventRegistrator : StructureAnnotation {
     EventRegistrator() : StructureAnnotation("event") {}
     bool touch ( const StructurePtr & st, ModuleGroup & /*libGroup*/,
         const AnnotationArgumentList & /*args*/, string & /*err*/ ) override {
-        st->fields.emplace(st->fields.begin(), "eventFlags", make_shared<TypeDecl>(Type::tUInt16),
+        st->fields.emplace(st->fields.begin(), "eventFlags", make_smart<TypeDecl>(Type::tUInt16),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
-        st->fields.emplace(st->fields.begin(), "eventSize", make_shared<TypeDecl>(Type::tUInt16),
+        st->fields.emplace(st->fields.begin(), "eventSize", make_smart<TypeDecl>(Type::tUInt16),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
-        st->fields.emplace(st->fields.begin(), "eventType", make_shared<TypeDecl>(Type::tUInt),
+        st->fields.emplace(st->fields.begin(), "eventType", make_smart<TypeDecl>(Type::tUInt),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
         return true;
     }

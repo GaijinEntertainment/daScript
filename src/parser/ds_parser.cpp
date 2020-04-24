@@ -4688,7 +4688,7 @@ yyreduce:
                             VariablePtr pVar = make_shared<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
-                            pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
                                 pVar->init_via_move = pDecl->init_via_move;
@@ -5131,7 +5131,7 @@ yyreduce:
                     VariablePtr pVar = make_shared<Variable>();
                     pVar->name = name;
                     pVar->at = (yyvsp[0].pVarDecl)->at;
-                    pVar->type = make_shared<TypeDecl>(*(yyvsp[0].pVarDecl)->pTypeDecl);
+                    pVar->type = make_smart<TypeDecl>(*(yyvsp[0].pVarDecl)->pTypeDecl);
                     if ( (yyvsp[0].pVarDecl)->pInit ) {
                         pVar->init = (yyvsp[0].pVarDecl)->pInit->clone();
                         pVar->init_via_move = (yyvsp[0].pVarDecl)->init_via_move;
@@ -5307,7 +5307,7 @@ yyreduce:
     {
         ExprBlock * closure = (ExprBlock *) (yyvsp[0].pExpression);
         (yyval.pExpression) = new ExprMakeBlock(tokAt((yylsp[0])),ExpressionPtr((yyvsp[0].pExpression)));
-        closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
+        closure->returnType = make_smart<TypeDecl>(Type::autoinfer);
     }
 #line 5313 "ds_parser.cpp"
     break;
@@ -5326,7 +5326,7 @@ yyreduce:
                             VariablePtr pVar = make_shared<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
-                            pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
                                 pVar->init_via_move = pDecl->init_via_move;
@@ -5560,7 +5560,7 @@ yyreduce:
     {
 		auto expr = new ExprAddr(tokAt((yylsp[-4])),*(yyvsp[0].s)); 
 		delete (yyvsp[0].s); 
-        expr->funcType = make_shared<TypeDecl>(Type::tFunction);
+        expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
 		(yyval.pExpression) = expr;
     }
@@ -5572,7 +5572,7 @@ yyreduce:
     { 
 		auto expr = new ExprAddr(tokAt((yylsp[-5])),*(yyvsp[0].s)); 
 		delete (yyvsp[0].s); 
-        expr->funcType = make_shared<TypeDecl>(Type::tFunction);
+        expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
         if ( (yyvsp[-3].pVarDeclList) ) {
             varDeclToTypeDecl(expr->funcType.get(), (yyvsp[-3].pVarDeclList));
@@ -6022,7 +6022,7 @@ yyreduce:
             auto pEnum = enums.back();
             auto ff = pEnum->find(*(yyvsp[0].s));
             if ( ff.second ) {
-				auto td = make_shared<TypeDecl>(pEnum);
+				auto td = make_smart<TypeDecl>(pEnum);
                 resEnum = new ExprConstEnumeration(tokAt((yylsp[0])), *(yyvsp[0].s), td);
             } else {
                 das_yyerror("enumeraiton value not found " + *(yyvsp[-1].s) + " " + *(yyvsp[0].s), tokAt((yylsp[0])),
@@ -6360,7 +6360,7 @@ yyreduce:
                     VariablePtr pVar = make_shared<Variable>();
                     pVar->name = name;
                     pVar->at = pDecl->at;
-                    pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                     if ( pDecl->pInit ) {
                         pVar->init = pDecl->pInit->clone();
                         pVar->init_via_move = pDecl->init_via_move;
@@ -6533,7 +6533,7 @@ yyreduce:
                             das_yyerror("structure field is not overriding anything, "+name,pDecl->at,
                                 CompilationError::invalid_override);
                         } else {
-                            auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            auto td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
                             pStruct->fields.emplace_back(name, td, init,
                                 pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
@@ -6976,7 +6976,7 @@ yyreduce:
     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-1]));
-        (yyval.pTypeDecl)->firstType = make_shared<TypeDecl>(Type::tPointer);
+        (yyval.pTypeDecl)->firstType = make_smart<TypeDecl>(Type::tPointer);
 		(yyval.pTypeDecl)->firstType->at = tokAt((yylsp[-1]));
 		(yyval.pTypeDecl)->firstType->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
@@ -7146,7 +7146,7 @@ yyreduce:
   case 399:
 #line 2085 "ds_parser.ypp"
     {
-        auto vtype = make_shared<TypeDecl>(Type::tVariant);
+        auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *(yyvsp[-4].s);
         vtype->at = tokAt((yylsp[-4]));
         varDeclToTypeDecl(vtype.get(), (yyvsp[-2].pVarDeclList), true);
@@ -7394,7 +7394,7 @@ yyreduce:
   case 424:
 #line 2241 "ds_parser.ypp"
     {
-        auto mkt = make_shared<TypeDecl>(Type::autoinfer);
+        auto mkt = make_smart<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)(yyvsp[-2].pExpression))->makeType = mkt;
         (yyvsp[-2].pExpression)->at = tokAt((yylsp[-3]));
@@ -7767,7 +7767,7 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, 
         if ( pDecl->pTypeDecl ) {
             int count = pDecl->pNameList ? int(pDecl->pNameList->size()) : 1;
             for ( int ai=0; ai!=count; ++ai ) {
-                auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                auto pVarType = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                 if ( pDecl->pInit ) {
                     das_yyerror("can't have default values in type declaration",
                     pDecl->at,CompilationError::cant_initialize);

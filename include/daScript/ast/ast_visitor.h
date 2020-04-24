@@ -32,7 +32,7 @@ namespace das {
         virtual void visitProgram ( Program * prog ) {}
         // TYPE
         virtual void preVisit ( TypeDecl * td ) {}
-        virtual TypeDeclPtr visit ( TypeDecl * td ) { return td->shared_from_this(); }
+        virtual TypeDeclPtr visit ( TypeDecl * td ) { return td; }
         // ENUMERATOIN
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) { }

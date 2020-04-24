@@ -13,7 +13,7 @@ namespace das {
     TypeDeclPtr BasicStructureAnnotation::makeFieldType ( const string & na ) const {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {
-            auto t = make_shared<TypeDecl>(*it->second.decl);
+            auto t = make_smart<TypeDecl>(*it->second.decl);
             if ( it->second.offset != -1U ) {
                 t->ref = true;
             }
@@ -26,7 +26,7 @@ namespace das {
     TypeDeclPtr BasicStructureAnnotation::makeSafeFieldType ( const string & na ) const {
         auto it = fields.find(na);
         if ( it!=fields.end() && it->second.offset!=-1U ) {
-            return make_shared<TypeDecl>(*it->second.decl);
+            return make_smart<TypeDecl>(*it->second.decl);
         } else {
             return nullptr;
         }

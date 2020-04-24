@@ -822,7 +822,7 @@ function_declaration
                             VariablePtr pVar = make_shared<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
-                            pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
                                 pVar->init_via_move = pDecl->init_via_move;
@@ -1060,7 +1060,7 @@ expression_let
                     VariablePtr pVar = make_shared<Variable>();
                     pVar->name = name;
                     pVar->at = $decl->at;
-                    pVar->type = make_shared<TypeDecl>(*$decl->pTypeDecl);
+                    pVar->type = make_smart<TypeDecl>(*$decl->pTypeDecl);
                     if ( $decl->pInit ) {
                         pVar->init = $decl->pInit->clone();
                         pVar->init_via_move = $decl->init_via_move;
@@ -1169,7 +1169,7 @@ expr_block
     :   expression_block[block]             {
         ExprBlock * closure = (ExprBlock *) $block;
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
-        closure->returnType = make_shared<TypeDecl>(Type::autoinfer);
+        closure->returnType = make_smart<TypeDecl>(Type::autoinfer);
     }
     |   block_or_lambda[bal] optional_annotation_list[annL] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
@@ -1184,7 +1184,7 @@ expr_block
                             VariablePtr pVar = make_shared<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
-                            pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
                                 pVar->init_via_move = pDecl->init_via_move;
@@ -1292,14 +1292,14 @@ func_addr_expr
     |   '@' '@'[loc] '<' type_declaration[blockType] '>' name_in_namespace[name] {
 		auto expr = new ExprAddr(tokAt(@loc),*$name); 
 		delete $name; 
-        expr->funcType = make_shared<TypeDecl>(Type::tFunction);
+        expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($blockType);
 		$$ = expr;
     }
     |   '@' '@'[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' name_in_namespace[name] { 
 		auto expr = new ExprAddr(tokAt(@loc),*$name); 
 		delete $name; 
-        expr->funcType = make_shared<TypeDecl>(Type::tFunction);
+        expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($result);
         if ( $list ) {
             varDeclToTypeDecl(expr->funcType.get(), $list);
@@ -1437,7 +1437,7 @@ expr
             auto pEnum = enums.back();
             auto ff = pEnum->find(*$eni);
             if ( ff.second ) {
-				auto td = make_shared<TypeDecl>(pEnum);
+				auto td = make_smart<TypeDecl>(pEnum);
                 resEnum = new ExprConstEnumeration(tokAt(@eni), *$eni, td);
             } else {
                 das_yyerror("enumeraiton value not found " + *$ena + " " + *$eni, tokAt(@eni),
@@ -1630,7 +1630,7 @@ global_let
                     VariablePtr pVar = make_shared<Variable>();
                     pVar->name = name;
                     pVar->at = pDecl->at;
-                    pVar->type = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                     if ( pDecl->pInit ) {
                         pVar->init = pDecl->pInit->clone();
                         pVar->init_via_move = pDecl->init_via_move;
@@ -1781,7 +1781,7 @@ structure_declaration
                             das_yyerror("structure field is not overriding anything, "+name,pDecl->at,
                                 CompilationError::invalid_override);
                         } else {
-                            auto td = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                            auto td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
                             pStruct->fields.emplace_back(name, td, init,
                                 pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
@@ -1987,7 +1987,7 @@ type_declaration
     |   type_declaration[typeDecl] QQ {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(@typeDecl);
-        $$->firstType = make_shared<TypeDecl>(Type::tPointer);
+        $$->firstType = make_smart<TypeDecl>(Type::tPointer);
 		$$->firstType->at = tokAt(@typeDecl);
 		$$->firstType->firstType = TypeDeclPtr($typeDecl);
     }
@@ -2083,7 +2083,7 @@ variant_keyword
 
 variant_alias_declaration
     :   variant_keyword NAME[vname] '{' variant_type_list[list] ';' '}' {
-        auto vtype = make_shared<TypeDecl>(Type::tVariant);
+        auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
         vtype->at = tokAt(@vname);
         varDeclToTypeDecl(vtype.get(), $list, true);
@@ -2239,7 +2239,7 @@ make_table
 
 make_table_decl
     :   CBRCBRB [loc] make_table[mka] '}' '}' {
-        auto mkt = make_shared<TypeDecl>(Type::autoinfer);
+        auto mkt = make_smart<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)$mka)->makeType = mkt;
         $mka->at = tokAt(@loc);
@@ -2357,7 +2357,7 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, 
         if ( pDecl->pTypeDecl ) {
             int count = pDecl->pNameList ? int(pDecl->pNameList->size()) : 1;
             for ( int ai=0; ai!=count; ++ai ) {
-                auto pVarType = make_shared<TypeDecl>(*pDecl->pTypeDecl);
+                auto pVarType = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                 if ( pDecl->pInit ) {
                     das_yyerror("can't have default values in type declaration",
                     pDecl->at,CompilationError::cant_initialize);

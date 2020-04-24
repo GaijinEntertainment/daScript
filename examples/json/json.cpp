@@ -271,8 +271,8 @@ namespace das {
         virtual size_t getAlignOf() const override { return alignof(JsValue); }
 
         TypeDeclPtr makeJsValuePtr() const {
-            auto pT = make_shared<TypeDecl>(Type::tPointer);
-            pT->firstType = make_shared<TypeDecl>(Type::tHandle);
+            auto pT = make_smart<TypeDecl>(Type::tPointer);
+            pT->firstType = make_smart<TypeDecl>(Type::tHandle);
             auto THAT = (JsValueTypeAnnotation *) this;
             pT->firstType->annotation = static_pointer_cast<TypeAnnotation>(THAT->shared_from_this());
             return pT;
@@ -292,17 +292,17 @@ namespace das {
         virtual TypeDeclPtr makeFieldType ( const string & fn ) const override {
             if ( fn=="is_int" || fn=="is_float" || fn=="is_double" || fn=="is_object" || fn=="is_array" ||
                 fn=="is_null" || fn=="is_string" || fn=="is_bool" ) {
-                return make_shared<TypeDecl>(Type::tBool);
+                return make_smart<TypeDecl>(Type::tBool);
             } else if ( fn=="as_bool" ) {
-                return make_shared<TypeDecl>(Type::tBool);
+                return make_smart<TypeDecl>(Type::tBool);
             } else if ( fn=="as_int" || fn=="size" ) {
-                return make_shared<TypeDecl>(Type::tInt);
+                return make_smart<TypeDecl>(Type::tInt);
             } else if ( fn=="as_float" ) {
-                return make_shared<TypeDecl>(Type::tFloat);
+                return make_smart<TypeDecl>(Type::tFloat);
             } else if ( fn=="as_double" ) {
-                return make_shared<TypeDecl>(Type::tDouble);
+                return make_smart<TypeDecl>(Type::tDouble);
             }else if ( fn=="as_string" ) {
-                return make_shared<TypeDecl>(Type::tString);
+                return make_smart<TypeDecl>(Type::tString);
             } else {
                 return makeJsValuePtr();
             }
@@ -327,8 +327,8 @@ namespace das {
             } else {
                 return makeJsValuePtr();
             }
-            auto pt = make_shared<TypeDecl>(Type::tPointer);
-            pt->firstType = make_shared<TypeDecl>(bt);
+            auto pt = make_smart<TypeDecl>(Type::tPointer);
+            pt->firstType = make_smart<TypeDecl>(bt);
             return pt;
         }
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const override {

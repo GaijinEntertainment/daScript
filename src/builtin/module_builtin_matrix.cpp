@@ -31,7 +31,7 @@ namespace das {
         MatrixAnnotation() : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ) {
             matrixTypeInfo = helpA.debugInfo->makeNode<TypeInfo>();
             auto bt = ToBasicType<VecT>::type;
-            auto tt = make_shared<TypeDecl>(Type(bt));
+            auto tt = make_smart<TypeDecl>(Type(bt));
             tt->dim.push_back(RowC);
             helpA.makeTypeInfo(matrixTypeInfo, tt);
         }
@@ -72,13 +72,13 @@ namespace das {
             if ( field<0  )
                 return nullptr;
             auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-            return make_shared<TypeDecl>(bt);
+            return make_smart<TypeDecl>(bt);
         }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & idx ) const override {
             auto decl = idx->type;
             if ( !decl->isIndex() ) return nullptr;
             auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-            auto pt = make_shared<TypeDecl>(bt);
+            auto pt = make_smart<TypeDecl>(bt);
             pt->ref = true;
             return pt;
         }

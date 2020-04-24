@@ -63,7 +63,7 @@ namespace das {
     }
 
     TypeDeclPtr Enumeration::makeBaseType() const { 
-        return make_shared<TypeDecl>(baseType); 
+        return make_smart<TypeDecl>(baseType); 
     }
 
     Type Enumeration::getEnumType() const {
@@ -88,13 +88,13 @@ namespace das {
         switch (baseType) {
         case Type::tInt8:
         case Type::tUInt8:
-            res = make_shared<TypeDecl>(Type::tEnumeration8); break;
+            res = make_smart<TypeDecl>(Type::tEnumeration8); break;
         case Type::tInt16:
         case Type::tUInt16:
-            res = make_shared<TypeDecl>(Type::tEnumeration16); break;
+            res = make_smart<TypeDecl>(Type::tEnumeration16); break;
         case Type::tInt:
         case Type::tUInt:
-            res = make_shared<TypeDecl>(Type::tEnumeration); break;
+            res = make_smart<TypeDecl>(Type::tEnumeration); break;
         default:
             DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
             return nullptr;
@@ -339,7 +339,7 @@ namespace das {
     VariablePtr Variable::clone() const {
         auto pVar = make_shared<Variable>();
         pVar->name = name;
-        pVar->type = make_shared<TypeDecl>(*type);
+        pVar->type = make_smart<TypeDecl>(*type);
         if ( init )
             pVar->init = init->clone();
         if ( source )
@@ -369,7 +369,7 @@ namespace das {
             cfun->arguments.push_back(arg->clone());
         }
         cfun->annotations = annotations;
-        cfun->result = make_shared<TypeDecl>(*result);
+        cfun->result = make_smart<TypeDecl>(*result);
         cfun->body = body->clone();
         cfun->index = -1;
         cfun->totalStackSize = 0;
@@ -525,7 +525,7 @@ namespace das {
             return nullptr;
         }
         expr->at = at;
-        expr->type = type ? make_shared<TypeDecl>(*type) : nullptr;
+        expr->type = type ? make_smart<TypeDecl>(*type) : nullptr;
         expr->genFlags = genFlags;
         return expr;
     }
@@ -535,7 +535,7 @@ namespace das {
             auto ar2l = make_shared<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
-            ar2l->type = make_shared<TypeDecl>(*expr->type);
+            ar2l->type = make_smart<TypeDecl>(*expr->type);
             ar2l->type->ref = false;
             return ar2l;
         } else {
@@ -640,7 +640,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->target = target;
         cexpr->func = func;
-        if (funcType) cexpr->funcType = make_shared<TypeDecl>(*funcType);
+        if (funcType) cexpr->funcType = make_smart<TypeDecl>(*funcType);
         return cexpr;
     }
 
@@ -755,7 +755,7 @@ namespace das {
         auto cexpr = clonePtr<ExprMakeGenerator>(expr);
         ExprLooksLikeCall::clone(cexpr);
         if ( iterType ) {
-            cexpr->iterType = make_shared<TypeDecl>(*iterType);
+            cexpr->iterType = make_smart<TypeDecl>(*iterType);
         }
         return cexpr;
     }
@@ -844,7 +844,7 @@ namespace das {
         auto cexpr = clonePtr<ExprTypeInfo>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
-        cexpr->typeexpr = make_shared<TypeDecl>(*typeexpr);
+        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
         return cexpr;
     }
 
@@ -900,7 +900,7 @@ namespace das {
         auto cexpr = clonePtr<ExprCast>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
-        cexpr->castType = make_shared<TypeDecl>(*castType);
+        cexpr->castType = make_smart<TypeDecl>(*castType);
         cexpr->castFlags = castFlags;
         return cexpr;
     }
@@ -1047,14 +1047,14 @@ namespace das {
     }
 
     TypeDeclPtr ExprBlock::makeBlockType () const {
-        auto eT = make_shared<TypeDecl>(Type::tBlock);
+        auto eT = make_smart<TypeDecl>(Type::tBlock);
         eT->constant = true;
         if ( type ) {
-            eT->firstType = make_shared<TypeDecl>(*type);
+            eT->firstType = make_smart<TypeDecl>(*type);
         }
         for ( auto & arg : arguments ) {
             if ( arg->type ) {
-                eT->argTypes.push_back(make_shared<TypeDecl>(*arg->type));
+                eT->argTypes.push_back(make_smart<TypeDecl>(*arg->type));
             }
         }
         return eT;
@@ -1125,7 +1125,7 @@ namespace das {
         }
         cexpr->blockFlags = blockFlags;
         if ( returnType )
-            cexpr->returnType = make_shared<TypeDecl>(*returnType);
+            cexpr->returnType = make_smart<TypeDecl>(*returnType);
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
         }
@@ -1830,7 +1830,7 @@ namespace das {
             }
             cexpr->structs.push_back(mfd);
         }
-        cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        cexpr->makeType = make_smart<TypeDecl>(*makeType);
         cexpr->useInitializer = useInitializer;
         return cexpr;
     }
@@ -1868,7 +1868,7 @@ namespace das {
         for ( auto & fd : variants ) {
             cexpr->variants.push_back(fd->clone());
         }
-        cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        cexpr->makeType = make_smart<TypeDecl>(*makeType);
         return cexpr;
     }
 
@@ -1901,7 +1901,7 @@ namespace das {
         for ( auto & val : values ) {
             cexpr->values.push_back(val->clone());
         }
-        cexpr->makeType = make_shared<TypeDecl>(*makeType);
+        cexpr->makeType = make_smart<TypeDecl>(*makeType);
         return cexpr;
     }
 
@@ -1936,7 +1936,7 @@ namespace das {
             cexpr->values.push_back(val->clone());
         }
         if ( makeType ) {
-            cexpr->makeType = make_shared<TypeDecl>(*makeType);
+            cexpr->makeType = make_smart<TypeDecl>(*makeType);
         }
         cexpr->isKeyValue = isKeyValue;
         return cexpr;

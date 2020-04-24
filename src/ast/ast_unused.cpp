@@ -508,7 +508,7 @@ namespace das {
                                 reportFolding();
                                 auto cle = expr->variable->init->clone();
                                 if ( !cle->type ) {
-                                    cle->type = make_shared<TypeDecl>(*expr->variable->init->type);
+                                    cle->type = make_smart<TypeDecl>(*expr->variable->init->type);
                                 }
                                 return cle;
                             }
@@ -519,7 +519,7 @@ namespace das {
                                 auto cfv = expr->type->enumType->find(0, "");
                                 if ( !cfv.empty() ) {
                                     reportFolding();
-                                    auto exprV = make_shared<ExprConstEnumeration>(expr->at, cfv, make_shared<TypeDecl>(*expr->type));
+                                    auto exprV = make_shared<ExprConstEnumeration>(expr->at, cfv, make_smart<TypeDecl>(*expr->type));
                                     exprV->type = expr->type->enumType->makeEnumType();
                                     exprV->type->constant = true;
                                     return exprV;
@@ -527,13 +527,13 @@ namespace das {
                             } else if ( expr->type->baseType==Type::tString ) {
                                 reportFolding();
                                 auto exprV = make_shared<ExprConstString>(expr->at);
-                                exprV->type = make_shared<TypeDecl>(Type::tString);
+                                exprV->type = make_smart<TypeDecl>(Type::tString);
                                 exprV->type->constant = true;
                                 return exprV;
                             } else {
                                 reportFolding();
                                 auto exprV = Program::makeConst(expr->at, expr->type, v_zero());
-                                exprV->type = make_shared<TypeDecl>(*expr->type);
+                                exprV->type = make_smart<TypeDecl>(*expr->type);
                                 exprV->type->constant = true;
                                 return exprV;
                             }

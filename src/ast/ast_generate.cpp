@@ -75,15 +75,15 @@ namespace das {
         auto compName = "__acomp_" + to_string(expr->at.line);
         auto pClosure = make_shared<ExprBlock>();
         pClosure->at = expr->subexpr->at;
-        pClosure->returnType = make_shared<TypeDecl>(Type::autoinfer);
+        pClosure->returnType = make_smart<TypeDecl>(Type::autoinfer);
         // temp : Array<expr->subexpr->type>
         auto pVar = make_shared<Variable>();
         pVar->at = expr->at;
         pVar->name = compName;
-        pVar->type = make_shared<TypeDecl>(Type::tArray);
+        pVar->type = make_smart<TypeDecl>(Type::tArray);
         pVar->type->constant = false;
         pVar->type->removeConstant = true;
-        pVar->type->firstType = make_shared<TypeDecl>(*expr->subexpr->type);
+        pVar->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
         pVar->type->firstType->ref = false;
         pVar->type->firstType->constant = false;
         // let temp
@@ -148,7 +148,7 @@ namespace das {
     ExpressionPtr generateComprehensionIterator ( ExprArrayComprehension * expr ) {
         auto pClosure = make_shared<ExprBlock>();
         pClosure->at = expr->subexpr->at;
-        pClosure->returnType = make_shared<TypeDecl>(Type::autoinfer);
+        pClosure->returnType = make_smart<TypeDecl>(Type::autoinfer);
         // yield subexpr
         auto pYield = make_shared<ExprYield>(expr->at, expr->subexpr->clone());
         if ( !expr->subexpr->type->canCopy() )
@@ -184,7 +184,7 @@ namespace das {
         auto pMakeBlock = make_shared<ExprMakeBlock>(expr->at,pClosure);
         // generator
         auto pMkGen = make_shared<ExprMakeGenerator>(expr->at, pMakeBlock);
-        pMkGen->iterType = make_shared<TypeDecl>(*expr->subexpr->type);
+        pMkGen->iterType = make_smart<TypeDecl>(*expr->subexpr->type);
         return pMkGen;
     }
 
@@ -195,7 +195,7 @@ namespace das {
         pInvoke->arguments.push_back(pAt);
         auto pCast = make_shared<ExprCast>();
         pCast->at = at;
-        pCast->castType = make_shared<TypeDecl>(Type::autoinfer);
+        pCast->castType = make_smart<TypeDecl>(Type::autoinfer);
         pCast->subexpr = ExpressionPtr(a);
         pInvoke->arguments.push_back(pCast);
         return pInvoke;
@@ -213,11 +213,11 @@ namespace das {
         fn->generated = true;
         fn->name = str->name;
         fn->at = str->at;
-        fn->result = make_shared<TypeDecl>(str->shared_from_this());
+        fn->result = make_smart<TypeDecl>(str->shared_from_this());
         auto block = make_shared<ExprBlock>();
         auto makeT = make_shared<ExprMakeStructureOrDefaultValue>(str->at);
         makeT->useInitializer = true;
-        makeT->makeType = make_shared<TypeDecl>(str->shared_from_this());
+        makeT->makeType = make_smart<TypeDecl>(str->shared_from_this());
         makeT->structs.push_back(make_shared<MakeStruct>());
         auto returnDecl = make_shared<ExprReturn>(str->at,makeT);
         returnDecl->moveSemantics = !str->canCopy();
@@ -234,18 +234,18 @@ namespace das {
     FunctionPtr makeClone ( Structure * str ) {
         auto varA = make_shared<Variable>();
         varA->name = "a";
-        varA->type = make_shared<TypeDecl>(str->shared_from_this());
+        varA->type = make_smart<TypeDecl>(str->shared_from_this());
         varA->at = str->at;
         auto varB = make_shared<Variable>();
         varB->name = "b";
-        varB->type = make_shared<TypeDecl>(str->shared_from_this());
+        varB->type = make_smart<TypeDecl>(str->shared_from_this());
         varB->type->constant = true;
         varB->at = str->at;
         auto fn = make_shared<Function>();
         fn->name = "clone";
         fn->generated = true;
         fn->at = str->at;
-        fn->result = make_shared<TypeDecl>();
+        fn->result = make_smart<TypeDecl>();
         fn->arguments.push_back(varA);
         fn->arguments.push_back(varB);
         auto block = make_shared<ExprBlock>();
@@ -290,10 +290,10 @@ namespace das {
         fb->at = at;
         fb->list.push_back(ife);
         pFunc->body = fb;
-        pFunc->result = make_shared<TypeDecl>(Type::tVoid);
+        pFunc->result = make_smart<TypeDecl>(Type::tVoid);
         auto cTHIS = make_shared<Variable>();
         cTHIS->name = "__this";
-        cTHIS->type = make_shared<TypeDecl>(*ptrType);
+        cTHIS->type = make_smart<TypeDecl>(*ptrType);
         cTHIS->type->constant = false;
         cTHIS->type->removeConstant = true;
         cTHIS->type->ref = true;
@@ -328,10 +328,10 @@ namespace das {
         mz->arguments.push_back(lvar);
         fb->list.push_back(mz);
         pFunc->body = fb;
-        pFunc->result = make_shared<TypeDecl>(Type::tVoid);
+        pFunc->result = make_smart<TypeDecl>(Type::tVoid);
         auto cTHIS = make_shared<Variable>();
         cTHIS->name = "__this";
-        cTHIS->type = make_shared<TypeDecl>(ls);
+        cTHIS->type = make_smart<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
         verifyGenerated(pFunc->body);
         return pFunc;
@@ -372,11 +372,11 @@ namespace das {
         delit1->alwaysSafe = true;
         fb->list.push_back(delit1);
         pFunc->body = fb;
-        pFunc->result = make_shared<TypeDecl>(Type::tVoid);
+        pFunc->result = make_smart<TypeDecl>(Type::tVoid);
         auto cTHIS = make_shared<Variable>();
         cTHIS->name = "__this";
-        cTHIS->type = make_shared<TypeDecl>(Type::tPointer);
-        cTHIS->type->firstType = make_shared<TypeDecl>(ls);
+        cTHIS->type = make_smart<TypeDecl>(Type::tPointer);
+        cTHIS->type->firstType = make_smart<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
         verifyGenerated(pFunc->body);
         return pFunc;
@@ -412,10 +412,10 @@ namespace das {
         wb->blockFlags = 0;
         fb->list.push_back(with);
         pFunc->body = fb;
-        pFunc->result = make_shared<TypeDecl>(*block->type);
+        pFunc->result = make_smart<TypeDecl>(*block->type);
         auto cTHIS = make_shared<Variable>();
         cTHIS->name = "__this";
-        cTHIS->type = make_shared<TypeDecl>(ls);
+        cTHIS->type = make_smart<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
         for ( auto & arg : block->arguments ) {
             auto cA = arg->clone();
@@ -433,23 +433,23 @@ namespace das {
         auto btd = block->makeBlockType();
         btd->baseType = Type::tFunction;
         btd->constant = false;
-        auto thisArg = make_shared<TypeDecl>(pStruct);
+        auto thisArg = make_smart<TypeDecl>(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
-        auto finFunc = make_shared<TypeDecl>(Type::tFunction);
-        auto finArg = make_shared<TypeDecl>(Type::tPointer);
-        finArg->firstType = make_shared<TypeDecl>(pStruct);
+        auto finFunc = make_smart<TypeDecl>(Type::tFunction);
+        auto finArg = make_smart<TypeDecl>(Type::tPointer);
+        finArg->firstType = make_smart<TypeDecl>(pStruct);
         finArg->constant = false;
         finArg->removeConstant = true;
         finFunc->argTypes.emplace_back(finArg);
-        finFunc->firstType = make_shared<TypeDecl>(Type::tVoid);
+        finFunc->firstType = make_smart<TypeDecl>(Type::tVoid);
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         if ( needYield ) {
-            auto yt = make_shared<TypeDecl>(Type::tInt);
+            auto yt = make_smart<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
         }
         for ( auto var : capt ) {
-            auto td = make_shared<TypeDecl>(*var->type);
+            auto td = make_smart<TypeDecl>(*var->type);
             td->ref = false;
             td->constant = false;
             pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
@@ -466,7 +466,7 @@ namespace das {
         auto makeS = make_shared<ExprMakeStructureOrDefaultValue>();
         // makeS->useInitializer = true;
         makeS->at = at;
-        makeS->makeType = make_shared<TypeDecl>(ls);
+        makeS->makeType = make_smart<TypeDecl>(ls);
         auto ms = make_shared<MakeStruct>();
         auto atTHIS = make_shared<ExprAddr>(lf->at, "_::" + lf->name);
         // TODO: expand atTHIS->funcType, so that it points to correct function by type as well
@@ -482,7 +482,7 @@ namespace das {
         }
         makeS->structs.push_back(ms);
         asc->subexpr = makeS;
-        asc->ascType = make_shared<TypeDecl>(*ls->fields[0].type);
+        asc->ascType = make_smart<TypeDecl>(*ls->fields[0].type);
         asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
         asc->ascType->baseType = Type::tLambda;
         auto res = ExpressionPtr(asc);
@@ -649,10 +649,10 @@ namespace das {
         auto capture = func->arguments[0]->type->structType;
         DAS_ASSERT(capture && "generator first argument is lambda capture");
         for ( auto & var : expr->variables ) {
-            auto vtd = make_shared<TypeDecl>(*var->type);
+            auto vtd = make_smart<TypeDecl>(*var->type);
             bool isRef = vtd->ref;
             if ( isRef ) {
-                auto pvtd = make_shared<TypeDecl>(Type::tPointer);
+                auto pvtd = make_smart<TypeDecl>(Type::tPointer);
                 pvtd->firstType = vtd;
                 vtd->ref = false;
                 vtd = pvtd;
@@ -833,7 +833,7 @@ namespace das {
         auto lvar = make_shared<Variable>();
         lvar->at = expr->at;
         lvar->name = loopVar;
-        lvar->type = make_shared<TypeDecl>(Type::tBool);
+        lvar->type = make_smart<TypeDecl>(Type::tBool);
         lvar->init = make_shared<ExprConstBool>(expr->at, true);
         leqt->variables.push_back(lvar);
         blk->list.push_back(leqt);
@@ -850,7 +850,7 @@ namespace das {
             auto svar = make_shared<Variable>();
             svar->at = expr->at;
             svar->name = srcName;
-            svar->type = make_shared<TypeDecl>(Type::autoinfer);
+            svar->type = make_smart<TypeDecl>(Type::autoinfer);
             svar->init_via_move = true;
             if ( src->type->isGoodIteratorType() ) {
                 svar->init = src->clone();
@@ -870,8 +870,8 @@ namespace das {
             srcv->name = srcVarName;
             if ( iterv->type->ref ) {
                 srcv->do_not_delete = true;
-                srcv->type = make_shared<TypeDecl>(Type::tPointer);
-                srcv->type->firstType = make_shared<TypeDecl>(*iterv->type);
+                srcv->type = make_smart<TypeDecl>(Type::tPointer);
+                srcv->type->firstType = make_smart<TypeDecl>(*iterv->type);
                 srcv->type->firstType->constant |= src->type->constant;
                 srcv->type->firstType->ref = false;
                 if ( bodyBlock ) {
@@ -880,7 +880,7 @@ namespace das {
                     replaceRef2Ptr(expr->shared_from_this(), iterv->name);
                 }
             } else {
-                srcv->type = make_shared<TypeDecl>(*iterv->type);
+                srcv->type = make_smart<TypeDecl>(*iterv->type);
                 srcv->type->constant |= src->type->constant;
             }
             srci->variables.push_back(srcv);
@@ -889,8 +889,8 @@ namespace das {
             auto vit0 = make_shared<ExprVar>(expr->at, srcVarName);
             auto adri = make_shared<ExprRef2Ptr>(expr->at, vit0);
             adri->alwaysSafe = true;
-            auto pvoid = make_shared<TypeDecl>(Type::tPointer);
-            pvoid->firstType = make_shared<TypeDecl>(Type::tVoid);
+            auto pvoid = make_smart<TypeDecl>(Type::tPointer);
+            pvoid->firstType = make_smart<TypeDecl>(Type::tVoid);
             auto rein = make_shared<ExprCast>(expr->at, adri, pvoid);
             rein->reinterpret = true;
             rein->alwaysSafe = true;
@@ -899,7 +899,7 @@ namespace das {
             auto vvar = make_shared<Variable>();
             vvar->at = expr->at;
             vvar->name = pVarName;
-            vvar->type = make_shared<TypeDecl>(*pvoid);
+            vvar->type = make_smart<TypeDecl>(*pvoid);
             vvar->init = rein;
             veqt->variables.push_back(vvar);
             blk->list.push_back(veqt);
@@ -967,16 +967,16 @@ namespace das {
         fn->generated = true;
         fn->name = "clone";
         fn->at = at;
-        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_shared<Variable>();
         arg0->name = "dest";
-        arg0->type = make_shared<TypeDecl>(*tupleType);
+        arg0->type = make_smart<TypeDecl>(*tupleType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_shared<Variable>();
         arg1->name = "src";
-        arg1->type = make_shared<TypeDecl>(*tupleType);
+        arg1->type = make_smart<TypeDecl>(*tupleType);
         arg1->type->constant = true;
         arg1->type->ref = false;
         fn->arguments.push_back(arg1);
@@ -1001,10 +1001,10 @@ namespace das {
         fn->generated = true;
         fn->name = "finalize";
         fn->at = at;
-        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_shared<Variable>();
         arg0->name = "__this";
-        arg0->type = make_shared<TypeDecl>(*tupleType);
+        arg0->type = make_smart<TypeDecl>(*tupleType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
@@ -1033,16 +1033,16 @@ namespace das {
         fn->generated = true;
         fn->name = "clone";
         fn->at = at;
-        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_shared<Variable>();
         arg0->name = "dest";
-        arg0->type = make_shared<TypeDecl>(*variantType);
+        arg0->type = make_smart<TypeDecl>(*variantType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_shared<Variable>();
         arg1->name = "src";
-        arg1->type = make_shared<TypeDecl>(*variantType);
+        arg1->type = make_smart<TypeDecl>(*variantType);
         arg1->type->constant = true;
         arg1->type->ref = false;
         fn->arguments.push_back(arg1);
@@ -1089,10 +1089,10 @@ namespace das {
         fn->generated = true;
         fn->name = "finalize";
         fn->at = at;
-        fn->result = make_shared<TypeDecl>(Type::tVoid);
+        fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_shared<Variable>();
         arg0->name = "__this";
-        arg0->type = make_shared<TypeDecl>(*variantType);
+        arg0->type = make_smart<TypeDecl>(*variantType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);

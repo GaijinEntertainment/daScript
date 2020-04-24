@@ -431,7 +431,7 @@ namespace das
             // lets set variant index
             uint32_t voffset = extraOffset + index*stride;
             auto vconst = make_shared<ExprConstInt>(at, int32_t(fieldVariant));
-            vconst->type = make_shared<TypeDecl>(Type::tInt);
+            vconst->type = make_smart<TypeDecl>(Type::tInt);
             SimNode * svi;
             if ( useCMRES ) {
                 svi = makeLocalCMResCopy(at,context,voffset,vconst);
@@ -2156,7 +2156,7 @@ namespace das
             auto varExpr = make_shared<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
-            varExpr->type = make_shared<TypeDecl>(*var->type);
+            varExpr->type = make_smart<TypeDecl>(*var->type);
             auto retN = makeMove(var->init->at, context, varExpr, var->init);
             if ( !retN ) {
                 context.thisProgram->error("internal compilation error, can't generate move", "", "", var->at);
@@ -2166,7 +2166,7 @@ namespace das
             auto varExpr = make_shared<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
-            varExpr->type = make_shared<TypeDecl>(*var->type);
+            varExpr->type = make_smart<TypeDecl>(*var->type);
             auto retN = makeCopy(var->init->at, context, varExpr, var->init);
             if ( !retN ) {
                 context.thisProgram->error("internal compilation error, can't generate copy", "", "", var->at);

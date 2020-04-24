@@ -258,7 +258,7 @@ namespace das
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
         virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
-            if ( na=="length" ) return make_shared<TypeDecl>(Type::tInt);
+            if ( na=="length" ) return make_smart<TypeDecl>(Type::tInt);
             return nullptr;
         }
         virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override { 
@@ -276,10 +276,10 @@ namespace das
             }
         }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
-            return make_shared<TypeDecl>(*vecType);
+            return make_smart<TypeDecl>(*vecType);
         }
         virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & ) const override {
-            return make_shared<TypeDecl>(*vecType);
+            return make_smart<TypeDecl>(*vecType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
@@ -299,7 +299,7 @@ namespace das
         }
         virtual void walk ( DataWalker & walker, void * vec ) override {
             if ( !ati ) {
-                auto dimType = make_shared<TypeDecl>(*vecType);
+                auto dimType = make_smart<TypeDecl>(*vecType);
                 dimType->ref = 0;
                 dimType->dim.push_back(1234);
                 ati = helpA.makeTypeInfo(nullptr, dimType);
@@ -369,10 +369,10 @@ namespace das
     void addConstant ( Module & mod, const string & name, const TT & value ) {
         VariablePtr pVar = make_shared<Variable>();
         pVar->name = name;
-        pVar->type = make_shared<TypeDecl>((Type)ToBasicType<TT>::type);
+        pVar->type = make_smart<TypeDecl>((Type)ToBasicType<TT>::type);
         pVar->type->constant = true;
         pVar->init = Program::makeConst(LineInfo(),pVar->type,cast<TT>::from(value));
-        pVar->init->type = make_shared<TypeDecl>(*pVar->type);
+        pVar->init->type = make_smart<TypeDecl>(*pVar->type);
         pVar->init->constexpression = true;
         pVar->initStackSize = sizeof(Prologue);
         if ( !mod.addVariable(pVar) ) {

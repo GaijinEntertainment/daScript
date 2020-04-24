@@ -23,7 +23,7 @@ namespace das {
                 auto nr2v = make_shared<ExprRef2Value>();
                 nr2v->at = expr->at;
                 nr2v->subexpr = ecast->subexpr;
-                nr2v->type = make_shared<TypeDecl>(*nr2v->subexpr->type);
+                nr2v->type = make_smart<TypeDecl>(*nr2v->subexpr->type);
                 nr2v->type->ref = false;
                 ecast->subexpr = nr2v;
                 ecast->type->ref = false;
@@ -241,7 +241,7 @@ namespace das {
                 if (lr && rr) {
                     if ( lr->subexpr ) {
                         auto newCond = make_shared<ExprOp3>(expr->at, "?", expr->cond, lr->subexpr, rr->subexpr);
-                        newCond->type = make_shared<TypeDecl>(*lr->subexpr->type);
+                        newCond->type = make_smart<TypeDecl>(*lr->subexpr->type);
                         auto newRet = make_shared<ExprReturn>(expr->at, newCond);
                         reportFolding();
                         return newRet;

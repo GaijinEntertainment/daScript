@@ -51,7 +51,7 @@ namespace das {
     template <>
     struct typeFactory<RttiValue> {
         static TypeDeclPtr make(const ModuleLibrary & library ) {
-            auto vtype = make_shared<TypeDecl>(Type::tVariant);
+            auto vtype = make_smart<TypeDecl>(Type::tVariant);
             vtype->alias = "RttiValue";
             vtype->aotAlias = true;
             vtype->addVariant("tBool",   typeFactory<decltype(RttiValue::bValue  )>::make(library));
@@ -180,7 +180,7 @@ namespace das {
             return indexType->isIndex();
         }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
-            return make_shared<TypeDecl>(*fieldType);
+            return make_smart<TypeDecl>(*fieldType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
@@ -193,7 +193,7 @@ namespace das {
             return true;
         }
         virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & ) const override {
-            return make_shared<TypeDecl>(*fieldType);
+            return make_smart<TypeDecl>(*fieldType);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
             auto rv = src->simulate(context);

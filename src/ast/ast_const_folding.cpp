@@ -301,7 +301,7 @@ namespace das {
                 return sim;
             } else {
                 auto sim = Program::makeConst(expr->at, expr->type, value);
-                sim->type = make_shared<TypeDecl>(*expr->type);
+                sim->type = make_smart<TypeDecl>(*expr->type);
                 sim->constexpression = true;
                 reportFolding();
                 return sim;
@@ -320,7 +320,7 @@ namespace das {
             auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
             auto sim = make_shared<ExprConstString>(expr->at, res);
-            sim->type = make_shared<TypeDecl>(Type::tString);
+            sim->type = make_smart<TypeDecl>(Type::tString);
             sim->constexpression = true;
             reportFolding();
             return sim;
@@ -459,7 +459,7 @@ namespace das {
                             return Visitor::visit(expr);
                         }
                         auto sim = Program::makeConst(expr->at, expr->type, cast<bool>::from(res));
-                        sim->type = make_shared<TypeDecl>(*expr->type);
+                        sim->type = make_smart<TypeDecl>(*expr->type);
                         sim->constexpression = true;
                         reportFolding();
                         return sim;
@@ -577,7 +577,7 @@ namespace das {
                 pCall->arguments.reserve(numArgs-1);
                 for ( uint32_t i=1; i!=numArgs; ++i )
                     pCall->arguments.push_back( expr->arguments[i]->clone() );
-                pCall->type = make_shared<TypeDecl>(*funcC->result);
+                pCall->type = make_smart<TypeDecl>(*funcC->result);
                 reportFolding();
                 return pCall;
             }
@@ -648,7 +648,7 @@ namespace das {
             if ( expr->elements.size()==0 ) {
                 // empty string builder is "" string
                 auto estr = make_shared<ExprConstString>(expr->at,"");
-                estr->type = make_shared<TypeDecl>(Type::tString);
+                estr->type = make_smart<TypeDecl>(Type::tString);
                 estr->constexpression = true;
                 return estr;
             } else if ( expr->elements.size()==1 && expr->elements[0]->rtti_isStringConstant() ) {

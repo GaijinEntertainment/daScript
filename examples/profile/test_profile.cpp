@@ -180,7 +180,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             auto carg = arg->clone();
             blk->arguments.push_back(carg);
         }
-        blk->returnType = make_shared<TypeDecl>(Type::tVoid);
+        blk->returnType = make_smart<TypeDecl>(Type::tVoid);
         auto ann = make_shared<AnnotationDeclaration>();
         ann->annotation = shared_from_this();
         ann->arguments = args;
