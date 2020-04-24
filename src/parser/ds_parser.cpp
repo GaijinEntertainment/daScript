@@ -759,7 +759,7 @@ static const char *const yytname[] =
 {
   "$end", "error", "$undefined", "\"lexer error\"", "\"struct\"",
   "\"let\"", "\"def\"", "\"while\"", "\"if\"", "\"static_if\"", "\"else\"",
-  "\"for\"", "\"catch\"", "\"true\"", "\"false\"", "\"new\"",
+  "\"for\"", "\"recover\"", "\"true\"", "\"false\"", "\"new\"",
   "\"typeinfo\"", "\"type\"", "\"in\"", "\"is\"", "\"as\"", "\"elif\"",
   "\"static_elif\"", "\"array\"", "\"return\"", "\"null\"", "\"break\"",
   "\"try\"", "\"options\"", "\"table\"", "\"expect\"", "\"const\"",

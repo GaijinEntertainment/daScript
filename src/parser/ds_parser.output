@@ -227,7 +227,7 @@ Grammar
   160                 | "yield" expr_pipe
   161                 | "yield" "<-" expr_pipe
 
-  162 expression_try_catch: "try" expression_block "catch" expression_block
+  162 expression_try_catch: "try" expression_block "recover" expression_block
 
   163 let_scope: %empty
   164          | "in" "scope"
@@ -598,7 +598,7 @@ Terminals, with rules where they appear
     "static_if" (264) 44
     "else" (265) 41
     "for" (266) 46 426 427
-    "catch" (267) 162
+    "recover" (267) 162
     "true" (268) 53 61 221
     "false" (269) 54 62 222
     "new" (270) 147 148 149 150
@@ -10253,7 +10253,7 @@ State 446
 
 State 447
 
-  162 expression_try_catch: "try" . expression_block "catch" expression_block
+  162 expression_try_catch: "try" . expression_block "recover" expression_block
 
     '{'  shift, and go to state 255
 
@@ -15742,9 +15742,9 @@ State 581
 
 State 582
 
-  162 expression_try_catch: "try" expression_block . "catch" expression_block
+  162 expression_try_catch: "try" expression_block . "recover" expression_block
 
-    "catch"  shift, and go to state 673
+    "recover"  shift, and go to state 673
 
 
 State 583
@@ -19481,7 +19481,7 @@ State 672
 
 State 673
 
-  162 expression_try_catch: "try" expression_block "catch" . expression_block
+  162 expression_try_catch: "try" expression_block "recover" . expression_block
 
     '{'  shift, and go to state 255
 
@@ -20716,7 +20716,7 @@ State 720
 
 State 721
 
-  162 expression_try_catch: "try" expression_block "catch" expression_block .
+  162 expression_try_catch: "try" expression_block "recover" expression_block .
 
     $default  reduce using rule 162 (expression_try_catch)
 

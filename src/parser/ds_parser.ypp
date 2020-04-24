@@ -125,7 +125,7 @@
 %token  DAS_STATIC_IF       "static_if"
 %token  DAS_ELSE            "else"
 %token  DAS_FOR             "for"
-%token  DAS_CATCH           "catch"
+%token  DAS_CATCH           "recover"
 %token  DAS_TRUE            "true"
 %token  DAS_FALSE           "false"
 %token  DAS_NEWT            "new"
