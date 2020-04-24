@@ -650,9 +650,6 @@ namespace das
 
     string TypeDecl::getMangledName() const {
         TextWriter ss;
-        if ( constant ) {
-            ss << "#const";
-        }
         if (baseType == Type::autoinfer) {
             ss << "#auto";
         } else if (baseType == Type::alias) {
@@ -704,6 +701,9 @@ namespace das
             for ( auto & arg : argTypes ) {
                 ss << "#" << arg->getMangledName();
             }
+            for ( auto & arg : argNames ) {
+                ss << "#`" << arg;
+            }
             if ( firstType ) {
                 ss << "#:" << firstType->getMangledName();
             }
@@ -716,12 +716,10 @@ namespace das
         } else {
             ss << das_to_string(baseType);
         }
-        if ( ref ) {
-            ss << "#ref";
-        }
-        if ( temporary ) {
-            ss << "#local";
-        }
+        if ( constant )     ss << "#const";
+        if ( ref )          ss << "#ref";
+        if ( temporary )    ss << "#temporary";
+        if ( implicit )     ss << "#implicit";
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "#" << d;

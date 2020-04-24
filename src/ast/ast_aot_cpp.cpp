@@ -428,8 +428,8 @@ namespace das {
             return ss.str();
         }
     protected:
-        void describeCppVarInfo ( TextWriter & ss, VarInfo * info ) const {
-            describeCppTypeInfo(ss, info, "_var");
+        void describeCppVarInfo ( TextWriter & ss, VarInfo * info, const string & suffix ) const {
+            describeCppTypeInfo(ss, info, suffix);
             ss << ", \"" << info->name << "\", ";
             ss << info->offset;
 
@@ -437,11 +437,12 @@ namespace das {
         void describeCppStructInfoFields ( TextWriter & ss, StructInfo * info ) const {
             if ( !info->fields ) return;
             for ( uint32_t fi=0; fi!=info->count; ++fi ) {
-                writeDim(ss, info->fields[fi], "_var");
-                writeArgTypes(ss, info->fields[fi], "_var");
-                writeArgNames(ss, info->fields[fi], "_var");
+                auto suffix = "_var_" + to_string(info->hash);
+                writeDim(ss, info->fields[fi], suffix);
+                writeArgTypes(ss, info->fields[fi], suffix);
+                writeArgNames(ss, info->fields[fi], suffix);
                 ss << "VarInfo " << structInfoName(info) << "_field_" << fi << " =  { ";
-                describeCppVarInfo(ss, info->fields[fi]);
+                describeCppVarInfo(ss, info->fields[fi],suffix);
                 ss << " };\n";
             }
             ss << "VarInfo * " << structInfoName(info) << "_fields[" << info->count << "] =  { ";

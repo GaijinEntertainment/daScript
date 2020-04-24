@@ -21,7 +21,7 @@ namespace das {
             eni->fields[i]->value = getConstExprIntOrUInt(ev.second);
             i ++;
         }
-        eni->hash = hash_value(eni);
+        eni->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         emn2e[mangledName] = eni;
         return eni;
     }
@@ -48,7 +48,7 @@ namespace das {
         if ( fn.init ) fni->flags |= FuncInfo::flag_init;
         if ( fn.builtIn ) fni->flags |= FuncInfo::flag_builtin;
         fni->result = makeTypeInfo(nullptr, fn.result);
-        fni->hash = hash_value(fni);
+        fni->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         fmn2f[mangledName] = fni;
         return fni;
     }
@@ -78,7 +78,7 @@ namespace das {
         } else {
             sti->annotation_list = nullptr;
         }
-        sti->hash = hash_value(sti);
+        sti->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         smn2s[mangledName] = sti;
         return sti;
     }
@@ -141,7 +141,9 @@ namespace das {
         } else {
             info->secondType = nullptr;
         }
-        if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant ) {   // todo: other types?
+        if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant || 
+                type->baseType==Type::tFunction || type->baseType==Type::tLambda ||
+                    type->baseType==Type::tBlock ) {
             info->argCount = uint32_t(type->argTypes.size());
             if ( info->argCount ) {
                 info->argTypes = (TypeInfo **) debugInfo->allocate(sizeof(TypeInfo *) * info->argCount );
@@ -158,7 +160,8 @@ namespace das {
                 info->argTypes = nullptr;
             }
         }
-        info->hash = hash_value(info);
+        auto mangledName = type->getMangledName();
+        info->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         debugInfo->lookup[info->hash] = info;
         return info;
     }

@@ -23,6 +23,12 @@ struct TestStruct
 	f : TestStruct?
 	g : tuple<int; float; string>
 	h : variant<i : int; f : float>
+	fn : function<(a:int;b:float):string>
+	lm : lambda<(a:int;b:float):string>
+
+[export]
+def bar ( blk : block<(a:int):float> )
+	pass
 
 [export]
 def main
@@ -57,6 +63,15 @@ def describeType(info)
 			res = "variant<" +  join([{for argname,argtype in arg_names(info),arg_types(info); "{argname}:{describeType(argtype)}"}],";") + ">"
 		else
 			res += "variant"
+	elif info.basicType==Type tFunction | info.basicType==Type tLambda | info.basicType==Type tBlock
+		res = "{get_das_type_name(info.basicType)}<"
+		if info.argTypes!=null
+			res += "(" + join([{for argtype in arg_types(info); describeType(argtype)}],";") + ")"
+		if info.firstType!=null
+			if info.argTypes!=null
+				res += ":"
+			res += "{describeType(*(info.firstType))}"
+		res += ">"
 	else
 		res = get_das_type_name(info.basicType)
 	res += join([{for d in each_dim(info); d!=-1 ? "[{d}]" : "[]"}],"")
