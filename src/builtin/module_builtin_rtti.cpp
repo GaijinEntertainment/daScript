@@ -80,7 +80,7 @@ namespace das {
 
     struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Module", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            this->addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
 
