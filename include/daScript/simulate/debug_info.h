@@ -159,7 +159,7 @@ namespace das
         Type                type;
         StructInfo *        structType;
         EnumInfo *          enumType;
-        TypeAnnotation *    annotation_or_name;
+        mutable TypeAnnotation * annotation_or_name;    // WARNING: unresolved. use 'getAnnotation'
         TypeInfo *          firstType;      // map  from, or array
         TypeInfo *          secondType;     // map  to
         TypeInfo **         argTypes;
@@ -178,9 +178,8 @@ namespace das
         __forceinline bool isConst() const { return flags & flag_isConst; }
         __forceinline bool isTemp() const { return flags & flag_isTemp; }
         __forceinline bool isImplicit() const { return flags & flag_isImplicit; }
+        TypeAnnotation * getAnnotation() const;
     };
-
-    TypeAnnotation * resolveAnnotation ( TypeInfo * info );
 
     struct VarInfo : TypeInfo {
         char *                      name;

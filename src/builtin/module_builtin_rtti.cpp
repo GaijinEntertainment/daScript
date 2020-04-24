@@ -230,7 +230,6 @@ namespace das {
             : ManagedStructureAnnotation<TT,false> (st, ml) {
             using ManagedType = TT;
             this->addFieldEx ( "basicType", "type", offsetof(TypeInfo, type), makeType<Type_DasProxy>(ml) );
-            this->template addField<DAS_BIND_MANAGED_FIELD(annotation_or_name)>("annotation_or_name");
             this->template addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
             this->template addField<DAS_BIND_MANAGED_FIELD(dimSize)>("dimSize");
             this->template addField<DAS_BIND_MANAGED_FIELD(argCount)>("argCount");
@@ -244,6 +243,7 @@ namespace das {
             this->template addProperty<DAS_BIND_MANAGED_PROP(isConst)>("isConst");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isTemp)>("isTemp");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isImplicit)>("isImplicit");
+            this->template addProperty<DAS_BIND_MANAGED_PROP(getAnnotation)>("annotation","getAnnotation");
             this->template addField<DAS_BIND_MANAGED_FIELD(argNames)>("argNames");
         }
         void init() {

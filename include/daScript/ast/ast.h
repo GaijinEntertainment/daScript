@@ -642,7 +642,7 @@ namespace das
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static void Shutdown();
-        static TypeAnnotation * resolveAnnotation ( TypeInfo * info );
+        static TypeAnnotation * resolveAnnotation ( const TypeInfo * info );
         static Type findOption ( const string & name );
         static void foreach(function<bool(Module * module)> && func);
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}

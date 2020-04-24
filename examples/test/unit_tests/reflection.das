@@ -39,7 +39,7 @@ def main
 def describeType(info)
 	var res : string 
 	if info.basicType==Type tHandle
-		res = string(info.annotation_or_name.name)
+		res = string(info.annotation.name)
 	elif info.basicType==Type tStructure
 		res = info.structType?.name ?? "structure"
 	elif info.basicType==Type tEnumeration | info.basicType==Type tEnumeration8 | info.basicType==Type tEnumeration16

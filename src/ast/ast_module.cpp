@@ -51,7 +51,7 @@ namespace das {
         }
     }
 
-    TypeAnnotation * Module::resolveAnnotation ( TypeInfo * info ) {
+    TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
             // convert module name from w-char to regular char

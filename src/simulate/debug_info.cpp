@@ -52,6 +52,10 @@ namespace das
         {   Type::tVariant,     "variant"},
     };
 
+    TypeAnnotation * TypeInfo::getAnnotation() const {
+        return Module::resolveAnnotation(this);
+    }
+
     string das_to_string ( Type t ) {
         return g_typeTable.find(t);
     }
@@ -204,7 +208,7 @@ namespace das
 
     int getTypeBaseSize ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
-            return int(Module::resolveAnnotation(info)->getSizeOf());
+            return int(info->getAnnotation()->getSizeOf());
         } else if ( info->type==Type::tStructure ) {
             return info->structType->size;
         } else if ( info->type==Type::tTuple ) {
@@ -218,7 +222,7 @@ namespace das
 
     int getTypeBaseAlign ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
-            return int(Module::resolveAnnotation(info)->getAlignOf());
+            return int(info->getAnnotation()->getAlignOf());
         } else if ( info->type==Type::tStructure ) {
             return getStructAlign(info->structType);
         } else if ( info->type==Type::tTuple ) {
@@ -277,10 +281,8 @@ namespace das
         if ( THIS->type != decl->type ) {
             return false;
         }
-        if ( THIS->type==Type::tHandle &&
-                Module::resolveAnnotation((TypeInfo *)THIS)!=Module::resolveAnnotation((TypeInfo *)decl) ) {
+        if ( THIS->type==Type::tHandle && THIS->getAnnotation()!=decl->getAnnotation() ) {
             return false;
-
         }
         if ( THIS->type==Type::tStructure && THIS->structType!=decl->structType ) {
             return false;
@@ -385,7 +387,7 @@ namespace das
     string debug_type ( TypeInfo * info ) {
         TextWriter stream;
         if ( info->type==Type::tHandle ) {
-            stream << Module::resolveAnnotation(info)->name;
+            stream << info->getAnnotation()->name;
         } else if ( info->type==Type::tStructure ) {
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {

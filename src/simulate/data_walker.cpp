@@ -224,7 +224,7 @@ namespace das {
                 case Type::tHandle:
                     beforeHandle(pa, info);
                     if ( cancel ) return;
-                    Module::resolveAnnotation(info)->walk(*this, pa);
+                    info->getAnnotation()->walk(*this, pa);
                     if ( cancel ) return;
                     afterHandle(pa, info);
                     break;
