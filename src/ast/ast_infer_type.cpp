@@ -1395,7 +1395,7 @@ namespace das {
             }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
-            if (arg->type->isAuto() ) {
+            if (arg->type->isAuto() && arg->init->type) {
                 auto varT = TypeDecl::inferGenericType(arg->type, arg->init->type);
                 if ( !varT ) {
                     error("generic argument type can't be infered, "
@@ -1410,7 +1410,7 @@ namespace das {
             }
             if ( !arg->init->type || !arg->type->isSameType(*arg->init->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
                 error("function argument default value type mismatch " + arg->type->describe()
-                    + " vs " + arg->init->type->describe(),  "", "",
+                    + " vs " + (arg->init->type ? arg->init->type->describe() : "???"),  "", "",
                     arg->init->at, CompilationError::invalid_type);
             }
             if (arg->init->type && arg->type->ref && !arg->init->type->ref ) {
