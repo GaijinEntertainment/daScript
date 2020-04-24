@@ -137,7 +137,7 @@ def main
 	program_for_each_registered_module() <| $ ( mod )
 		describeModule(mod)
 	describeModule(get_module("$"))
-	// sampel program
+	// sample program
 	compile("sample",sample) <| $ ( ok; prog; errors )
 		if ok
 			print("compiled\n")

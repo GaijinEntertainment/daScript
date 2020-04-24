@@ -17,26 +17,6 @@ def is_same_type( a,b:TypeInfo;
 def is_compatible_cast( a,b:StructInfo )
     return builtin_is_compatible_cast(reinterpret<StructInfo const?>(a),reinterpret<StructInfo const?>(b))
 
-def arg_names ( info : TypeInfo ) : iterator<string>
-    var it : iterator<string>
-    _builtin_make_arg_names_iterator(it,info)
-    return <- it
-
-def arg_types ( info : TypeInfo ) : iterator<TypeInfo&>
-    var it : iterator<TypeInfo&>
-    _builtin_make_arg_types_iterator(it,info)
-    return <- it
-
-def arg_names ( info : VarInfo ) : iterator<string>
-    var it : iterator<string>
-    _builtin_make_arg_names_iterator(it,info)
-    return <- it
-
-def arg_types ( info : VarInfo ) : iterator<TypeInfo&>
-    var it : iterator<TypeInfo&>
-    _builtin_make_arg_types_iterator(it,info)
-    return <- it
-
 def context_for_each_function( blk:block<(info:FuncInfo):void> )
 	for fni in range(0,get_total_functions())
 		invoke(blk,get_function_info(fni))
@@ -45,11 +25,45 @@ def context_for_each_variable( blk:block<(info:VarInfo):void> )
 	for vi in range(0,get_total_variables())
 		invoke(blk,get_variable_info(vi))
 
-[unsafe]
-def each_dim(info)
-	var pinfo = addr(info)
-	return <- generator<int>() <| $()
-		for index in range(0,int(pinfo.dimSize))
-			yield get_dim(*pinfo,index)
+[unsafe,private]
+def each_dim_any(info)
+	let pinfo = addr(info)
+	return <- [[ for index in range(0,int(pinfo.dimSize)); get_dim(*pinfo,index) ]]
+
+def each_dim(info:TypeInfo)
+	return <- each_dim_any(info)
+
+def each_dim(info:VarInfo)
+	return <- each_dim_any(info)
+
+[unsafe,private]
+def arg_types_any(info)
+	let pinfo = addr(info)
+	return <- generator<TypeInfo const&>() <| $()
+		if pinfo.argTypes!=null
+			for index in range(0,int(pinfo.argCount))
+				yield *(pinfo.argTypes[index])
 		return false
+
+def arg_types(info:TypeInfo)
+	return <- arg_types_any(info)
+
+def arg_types(info:VarInfo)
+	return <- arg_types_any(info)
+
+[unsafe,private]
+def arg_names_any(info)
+	let pinfo = addr(info)
+	return <- generator<string>() <| $()
+		if pinfo.argNames!=null
+			for index in range(0,int(pinfo.argCount))
+				yield pinfo.argNames[index]
+		return false
+
+def arg_names(info:TypeInfo)
+	return <- arg_names_any(info)
+
+def arg_names(info:VarInfo)
+	return <- arg_names_any(info)
+
 

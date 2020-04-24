@@ -312,7 +312,6 @@ int main() {
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
     // #define TEST_NAME   "examples/test/unit_tests/reflection.das"
-    // #define TEST_NAME "examples/test/unit_tests/block_access_function_arg.das"
     unit_test(TEST_PATH TEST_NAME,false);
     // unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();

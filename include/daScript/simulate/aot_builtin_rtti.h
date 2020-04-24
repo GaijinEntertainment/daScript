@@ -101,11 +101,6 @@ namespace das {
     int32_t rtti_getDimTypeInfo(const TypeInfo & ti, int32_t index, Context * context);
     int32_t rtti_getDimVarInfo(const VarInfo & ti, int32_t index, Context * context);
 
-    void builtin_make_arg_names_iterator(Sequence & result, const TypeInfo & info, Context * context);
-    void builtin_make_arg_types_iterator(Sequence & result, const TypeInfo & info, Context * context);
-    void builtin_make_var_arg_names_iterator(Sequence & result, const VarInfo & info, Context * context);
-    void builtin_make_var_arg_types_iterator(Sequence & result, const VarInfo & info, Context * context);
-
     void rtti_builtin_compile(char * modName, char * str, const TBlock<void, bool, const RttiProgram, const string> & block, Context * context);
     void rtti_builtin_compile_file(char * modName, const TBlock<void, bool, const RttiProgram, const string> & block, Context * context);
 

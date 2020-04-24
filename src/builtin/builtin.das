@@ -226,6 +226,10 @@ def each_enum(tt:auto(TT)) : iterator<TT delete const &>
     _builtin_make_enum_iterator(iter)
     return <- iter
 
+def nothing( var it : iterator<auto(TT)> ) : iterator<TT>
+	_builtin_make_nil_iterator(it)
+	return <- it
+
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     var arr : array<TT delete const &>

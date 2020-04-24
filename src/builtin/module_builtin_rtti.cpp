@@ -248,30 +248,6 @@ namespace das {
         }
     };
 
-    void builtin_make_arg_names_iterator ( Sequence & result, const TypeInfo & info, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(PointerDimIterator));
-        new (iter) PointerDimIterator(info.argNames, info.argCount, sizeof(PointerDimIterator));
-        result = { (Iterator *) iter };
-    }
-
-    void builtin_make_arg_types_iterator ( Sequence & result, const TypeInfo & info, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(PointerDimIterator));
-        new (iter) PointerDimIterator((char **)info.argTypes, info.argCount, sizeof(PointerDimIterator));
-        result = { (Iterator *) iter };
-    }
-
-    void builtin_make_var_arg_names_iterator ( Sequence & result, const VarInfo & info, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(PointerDimIterator));
-        new (iter) PointerDimIterator(info.argNames, info.argCount, sizeof(PointerDimIterator));
-        result = { (Iterator *) iter };
-    }
-
-    void builtin_make_var_arg_types_iterator ( Sequence & result, const VarInfo & info, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(PointerDimIterator));
-        new (iter) PointerDimIterator((char **)info.argTypes, info.argCount, sizeof(PointerDimIterator));
-        result = { (Iterator *) iter };
-    }
-
     struct VarInfoAnnotation : ManagedTypeInfoAnnotation <VarInfo> {
         VarInfoAnnotation(ModuleLibrary & ml) : ManagedTypeInfoAnnotation ("VarInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -680,14 +656,6 @@ namespace das {
                 SideEffects::modifyExternal, "isSameType");
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast", 
                 SideEffects::modifyExternal, "isCompatibleCast");
-            addExtern<DAS_BIND_FUN(builtin_make_arg_names_iterator)>(*this, lib,  "_builtin_make_arg_names_iterator",
-                SideEffects::modifyArgumentAndExternal, "builtin_make_arg_names_iterator");
-            addExtern<DAS_BIND_FUN(builtin_make_arg_types_iterator)>(*this, lib,  "_builtin_make_arg_types_iterator",
-                SideEffects::modifyArgumentAndExternal, "builtin_make_arg_types_iterator");
-            addExtern<DAS_BIND_FUN(builtin_make_var_arg_names_iterator)>(*this, lib,  "_builtin_make_arg_names_iterator",
-                SideEffects::modifyArgumentAndExternal, "builtin_make_var_arg_names_iterator");
-            addExtern<DAS_BIND_FUN(builtin_make_var_arg_types_iterator)>(*this, lib,  "_builtin_make_arg_types_iterator",
-                SideEffects::modifyArgumentAndExternal, "builtin_make_var_arg_types_iterator");
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name");
             // add builtin module
