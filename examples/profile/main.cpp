@@ -33,7 +33,7 @@ bool unit_test ( const string & fn, bool useAOT ) {
     // make sure there is no stack
     CodeOfPolicies policies;
     policies.stack = 0;
-    auto access = make_shared<FsFileAccess>();
+    auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {

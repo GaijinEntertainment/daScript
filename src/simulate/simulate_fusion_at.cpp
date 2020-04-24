@@ -9,7 +9,7 @@
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast_typedecl.h"
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
@@ -153,8 +153,8 @@ namespace das {
     void createFusionEngine_at() {
         REGISTER_SETOP_SCALAR(AtR2V);
         REGISTER_SETOP_NUMERIC_VEC(AtR2V);
-        (*g_fusionEngine)["At"].push_back(make_shared<FusionPoint_Set_At_StringPtr>());
-        (*g_fusionEngine)["At"].push_back(make_shared<FusionPoint_Set_At_VoidPtr>());
+        (*g_fusionEngine)["At"].push_back(make_unique<FusionPoint_Set_At_StringPtr>());
+        (*g_fusionEngine)["At"].push_back(make_unique<FusionPoint_Set_At_VoidPtr>());
     }
 }
 

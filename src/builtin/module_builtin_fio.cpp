@@ -45,10 +45,10 @@ namespace das {
     }
 
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
-        addAnnotation(make_shared<TimeAnnotation>());
+        addAnnotation(make_smart<TimeAnnotation>());
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
-        addFunction( make_shared<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib,"Sub"));
+        addFunction( make_smart<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib,"Sub"));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
     }
 }
@@ -342,8 +342,8 @@ namespace das {
             lib.addModule(this);
             lib.addBuiltInModule();
             // type
-            addAnnotation(make_shared<FileAnnotation>(lib));
-            addAnnotation(make_shared<FStatAnnotation>(lib));
+            addAnnotation(make_smart<FileAnnotation>(lib));
+            addAnnotation(make_smart<FStatAnnotation>(lib));
             // file io
             addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen", SideEffects::modifyExternal, "builtin_fopen");
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose", SideEffects::modifyExternal, "builtin_fclose");

@@ -13,10 +13,10 @@ namespace das {
             if (var->used) return;
             var->used = true;
             for (const auto & gv : var->useGlobalVariables) {
-                propageteVarUse(gv->shared_from_this());
+                propageteVarUse(gv);
             }
             for (const auto & it : var->useFunctions) {
-                propagateFunctionUse(it->shared_from_this());
+                propagateFunctionUse(it);
             }
         }
         void propagateFunctionUse(const FunctionPtr & fn) {
@@ -24,10 +24,10 @@ namespace das {
             if (fn->builtIn) return;
             fn->used = true;
             for (const auto & gv : fn->useGlobalVariables) {
-                propageteVarUse(gv->shared_from_this());
+                propageteVarUse(gv);
             }
             for (const auto & it : fn->useFunctions) {
-                propagateFunctionUse(it->shared_from_this());
+                propagateFunctionUse(it);
             }
         }
         void markVarsUsed( ModuleLibrary & lib, bool forceAll ){
@@ -97,7 +97,7 @@ namespace das {
         // function
         virtual void preVisit(Function * f) override {
             Visitor::preVisit(f);
-            func = f->shared_from_this();
+            func = f;
             func->useFunctions.clear();
             func->useGlobalVariables.clear();
             func->used = false;

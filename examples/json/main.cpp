@@ -21,7 +21,7 @@ TextPrinter tout;
 
 bool unit_test ( const string & fn ) {
 	tout << fn << " ";
-    auto access = make_shared<FsFileAccess>();
+    auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn, access, tout, dummyGroup) ) {
         if ( program->failed() ) {

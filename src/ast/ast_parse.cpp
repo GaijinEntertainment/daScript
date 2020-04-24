@@ -185,7 +185,7 @@ namespace das {
                               CodeOfPolicies policies ) {
         auto time0 = ref_time_ticks();
         int err;
-        auto program = g_Program = make_shared<Program>();
+        auto program = g_Program = make_smart<Program>();
         g_Program->policies = policies;
         g_Access = access;
         program->thisModuleGroup = &libGroup;
@@ -288,7 +288,7 @@ namespace das {
             }
             return res;
         } else {
-            auto program = make_shared<Program>();
+            auto program = make_smart<Program>();
             program->policies = policies;
             program->thisModuleGroup = &libGroup;
             TextWriter err;

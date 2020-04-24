@@ -181,7 +181,7 @@ namespace das
         bool isGlobalVariable() const { return !local && !argument && !block; }
         string              name;
         VariablePtr         variable;
-        weak_ptr<ExprBlock> pBlock;
+        ExprBlock *         pBlock = nullptr;
         int                 argumentIndex = -1;
         union {
             struct {
@@ -936,9 +936,9 @@ namespace das
     };
 
     struct MakeFieldDecl;
-    typedef shared_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
+    typedef smart_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
 
-    struct MakeFieldDecl : enable_shared_from_this<MakeFieldDecl> {
+    struct MakeFieldDecl : ptr_ref_count {
         LineInfo        at;
         string          name;
         ExpressionPtr   value;
@@ -949,8 +949,9 @@ namespace das
         MakeFieldDeclPtr clone() const;
     };
 
-    typedef vector<MakeFieldDeclPtr>    MakeStruct;
-    typedef shared_ptr<MakeStruct>      MakeStructPtr;
+    class MakeStruct : public vector<MakeFieldDeclPtr>, public ptr_ref_count {
+    };
+    typedef smart_ptr<MakeStruct>      MakeStructPtr;
 
     struct ExprNamedCall : Expression {
         ExprNamedCall () = default;

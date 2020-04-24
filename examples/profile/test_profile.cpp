@@ -172,8 +172,8 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         // def funName // note, no more arguments
         //    testProfile::queryEs() <| $( clone of function arguments )
         //        clone of functoin body
-        auto cle = make_shared<ExprCall>(func->at, "testProfile::queryEs");
-        auto blk = make_shared<ExprBlock>();
+        auto cle = make_smart<ExprCall>(func->at, "testProfile::queryEs");
+        auto blk = make_smart<ExprBlock>();
         blk->at = func->at;
         blk->isClosure = true;
         for ( auto & arg : func->arguments ) {
@@ -181,14 +181,14 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             blk->arguments.push_back(carg);
         }
         blk->returnType = make_smart<TypeDecl>(Type::tVoid);
-        auto ann = make_shared<AnnotationDeclaration>();
-        ann->annotation = shared_from_this();
+        auto ann = make_smart<AnnotationDeclaration>();
+        ann->annotation = this;
         ann->arguments = args;
         blk->annotations.push_back(ann);
         blk->list.push_back(func->body->clone());
-        auto mkb = make_shared<ExprMakeBlock>(func->at, blk);
+        auto mkb = make_smart<ExprMakeBlock>(func->at, blk);
         cle->arguments.push_back(mkb);
-        auto cleb = make_shared<ExprBlock>();
+        auto cleb = make_smart<ExprBlock>();
         cleb->at = func->at;
         cleb->list.push_back(cle);
         func->body = cleb;
@@ -895,12 +895,12 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         // function annotations
-        addAnnotation(make_shared<EsFunctionAnnotation>());
+        addAnnotation(make_smart<EsFunctionAnnotation>());
         // register types
-        addAnnotation(make_shared<ObjectStructureTypeAnnotation>(lib));
+        addAnnotation(make_smart<ObjectStructureTypeAnnotation>(lib));
         addFunctionBasic<Object>(*this, lib);
-        addAnnotation(make_shared<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
-        addAnnotation(make_shared<ManagedVectorAnnotation<ManagedIntArray>>("ManagedIntArray",lib));
+        addAnnotation(make_smart<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
+        addAnnotation(make_smart<ManagedVectorAnnotation<ManagedIntArray>>("ManagedIntArray",lib));
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal,"updateObject");
@@ -910,11 +910,11 @@ public:
         addExtern<DAS_BIND_FUN(testManagedInt)>(*this,lib,"testManagedInt",SideEffects::modifyExternal,"testManagedInt");
         // es
         initEsComponents();
-        auto qes_annotation = make_shared<QueryEsFunctionAnnotation>();
+        auto qes_annotation = make_smart<QueryEsFunctionAnnotation>();
         addAnnotation(qes_annotation);
         auto queryEsFn = addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal,"queryEs");
 #if FAST_PATH_ANNOTATION
-        auto qes_decl = make_shared<AnnotationDeclaration>();
+        auto qes_decl = make_smart<AnnotationDeclaration>();
         qes_decl->annotation = qes_annotation;
         queryEsFn->annotations.push_back(qes_decl);
 #endif

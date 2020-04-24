@@ -45,7 +45,7 @@ namespace das {
                                         reportFolding();                                    // report that optimization has occured
                                         call->name = new_name;                              // replace find with find_if_exists or find_for_edit with find_for_edit_if_exists
                                         block->list[0] = ite->if_true;                      // replace first expression in the block with if_true portion of the condition
-                                        return call->shared_from_this();
+                                        return call;
                                     }
                                 }
                             }
@@ -106,7 +106,7 @@ namespace das {
                 float4x4
                     transpose(transpose(x)) = x
              */
-            if ( isTranspose4x4(call->shared_from_this()) ) {
+            if ( isTranspose4x4(call) ) {
                 if ( isTranspose4x4(call->arguments[0]) ) {
                     reportFolding();
                     auto tt = static_pointer_cast<ExprCall>(call->arguments[0]);
@@ -131,7 +131,7 @@ namespace das {
                 auto b = cl->arguments[0];
                 auto a = cr->arguments[0];
                 auto rest = cl;
-                rest->arguments[0] = op2->shared_from_this();
+                rest->arguments[0] = op2;
                 op2->left = a;
                 op2->right = b;
                 return rest;
@@ -143,7 +143,7 @@ namespace das {
     };
 
     void Module_BuiltIn::addMacros(ModuleLibrary &) {
-        macros.push_back(make_shared<InferBuiltinFunctions>(this));
-        optimizationMacros.push_back(make_shared<OptimizeBuiltinFunctions>(this));
+        macros.push_back(make_unique<InferBuiltinFunctions>(this));
+        optimizationMacros.push_back(make_unique<OptimizeBuiltinFunctions>(this));
     }
 }

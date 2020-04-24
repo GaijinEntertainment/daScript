@@ -37,68 +37,68 @@ namespace das {
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) { }
         virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) {
-            return value ? value->shared_from_this() : nullptr;
+            return value;
         }
-        virtual EnumerationPtr visit ( Enumeration * enu ) { return enu->shared_from_this(); }
+        virtual EnumerationPtr visit ( Enumeration * enu ) { return enu; }
         // STRUCTURE
         virtual void preVisit ( Structure * var ) { }
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
-        virtual StructurePtr visit ( Structure * var ) { return var->shared_from_this(); }
+        virtual StructurePtr visit ( Structure * var ) { return var; }
         // REAL THINGS (AFTER STRUCTS AND ENUMS)
         virtual void preVisitProgramBody ( Program * prog ) {}
         // FUNCTON
         virtual void preVisit ( Function * ) {}
-        virtual FunctionPtr visit ( Function * that ) { return that->shared_from_this(); }
+        virtual FunctionPtr visit ( Function * that ) { return that; }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) {}
         virtual VariablePtr visitArgument ( Function *, const VariablePtr & that, bool lastArg ) { return that; }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & var, Expression * init ) {}
-        virtual ExpressionPtr visitArgumentInit ( Function *, const VariablePtr &, Expression * that ) { return that->shared_from_this(); }
+        virtual ExpressionPtr visitArgumentInit ( Function *, const VariablePtr &, Expression * that ) { return that; }
         virtual void preVisitFunctionBody ( Function *,Expression * ) {}
-        virtual ExpressionPtr visitFunctionBody ( Function *, Expression * that ) { return that->shared_from_this(); }
+        virtual ExpressionPtr visitFunctionBody ( Function *, Expression * that ) { return that; }
         // ANY
         virtual void preVisitExpression ( Expression * expr ) {}
-        virtual ExpressionPtr visitExpression ( Expression * expr ) { return expr->shared_from_this(); }
+        virtual ExpressionPtr visitExpression ( Expression * expr ) { return expr; }
         // BLOCK
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) {}
         virtual VariablePtr visitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) { return var; }
         virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) {}
-        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr &, Expression * that ) { return that->shared_from_this(); }
+        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr &, Expression * that ) { return that; }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) {}
-        virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
+        virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) { return expr; }
         virtual void preVisitBlockFinal ( ExprBlock * block ) {}
         virtual void visitBlockFinal ( ExprBlock * block ) {}
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) {}
-        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * block, Expression * expr ) { return expr->shared_from_this(); }
+        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * block, Expression * expr ) { return expr; }
         // LET
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) {}
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) { return var; }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) {}
-        virtual ExpressionPtr visitLetInit ( ExprLet *, const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
+        virtual ExpressionPtr visitLetInit ( ExprLet *, const VariablePtr & var, Expression * that ) { return that; }
         // GLOBAL LET
         virtual void preVisitGlobalLetBody ( Program * prog ) {}
         virtual void preVisitGlobalLet ( const VariablePtr & ) {}
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) { return var; }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * ) {}
-        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that->shared_from_this(); }
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that; }
         virtual void visitGlobalLetBody ( Program * prog ) {}
         // STRING BUILDER
         virtual void preVisit ( ExprStringBuilder * expr ) {}
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) {}
-        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) { return expr->shared_from_this(); }
-        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) { return expr->shared_from_this(); }
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) { return expr; }
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) { return expr; }
         // NEW
         virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) {}
-        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
+        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) { return arg; }
         // NAMED CALL
         virtual void preVisitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) {}
-        virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) { return arg->shared_from_this(); }
+        virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) { return arg; }
         // CALL
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {}
-        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
+        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) { return arg; }
         // CALL
         virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) {}
-        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) { return arg->shared_from_this(); }
+        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) { return arg; }
         // NULL COAELESCING
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * , Expression * ) {}
         // AT
@@ -133,27 +133,27 @@ namespace das {
         virtual void preVisitForStack ( ExprFor * ) {}
         virtual void preVisitForBody ( ExprFor *, Expression * ) {}
         virtual void preVisitForSource ( ExprFor *, Expression *, bool ) {}
-        virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that->shared_from_this(); }
+        virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that; }
         // MAKE VARIANT
         virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
         virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField) {
-            return decl->shared_from_this(); 
+            return decl; 
         }
             // MAKE STRUCTURE
         virtual void preVisitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastIndex ) {}
         virtual void visitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastField ) {}
         virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool lastField ) {
-            return decl->shared_from_this(); }
+            return decl; }
         // MAKE ARRAY
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) {}
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) {
-            return init->shared_from_this();
+            return init;
         }
         // MAKE TUPLE
         virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastIndex ) {}
         virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) {
-            return init->shared_from_this();
+            return init;
         }
         // ARRAY COMPREHENSION
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) {}

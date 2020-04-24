@@ -9,7 +9,7 @@
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast_typedecl.h"
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_fusion_op1.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
@@ -165,11 +165,11 @@ namespace das {
     {
         REGISTER_OP1_WORKHORSE_FUSION_POINT(FieldDerefR2V);
         REGISTER_OP1_NUMERIC_VEC(FieldDerefR2V);
-        (*g_fusionEngine)["FieldDeref"].push_back(make_shared<Op1FusionPoint_FieldDeref_vec4f>());
+        (*g_fusionEngine)["FieldDeref"].push_back(make_unique<Op1FusionPoint_FieldDeref_vec4f>());
 
         REGISTER_OP1_WORKHORSE_FUSION_POINT(PtrFieldDerefR2V);
         REGISTER_OP1_NUMERIC_VEC(PtrFieldDerefR2V);
-        (*g_fusionEngine)["PtrFieldDeref"].push_back(make_shared<Op1FusionPoint_PtrFieldDeref_vec4f>());
+        (*g_fusionEngine)["PtrFieldDeref"].push_back(make_unique<Op1FusionPoint_PtrFieldDeref_vec4f>());
     }
 }
 

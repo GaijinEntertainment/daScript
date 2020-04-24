@@ -42,7 +42,7 @@ namespace das {
         template <typename TT>
         string id(TT * p) const { return "id_" + to_string(intptr_t(p)); }
         template <typename TT>
-        string id(const shared_ptr<TT> & value) const { return "id_" + to_string(intptr_t(value.get())); }
+        string id(const smart_ptr<TT> & value) const { return "id_" + to_string(intptr_t(value.get())); }
     protected:
         template <typename TF, typename TT>
         void connect(TF a, TT b, const string & extra = "") {

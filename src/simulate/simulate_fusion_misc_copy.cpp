@@ -10,7 +10,7 @@
 
 #include "daScript/misc/copy_bytes.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast_typedecl.h"
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_fusion_op2.h"
 
 namespace das {
@@ -157,8 +157,8 @@ namespace das {
     };
 
     void createFusionEngine_misc_copy_reference() {
-        (*g_fusionEngine)["CopyReference"].push_back(make_shared<FusionPoint_MiscCopyReference>());
-        (*g_fusionEngine)["CopyRefValue"].push_back(make_shared<FusionPoint_MiscCopyRefValue>());
+        (*g_fusionEngine)["CopyReference"].push_back(make_unique<FusionPoint_MiscCopyReference>());
+        (*g_fusionEngine)["CopyRefValue"].push_back(make_unique<FusionPoint_MiscCopyRefValue>());
     }
 }
 

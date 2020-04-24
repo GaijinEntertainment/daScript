@@ -37,7 +37,7 @@ namespace das {
             return (it->second.name == name) && (it->second.typeName==typeName);
         }
     };
-    typedef shared_ptr<FusionPoint> FusionPointPtr;
+    typedef unique_ptr<FusionPoint> FusionPointPtr;
 
     typedef das_map<string,vector<FusionPointPtr>> FusionEngine;
     extern unique_ptr<FusionEngine> g_fusionEngine;

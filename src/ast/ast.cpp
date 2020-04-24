@@ -99,7 +99,7 @@ namespace das {
             DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
             return nullptr;
         }
-        res->enumType = const_pointer_cast<Enumeration>(shared_from_this());
+        res->enumType = const_cast<Enumeration*>(this);
         return res;
     }
 
@@ -134,7 +134,7 @@ namespace das {
     }
 
     bool Enumeration::addI ( const string & f, int64_t value ) {
-        return add(f, make_shared<ExprConstInt64>(value));
+        return add(f, make_smart<ExprConstInt64>(value));
     }
 
     bool Enumeration::add ( const string & na, const ExpressionPtr & expr ) {
@@ -152,7 +152,7 @@ namespace das {
     // structure
 
     StructurePtr Structure::clone() const {
-        auto cs = make_shared<Structure>(name);
+        auto cs = make_smart<Structure>(name);
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
             cs->fields.emplace_back(fd.name, fd.type, fd.init, fd.annotation, fd.moveSemantic, fd.at);
@@ -337,7 +337,7 @@ namespace das {
     // variable
 
     VariablePtr Variable::clone() const {
-        auto pVar = make_shared<Variable>();
+        auto pVar = make_smart<Variable>();
         pVar->name = name;
         pVar->type = make_smart<TypeDecl>(*type);
         if ( init )
@@ -363,7 +363,7 @@ namespace das {
     // function
 
     FunctionPtr Function::clone() const {
-        auto cfun = make_shared<Function>();
+        auto cfun = make_smart<Function>();
         cfun->name = name;
         for ( const auto & arg : arguments ) {
             cfun->arguments.push_back(arg->clone());
@@ -498,12 +498,12 @@ namespace das {
         if ( uint32_t(seFlags) & uint32_t(SideEffects::unsafe) ) {
             unsafeOperation = true;
         }
-        return shared_from_this();
+        return this;
     }
 
     FunctionPtr Function::setAotTemplate() {
         aotTemplate = true;
-        return shared_from_this();
+        return this;
     }
 
     // built-in function
@@ -532,7 +532,7 @@ namespace das {
 
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr ) {
         if ( expr->type && !expr->type->isAuto() && expr->type->isRef() && !expr->type->isRefType() ) {
-            auto ar2l = make_shared<ExprRef2Value>();
+            auto ar2l = make_smart<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
             ar2l->type = make_smart<TypeDecl>(*expr->type);
@@ -1810,7 +1810,7 @@ namespace das {
     // make structure
 
     MakeFieldDeclPtr MakeFieldDecl::clone() const {
-        auto md = make_shared<MakeFieldDecl>();
+        auto md = make_smart<MakeFieldDecl>();
         md->at = at;
         md->moveSemantic = moveSemantic;
         md->name = name;
@@ -1823,7 +1823,7 @@ namespace das {
         ExprMakeLocal::clone(cexpr);
         cexpr->structs.reserve ( structs.size() );
         for ( auto & fields : structs ) {
-            auto mfd = make_shared<MakeStruct>();
+            auto mfd = make_smart<MakeStruct>();
             mfd->reserve( fields->size() );
             for ( auto & fd : *fields ) {
                 mfd->push_back(fd->clone());
@@ -2193,28 +2193,28 @@ namespace das {
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
-            case Type::tBool:           return make_shared<ExprConstBool>(at, cast<bool>::to(value));
-            case Type::tInt8:           return make_shared<ExprConstInt8>(at, cast<int8_t>::to(value));
-            case Type::tInt16:          return make_shared<ExprConstInt16>(at, cast<int16_t>::to(value));
-            case Type::tInt64:          return make_shared<ExprConstInt64>(at, cast<int64_t>::to(value));
-            case Type::tInt:            return make_shared<ExprConstInt>(at, cast<int32_t>::to(value));
-            case Type::tInt2:           return make_shared<ExprConstInt2>(at, cast<int2>::to(value));
-            case Type::tInt3:           return make_shared<ExprConstInt3>(at, cast<int3>::to(value));
-            case Type::tInt4:           return make_shared<ExprConstInt4>(at, cast<int4>::to(value));
-            case Type::tUInt8:          return make_shared<ExprConstUInt8>(at, cast<uint8_t>::to(value));
-            case Type::tUInt16:         return make_shared<ExprConstUInt16>(at, cast<uint16_t>::to(value));
-            case Type::tUInt64:         return make_shared<ExprConstUInt64>(at, cast<uint64_t>::to(value));
-            case Type::tUInt:           return make_shared<ExprConstUInt>(at, cast<uint32_t>::to(value));
-            case Type::tUInt2:          return make_shared<ExprConstUInt2>(at, cast<uint2>::to(value));
-            case Type::tUInt3:          return make_shared<ExprConstUInt3>(at, cast<uint3>::to(value));
-            case Type::tUInt4:          return make_shared<ExprConstUInt4>(at, cast<uint4>::to(value));
-            case Type::tFloat:          return make_shared<ExprConstFloat>(at, cast<float>::to(value));
-            case Type::tFloat2:         return make_shared<ExprConstFloat2>(at, cast<float2>::to(value));
-            case Type::tFloat3:         return make_shared<ExprConstFloat3>(at, cast<float3>::to(value));
-            case Type::tFloat4:         return make_shared<ExprConstFloat4>(at, cast<float4>::to(value));
-            case Type::tDouble:         return make_shared<ExprConstDouble>(at, cast<double>::to(value));
-            case Type::tRange:          return make_shared<ExprConstRange>(at, cast<range>::to(value));
-            case Type::tURange:         return make_shared<ExprConstURange>(at, cast<urange>::to(value));
+            case Type::tBool:           return make_smart<ExprConstBool>(at, cast<bool>::to(value));
+            case Type::tInt8:           return make_smart<ExprConstInt8>(at, cast<int8_t>::to(value));
+            case Type::tInt16:          return make_smart<ExprConstInt16>(at, cast<int16_t>::to(value));
+            case Type::tInt64:          return make_smart<ExprConstInt64>(at, cast<int64_t>::to(value));
+            case Type::tInt:            return make_smart<ExprConstInt>(at, cast<int32_t>::to(value));
+            case Type::tInt2:           return make_smart<ExprConstInt2>(at, cast<int2>::to(value));
+            case Type::tInt3:           return make_smart<ExprConstInt3>(at, cast<int3>::to(value));
+            case Type::tInt4:           return make_smart<ExprConstInt4>(at, cast<int4>::to(value));
+            case Type::tUInt8:          return make_smart<ExprConstUInt8>(at, cast<uint8_t>::to(value));
+            case Type::tUInt16:         return make_smart<ExprConstUInt16>(at, cast<uint16_t>::to(value));
+            case Type::tUInt64:         return make_smart<ExprConstUInt64>(at, cast<uint64_t>::to(value));
+            case Type::tUInt:           return make_smart<ExprConstUInt>(at, cast<uint32_t>::to(value));
+            case Type::tUInt2:          return make_smart<ExprConstUInt2>(at, cast<uint2>::to(value));
+            case Type::tUInt3:          return make_smart<ExprConstUInt3>(at, cast<uint3>::to(value));
+            case Type::tUInt4:          return make_smart<ExprConstUInt4>(at, cast<uint4>::to(value));
+            case Type::tFloat:          return make_smart<ExprConstFloat>(at, cast<float>::to(value));
+            case Type::tFloat2:         return make_smart<ExprConstFloat2>(at, cast<float2>::to(value));
+            case Type::tFloat3:         return make_smart<ExprConstFloat3>(at, cast<float3>::to(value));
+            case Type::tFloat4:         return make_smart<ExprConstFloat4>(at, cast<float4>::to(value));
+            case Type::tDouble:         return make_smart<ExprConstDouble>(at, cast<double>::to(value));
+            case Type::tRange:          return make_smart<ExprConstRange>(at, cast<range>::to(value));
+            case Type::tURange:         return make_smart<ExprConstURange>(at, cast<urange>::to(value));
             default:                    DAS_ASSERTF(0, "we should not even be here"); return nullptr;
         }
     }

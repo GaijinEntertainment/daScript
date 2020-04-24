@@ -342,7 +342,7 @@ namespace das {
     void rtti_builtin_compile ( char * modName, char * str, const TBlock<void,bool,const RttiProgram,const string> & block, Context * context ) {
         TextWriter issues;
         uint32_t str_len = stringLengthSafe(*context, str);
-        auto access = make_shared<FileAccess>();
+        auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, move(fileInfo));
         ModuleGroup dummyLibGroup;
@@ -567,7 +567,7 @@ namespace das {
 
     void rtti_builtin_compile_file ( char * modName, const TBlock<void,bool,const RttiProgram,const string> & block, Context * context ) {
         TextWriter issues;
-        auto access = make_shared<FsFileAccess>();
+        auto access = make_smart<FsFileAccess>();
         ModuleGroup dummyLibGroup;
         auto program = compileDaScript(modName, access, issues, dummyLibGroup, true);
         if ( program ) {
@@ -609,14 +609,14 @@ namespace das {
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
-        void initRecAnnotation ( const shared_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
+        void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
             rec->mlib = &lib;
             rec->init();
             rec->mlib = nullptr;
         }
         template <typename RecAnn>
         void addRecAnnotation ( ModuleLibrary & lib ) {
-            auto rec = make_shared<RecAnn>(lib);
+            auto rec = make_smart<RecAnn>(lib);
             addAnnotation(rec);
             initRecAnnotation(rec, lib);
         }
@@ -625,25 +625,25 @@ namespace das {
             lib.addModule(this);
             lib.addBuiltInModule();
             // type annotations
-            addAnnotation(make_shared<ModuleAnnotation>(lib));
-            addAnnotation(make_shared<RttiProgramAnnotation>(lib));
-            addEnumeration(make_shared<EnumerationType>());
-            addAnnotation(make_shared<AnnotationArgumentAnnotation>(lib));
-            addAnnotation(make_shared<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
-            addAnnotation(make_shared<AnnotationAnnotation>(lib));
-            addAnnotation(make_shared<TypeAnnotationAnnotation>(lib));
-            addAnnotation(make_shared<BasicStructureAnnotationAnnotation>(lib));
-            addAnnotation(make_shared<EnumValueInfoAnnotation>(lib));
-            addAnnotation(make_shared<EnumInfoAnnotation>(lib));
-            addEnumeration(make_shared<EnumerationRefMatters>());
-            addEnumeration(make_shared<EnumerationConstMatters>());
-            addEnumeration(make_shared<EnumerationTemporaryMatters>());
-            auto sia = make_shared<StructInfoAnnotation>(lib);              // this is type forward decl
+            addAnnotation(make_smart<ModuleAnnotation>(lib));
+            addAnnotation(make_smart<RttiProgramAnnotation>(lib));
+            addEnumeration(make_smart<EnumerationType>());
+            addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
+            addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
+            addAnnotation(make_smart<AnnotationAnnotation>(lib));
+            addAnnotation(make_smart<TypeAnnotationAnnotation>(lib));
+            addAnnotation(make_smart<BasicStructureAnnotationAnnotation>(lib));
+            addAnnotation(make_smart<EnumValueInfoAnnotation>(lib));
+            addAnnotation(make_smart<EnumInfoAnnotation>(lib));
+            addEnumeration(make_smart<EnumerationRefMatters>());
+            addEnumeration(make_smart<EnumerationConstMatters>());
+            addEnumeration(make_smart<EnumerationTemporaryMatters>());
+            auto sia = make_smart<StructInfoAnnotation>(lib);              // this is type forward decl
             addAnnotation(sia);
             addRecAnnotation<TypeInfoAnnotation>(lib);
             addRecAnnotation<VarInfoAnnotation>(lib);
             initRecAnnotation(sia, lib);
-            addAnnotation(make_shared<FuncInfoAnnotation>(lib));
+            addAnnotation(make_smart<FuncInfoAnnotation>(lib));
             // RttiValue
             addAlias(typeFactory<RttiValue>::make(lib));
             // func info flags

@@ -237,7 +237,7 @@ namespace das {
                 }
             }
             for ( auto & depF : fnc->useFunctions ) {
-                auto dep = depF->shared_from_this();
+                auto dep = depF;
                 if ( dep != fnc ) {
                     uint32_t depFlags = getSideEffects(dep);
                     depFlags &= ~uint32_t(SideEffects::modifyArgument);
@@ -326,7 +326,7 @@ namespace das {
     // Op1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
-            auto sef = getSideEffects(expr->func->shared_from_this());
+            auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 propagateWrite(expr->subexpr.get());
             }
@@ -334,7 +334,7 @@ namespace das {
     // Op2
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
-            auto sef = getSideEffects(expr->func->shared_from_this());
+            auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 auto leftT = expr->left->type;
                 if ( leftT->isRef() && !leftT->isConst() ) {
@@ -349,7 +349,7 @@ namespace das {
     // Op3
         virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
-            auto sef = expr->func ? getSideEffects(expr->func->shared_from_this()) : 0;
+            auto sef = expr->func ? getSideEffects(expr->func) : 0;
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 auto condT = expr->subexpr->type;
                 if ( condT->isRef() && !condT->isConst() ) {
@@ -385,7 +385,7 @@ namespace das {
             }
             if ( expr->initializer ) {
                 // if modified, modify CALL
-                auto sef = getSideEffects(expr->func->shared_from_this());
+                auto sef = getSideEffects(expr->func);
                 if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                     for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                         const auto & argT = expr->func->arguments[ai]->type;
@@ -421,7 +421,7 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             // if modified, modify NEW
-            auto sef = getSideEffects(expr->func->shared_from_this());
+            auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
@@ -519,14 +519,14 @@ namespace das {
                                 auto cfv = expr->type->enumType->find(0, "");
                                 if ( !cfv.empty() ) {
                                     reportFolding();
-                                    auto exprV = make_shared<ExprConstEnumeration>(expr->at, cfv, make_smart<TypeDecl>(*expr->type));
+                                    auto exprV = make_smart<ExprConstEnumeration>(expr->at, cfv, make_smart<TypeDecl>(*expr->type));
                                     exprV->type = expr->type->enumType->makeEnumType();
                                     exprV->type->constant = true;
                                     return exprV;
                                 }
                             } else if ( expr->type->baseType==Type::tString ) {
                                 reportFolding();
-                                auto exprV = make_shared<ExprConstString>(expr->at);
+                                auto exprV = make_smart<ExprConstString>(expr->at);
                                 exprV->type = make_smart<TypeDecl>(Type::tString);
                                 exprV->type->constant = true;
                                 return exprV;

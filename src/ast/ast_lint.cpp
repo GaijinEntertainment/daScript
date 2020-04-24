@@ -379,7 +379,7 @@ namespace das {
         buildAccessFlags(logs);
         checkSideEffects();
         // lint it
-        LintVisitor lintV(shared_from_this());
+        LintVisitor lintV(this);
         visit(lintV);
         unsafe = lintV.anyUnsafe;
         // all control paths return something

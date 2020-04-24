@@ -71,6 +71,7 @@ src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
 include/daScript/ast/compilation_errors.h
 include/daScript/ast/ast_typedecl.h
+include/daScript/ast/ast_typefactory.h
 include/daScript/ast/ast.h
 include/daScript/ast/ast_expressions.h
 include/daScript/ast/ast_visitor.h

@@ -1027,9 +1027,9 @@ namespace das {
                 if ( auto eWT = eW->with->type ) {
                     StructurePtr pSt;
                     if ( eWT->isStructure() ) {
-                        pSt = eWT->structType->shared_from_this();
+                        pSt = eWT->structType;
                     } else if ( eWT->isPointer() && eWT->firstType && eWT->firstType->isStructure() ) {
-                        pSt = eWT->firstType->structType->shared_from_this();
+                        pSt = eWT->firstType->structType;
                     }
                     if ( pSt ) {
                         for ( auto fi : pSt->fields ) {
@@ -1119,7 +1119,7 @@ namespace das {
                 if ( lastEnuValue ) {
                     if ( lastEnuValue->rtti_isConstant() && lastEnuValue->type && lastEnuValue->type->isInteger() ) {
                         reportAstChanged();
-                        int64_t nextInt = getConstExprIntOrUInt(lastEnuValue->shared_from_this()) + 1;
+                        int64_t nextInt = getConstExprIntOrUInt(lastEnuValue) + 1;
                         auto nextValue = makeEnumConstValue(enu, nextInt);
                         lastEnuValue = nextValue.get();
                         return nextValue;
@@ -1146,7 +1146,7 @@ namespace das {
                           value->at, CompilationError::invalid_enumeration);
                 } else if (value->type->baseType != enu->baseType) {
                     reportAstChanged();
-                    int64_t thisInt = getConstExprIntOrUInt(value->shared_from_this());
+                    int64_t thisInt = getConstExprIntOrUInt(value);
                     auto thisValue = makeEnumConstValue(enu, thisInt);
                     lastEnuValue = thisValue.get();
                     return thisValue;
@@ -1170,7 +1170,7 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             fieldOffset = 0;
-            auto tp = make_smart<TypeDecl>(that->shared_from_this());
+            auto tp = make_smart<TypeDecl>(that);
             cppLayout = that->cppLayout;
             cppLayoutPod = that->cppLayoutPod;
             cppLayoutParent = nullptr;
@@ -1344,7 +1344,7 @@ namespace das {
                     reportAstChanged();
                     var->init_via_clone = false;
                     var->init_via_move = true;
-                    auto c2m = make_shared<ExprCall>(var->at,"clone_to_move");
+                    auto c2m = make_smart<ExprCall>(var->at,"clone_to_move");
                     c2m->arguments.push_back(var->init);
                     return c2m;
                 }
@@ -1379,7 +1379,7 @@ namespace das {
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
-            func = f->shared_from_this();
+            func = f;
             func->hasReturn = false;
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
@@ -1845,7 +1845,7 @@ namespace das {
                             // add "yield" argument
                             bool makeRef = false;
                             if ( !expr->iterType->isVoid() ) {
-                                auto yva = make_shared<Variable>();
+                                auto yva = make_smart<Variable>();
                                 if ( expr->iterType->ref ) {
                                     yva->type = make_smart<TypeDecl>(Type::tPointer);
                                     yva->type->firstType = make_smart<TypeDecl>(*expr->iterType);
@@ -1874,7 +1874,7 @@ namespace das {
                                         reportAstChanged();
                                         auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
                                         // each ( [[ ]]] )
-                                        auto cEach = make_shared<ExprCall>(block->at, makeRef ? "each_ref" : "each");
+                                        auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
                                         cEach->arguments.push_back(ms);
                                         return cEach;
                                     } else {
@@ -2178,7 +2178,7 @@ namespace das {
             if ( nErrors==program->errors.size() ) {
                 reportAstChanged();
                 bool isSame = expr->subexpr->type->isSameType(*expr->typeexpr, RefMatters::no, ConstMatters::no, TemporaryMatters::no);
-                return make_shared<ExprConstBool>(expr->at, isSame);
+                return make_smart<ExprConstBool>(expr->at, isSame);
             }
             // infer
             return Visitor::visit(expr);
@@ -2225,17 +2225,17 @@ namespace das {
             if ( nErrors==program->errors.size() ) {
                 if ( expr->trait=="sizeof" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+                    return make_smart<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
                 } else if ( expr->trait=="alignof" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstInt>(expr->at, expr->typeexpr->getAlignOf());
+                    return make_smart<ExprConstInt>(expr->at, expr->typeexpr->getAlignOf());
                 } else if ( expr->trait=="is_dim" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->dim.size()!=0);
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->dim.size()!=0);
                 } else if ( expr->trait=="dim" ) {
                     if ( expr->typeexpr->dim.size() ) {
                         reportAstChanged();
-                        return make_shared<ExprConstInt>(expr->at, expr->typeexpr->dim.back());
+                        return make_smart<ExprConstInt>(expr->at, expr->typeexpr->dim.back());
                     } else {
                         error("typeinfo(dim non_array) is prohibited, " + expr->typeexpr->describe(), "", "",
                               expr->at,CompilationError::typeinfo_dim);
@@ -2247,13 +2247,13 @@ namespace das {
                                 expr->at, CompilationError::invalid_type);
                         } else {
                             reportAstChanged();
-                            return make_shared<ExprConstInt>(expr->at, -1);
+                            return make_smart<ExprConstInt>(expr->at, -1);
                         }
                     } else {
                         int32_t index = expr->typeexpr->findArgumentIndex(expr->subtrait);
                         if ( index!=-1 ||  expr->trait=="safe_variant_index" ) {
                             reportAstChanged();
-                            return make_shared<ExprConstInt>(expr->at, index);
+                            return make_smart<ExprConstInt>(expr->at, index);
                         } else {
                             error("variant_index variant " + expr->subtrait + " not found in " + expr->typeexpr->describe(), "", "",
                                 expr->at,CompilationError::typeinfo_undefined);
@@ -2261,55 +2261,55 @@ namespace das {
                     }
                 } else if ( expr->trait=="typename" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no));
+                    return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no));
                 } else if ( expr->trait=="undecorated_typename" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::no));
+                    return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::no));
                 } else if ( expr->trait=="fulltypename" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes));
+                    return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes));
                 } else if ( expr->trait=="is_pod" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPod());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isPod());
                 } else if ( expr->trait=="is_raw" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRawPod());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isRawPod());
                 } else if ( expr->trait=="is_struct" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isStructure());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isStructure());
                 } else if ( expr->trait=="is_enum" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isEnum());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isEnum());
                 } else if ( expr->trait=="is_handle" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isHandle());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isHandle());
                 } else if ( expr->trait=="is_ref" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRef());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isRef());
                 } else if ( expr->trait=="is_ref_type" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isRefType());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isRefType());
                 } else if ( expr->trait=="is_ref_value" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, bool(expr->typeexpr->ref));
+                    return make_smart<ExprConstBool>(expr->at, bool(expr->typeexpr->ref));
                 } else if ( expr->trait=="is_const" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isConst());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isConst());
                 } else if ( expr->trait=="is_temp" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isTemp());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isTemp());
                 } else if ( expr->trait=="is_temp_type" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isTempType());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isTempType());
                 } else if ( expr->trait=="is_pointer" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
                 } else if ( expr->trait=="is_string" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isString());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isString());
                 } else if ( expr->trait=="is_iterator" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isGoodIteratorType());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isGoodIteratorType());
                 } else if ( expr->trait=="is_iterable" ) {
                     reportAstChanged();
                     bool iterable = false;
@@ -2326,42 +2326,42 @@ namespace das {
                     } else if ( expr->typeexpr->isHandle() && expr->typeexpr->annotation->isIterable() ) {
                         iterable = true;
                     } 
-                    return make_shared<ExprConstBool>(expr->at, iterable);
+                    return make_smart<ExprConstBool>(expr->at, iterable);
                 } else if ( expr->trait=="is_vector" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isVectorType());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isVectorType());
                 } else if ( expr->trait=="is_numeric" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumeric());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isNumeric());
                 } else if ( expr->trait=="is_numeric_comparable" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->isNumericComparable());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isNumericComparable());
                 } else if ( expr->trait=="can_copy" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canCopy());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canCopy());
                 } else if ( expr->trait=="can_move" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canMove());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canMove());
                 } else if ( expr->trait=="can_clone" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canClone());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canClone());
                 } else if ( expr->trait=="can_delete" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->canDelete());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canDelete());
                 } else if ( expr->trait=="need_delete" ) {
                     reportAstChanged();
-                    return make_shared<ExprConstBool>(expr->at, expr->typeexpr->needDelete());
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->needDelete());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportAstChanged();
-                        return make_shared<ExprConstBool>(expr->at, expr->typeexpr->structType->findField(expr->subtrait));
+                        return make_smart<ExprConstBool>(expr->at, expr->typeexpr->structType->findField(expr->subtrait));
                     } else if ( expr->typeexpr->isHandle() ) {
                         reportAstChanged();
                         auto ft = expr->typeexpr->annotation->makeFieldType(expr->subtrait);
-                        return make_shared<ExprConstBool>(expr->at, ft!=nullptr);
+                        return make_smart<ExprConstBool>(expr->at, ft!=nullptr);
                     } else {
                         if ( expr->trait=="safe_has_field" ) {
-                            return make_shared<ExprConstBool>(expr->at, false);
+                            return make_smart<ExprConstBool>(expr->at, false);
                         } else {
                             error("typeinfo(has_field<" + expr->subtrait
                                   + "> ...) is only defined for structures and handled types, "
@@ -2376,10 +2376,10 @@ namespace das {
                         auto it = find_if ( ann.begin(), ann.end(), [&](const AnnotationDeclarationPtr & pa){
                             return pa->annotation->name == expr->subtrait;
                         });
-                        return make_shared<ExprConstBool>(expr->at, it!=ann.end());
+                        return make_smart<ExprConstBool>(expr->at, it!=ann.end());
                     } else {
                         if ( expr->trait=="struct_safe_has_annotation" ) {
-                            return make_shared<ExprConstBool>(expr->at, false);
+                            return make_smart<ExprConstBool>(expr->at, false);
                         } else {
                             error("typeinfo(struct_has_annotation<" + expr->subtrait
                                   + "> ...) is only defined for structures, "
@@ -2395,7 +2395,7 @@ namespace das {
                         });
                         if ( it == ann.end() ) {
                             if ( expr->trait=="struct_safe_has_annotation_argument" ) {
-                                return make_shared<ExprConstBool>(expr->at, false);
+                                return make_smart<ExprConstBool>(expr->at, false);
                             } else {
                                 error("typeinfo(struct_has_annotation_argument<" + expr->subtrait
                                       + ";"  + expr->extratrait + "> ...) annotation not found ", "", "",
@@ -2407,11 +2407,11 @@ namespace das {
                             auto ita = find_if ( args.begin(), args.end(), [&](const AnnotationArgument & arg){
                                 return arg.name == expr->extratrait;
                             });
-                            return make_shared<ExprConstBool>(expr->at, ita!=args.end());
+                            return make_smart<ExprConstBool>(expr->at, ita!=args.end());
                         }
                     } else {
                         if ( expr->trait=="struct_safe_has_annotation_argument" ) {
-                            return make_shared<ExprConstBool>(expr->at, false);
+                            return make_smart<ExprConstBool>(expr->at, false);
                         } else {
                             error("typeinfo(struct_has_annotation_argument<" + expr->subtrait
                                   + "> ...) is only defined for structures, "
@@ -2442,16 +2442,16 @@ namespace das {
                                 switch ( ita->type ) {
                                     case Type::tBool:
                                         reportAstChanged();
-                                        return make_shared<ExprConstBool>(expr->at, ita->bValue);
+                                        return make_smart<ExprConstBool>(expr->at, ita->bValue);
                                     case Type::tInt:
                                         reportAstChanged();
-                                        return make_shared<ExprConstInt>(expr->at, ita->iValue);
+                                        return make_smart<ExprConstInt>(expr->at, ita->iValue);
                                     case Type::tFloat:
                                         reportAstChanged();
-                                        return make_shared<ExprConstFloat>(expr->at, ita->fValue);
+                                        return make_smart<ExprConstFloat>(expr->at, ita->fValue);
                                     case Type::tString:
                                         reportAstChanged();
-                                        return make_shared<ExprConstString>(expr->at, ita->sValue);
+                                        return make_smart<ExprConstString>(expr->at, ita->sValue);
                                     default:
                                         error("typeinfo(struct_get_annotation_argument<" + expr->subtrait
                                               + ";"  + expr->extratrait + "> ...) unsupported annotation argument type ", "", "",
@@ -2470,7 +2470,7 @@ namespace das {
                         auto decl = expr->typeexpr->structType->findField(expr->subtrait);
                         if ( isFullySealedType(expr->typeexpr) ) {
                             reportAstChanged();
-                            return make_shared<ExprConstInt>(expr->at, decl->offset);
+                            return make_smart<ExprConstInt>(expr->at, decl->offset);
                         } else {
                             error("typeinfo(offsetof<" + expr->subtrait
                                   + "> ...) of undefined type, " + expr->typeexpr->describe(), "", "",
@@ -2491,8 +2491,8 @@ namespace das {
         }
     // ExprDelete
         void reportMissingFinalizer ( const string & message, const LineInfo & at, const TypeDeclPtr & ftype ) {
-            auto fakeCall = make_shared<ExprCall>(at, "_::finalize");
-            auto fakeVar = make_shared<ExprVar>(at, "this");
+            auto fakeCall = make_smart<ExprCall>(at, "_::finalize");
+            auto fakeVar = make_smart<ExprVar>(at, "this");
             fakeVar->type = make_smart<TypeDecl>(*ftype);
             fakeCall->arguments.push_back(fakeVar);
             vector<TypeDeclPtr> fakeTypes;
@@ -2509,7 +2509,7 @@ namespace das {
                         reportAstChanged();
                         auto fn = fnList[0];
                         string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
-                        auto finalizeFn = make_shared<ExprCall>(expr->at, finalizeName);
+                        auto finalizeFn = make_smart<ExprCall>(expr->at, finalizeName);
                         finalizeFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(finalizeFn);
                     } else {
@@ -2549,7 +2549,7 @@ namespace das {
                         }
                         reportAstChanged();
                         expr->native = true;
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(cloneFn);
                     } else {
@@ -2561,19 +2561,19 @@ namespace das {
                 auto finalizeType = expr->subexpr->type;
                 if ( finalizeType->isGoodIteratorType() ) {
                     reportAstChanged();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "_builtin_iterator_delete");
+                    auto cloneFn = make_smart<ExprCall>(expr->at, "_builtin_iterator_delete");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( finalizeType->isGoodArrayType() || finalizeType->isGoodTableType() ) {
                     reportAstChanged();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                    auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
                 } else if ( finalizeType->isStructure() ) {
-                    auto fnDel = generateStructureFinalizer(finalizeType->structType->shared_from_this());
+                    auto fnDel = generateStructureFinalizer(finalizeType->structType);
                     if ( program->addFunction(fnDel) ) {
                         reportAstChanged();
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(cloneFn);
                     } else {
@@ -2584,7 +2584,7 @@ namespace das {
                     auto fnDel = generateTupleFinalizer(expr->at, finalizeType);
                     if ( program->addFunction(fnDel) ) {
                         reportAstChanged();
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(cloneFn);
                     } else {
@@ -2595,7 +2595,7 @@ namespace das {
                     auto fnDel = generateVariantFinalizer(expr->at, finalizeType);
                     if ( program->addFunction(fnDel) ) {
                         reportAstChanged();
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::finalize");
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(cloneFn);
                     } else {
@@ -2604,7 +2604,7 @@ namespace das {
                     }
                 } else if ( finalizeType->dim.size() ) {
                     reportAstChanged();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "finalize_dim");
+                    auto cloneFn = make_smart<ExprCall>(expr->at, "finalize_dim");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
                     return ExpressionPtr(cloneFn);
                 } else {
@@ -3305,7 +3305,7 @@ namespace das {
             auto valT = expr->value->type;
             if ( valT->isVectorType() ) {
                 reportAstChanged();
-                return make_shared<ExprSwizzle>(expr->at,expr->value,expr->name);
+                return make_smart<ExprSwizzle>(expr->at,expr->value,expr->name);
             } else if ( valT->isHandle() ) {
                 expr->annotation = valT->annotation;
                 expr->type = expr->annotation->makeFieldType(expr->name);
@@ -3479,7 +3479,7 @@ namespace das {
             expr->variable = nullptr;
             expr->local = false;
             expr->block = false;
-            expr->pBlock.reset();
+            expr->pBlock = nullptr;
             expr->argument = false;
             expr->argumentIndex = -1;
         }
@@ -3498,11 +3498,11 @@ namespace das {
             // with
             if ( auto eW = hasMatchingWith(expr->name) ) {
                 reportAstChanged();
-                return make_shared<ExprField>(expr->at, eW->with->clone(), expr->name);
+                return make_smart<ExprField>(expr->at, eW->with->clone(), expr->name);
             }
             // block arguments
             for ( auto it = blocks.rbegin(); it!=blocks.rend(); ++it ) {
-                auto block = *it;
+                ExprBlock * block = *it;
                 int argumentIndex = 0;
                 for ( auto & arg : block->arguments ) {
                     if ( arg->name==expr->name ) {
@@ -3515,7 +3515,7 @@ namespace das {
                         expr->type = make_smart<TypeDecl>(*arg->type);
                         if (!expr->type->isRefType())
                             expr->type->ref = true;
-                        expr->pBlock = static_pointer_cast<ExprBlock>(block->shared_from_this());
+                        expr->pBlock = static_cast<ExprBlock*>(block);
                         return Visitor::visit(expr);
                     }
                     argumentIndex ++;
@@ -3773,7 +3773,7 @@ namespace das {
                 if ( verifyCloneFunc(fnList, expr->at) ) {
                     auto fn = fnList[0];
                     string cloneName = (fn->module->name.empty() ? "_" : fn->module->name) + "::clone";
-                    auto cloneFn = make_shared<ExprCall>(expr->at, cloneName);
+                    auto cloneFn = make_smart<ExprCall>(expr->at, cloneName);
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
@@ -3801,20 +3801,20 @@ namespace das {
                     return Visitor::visit(expr);
                 } else if ( cloneType->isString() && expr->right->type->isTemp() ) {
                     reportAstChanged();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone_string");
+                    auto cloneFn = make_smart<ExprCall>(expr->at, "clone_string");
                     cloneFn->arguments.push_back(expr->right->clone());
-                    return make_shared<ExprCopy>(expr->at, expr->left->clone(), cloneFn);
+                    return make_smart<ExprCopy>(expr->at, expr->left->clone(), cloneFn);
                 } else if ( cloneType->canCopy() ) {
                     if ( expr->right->type->isTemp(true,false) ) {
                         error("can't clone (copy) temporary value", "", "",
                             expr->at, CompilationError::cant_pass_temporary);
                     } else {
                         reportAstChanged();
-                        return make_shared<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
+                        return make_smart<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
                     }
                 } else if ( cloneType->isGoodArrayType() || cloneType->isGoodTableType() ) {
                     reportAstChanged();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                    auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
@@ -3828,7 +3828,7 @@ namespace das {
                             clf->privateFunction = true;
                             extraFunctions.push_back(clf);
                         }
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                         cloneFn->arguments.push_back(expr->left->clone());
                         cloneFn->arguments.push_back(expr->right->clone());
                         return ExpressionPtr(cloneFn);
@@ -3844,7 +3844,7 @@ namespace das {
                             clf->privateFunction = true;
                             extraFunctions.push_back(clf);
                         }
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                         cloneFn->arguments.push_back(expr->left->clone());
                         cloneFn->arguments.push_back(expr->right->clone());
                         return ExpressionPtr(cloneFn);
@@ -3860,7 +3860,7 @@ namespace das {
                             clf->privateFunction = true;
                             extraFunctions.push_back(clf);
                         }
-                        auto cloneFn = make_shared<ExprCall>(expr->at, "_::clone");
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                         cloneFn->arguments.push_back(expr->left->clone());
                         cloneFn->arguments.push_back(expr->right->clone());
                         return ExpressionPtr(cloneFn);
@@ -3869,7 +3869,7 @@ namespace das {
                     }
                 } else if ( cloneType->dim.size() ) {
                     reportAstChanged();
-                    auto cloneFn = make_shared<ExprCall>(expr->at, "clone_dim");
+                    auto cloneFn = make_smart<ExprCall>(expr->at, "clone_dim");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
@@ -4047,7 +4047,7 @@ namespace das {
                     if ( !enumv.first->rtti_isConstant() ) return nullptr;      // not a constant
                     if ( enumc->baseType != enumv.first->type->baseType ) return nullptr;   // not a constant of the same type
                 }
-                return expr->shared_from_this();
+                return expr;
             }
             if ( expr->rtti_isR2V() ) {
                 auto r2v = static_cast<ExprRef2Value *>(expr);
@@ -4158,9 +4158,9 @@ namespace das {
                     error("with array in undefined, " + wT->describe(), "", "",
                         expr->at, CompilationError::invalid_with_type );
                 } else if ( wT->isStructure() ) {
-                    pSt = wT->structType->shared_from_this();
+                    pSt = wT->structType;
                 } else if ( wT->isPointer() && wT->firstType && wT->firstType->isStructure() ) {
-                    pSt = wT->firstType->structType->shared_from_this();
+                    pSt = wT->firstType->structType;
                 } else {
                     error("unexpected with type " + wT->describe(), "", "",
                         expr->at, CompilationError::invalid_with_type );
@@ -4183,7 +4183,7 @@ namespace das {
     // ExprWhile
         virtual void preVisit ( ExprWhile * expr ) override {
             Visitor::preVisit(expr);
-            loop.push_back(expr->shared_from_this());
+            loop.push_back(expr);
         }
         virtual ExpressionPtr visit ( ExprWhile * expr ) override {
             loop.pop_back();
@@ -4217,7 +4217,7 @@ namespace das {
     // ExprFor
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);
-            loop.push_back(expr->shared_from_this());
+            loop.push_back(expr);
             pushVarStack();
         }
         virtual void preVisitForStack ( ExprFor * expr ) override {
@@ -4243,7 +4243,7 @@ namespace das {
                     idx++;
                     continue;
                 }
-                auto pVar = make_shared<Variable>();
+                auto pVar = make_smart<Variable>();
                 pVar->name = expr->iterators[idx];
                 pVar->at = expr->at;
                 if ( src->type->dim.size() ) {
@@ -4280,7 +4280,7 @@ namespace das {
         }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
             if ( that->type && that->type->isRef() ) {
-                return Expression::autoDereference(that->shared_from_this());
+                return Expression::autoDereference(that);
             }
             return Visitor::visitForSource(expr, that, last);
         }
@@ -4425,7 +4425,7 @@ namespace das {
                     reportAstChanged();
                     var->init_via_clone = false;
                     var->init_via_move = true;
-                    auto c2m = make_shared<ExprCall>(var->at,"clone_to_move");
+                    auto c2m = make_smart<ExprCall>(var->at,"clone_to_move");
                     c2m->arguments.push_back(var->init);
                     return c2m;
                 }
@@ -4483,7 +4483,7 @@ namespace das {
         }
     // ExprNamedCall
         ExpressionPtr demoteCall ( ExprNamedCall * expr, const FunctionPtr & pFn ) {
-            auto newCall = make_shared<ExprCall>(expr->at,pFn->name);
+            auto newCall = make_smart<ExprCall>(expr->at,pFn->name);
             size_t fnArgIndex = 0;
             for ( size_t ai = 0; ai != expr->arguments.size(); ++ai ) {
                 auto & arg = expr->arguments[ai];
@@ -4825,7 +4825,7 @@ namespace das {
         }
     // StringBuilder
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
-            return Expression::autoDereference(expr->shared_from_this());
+            return Expression::autoDereference(expr);
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
             expr->type = make_smart<TypeDecl>(Type::tString);
@@ -4954,7 +4954,7 @@ namespace das {
             }
             // promote to make variant
             if ( expr->makeType->baseType == Type::tVariant ) {
-                auto mkv = make_shared<ExprMakeVariant>(expr->at);
+                auto mkv = make_smart<ExprMakeVariant>(expr->at);
                 mkv->makeType = make_smart<TypeDecl>(*expr->makeType);
                 auto allGood = true;
                 for (auto & st : expr->structs) {
@@ -5006,7 +5006,7 @@ namespace das {
                                     return fd->name == fi.name;
                                 });
                                 if ( it==st->end() ) {
-                                    auto msf = make_shared<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy());
+                                    auto msf = make_smart<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy());
                                     st->push_back(msf);
                                     reportAstChanged();
                                 }
@@ -5054,7 +5054,7 @@ namespace das {
             expr->type = resT;
             if ( expr->type->isString() ) {
                 reportAstChanged();
-                auto ecs = make_shared<ExprConstString>(expr->at);
+                auto ecs = make_smart<ExprConstString>(expr->at);
                 ecs->type = make_smart<TypeDecl>(Type::tString);
                 return ecs;
             } else if ( expr->type->isEnumT() ) {
@@ -5063,7 +5063,7 @@ namespace das {
                     reportAstChanged();
                     auto et = make_smart<TypeDecl>(*expr->type);
                     et->ref = false;
-                    auto ens = make_shared<ExprConstEnumeration>(expr->at, f0, et);
+                    auto ens = make_smart<ExprConstEnumeration>(expr->at, f0, et);
                     ens->type = make_smart<TypeDecl>(*et);
                     return ens;
                 } else {
@@ -5354,7 +5354,7 @@ namespace das {
         for ( pass = 0; pass < maxPasses; ++pass ) {
             failToCompile = false;
             errors.clear();
-            InferTypes context(shared_from_this());
+            InferTypes context(this);
             visit(context);
             for ( auto efn : context.extraFunctions ) {
                 addFunction(efn);

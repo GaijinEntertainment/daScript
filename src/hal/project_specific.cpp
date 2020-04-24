@@ -11,7 +11,7 @@ void require_project_specific_modules() {
     NEED_MODULE(Module_UnitTest);
 }
 
-shared_ptr<das::FileAccess> get_file_access() {
-    return make_shared<FsFileAccess>();
+smart_ptr<das::FileAccess> get_file_access() {
+    return make_smart<FsFileAccess>();
 }
 

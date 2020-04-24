@@ -36,6 +36,6 @@
 #include "daScript/simulate/simulate_fusion_op1_set_perm.h"
 
 #define REGISTER_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_shared<Op1FusionPoint_##OPNAME##_##CTYPE>());
+    (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_unique<Op1FusionPoint_##OPNAME##_##CTYPE>());
 
 #include "daScript/simulate/simulate_fusion_op1_reg.h"

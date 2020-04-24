@@ -34,11 +34,11 @@ namespace das
             using Result  = typename FunctionTrait::return_type;
             auto args = makeArgs<Arguments>(lib, Indices());
             for ( int argi=0; argi!=nargs; ++argi ) {
-                auto arg = make_shared<Variable>();
+                auto arg = make_smart<Variable>();
                 arg->name = "arg" + to_string(argi);
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
-                    arg->init = make_shared<ExprFakeContext>(at);
+                    arg->init = make_smart<ExprFakeContext>(at);
                 }
                 this->arguments.push_back(arg);
             }
@@ -70,11 +70,11 @@ namespace das
             : BuiltInFunction(name,cppName) {
             vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
             for ( size_t argi=0; argi!=args.size(); ++argi ) {
-                auto arg = make_shared<Variable>();
+                auto arg = make_smart<Variable>();
                 arg->name = "arg" + to_string(argi);
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
-                    arg->init = make_shared<ExprConstPtr>(at);
+                    arg->init = make_smart<ExprConstPtr>(at);
                 }
                 this->arguments.push_back(arg);
             }
@@ -133,7 +133,7 @@ namespace das
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
     inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string(), QQ && tempFn = QQ() ) {
-        auto fnX = make_shared<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncT>>(name, lib, cppName);
+        auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncT>>(name, lib, cppName);
         if ( !SimNodeT<FuncT,fn>::IS_CMRES ) {
             if ( fnX->result->isRefType() && !fnX->result->ref ) {
                 DAS_FATAL_LOG(
@@ -159,7 +159,7 @@ namespace das
     template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
     inline auto addExternEx ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string()) {
-        auto fnX = make_shared<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncArgT>>(name, lib, cppName);
+        auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncArgT>>(name, lib, cppName);
         if ( !SimNodeT<FuncT,fn>::IS_CMRES ) {
             if ( fnX->result->isRefType() && !fnX->result->ref ) {
                 DAS_FATAL_LOG(
@@ -181,7 +181,7 @@ namespace das
     template <InteropFunction func, typename RetT, typename ...Args>
     inline auto addInterop ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                    const string & cppName = string() ) {
-        auto fnX = make_shared<InteropFn<func, RetT, Args...>>(name, lib, cppName);
+        auto fnX = make_smart<InteropFn<func, RetT, Args...>>(name, lib, cppName);
         fnX->setSideEffects(seFlags);
         if ( !mod.addFunction(fnX) ) {
             DAS_FATAL_LOG("addInterop(%s) failed in module %s\n", name.c_str(), mod.name.c_str());

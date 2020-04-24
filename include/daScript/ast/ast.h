@@ -14,28 +14,28 @@
 namespace das
 {
     class Function;
-    typedef shared_ptr<Function> FunctionPtr;
+    typedef smart_ptr<Function> FunctionPtr;
 
     struct Variable;
-    typedef shared_ptr<Variable> VariablePtr;
+    typedef smart_ptr<Variable> VariablePtr;
 
     class Program;
-    typedef shared_ptr<Program> ProgramPtr;
+    typedef smart_ptr<Program> ProgramPtr;
 
     struct FunctionAnnotation;
-    typedef shared_ptr<FunctionAnnotation> FunctionAnnotationPtr;
+    typedef smart_ptr<FunctionAnnotation> FunctionAnnotationPtr;
 
     struct Expression;
-    typedef shared_ptr<Expression> ExpressionPtr;
+    typedef smart_ptr<Expression> ExpressionPtr;
 
     class LintMacro;
-    typedef shared_ptr<LintMacro> LintMacroPtr;
+    typedef unique_ptr<LintMacro> LintMacroPtr;
 
     class VisitorMacro;
-    typedef shared_ptr<VisitorMacro> VisitorMacroPtr;
+    typedef unique_ptr<VisitorMacro> VisitorMacroPtr;
 
     class OptimizationMacro;
-    typedef shared_ptr<OptimizationMacro> OptimizationMacroPtr;
+    typedef unique_ptr<OptimizationMacro> OptimizationMacroPtr;
 
     struct AnnotationArgumentList;
 
@@ -75,7 +75,7 @@ namespace das
         int32_t getIntOption(const string & name, int32_t def = false) const;
     };
 
-    struct Annotation : BasicAnnotation, enable_shared_from_this<Annotation> {
+    struct Annotation : BasicAnnotation {
         Annotation ( const string & n, const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
         virtual ~Annotation() {}
         virtual void seal( Module * m ) { module = m; }
@@ -89,16 +89,16 @@ namespace das
         Module *    module = nullptr;
     };
 
-    struct AnnotationDeclaration : enable_shared_from_this<AnnotationDeclaration> {
+    struct AnnotationDeclaration : ptr_ref_count {
         AnnotationPtr           annotation;
         AnnotationArgumentList  arguments;
         string getMangledName() const;
     };
-    typedef shared_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
+    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
 
-    class Enumeration : public enable_shared_from_this<Enumeration> {
+    class Enumeration : public ptr_ref_count {
     public:
         Enumeration() = default;
         Enumeration( const string & na ) : name(na) {}
@@ -123,7 +123,7 @@ namespace das
         Type            baseType = Type::tInt;
     };
 
-    class Structure : public enable_shared_from_this<Structure> {
+    class Structure : public ptr_ref_count {
     public:
         struct FieldDeclaration {
             string                  name;
@@ -181,7 +181,7 @@ namespace das
         AnnotationList              annotations;
     };
 
-    struct Variable : public enable_shared_from_this<Variable> {
+    struct Variable : ptr_ref_count {
         VariablePtr clone() const;
         string getMangledName() const;
         bool isAccessUnused() const;
@@ -335,19 +335,19 @@ namespace das
         virtual bool isPod() const override { return false; }
         virtual bool isRawPod() const override { return false; }
         virtual bool isRefType() const override { return false; }
-        virtual bool create ( const shared_ptr<Structure> & st, const AnnotationArgumentList & /*args*/, string & /*err*/ ) {
+        virtual bool create ( const StructurePtr & st, const AnnotationArgumentList & /*args*/, string & /*err*/ ) {
             structureType = st;
             return true;
         }
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
-            shared_ptr<StructureTypeAnnotation> cp =  p ? static_pointer_cast<StructureTypeAnnotation>(p) : make_shared<StructureTypeAnnotation>(name);
+            smart_ptr<StructureTypeAnnotation> cp =  p ? static_pointer_cast<StructureTypeAnnotation>(p) : make_smart<StructureTypeAnnotation>(name);
             cp->structureType = structureType;
             return TypeAnnotation::clone(cp);
         }
-        shared_ptr<Structure>   structureType;
+        smart_ptr<Structure>   structureType;
     };
 
-    struct Expression : enable_shared_from_this<Expression> {
+    struct Expression : ptr_ref_count {
         Expression() = default;
         Expression(const LineInfo & a) : at(a) {}
         virtual ~Expression() {}
@@ -429,8 +429,8 @@ namespace das
     typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
 
     template <typename ExprType>
-    inline shared_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
-        return expr ? static_pointer_cast<ExprType>(expr) : make_shared<ExprType>();
+    inline smart_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
+        return expr ? static_pointer_cast<ExprType>(expr) : make_smart<ExprType>();
     }
 
 #ifdef _MSC_VER
@@ -480,7 +480,7 @@ namespace das
     ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
 
-    class Function : public enable_shared_from_this<Function> {
+    class Function : public ptr_ref_count {
     public:
         virtual ~Function() {}
         friend TextWriter& operator<< (TextWriter& stream, const Function & func);
@@ -740,10 +740,10 @@ namespace das
         das_map<string,ModuleGroupUserDataPtr>  userData;
     };
 
-    class DebugInfoHelper {
+    class DebugInfoHelper : ptr_ref_count {
     public:
-        DebugInfoHelper () { debugInfo = make_shared<DebugInfoAllocator>(); }
-        DebugInfoHelper ( const shared_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}
+        DebugInfoHelper () { debugInfo = make_smart<DebugInfoAllocator>(); }
+        DebugInfoHelper ( const smart_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}
     public:
         TypeInfo * makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( const Variable & var );
@@ -752,7 +752,7 @@ namespace das
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
     public:
-        shared_ptr<DebugInfoAllocator>  debugInfo;
+        smart_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;
     protected:
         das_map<string,StructInfo *>        smn2s;
@@ -780,7 +780,7 @@ namespace das
         bool no_unused_function_arguments = false;
     };
 
-    class Program : public enable_shared_from_this<Program> {
+    class Program : public ptr_ref_count {
     public:
         Program();
         int getContextStackSize() const;

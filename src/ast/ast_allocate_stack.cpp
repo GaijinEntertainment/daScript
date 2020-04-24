@@ -20,7 +20,7 @@ namespace das {
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
-            func = f->shared_from_this();
+            func = f;
         }
         virtual FunctionPtr visit ( Function * that ) override {
             if ( cmresVAR && !failedToCMRES ) cmresVAR->aliasCMRES = true;
@@ -141,7 +141,7 @@ namespace das {
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
-            func = f->shared_from_this();
+            func = f;
             func->totalStackSize = stackTop = sizeof(Prologue);
             if ( log ) {
                 if (!func->used) logs << "unused ";
@@ -530,10 +530,10 @@ namespace das {
         }
         globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
-        VarCMRes vcm(shared_from_this());
+        VarCMRes vcm(this);
         visit(vcm);
         // allocate stack for the rest of them
-        AllocateStack context(shared_from_this(), logs);
+        AllocateStack context(this, logs);
         visit(context);
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {

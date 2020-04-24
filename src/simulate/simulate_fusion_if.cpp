@@ -9,7 +9,7 @@
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast_typedecl.h"
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_fusion_op1.h"
 #include "daScript/simulate/simulate_visit_op.h"
 

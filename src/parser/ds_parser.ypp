@@ -428,7 +428,7 @@ string_builder_body
         bool err;
         auto esconst = unescapeString(*$sconst,&err);
         if ( err ) das_yyerror("invalid escape sequence",tokAt(@sb), CompilationError::invalid_escape_sequence);
-        auto sc = make_shared<ExprConstString>(tokAt(@sconst),esconst);
+        auto sc = make_smart<ExprConstString>(tokAt(@sconst),esconst);
         delete $sconst;
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
         $$ = $sb;
@@ -715,14 +715,14 @@ annotation_declaration
     :   annotation_declaration_name[name] {
         $$ = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*$name,tokAt(@name)) ) {
-            $$->annotation = ann->shared_from_this();
+            $$->annotation = ann;
         }
         delete $name;
     }
     |   annotation_declaration_name[name] '(' annotation_argument_list[argL] ')' {
         $$ = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*$name,tokAt(@name)) ) {
-            $$->annotation = ann->shared_from_this();
+            $$->annotation = ann;
         }
         swap ( $$->arguments, *$argL );
         delete $argL;
@@ -809,7 +809,7 @@ function_name
 function_declaration
     :   optional_annotation_list[annL] DAS_DEF[loc] function_name[name]
             optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
-        auto pFunction = make_shared<Function>();
+        auto pFunction = make_smart<Function>();
         pFunction->at = tokAt(@loc);
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
@@ -819,7 +819,7 @@ function_declaration
                 if ( pDecl->pTypeDecl ) {
                     for ( const auto & name : *pDecl->pNameList ) {
                         if ( !pFunction->findArgument(name) ) {
-                            VariablePtr pVar = make_shared<Variable>();
+                            VariablePtr pVar = make_smart<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
@@ -1057,7 +1057,7 @@ expression_let
         if ( $decl->pTypeDecl ) {
             for ( const auto & name : *$decl->pNameList ) {
                 if ( !pLet->find(name) ) {
-                    VariablePtr pVar = make_shared<Variable>();
+                    VariablePtr pVar = make_smart<Variable>();
                     pVar->name = name;
                     pVar->at = $decl->at;
                     pVar->type = make_smart<TypeDecl>(*$decl->pTypeDecl);
@@ -1144,14 +1144,14 @@ expr_list
 block_or_simple_block
     :   expression_block[block]     { $$ = $block; }
     |   MAPTO[loc] expr[subexpr]        {
-            auto retE = make_shared<ExprReturn>(tokAt(@loc), ExpressionPtr($subexpr));
+            auto retE = make_smart<ExprReturn>(tokAt(@loc), ExpressionPtr($subexpr));
             auto blkE = new ExprBlock();
             blkE->at = tokAt(@loc);
             blkE->list.push_back(retE);
             $$ = blkE;
     }
     |   MAPTO[loc] LARROW expr[subexpr]        {
-            auto retE = make_shared<ExprReturn>(tokAt(@loc), ExpressionPtr($subexpr));
+            auto retE = make_smart<ExprReturn>(tokAt(@loc), ExpressionPtr($subexpr));
 			retE->moveSemantics = true;
             auto blkE = new ExprBlock();
             blkE->at = tokAt(@loc);
@@ -1181,7 +1181,7 @@ expr_block
                 if ( pDecl->pTypeDecl ) {
                     for ( const auto & name : *pDecl->pNameList ) {
                         if ( !closure->findArgument(name) ) {
-                            VariablePtr pVar = make_shared<Variable>();
+                            VariablePtr pVar = make_smart<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
@@ -1627,7 +1627,7 @@ global_let
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
-                    VariablePtr pVar = make_shared<Variable>();
+                    VariablePtr pVar = make_smart<Variable>();
                     pVar->name = name;
                     pVar->at = pDecl->at;
                     pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
@@ -1751,7 +1751,7 @@ structure_name
             }
             delete $parent;
         } else {
-            pStruct = make_shared<Structure>(*$name);
+            pStruct = make_smart<Structure>(*$name);
         }
         if ( pStruct ) {
             if ( !g_Program->addStructure(pStruct) ) {
@@ -1771,7 +1771,7 @@ structure_name
 structure_declaration
     : optional_annotation_list[annL] DAS_STRUCT[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
         if ( $ps ) {
-            auto pStruct = $ps->shared_from_this();
+            auto pStruct = $ps;
             pStruct->at = tokAt(@loc);
             for ( auto pDecl : *$list ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -2105,14 +2105,14 @@ make_decl
 
 make_struct_fields
     :   NAME[fn] copy_or_move[com] expr[value] {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
         delete $fn;
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
     |   make_struct_fields[msd] ',' NAME[fn] copy_or_move[com] expr[value] {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
         delete $fn;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
@@ -2256,7 +2256,7 @@ array_comprehension_where
 
 array_comprehension
     :   BRABRAB DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' {
-        auto pFor = make_shared<ExprFor>(tokAt(@loc));
+        auto pFor = make_smart<ExprFor>(tokAt(@loc));
         pFor->iterators = *$iters;
         delete $iters;
         pFor->sources = sequenceToList($srcs);
@@ -2270,7 +2270,7 @@ array_comprehension
         $$ = pAC;
     }
     |   BRACBRB DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' {
-        auto pFor = make_shared<ExprFor>(tokAt(@loc));
+        auto pFor = make_smart<ExprFor>(tokAt(@loc));
         pFor->iterators = *$iters;
         delete $iters;
         pFor->sources = sequenceToList($srcs);
@@ -2312,7 +2312,7 @@ vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
             argList.push_back(pSeq->right);
             arg = pSeq->left.get();
         }
-        argList.push_back(arg->shared_from_this());
+        argList.push_back(arg);
         reverse(argList.begin(),argList.end());
         delete arguments;
     } else {

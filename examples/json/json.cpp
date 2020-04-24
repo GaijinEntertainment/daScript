@@ -273,8 +273,7 @@ namespace das {
         TypeDeclPtr makeJsValuePtr() const {
             auto pT = make_smart<TypeDecl>(Type::tPointer);
             pT->firstType = make_smart<TypeDecl>(Type::tHandle);
-            auto THAT = (JsValueTypeAnnotation *) this;
-            pT->firstType->annotation = static_pointer_cast<TypeAnnotation>(THAT->shared_from_this());
+            pT->firstType->annotation = const_cast<JsValueTypeAnnotation *>(this);
             return pT;
         }
 
@@ -894,7 +893,7 @@ namespace das {
             lib.addModule(this);
             lib.addBuiltInModule();
             // JsValue type
-            addAnnotation(make_shared<JsValueTypeAnnotation>());
+            addAnnotation(make_smart<JsValueTypeAnnotation>());
             // functionality
             addExtern<DAS_BIND_FUN(readJson)>(*this,lib,"_builtin_parse_json",SideEffects::modifyExternal);
             addInterop<_builtin_save_json,void,vec4f,const Block>(*this, lib, "_builtin_save_json",SideEffects::modifyExternal);

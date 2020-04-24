@@ -2822,7 +2822,7 @@ namespace das {
         setPrintFlags();
         BlockVariableCollector collector;
         visit(collector);
-        CppAot aotVisitor(shared_from_this(),collector);
+        CppAot aotVisitor(this,collector);
         // pre visit all enumerations and structures for each dependency
         for ( auto & pm : library.modules ) {
             if ( pm == thisModule.get() ) {

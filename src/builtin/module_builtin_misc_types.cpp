@@ -137,20 +137,20 @@ namespace das
         addExtern<DAS_BIND_FUN(enum16_to_int)>(*this, lib, "int", SideEffects::none, "int");
         // function
         addFunctionBasic<Func>(*this,lib);
-        addFunction( make_shared<BuiltInFn<Sim_EqFunPtr, bool,const Func,const void *>>("==",lib,"==",false) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqFunPtr,bool,const Func,const void *>>("!=",lib,"!=",false) );
+        addFunction( make_smart<BuiltInFn<Sim_EqFunPtr, bool,const Func,const void *>>("==",lib,"==",false) );
+        addFunction( make_smart<BuiltInFn<Sim_NEqFunPtr,bool,const Func,const void *>>("!=",lib,"!=",false) );
         // lambda
-        addFunction( make_shared<BuiltInFn<Sim_EqLambdaPtr, bool,const Lambda,const void *>>("==",lib,"==",false) );
-        addFunction( make_shared<BuiltInFn<Sim_NEqLambdaPtr,bool,const Lambda,const void *>>("!=",lib,"!=",false) );
+        addFunction( make_smart<BuiltInFn<Sim_EqLambdaPtr, bool,const Lambda,const void *>>("==",lib,"==",false) );
+        addFunction( make_smart<BuiltInFn<Sim_NEqLambdaPtr,bool,const Lambda,const void *>>("!=",lib,"!=",false) );
         // string
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);
         addFunctionConcat<char *>(*this,lib);
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_shared<BuiltInFn<SimNode_LexicalCast<float>,     char *,float,Context *>>      ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
+        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<float>,     char *,float,Context *>>      ("string",lib,"das_lexical_cast",false) );
     }
 }
 

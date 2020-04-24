@@ -2,7 +2,7 @@
     IMPLEMENT_ANY_OP2(,CTYPE)
 
 #define REGISTER_OP2(OPNAME,TYPE,CTYPE) \
-    (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_shared<FusionPoint_##OPNAME##_##CTYPE>());
+    (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_unique<FusionPoint_##OPNAME##_##CTYPE>());
 
 #define IMPLEMENT_OP2_INTEGER(OPNAME) \
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Int,int32_t); \

@@ -36,7 +36,7 @@ namespace das {
             helpA.makeTypeInfo(matrixTypeInfo, tt);
         }
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
-            shared_ptr<ThisAnnotation> cp =  p ? static_pointer_cast<ThisAnnotation>(p) : make_shared<ThisAnnotation>();
+            smart_ptr<ThisAnnotation> cp =  p ? static_pointer_cast<ThisAnnotation>(p) : make_smart<ThisAnnotation>();
             return TypeAnnotation::clone(cp);
         }
         virtual bool rtti_isHandledTypeAnnotation() const override {
@@ -281,11 +281,11 @@ namespace das {
 
     void Module_BuiltIn::addMatrixTypes(ModuleLibrary & lib) {
         // structure annotations
-        addAnnotation(make_shared<float4x4_ann>());
-        addAnnotation(make_shared<float3x4_ann>());
+        addAnnotation(make_smart<float4x4_ann>());
+        addAnnotation(make_smart<float3x4_ann>());
         // c-tor
-        addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
-        addFunction ( make_shared< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
+        addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
+        addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
         // 4x4
         addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument, "float4x4_identity");
         addExtern<DAS_BIND_FUN(float4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation", SideEffects::none, "float_4x4_translation");
@@ -300,3 +300,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(rotate)>(*this, lib, "rotate", SideEffects::none, "rotate");
     }
 }
+
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(float4x4, das::float4x4)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(float3x4, das::float3x4)

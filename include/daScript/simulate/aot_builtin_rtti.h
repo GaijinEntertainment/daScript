@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/simulate/bind_enum.h"
+#include "daScript/misc/arraytype.h"
 
 DAS_BIND_ENUM_CAST(RefMatters);
 DAS_BIND_ENUM_CAST(ConstMatters);
@@ -11,7 +12,10 @@ DAS_BIND_ENUM_CAST_98(Type);
 namespace das {
 
     class Program;
-    typedef shared_ptr<Program> ProgramPtr;
+    typedef smart_ptr<Program> ProgramPtr;
+
+    class Module;
+    struct Annotation;
 
     struct RttiProgram {
         ProgramPtr      program;

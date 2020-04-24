@@ -6,6 +6,10 @@ namespace das {
     class smart_ptr {
     public:
         using element_type = T;
+        template <typename Y>
+        __forceinline smart_ptr ( const smart_ptr<Y> & p ) { 
+            init(p.get());
+        }
         __forceinline smart_ptr ( const smart_ptr & p ) { 
             init(p.ptr);
         }
@@ -21,6 +25,10 @@ namespace das {
         }
         __forceinline smart_ptr & operator = ( const smart_ptr & p ) {
             return set(p.ptr);
+        }
+        template <typename Y>
+        __forceinline smart_ptr & operator = (const smart_ptr<Y> & p) {
+            return set(p.get());
         }
         __forceinline smart_ptr & operator = ( smart_ptr && p ) {
             ptr = p.ptr;
@@ -73,6 +81,30 @@ namespace das {
         __forceinline bool operator != ( const smart_ptr<T> & p ) const {
             return ptr != p.ptr;
         }
+        __forceinline bool operator >= ( T * p ) const {
+            return ptr >= p;
+        }
+        __forceinline bool operator >= ( const smart_ptr<T> & p ) const {
+            return ptr >= p.ptr;
+        }
+        __forceinline bool operator <= ( T * p ) const {
+            return ptr <= p;
+        }
+        __forceinline bool operator <= ( const smart_ptr<T> & p ) const {
+            return ptr <= p.ptr;
+        }
+        __forceinline bool operator > ( T * p ) const {
+            return ptr > p;
+        }
+        __forceinline bool operator > ( const smart_ptr<T> & p ) const {
+            return ptr > p.ptr;
+        }
+        __forceinline bool operator < ( T * p ) const {
+            return ptr < p;
+        }
+        __forceinline bool operator < ( const smart_ptr<T> & p ) const {
+            return ptr < p.ptr;
+        }
     protected:
         __forceinline smart_ptr & set ( T * p )  { 
             T *t = ptr;
@@ -88,6 +120,31 @@ namespace das {
     protected:
         T *ptr;
     };
+
+    template <class T, class U>
+    __forceinline bool operator == (T * l, const smart_ptr<U> & r) {
+        return l == r.get();
+    }
+    template <class T, class U>
+    __forceinline bool operator != (T * l, const smart_ptr<U> & r) {
+        return l != r.get();
+    }
+    template <class T, class U>
+    __forceinline bool operator >= (T * l, const smart_ptr<U> & r) {
+        return l >= r.get();
+    }
+    template <class T, class U>
+    __forceinline bool operator <= (T * l, const smart_ptr<U> & r) {
+        return l <= r.get();
+    }
+    template <class T, class U>
+    __forceinline bool operator > (T * l, const smart_ptr<U> & r) {
+        return l > r.get();
+    }
+    template <class T, class U>
+    __forceinline bool operator < (T * l, const smart_ptr<U> & r) {
+        return l < r.get();
+    }
 
     template< class T, class... Args >
     inline smart_ptr<T> make_smart ( Args&&... args ) {
@@ -124,7 +181,7 @@ namespace das {
         virtual ~ptr_ref_count() {
             DAS_ASSERTF(ref_count == 0, "can only delete when ref_count==0");
         }
-    private:
+    protected:
         __forceinline void addRef() {
             ref_count--; 
         }

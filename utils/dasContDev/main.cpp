@@ -42,7 +42,7 @@ void wait_for_file_to_change ( const char * fn ) {
 }
 
 bool compile_and_run ( const char * fn ) {
-    auto access = make_shared<FsFileAccess>();
+    auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {

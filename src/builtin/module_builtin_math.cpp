@@ -102,60 +102,60 @@ namespace das {
     template <typename TT>
     void addFunctionTrig(Module & mod, const ModuleLibrary & lib) {
         //                                     policy              ret   arg1 arg2     name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Sin<TT>,        TT,   TT>        >("sin",       lib, "Sin") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",       lib, "Cos") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",       lib, "Tan") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_ATan<TT>,       TT,   TT>        >("atan",      lib, "ATan") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_ASin<TT>,       TT,   TT>        >("asin",      lib, "ASin") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_ACos<TT>,       TT,   TT>        >("acos",      lib, "ACos") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",     lib, "ATan2") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_ATan2_est<TT>,  TT,   TT,  TT>   >("atan2_est", lib, "ATan2_est") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Sin<TT>,        TT,   TT>        >("sin",       lib, "Sin") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",       lib, "Cos") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",       lib, "Tan") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_ATan<TT>,       TT,   TT>        >("atan",      lib, "ATan") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_ASin<TT>,       TT,   TT>        >("asin",      lib, "ASin") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_ACos<TT>,       TT,   TT>        >("acos",      lib, "ACos") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",     lib, "ATan2") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_ATan2_est<TT>,  TT,   TT,  TT>   >("atan2_est", lib, "ATan2_est") );
     }
 
     template <typename TT>
     void addFunctionCommonTyped(Module & mod, const ModuleLibrary & lib) {
-        mod.addFunction( make_shared<BuiltInFn<Sim_Min <TT>, TT,   TT,   TT>   >("min", lib, "Min") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Max <TT>, TT,   TT,   TT>   >("max", lib, "Max") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Min <TT>, TT,   TT,   TT>   >("min", lib, "Min") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Max <TT>, TT,   TT,   TT>   >("max", lib, "Max") );
     }
 
     template <typename TT>
     void addFunctionCommon(Module & mod, const ModuleLibrary & lib) {
         //                                     policy            ret   arg1     name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Abs<TT>,      TT,   TT>   >("abs",         lib, "Abs") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Floor<TT>,    TT,   TT>   >("floor",       lib, "Floor") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Ceil<TT>,     TT,   TT>   >("ceil",        lib, "Ceil") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Sqrt<TT>,     TT,   TT>   >("sqrt",        lib, "Sqrt") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_RSqrt<TT>,    TT,   TT>   >("rsqrt",       lib, "RSqrt") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_RSqrtEst<TT>, TT,   TT>   >("rsqrt_est",   lib, "RSqrtEst") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Sat<TT>,      TT,   TT>   >("saturate",    lib, "Sat") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Abs<TT>,      TT,   TT>   >("abs",         lib, "Abs") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Floor<TT>,    TT,   TT>   >("floor",       lib, "Floor") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Ceil<TT>,     TT,   TT>   >("ceil",        lib, "Ceil") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Sqrt<TT>,     TT,   TT>   >("sqrt",        lib, "Sqrt") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_RSqrt<TT>,    TT,   TT>   >("rsqrt",       lib, "RSqrt") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_RSqrtEst<TT>, TT,   TT>   >("rsqrt_est",   lib, "RSqrtEst") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Sat<TT>,      TT,   TT>   >("saturate",    lib, "Sat") );
     }
     template <typename Ret, typename TT>
     void addFunctionCommonConversion(Module & mod, const ModuleLibrary & lib) {
         //                                     policy          ret    arg1     name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Floori<TT>, Ret,   TT>   >("floori",  lib, "Floori") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Ceili <TT>, Ret,   TT>   >("ceili",   lib, "Ceili") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Roundi<TT>, Ret,   TT>   >("roundi",  lib, "Roundi") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Trunci<TT>, Ret,   TT>   >("trunci",  lib, "Trunci") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Floori<TT>, Ret,   TT>   >("floori",  lib, "Floori") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Ceili <TT>, Ret,   TT>   >("ceili",   lib, "Ceili") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Roundi<TT>, Ret,   TT>   >("roundi",  lib, "Roundi") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Trunci<TT>, Ret,   TT>   >("trunci",  lib, "Trunci") );
     }
 
     template <typename TT>
     void addFunctionPow(Module & mod, const ModuleLibrary & lib) {
         //                                     policy           ret   arg1   name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Exp<TT>,     TT,   TT> >("exp",      lib, "Exp") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Log<TT>,     TT,   TT> >("log",      lib, "Log") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Exp2<TT>,    TT,   TT> >("exp2",     lib, "Exp2") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Log2<TT>,    TT,   TT> >("log2",     lib, "Log2") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Rcp<TT>,     TT,   TT> >("rcp",      lib, "Rcp") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_RcpEst<TT>,  TT,   TT> >("rcp_est",  lib, "RcpEst") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Pow<TT>,  TT,   TT,   TT> >("pow",   lib, "Pow") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Exp<TT>,     TT,   TT> >("exp",      lib, "Exp") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Log<TT>,     TT,   TT> >("log",      lib, "Log") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Exp2<TT>,    TT,   TT> >("exp2",     lib, "Exp2") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Log2<TT>,    TT,   TT> >("log2",     lib, "Log2") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Rcp<TT>,     TT,   TT> >("rcp",      lib, "Rcp") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_RcpEst<TT>,  TT,   TT> >("rcp_est",  lib, "RcpEst") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Pow<TT>,  TT,   TT,   TT> >("pow",   lib, "Pow") );
     }
 
     template <typename TT>
     void addFunctionOp3(Module & mod, const ModuleLibrary & lib) {
         //                                     policy         ret arg1 arg2 arg3   name
-        mod.addFunction( make_shared<BuiltInFn<Sim_Lerp<TT>,  TT, TT,  TT,  TT> >("lerp",  lib, "Lerp") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Clamp<TT>, TT, TT,  TT,  TT> >("clamp", lib, "Clamp") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_Mad<TT>,   TT, TT,  TT,  TT> >("mad",   lib, "Mad") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Lerp<TT>,  TT, TT,  TT,  TT> >("lerp",  lib, "Lerp") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Clamp<TT>, TT, TT,  TT,  TT> >("clamp", lib, "Clamp") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Mad<TT>,   TT, TT,  TT,  TT> >("mad",   lib, "Mad") );
     }
 
     class Module_Math : public Module {
@@ -185,9 +185,9 @@ namespace das {
             addFunctionOp3<float3>(*this,lib);
             addFunctionOp3<float4>(*this,lib);
 
-            addFunction( make_shared<BuiltInFn<Sim_MadS<float2>,   float2, float2,  float,  float2> >("mad", lib, "MadS") );
-            addFunction( make_shared<BuiltInFn<Sim_MadS<float3>,   float3, float3,  float,  float3> >("mad", lib, "MadS") );
-            addFunction( make_shared<BuiltInFn<Sim_MadS<float4>,   float4, float4,  float,  float4> >("mad", lib, "MadS") );
+            addFunction( make_smart<BuiltInFn<Sim_MadS<float2>,   float2, float2,  float,  float2> >("mad", lib, "MadS") );
+            addFunction( make_smart<BuiltInFn<Sim_MadS<float3>,   float3, float3,  float,  float3> >("mad", lib, "MadS") );
+            addFunction( make_smart<BuiltInFn<Sim_MadS<float4>,   float4, float4,  float,  float4> >("mad", lib, "MadS") );
 
             //common
             addFunctionCommon<float>(*this, lib);

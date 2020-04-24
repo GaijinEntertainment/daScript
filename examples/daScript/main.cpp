@@ -6,7 +6,7 @@ using namespace das;
 TextPrinter tout;
 
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
-    auto access = make_shared<FsFileAccess>();
+    auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
         if ( program->failed() ) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "daScript/ast/ast_typefactory.h"
+
 namespace das {
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context );

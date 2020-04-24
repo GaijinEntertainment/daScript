@@ -46,21 +46,21 @@ namespace das
     template <typename TT>
     void addFunctionVecBit(Module & mod, const ModuleLibrary & lib) {
         //                                     policy              ret   arg1 arg2    name
-     // mod.addFunction( make_shared<BuiltInFn<Sim_BinNot<TT>,     TT,   TT>            >("~",      lib) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_BinAnd<TT>,     TT,   TT,  TT>       >("&",      lib, "BinAnd") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_BinOr<TT>,      TT,   TT,  TT>       >("|",      lib, "BinOr") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_BinXor<TT>,     TT,   TT,  TT>       >("^",      lib, "BinXor") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_BinShl<TT>,     TT,   TT,  int32_t>  >("<<",     lib, "BinShl") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_BinShr<TT>,     TT,   TT,  int32_t>  >(">>",     lib, "BinShr") );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT&, TT>       >("&=",     lib, "SetBinAnd")
+     // mod.addFunction( make_smart<BuiltInFn<Sim_BinNot<TT>,     TT,   TT>            >("~",      lib) );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinAnd<TT>,     TT,   TT,  TT>       >("&",      lib, "BinAnd") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinOr<TT>,      TT,   TT,  TT>       >("|",      lib, "BinOr") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinXor<TT>,     TT,   TT,  TT>       >("^",      lib, "BinXor") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinShl<TT>,     TT,   TT,  int32_t>  >("<<",     lib, "BinShl") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinShr<TT>,     TT,   TT,  int32_t>  >(">>",     lib, "BinShr") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT&, TT>       >("&=",     lib, "SetBinAnd")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinOr<TT>,   void, TT&, TT>       >("|=",     lib, "SetBinOr")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinOr<TT>,   void, TT&, TT>       >("|=",     lib, "SetBinOr")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinXor<TT>,  void, TT&, TT>       >("^=",     lib, "SetBinXor")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinXor<TT>,  void, TT&, TT>       >("^=",     lib, "SetBinXor")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinShl<TT>,  void, TT&, int32_t>  >("<<=",    lib, "SetBinShl")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinShl<TT>,  void, TT&, int32_t>  >("<<=",    lib, "SetBinShl")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_shared<BuiltInFn<Sim_SetBinShr<TT>,  void, TT&, int32_t>  >(">>=",    lib, "SetBinShr")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinShr<TT>,  void, TT&, int32_t>  >(">>=",    lib, "SetBinShr")
                         ->setSideEffects(SideEffects::modifyArgument) );
     }
 

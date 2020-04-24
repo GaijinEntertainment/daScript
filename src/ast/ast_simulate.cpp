@@ -430,7 +430,7 @@ namespace das
             assert(fieldVariant!=-1 && "should have failed in type infer otherwise");
             // lets set variant index
             uint32_t voffset = extraOffset + index*stride;
-            auto vconst = make_shared<ExprConstInt>(at, int32_t(fieldVariant));
+            auto vconst = make_smart<ExprConstInt>(at, int32_t(fieldVariant));
             vconst->type = make_smart<TypeDecl>(Type::tInt);
             SimNode * svi;
             if ( useCMRES ) {
@@ -1136,7 +1136,7 @@ namespace das
             if ( initializer ) {
                 auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes);
                 pCall->cmresEval = nullptr;
-                newNode = ExprCall::simulateCall(func->shared_from_this(), this, context, pCall);
+                newNode = ExprCall::simulateCall(func, this, context, pCall);
             } else {
                 newNode = context.code->makeNode<SimNode_New>(at,bytes);
             }
@@ -1675,7 +1675,7 @@ namespace das
 
     SimNode * ExprVar::simulate (Context & context) const {
         if ( block ) {
-            auto blk = pBlock.lock();
+            auto blk = pBlock;
             if (variable->type->isRef()) {
                 if (r2v && !type->isRefType()) {
                     if ( thisBlock ) {
@@ -2153,7 +2153,7 @@ namespace das
             return context.code->makeNode<SimNode_CopyReference>(var->init->at, get,
                                                                  var->init->simulate(context));
         } else if ( var->init_via_move && var->type->canMove() ) {
-            auto varExpr = make_shared<ExprVar>(var->at, var->name);
+            auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
             varExpr->type = make_smart<TypeDecl>(*var->type);
@@ -2163,7 +2163,7 @@ namespace das
             }
             return retN;
         } else if ( !var->init_via_move && var->type->canCopy() ) {
-            auto varExpr = make_shared<ExprVar>(var->at, var->name);
+            auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
             varExpr->type = make_smart<TypeDecl>(*var->type);
@@ -2228,7 +2228,7 @@ namespace das
 
     SimNode * ExprCall::simulate (Context & context) const {
         auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
-        simulateCall(func->shared_from_this(), this, context, pCall);
+        simulateCall(func, this, context, pCall);
         if ( !doesNotNeedSp && stackTop ) {
             pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
         }
@@ -2287,7 +2287,7 @@ namespace das
 
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         context.thisProgram = this;
-        context.constStringHeap = make_shared<StringAllocator>();
+        context.constStringHeap = make_smart<StringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
             context.constStringHeap->setIntern(true);

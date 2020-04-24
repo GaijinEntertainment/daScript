@@ -1,7 +1,7 @@
 #pragma once
 
 #include "daScript/misc/type_name.h"
-#include "daScript/ast/ast_typedecl.h"
+#include "daScript/ast/ast_typefactory.h"
 
 namespace das {
 
@@ -25,5 +25,8 @@ namespace das {
 }
 
 // use MAKE_TYPE_FACTORY out of namespaces. Some compilers are not happy otherwise
-MAKE_TYPE_FACTORY(float4x4, das::float4x4)
-MAKE_TYPE_FACTORY(float3x4, das::float3x4)
+
+MAKE_EXTERNAL_TYPE_FACTORY(float4x4, das::float4x4)
+
+MAKE_EXTERNAL_TYPE_FACTORY(float3x4, das::float3x4)
+

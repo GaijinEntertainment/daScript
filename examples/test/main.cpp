@@ -28,7 +28,7 @@ TextPrinter tout;
 
 bool compilation_fail_test ( const string & fn, bool ) {
     tout << fn << " ";
-    auto fAccess = make_shared<FsFileAccess>();
+    auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
@@ -87,7 +87,7 @@ bool compilation_fail_test ( const string & fn, bool ) {
 
 bool unit_test ( const string & fn, bool useAot ) {
     tout << fn << " ";
-    auto fAccess = make_shared<FsFileAccess>();
+    auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
     // policies.intern_strings = true;
@@ -146,7 +146,7 @@ bool unit_test ( const string & fn, bool useAot ) {
 
 bool exception_test ( const string & fn, bool useAot ) {
     tout << fn << " ";
-    auto fAccess = make_shared<FsFileAccess>();
+    auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
@@ -242,8 +242,8 @@ bool run_exception_tests( const string & path ) {
 bool run_module_test ( const string & path, const string & main, bool usePak ) {
     tout << "testing MODULE at " << path << " ";
     auto fAccess = usePak ? 
-            make_shared<FsFileAccess>( path + "/project.das_project", make_shared<FsFileAccess>()) :
-            make_shared<FsFileAccess>();
+            make_smart<FsFileAccess>( path + "/project.das_project", make_smart<FsFileAccess>()) :
+            make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     if ( auto program = compileDaScript(path + "/" + main, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
@@ -311,7 +311,7 @@ int main() {
 #endif
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
-    // #define TEST_NAME   "examples/test/unit_tests/reflection.das"
+    // #define TEST_NAME   "examples/test/unit_tests/block_access_function_arg.das"
     unit_test(TEST_PATH TEST_NAME,false);
     // unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();

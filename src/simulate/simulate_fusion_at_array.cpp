@@ -10,7 +10,7 @@
 
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast_typedecl.h"
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
@@ -150,7 +150,7 @@ namespace das {
     void createFusionEngine_at_array() {
         REGISTER_SETOP_SCALAR(ArrayAtR2V);
         REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V);
-        (*g_fusionEngine)["ArrayAt"].push_back(make_shared<FusionPoint_Set_ArrayAt_StringPtr>());
+        (*g_fusionEngine)["ArrayAt"].push_back(make_unique<FusionPoint_Set_ArrayAt_StringPtr>());
     }
 }
 

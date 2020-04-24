@@ -71,17 +71,17 @@ namespace das
     IMPLEMENT_OP2_POLICY(BoolXor, Bool, bool);
 
 #define ADD_NUMERIC_CASTS(TYPE,CTYPE)                                                                               \
-    addFunction ( make_shared<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false) );                             \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib,#CTYPE,false) );          \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib,#CTYPE,false) );        \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib,#CTYPE,false) );      \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib,#CTYPE,false) );    \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int8_t>,CTYPE,int8_t>>(#TYPE,lib,#CTYPE,false) );        \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint8_t>,CTYPE,uint8_t>>(#TYPE,lib,#CTYPE,false) );      \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int16_t>,CTYPE,int16_t>>(#TYPE,lib,#CTYPE,false) );      \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint16_t>,CTYPE,uint16_t>>(#TYPE,lib,#CTYPE,false) );    \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib,#CTYPE,false) );      \
-    addFunction ( make_shared<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib,#CTYPE,false) );
+    addFunction ( make_smart<BuiltInFn<SimNode_Zero,CTYPE>>(#TYPE,lib,#CTYPE,false) );                             \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,float>,CTYPE,float>>(#TYPE,lib,#CTYPE,false) );          \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib,#CTYPE,false) );        \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib,#CTYPE,false) );      \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib,#CTYPE,false) );    \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,int8_t>,CTYPE,int8_t>>(#TYPE,lib,#CTYPE,false) );        \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,uint8_t>,CTYPE,uint8_t>>(#TYPE,lib,#CTYPE,false) );      \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,int16_t>,CTYPE,int16_t>>(#TYPE,lib,#CTYPE,false) );      \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,uint16_t>,CTYPE,uint16_t>>(#TYPE,lib,#CTYPE,false) );    \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,int64_t>,CTYPE,int64_t>>(#TYPE,lib,#CTYPE,false) );      \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,uint64_t>,CTYPE,uint64_t>>(#TYPE,lib,#CTYPE,false) );
 
 
 #define ADD_NUMERIC_LIMITS(TYPENAME,CTYPE)  \

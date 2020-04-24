@@ -1,6 +1,6 @@
 #pragma once
 
-#include "daScript/misc/smart_ptr.h"
+#include "daScript/ast/ast_typefactory.h"
 
 namespace das {
 
@@ -8,19 +8,19 @@ namespace das {
     typedef smart_ptr<TypeDecl> TypeDeclPtr;
 
     class Structure;
-    typedef shared_ptr<Structure> StructurePtr;
+    typedef smart_ptr<Structure> StructurePtr;
 
     class Enumeration;
-    typedef shared_ptr<Enumeration> EnumerationPtr;
+    typedef smart_ptr<Enumeration> EnumerationPtr;
 
     struct Annotation;
-    typedef shared_ptr<Annotation> AnnotationPtr;
+    typedef smart_ptr<Annotation> AnnotationPtr;
 
     struct TypeAnnotation;
-    typedef shared_ptr<TypeAnnotation> TypeAnnotationPtr;
+    typedef smart_ptr<TypeAnnotation> TypeAnnotationPtr;
 
     struct Expression;
-    typedef shared_ptr<Expression> ExpressionPtr;
+    typedef smart_ptr<Expression> ExpressionPtr;
 
     typedef das_map<string,TypeDeclPtr> AliasMap;
 
@@ -283,9 +283,6 @@ namespace das {
     };
 
     template <typename TT>
-    struct TTemporary {};
-
-    template <typename TT>
     struct typeFactory<TTemporary<TT>> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = typeFactory<TT>::make(lib);
@@ -411,17 +408,3 @@ namespace das {
 
 }
 
-
-#define MAKE_TYPE_FACTORY(TYPE,CTYPE)                                       \
-namespace das { \
-  template <>                                                             \
-  struct typeFactory<CTYPE> {                                        \
-      static TypeDeclPtr make(const ModuleLibrary & library ) { \
-          return makeHandleType(library,#TYPE);                           \
-      }                                                                   \
-  };                                                                      \
-  template <>                                                             \
-  struct typeName<CTYPE> {                                           \
-      static string name() { return #CTYPE; }                             \
-  }; \
-};

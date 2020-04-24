@@ -367,7 +367,7 @@ namespace das
 
     template <typename TT>
     void addConstant ( Module & mod, const string & name, const TT & value ) {
-        VariablePtr pVar = make_shared<Variable>();
+        VariablePtr pVar = make_smart<Variable>();
         pVar->name = name;
         pVar->type = make_smart<TypeDecl>((Type)ToBasicType<TT>::type);
         pVar->type->constant = true;

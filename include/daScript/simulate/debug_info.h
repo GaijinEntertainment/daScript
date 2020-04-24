@@ -73,7 +73,7 @@ namespace das
     struct TypeAnnotation;
     struct EnumInfo;
 
-    struct BasicAnnotation {
+    struct BasicAnnotation : ptr_ref_count {
         BasicAnnotation ( const string & n, const string & cpn = "" ) : name(n), cppName(cpn) {}
         string      name;
         string      cppName;
@@ -100,7 +100,7 @@ namespace das
         string  importName;
     };
 
-    class FileAccess {
+    class FileAccess : public ptr_ref_count {
     public:
         virtual ~FileAccess() {}
         FileInfo * setFileInfo ( const string & fileName, FileInfoPtr && info );
@@ -114,7 +114,7 @@ namespace das
     protected:
         das_map<string, FileInfoPtr>    files;
     };
-    typedef shared_ptr<FileAccess> FileAccessPtr;
+    typedef smart_ptr<FileAccess> FileAccessPtr;
 
     struct SimFunction;
     class Context;

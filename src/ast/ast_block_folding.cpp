@@ -20,7 +20,7 @@ namespace das {
             if ( expr->subexpr->rtti_isCast() ) {
                 reportFolding();
                 auto ecast = static_pointer_cast<ExprCast>(expr->subexpr);
-                auto nr2v = make_shared<ExprRef2Value>();
+                auto nr2v = make_smart<ExprRef2Value>();
                 nr2v->at = expr->at;
                 nr2v->subexpr = ecast->subexpr;
                 nr2v->type = make_smart<TypeDecl>(*nr2v->subexpr->type);
@@ -225,7 +225,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             // if (cond) return x; else return y; => (cond ? x : y)
             if (expr->if_false) {
-                shared_ptr<ExprReturn> lr, rr;
+                smart_ptr<ExprReturn> lr, rr;
                 if (expr->if_true->rtti_isBlock()) {
                     auto tb = static_pointer_cast<ExprBlock>(expr->if_true);
                     if (tb->list.size() == 1 && tb->list.back()->rtti_isReturn()) {
@@ -240,9 +240,9 @@ namespace das {
                 }
                 if (lr && rr) {
                     if ( lr->subexpr ) {
-                        auto newCond = make_shared<ExprOp3>(expr->at, "?", expr->cond, lr->subexpr, rr->subexpr);
+                        auto newCond = make_smart<ExprOp3>(expr->at, "?", expr->cond, lr->subexpr, rr->subexpr);
                         newCond->type = make_smart<TypeDecl>(*lr->subexpr->type);
-                        auto newRet = make_shared<ExprReturn>(expr->at, newCond);
+                        auto newRet = make_smart<ExprReturn>(expr->at, newCond);
                         reportFolding();
                         return newRet;
                     } else {
@@ -282,7 +282,7 @@ namespace das {
                                         if (lastE->rtti_isReturn() || lastE->rtti_isBreak() || lastE->rtti_isContinue()) {
                                             vector<ExpressionPtr> tail;
                                             tail.insert(tail.begin(), block->list.begin() + i + 1, block->list.end());
-                                            auto fb = make_shared<ExprBlock>();
+                                            auto fb = make_smart<ExprBlock>();
                                             fb->at = tail.front()->at;
                                             swap(fb->list, tail);
                                             ite->if_false = fb;

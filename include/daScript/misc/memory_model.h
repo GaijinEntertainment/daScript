@@ -93,7 +93,7 @@ namespace das {
         Page *      pages;
     };
 
-    struct MemoryModel {
+    struct MemoryModel : ptr_ref_count {
         MemoryModel() = delete;
         MemoryModel(const MemoryModel &) = delete;
         MemoryModel & operator = (const MemoryModel &) = delete;

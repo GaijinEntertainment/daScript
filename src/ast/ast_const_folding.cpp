@@ -275,7 +275,7 @@ namespace das {
 
     ExpressionPtr FoldingVisitor::evalAndFold ( Expression * expr ) {
         if ( expr->type->baseType == Type::tString ) return evalAndFoldString(expr);
-        if ( expr->rtti_isConstant() ) return expr->shared_from_this();
+        if ( expr->rtti_isConstant() ) return expr;
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
@@ -293,8 +293,8 @@ namespace das {
                 default: DAS_ASSERTF(0,"we should not be here. unsupported enum type");
                 }
                 auto cef = expr->type->enumType->find(ival, "");
-                if ( cef.empty() ) return expr->shared_from_this(); // it folded to unsupported value
-                auto sim = make_shared<ExprConstEnumeration>(expr->at, cef, expr->type);
+                if ( cef.empty() ) return expr; // it folded to unsupported value
+                auto sim = make_smart<ExprConstEnumeration>(expr->at, cef, expr->type);
                 sim->type = expr->type->enumType->makeEnumType();
                 sim->constexpression = true;
                 reportFolding();
@@ -307,25 +307,25 @@ namespace das {
                 return sim;
             }
         } else {
-            return expr->shared_from_this();
+            return expr;
         }
     }
 
     ExpressionPtr FoldingVisitor::evalAndFoldString ( Expression * expr ) {
-        if ( expr->rtti_isStringConstant() ) return expr->shared_from_this();
+        if ( expr->rtti_isStringConstant() ) return expr;
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
             DebugInfoHelper helper(ctx.debugInfo);
             auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
-            auto sim = make_shared<ExprConstString>(expr->at, res);
+            auto sim = make_smart<ExprConstString>(expr->at, res);
             sim->type = make_smart<TypeDecl>(Type::tString);
             sim->constexpression = true;
             reportFolding();
             return sim;
         } else {
-            return expr->shared_from_this();
+            return expr;
         }
     }
 
@@ -571,7 +571,7 @@ namespace das {
             if ( what->type->baseType==Type::tFunction && what->rtti_isAddr() ) {
                 auto pAddr = static_pointer_cast<ExprAddr>(what);
                 auto funcC = pAddr->func;
-                auto pCall = make_shared<ExprCall>(expr->at, funcC->name);
+                auto pCall = make_smart<ExprCall>(expr->at, funcC->name);
                 pCall->func = funcC;
                 uint32_t numArgs = uint32_t(expr->arguments.size());
                 pCall->arguments.reserve(numArgs-1);
@@ -591,11 +591,11 @@ namespace das {
                     allNoSideEffects &= arg->noSideEffects;
             }
             if ( allNoSideEffects ) {
-                if ( isNop(expr->func->shared_from_this()) ) {
+                if ( isNop(expr->func) ) {
                     reportFolding();
                     return nullptr;
                 }
-                if ( auto sc = getSimpleConst(expr->func->shared_from_this()) ) {
+                if ( auto sc = getSimpleConst(expr->func) ) {
                     reportFolding();
                     return sc;
                 }
@@ -625,7 +625,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
             // concatinate all constant strings, which are close together
-            shared_ptr<ExprConstString> str;
+            smart_ptr<ExprConstString> str;
             for ( auto it = expr->elements.begin(); it != expr->elements.end(); ) {
                 auto & elem = *it;
                 if ( elem->rtti_isStringConstant() ) {
@@ -647,7 +647,7 @@ namespace das {
             // check if we are no longer a builder
             if ( expr->elements.size()==0 ) {
                 // empty string builder is "" string
-                auto estr = make_shared<ExprConstString>(expr->at,"");
+                auto estr = make_smart<ExprConstString>(expr->at,"");
                 estr->type = make_smart<TypeDecl>(Type::tString);
                 estr->constexpression = true;
                 return estr;
@@ -670,7 +670,7 @@ namespace das {
     protected:
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
-            func = f->shared_from_this();
+            func = f;
         }
         virtual FunctionPtr visit ( Function * that ) override {
             func.reset();
@@ -788,12 +788,12 @@ namespace das {
 
     bool Program::optimizationConstFolding() {
         checkSideEffects();
-        ConstFolding cfe(shared_from_this());
+        ConstFolding cfe(this);
         visit(cfe);
         bool any = cfe.didAnything();
         if ( cfe.needRun() ) {
             if ( !options.getBoolOption("disable_run",false) ) {
-                RunFolding rfe(shared_from_this());
+                RunFolding rfe(this);
                 visit(rfe);
                 any |= rfe.didAnything();
             }
@@ -802,7 +802,7 @@ namespace das {
     }
 
     bool Program::verifyAndFoldContracts() {
-        ContractFolding context(shared_from_this());
+        ContractFolding context(this);
         visit(context);
         return context.didAnything();
     }

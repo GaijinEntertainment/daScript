@@ -297,7 +297,7 @@ namespace das
 
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
-        addAnnotation(make_shared<StringBuilderWriterAnnotation>(lib));
+        addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
         addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
             SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
         addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
@@ -314,7 +314,7 @@ namespace das
                                                           SideEffects::modifyArgumentAndExternal, "builtin_strdup");
         bsd->unsafeOperation = true;
         // das string binding
-        addAnnotation(make_shared<DasStringTypeAnnotation>());
+        addAnnotation(make_smart<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::modifyArgument,"set_das_string");
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",

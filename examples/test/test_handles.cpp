@@ -241,10 +241,10 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
 
     IntFieldsAnnotation() : StructureTypeAnnotation("IntFields") {}
     virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
-        shared_ptr<IntFieldsAnnotation> cp =  p ? static_pointer_cast<IntFieldsAnnotation>(p) : make_shared<IntFieldsAnnotation>();
+        smart_ptr<IntFieldsAnnotation> cp =  p ? static_pointer_cast<IntFieldsAnnotation>(p) : make_smart<IntFieldsAnnotation>();
         return StructureTypeAnnotation::clone(cp);
     }
-    virtual bool create ( const shared_ptr<Structure> & st, const AnnotationArgumentList & args, string & err ) override {
+    virtual bool create ( const smart_ptr<Structure> & st, const AnnotationArgumentList & args, string & err ) override {
         if( !StructureTypeAnnotation::create(st,args,err) )
             return false;
         bool fail = false;
@@ -366,7 +366,7 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
             auto starg = static_pointer_cast<ExprConstString>(arg);
             if (!starg->getValue().empty()) {
                 uint32_t hv = hash_blockz32((uint8_t *)starg->text.c_str());
-                auto hconst = make_shared<ExprConstUInt>(arg->at, hv);
+                auto hconst = make_smart<ExprConstUInt>(arg->at, hv);
                 hconst->type = make_smart<TypeDecl>(Type::tUInt);
                 hconst->type->constant = true;
                 auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
@@ -416,10 +416,10 @@ protected:
                 auto name = static_pointer_cast<ExprConstString>(nameArg)->getValue();
                 if (!name.empty()) {
                     auto hv = hash_blockz32((uint8_t *)name.c_str());
-                    auto hvc = make_shared<ExprConstUInt>(nameArg->at, hv);
+                    auto hvc = make_smart<ExprConstUInt>(nameArg->at, hv);
                     call->arguments.insert(call->arguments.begin() + 1, hvc);
                     reportFolding();
-                    return call->shared_from_this();
+                    return call;
                 } else {
                     program->error("EID can't be an empty string", "", "",
                         call->at, CompilationError::invalid_argument_type);
@@ -535,20 +535,20 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     lib.addBuiltInModule();
     addEnumTest(lib);
     // structure annotations
-    addAnnotation(make_shared<CheckRange>());
-    addAnnotation(make_shared<IntFieldsAnnotation>());
+    addAnnotation(make_smart<CheckRange>());
+    addAnnotation(make_smart<IntFieldsAnnotation>());
     // dummy type example
-    addAnnotation(make_shared<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
+    addAnnotation(make_smart<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
-    addAnnotation(make_shared<TestObjectNotLocalAnnotation>(lib));
-    addAnnotation(make_shared<TestObjectFooAnnotation>(lib));
-    addAnnotation(make_shared<TestObjectBarAnnotation>(lib));
+    addAnnotation(make_smart<TestObjectNotLocalAnnotation>(lib));
+    addAnnotation(make_smart<TestObjectFooAnnotation>(lib));
+    addAnnotation(make_smart<TestObjectBarAnnotation>(lib));
     // events
-    addAnnotation(make_shared<EventRegistrator>());
+    addAnnotation(make_smart<EventRegistrator>());
     // test
-    addAnnotation(make_shared<TestFunctionAnnotation>());
+    addAnnotation(make_smart<TestFunctionAnnotation>());
     // point3 array
-    addAnnotation(make_shared<ManagedVectorAnnotation<Point3Array>>("Point3Array",lib));
+    addAnnotation(make_smart<ManagedVectorAnnotation<Point3Array>>("Point3Array",lib));
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array", 
         SideEffects::modifyExternal, "testPoint3Array");
     // utf8 print
@@ -578,15 +578,15 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // register CheckEid functions
     addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid", SideEffects::modifyExternal, "CheckEidHint");
     auto ceid = addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid", SideEffects::modifyExternal, "CheckEid");
-    auto ceid_decl = make_shared<AnnotationDeclaration>();
-    ceid_decl->annotation = make_shared<CheckEidFunctionAnnotation>();
+    auto ceid_decl = make_smart<AnnotationDeclaration>();
+    ceid_decl->annotation = make_smart<CheckEidFunctionAnnotation>();
     ceid->annotations.push_back(ceid_decl);
     // register CheckEid2 functoins and macro
     addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEidHint");
     addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEid");
-    macros.push_back(make_shared<CheckEid2Macro>(this));
+    macros.push_back(make_unique<CheckEid2Macro>(this));
     addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid3", SideEffects::modifyExternal, "CheckEid");
-    lintMacros.push_back(make_shared<LintEidMacro>(this));
+    lintMacros.push_back(make_unique<LintEidMacro>(this));
     // extra tests
     addExtern<DAS_BIND_FUN(start_effect)>(*this, lib, "start_effect", SideEffects::modifyExternal, "start_effect");
     addExtern<DAS_BIND_FUN(tempArrayExample)>(*this, lib, "temp_array_example", SideEffects::modifyExternal, "tempArrayExample");

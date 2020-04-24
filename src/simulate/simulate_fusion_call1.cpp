@@ -9,7 +9,7 @@
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast_typedecl.h"
+#include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_fusion_op1.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
@@ -133,8 +133,8 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
 
     void createFusionEngine_call1()
     {
-        (*g_fusionEngine)["FastCall"].push_back(make_shared<Op1FusionPoint_FastCall_vec4f>());
-        (*g_fusionEngine)["Call"].push_back(make_shared<Op1FusionPoint_Call_vec4f>());
+        (*g_fusionEngine)["FastCall"].push_back(make_unique<Op1FusionPoint_FastCall_vec4f>());
+        (*g_fusionEngine)["Call"].push_back(make_unique<Op1FusionPoint_Call_vec4f>());
     }
 }
 

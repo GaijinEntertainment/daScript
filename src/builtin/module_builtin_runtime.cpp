@@ -494,21 +494,21 @@ namespace das
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
-        addAnnotation(make_shared<CommentAnnotation>());
-        addAnnotation(make_shared<CppAlignmentAnnotation>());
-        addAnnotation(make_shared<GenericFunctionAnnotation>());
-        addAnnotation(make_shared<PrivateFunctionAnnotation>());
-        addAnnotation(make_shared<ExportFunctionAnnotation>());
-        addAnnotation(make_shared<SideEffectsFunctionAnnotation>());
-        addAnnotation(make_shared<RunAtCompileTimeFunctionAnnotation>());
-        addAnnotation(make_shared<UnsafeFunctionAnnotation>());
-        addAnnotation(make_shared<UnsafeOpFunctionAnnotation>());
-        addAnnotation(make_shared<NoAotFunctionAnnotation>());
-        addAnnotation(make_shared<InitFunctionAnnotation>());
-        addAnnotation(make_shared<HybridFunctionAnnotation>());
-        addAnnotation(make_shared<UnsafeDerefFunctionAnnotation>());
-        addAnnotation(make_shared<MarkUsedFunctionAnnotation>());
-        addAnnotation(make_shared<LocalOnlyFunctionAnnotation>());
+        addAnnotation(make_smart<CommentAnnotation>());
+        addAnnotation(make_smart<CppAlignmentAnnotation>());
+        addAnnotation(make_smart<GenericFunctionAnnotation>());
+        addAnnotation(make_smart<PrivateFunctionAnnotation>());
+        addAnnotation(make_smart<ExportFunctionAnnotation>());
+        addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
+        addAnnotation(make_smart<RunAtCompileTimeFunctionAnnotation>());
+        addAnnotation(make_smart<UnsafeFunctionAnnotation>());
+        addAnnotation(make_smart<UnsafeOpFunctionAnnotation>());
+        addAnnotation(make_smart<NoAotFunctionAnnotation>());
+        addAnnotation(make_smart<InitFunctionAnnotation>());
+        addAnnotation(make_smart<HybridFunctionAnnotation>());
+        addAnnotation(make_smart<UnsafeDerefFunctionAnnotation>());
+        addAnnotation(make_smart<MarkUsedFunctionAnnotation>());
+        addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_first");

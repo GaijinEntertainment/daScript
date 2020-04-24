@@ -3914,7 +3914,7 @@ yyreduce:
         bool err;
         auto esconst = unescapeString(*(yyvsp[0].s),&err);
         if ( err ) das_yyerror("invalid escape sequence",tokAt((yylsp[-1])), CompilationError::invalid_escape_sequence);
-        auto sc = make_shared<ExprConstString>(tokAt((yylsp[0])),esconst);
+        auto sc = make_smart<ExprConstString>(tokAt((yylsp[0])),esconst);
         delete (yyvsp[0].s);
         static_cast<ExprStringBuilder *>((yyvsp[-1].pExpression))->elements.push_back(sc);
         (yyval.pExpression) = (yyvsp[-1].pExpression);
@@ -4360,7 +4360,7 @@ yyreduce:
     {
         (yyval.fa) = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*(yyvsp[0].s),tokAt((yylsp[0]))) ) {
-            (yyval.fa)->annotation = ann->shared_from_this();
+            (yyval.fa)->annotation = ann;
         }
         delete (yyvsp[0].s);
     }
@@ -4372,7 +4372,7 @@ yyreduce:
     {
         (yyval.fa) = new AnnotationDeclaration();
         if ( auto ann = findAnnotation(*(yyvsp[-3].s),tokAt((yylsp[-3]))) ) {
-            (yyval.fa)->annotation = ann->shared_from_this();
+            (yyval.fa)->annotation = ann;
         }
         swap ( (yyval.fa)->arguments, *(yyvsp[-1].aaList) );
         delete (yyvsp[-1].aaList);
@@ -4675,7 +4675,7 @@ yyreduce:
   case 118:
 #line 811 "ds_parser.ypp"
     {
-        auto pFunction = make_shared<Function>();
+        auto pFunction = make_smart<Function>();
         pFunction->at = tokAt((yylsp[-4]));
         pFunction->name = *(yyvsp[-3].s);
         pFunction->body = ExpressionPtr((yyvsp[0].pExpression));
@@ -4685,7 +4685,7 @@ yyreduce:
                 if ( pDecl->pTypeDecl ) {
                     for ( const auto & name : *pDecl->pNameList ) {
                         if ( !pFunction->findArgument(name) ) {
-                            VariablePtr pVar = make_shared<Variable>();
+                            VariablePtr pVar = make_smart<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
@@ -5128,7 +5128,7 @@ yyreduce:
         if ( (yyvsp[0].pVarDecl)->pTypeDecl ) {
             for ( const auto & name : *(yyvsp[0].pVarDecl)->pNameList ) {
                 if ( !pLet->find(name) ) {
-                    VariablePtr pVar = make_shared<Variable>();
+                    VariablePtr pVar = make_smart<Variable>();
                     pVar->name = name;
                     pVar->at = (yyvsp[0].pVarDecl)->at;
                     pVar->type = make_smart<TypeDecl>(*(yyvsp[0].pVarDecl)->pTypeDecl);
@@ -5268,7 +5268,7 @@ yyreduce:
   case 181:
 #line 1146 "ds_parser.ypp"
     {
-            auto retE = make_shared<ExprReturn>(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[0].pExpression)));
+            auto retE = make_smart<ExprReturn>(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[0].pExpression)));
             auto blkE = new ExprBlock();
             blkE->at = tokAt((yylsp[-1]));
             blkE->list.push_back(retE);
@@ -5280,7 +5280,7 @@ yyreduce:
   case 182:
 #line 1153 "ds_parser.ypp"
     {
-            auto retE = make_shared<ExprReturn>(tokAt((yylsp[-2])), ExpressionPtr((yyvsp[0].pExpression)));
+            auto retE = make_smart<ExprReturn>(tokAt((yylsp[-2])), ExpressionPtr((yyvsp[0].pExpression)));
 			retE->moveSemantics = true;
             auto blkE = new ExprBlock();
             blkE->at = tokAt((yylsp[-2]));
@@ -5323,7 +5323,7 @@ yyreduce:
                 if ( pDecl->pTypeDecl ) {
                     for ( const auto & name : *pDecl->pNameList ) {
                         if ( !closure->findArgument(name) ) {
-                            VariablePtr pVar = make_shared<Variable>();
+                            VariablePtr pVar = make_smart<Variable>();
                             pVar->name = name;
                             pVar->at = pDecl->at;
                             pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
@@ -6357,7 +6357,7 @@ yyreduce:
         for ( auto pDecl : *(yyvsp[-1].pVarDeclList) ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name : *pDecl->pNameList ) {
-                    VariablePtr pVar = make_shared<Variable>();
+                    VariablePtr pVar = make_smart<Variable>();
                     pVar->name = name;
                     pVar->at = pDecl->at;
                     pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
@@ -6501,7 +6501,7 @@ yyreduce:
             }
             delete (yyvsp[0].s);
         } else {
-            pStruct = make_shared<Structure>(*(yyvsp[-1].s));
+            pStruct = make_smart<Structure>(*(yyvsp[-1].s));
         }
         if ( pStruct ) {
             if ( !g_Program->addStructure(pStruct) ) {
@@ -6523,7 +6523,7 @@ yyreduce:
 #line 1772 "ds_parser.ypp"
     {
         if ( (yyvsp[-3].pStructure) ) {
-            auto pStruct = (yyvsp[-3].pStructure)->shared_from_this();
+            auto pStruct = (yyvsp[-3].pStructure);
             pStruct->at = tokAt((yylsp[-4]));
             for ( auto pDecl : *(yyvsp[-1].pVarDeclList) ) {
                 for ( const auto & name : *pDecl->pNameList ) {
@@ -7187,7 +7187,7 @@ yyreduce:
   case 404:
 #line 2107 "ds_parser.ypp"
     {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt((yylsp[-2])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b));
+        auto mfd = make_smart<MakeFieldDecl>(tokAt((yylsp[-2])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b));
         delete (yyvsp[-2].s);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
@@ -7199,7 +7199,7 @@ yyreduce:
   case 405:
 #line 2114 "ds_parser.ypp"
     {
-        auto mfd = make_shared<MakeFieldDecl>(tokAt((yylsp[-2])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b));
+        auto mfd = make_smart<MakeFieldDecl>(tokAt((yylsp[-2])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b));
         delete (yyvsp[-2].s);
         ((MakeStruct *)(yyvsp[-4].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-4].pMakeStruct);
@@ -7420,7 +7420,7 @@ yyreduce:
   case 427:
 #line 2258 "ds_parser.ypp"
     {
-        auto pFor = make_shared<ExprFor>(tokAt((yylsp[-8])));
+        auto pFor = make_smart<ExprFor>(tokAt((yylsp[-8])));
         pFor->iterators = *(yyvsp[-7].pNameList);
         delete (yyvsp[-7].pNameList);
         pFor->sources = sequenceToList((yyvsp[-5].pExpression));
@@ -7439,7 +7439,7 @@ yyreduce:
   case 428:
 #line 2272 "ds_parser.ypp"
     {
-        auto pFor = make_shared<ExprFor>(tokAt((yylsp[-8])));
+        auto pFor = make_smart<ExprFor>(tokAt((yylsp[-8])));
         pFor->iterators = *(yyvsp[-7].pNameList);
         delete (yyvsp[-7].pNameList);
         pFor->sources = sequenceToList((yyvsp[-5].pExpression));
@@ -7722,7 +7722,7 @@ vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
             argList.push_back(pSeq->right);
             arg = pSeq->left.get();
         }
-        argList.push_back(arg->shared_from_this());
+        argList.push_back(arg);
         reverse(argList.begin(),argList.end());
         delete arguments;
     } else {
