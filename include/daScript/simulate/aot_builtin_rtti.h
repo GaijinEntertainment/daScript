@@ -115,8 +115,13 @@ namespace das {
     void rtti_builtin_module_for_each_function(const Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
     void rtti_builtin_module_for_each_generic(const Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
     void rtti_builtin_module_for_each_global(const Module * module, const TBlock<void, const VarInfo> & block, Context * context);
+    void rtti_builtin_module_for_each_annotation(const Module * module, const TBlock<void, const Annotation> & block, Context * context);
 
     // note: this one is not TBlock, so that we don't have to include ast.h
     void rtti_builtin_structure_for_each_annotation(const StructInfo & info, const Block & block, Context * context);
+
+    struct BasicStructureAnnotation;
+    void rtti_builtin_basic_struct_for_each_field(const BasicStructureAnnotation & ann,
+        const TBlock<void, char *, char*, const TypeInfo, uint32_t> & block, Context * context);
 }
 

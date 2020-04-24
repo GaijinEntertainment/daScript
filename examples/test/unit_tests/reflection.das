@@ -119,11 +119,26 @@ def describeEnumeration(einfo)
 	for eitem in einfo
 		print("\t{eitem.name} = {eitem.value}\n")
 
+[unsafe]
+def describeAnnotation(ann)
+	if ann.isBasicStructureAnnotation
+		let sann & = reinterpret<BasicStructureAnnotation&>(ann)
+		print("struct {sann.name} // {sann.fieldCount} {sann.cppName}\n")
+		basic_struct_for_each_field(sann) <| $ ( name,cppName,xtype,offset)
+			print("\t{name}:{describeType(xtype)} // {cppName} at {offset}\n")
+	elif ann.isTypeAnnotation
+		let tann & = reinterpret<TypeAnnotation&>(ann)
+		print("{tann.name} // {tann.cppName}\n")
+	else
+		print("{ann.name}\n")
+
 def describeModule(mod)
 	module_for_each_enumeration(mod) <| $ ( einfo )
 		describeEnumeration(einfo)
 	module_for_each_structure(mod) <| $ ( sinfo )
 		describeStructure(sinfo)
+	module_for_each_annotation(mod) <| $ ( ann )
+		describeAnnotation(ann)
 	module_for_each_function(mod) <| $ ( finfo )
 		describeFunction(finfo)
 	module_for_each_generic(mod) <| $ ( finfo )
@@ -155,6 +170,6 @@ def main
 		describeVariable(vinfo)
 	return true
 
-[export]
+[export, unsafe]
 def test
 	return true

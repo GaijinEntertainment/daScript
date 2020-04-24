@@ -83,6 +83,7 @@ namespace das
         virtual bool rtti_isStructureAnnotation() const { return false; }
         virtual bool rtti_isStructureTypeAnnotation() const { return false; }
         virtual bool rtti_isFunctionAnnotation() const { return false; }
+        virtual bool rtti_isBasicStructureAnnotation() const { return false;  }
         string describe() const { return name; }
         string getMangledName() const;
         Module *    module = nullptr;

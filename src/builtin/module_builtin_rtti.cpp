@@ -30,6 +30,7 @@ DAS_BASE_BIND_ENUM_98(Type, Type,
 
 MAKE_TYPE_FACTORY(Annotation,Annotation)
 MAKE_TYPE_FACTORY(TypeAnnotation,TypeAnnotation)
+MAKE_TYPE_FACTORY(BasicStructureAnnotation,BasicStructureAnnotation)
 MAKE_TYPE_FACTORY(StructInfo,StructInfo)
 MAKE_TYPE_FACTORY(EnumInfo,EnumInfo)
 MAKE_TYPE_FACTORY(EnumValueInfo,EnumValueInfo)
@@ -107,9 +108,22 @@ namespace das {
         }
     };
 
+    struct BasicStructureAnnotationAnnotation : ManagedStructureAnnotation <BasicStructureAnnotation,false> {
+        BasicStructureAnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("BasicStructureAnnotation", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
+            addProperty<DAS_BIND_MANAGED_PROP(fieldCount)>("fieldCount");
+        }
+    };
+
+
     struct AnnotationAnnotation : ManagedStructureAnnotation <Annotation,false> {
         AnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Annotation", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addProperty<DAS_BIND_MANAGED_PROP(rtti_isHandledTypeAnnotation)>("isTypeAnnotation",
+                "rtti_isHandledTypeAnnotation");
+            addProperty<DAS_BIND_MANAGED_PROP(rtti_isBasicStructureAnnotation)>("isBasicStructureAnnotation",
+                "rtti_isBasicStructureAnnotation");
         }
     };
 
@@ -517,6 +531,33 @@ namespace das {
         }
     }
 
+    void rtti_builtin_module_for_each_annotation ( const Module * module, const TBlock<void,const Annotation> & block, Context * context ) {
+        for ( auto & it : module->handleTypes ) {
+            vec4f args[1] = {
+                cast<Annotation*>::from(it.second.get())
+            };
+            context->invoke(block, args, nullptr);
+        }
+    }
+
+    void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann, 
+        const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context ) {
+        DebugInfoHelper helper;
+        helper.rtti = true;
+        for ( auto & it : ann.fields ) {
+            const auto & fld = it.second;
+            TypeInfo * info = helper.makeTypeInfo(nullptr, fld.decl);
+            vec4f args[4] = {
+                cast<char *>::from(it.first.c_str()),
+                cast<char *>::from(fld.cppName.c_str()),
+                cast<TypeInfo *>::from(info),
+                cast<uint32_t>::from(fld.offset)
+            };
+            context->invoke(block, args, nullptr);
+        }
+    }
+
+
     char * rtti_get_das_type_name(Type tt, Context * context) {
         string str = das_to_string(tt);
         return context->stringHeap.allocateString(str);
@@ -591,6 +632,7 @@ namespace das {
             addAnnotation(make_shared<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
             addAnnotation(make_shared<AnnotationAnnotation>(lib));
             addAnnotation(make_shared<TypeAnnotationAnnotation>(lib));
+            addAnnotation(make_shared<BasicStructureAnnotationAnnotation>(lib));
             addAnnotation(make_shared<EnumValueInfoAnnotation>(lib));
             addAnnotation(make_shared<EnumInfoAnnotation>(lib));
             addEnumeration(make_shared<EnumerationRefMatters>());
@@ -650,8 +692,12 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_generic");
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_global)>(*this, lib, "module_for_each_global", 
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_global");
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_annotation)>(*this, lib, "module_for_each_annotation", 
+                SideEffects::modifyExternal, "rtti_builtin_module_for_each_annotation");
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", 
                 SideEffects::modifyExternal, "rtti_builtin_structure_for_each_annotation");
+            addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_field)>(*this, lib, "basic_struct_for_each_field", 
+                SideEffects::modifyExternal, "rtti_builtin_basic_struct_for_each_field");
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type", 
                 SideEffects::modifyExternal, "isSameType");
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast", 
@@ -666,6 +712,7 @@ namespace das {
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_rtti.h\"\n";
             tw << "#include \"daScript/ast/ast.h\"\n";
+            tw << "#include \"daScript/ast/ast_handle.h\"\n";
             return ModuleAotType::hybrid;
         }
     };

@@ -85,6 +85,7 @@ namespace das
         }
         virtual void seal(Module * m) override;
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
+        virtual bool rtti_isBasicStructureAnnotation() const { return true; }
         virtual bool isRefType() const override { return true; }
         virtual TypeDeclPtr makeFieldType(const string & na) const override;
         virtual TypeDeclPtr makeSafeFieldType(const string & na) const override;
@@ -100,6 +101,7 @@ namespace das
         virtual void aotVisitGetFieldPtr(TextWriter & ss, const string & fieldName) override;
         void addFieldEx(const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT);
         virtual void walk(DataWalker & walker, void * data) override;
+        int32_t fieldCount() const { return int32_t(fields.size()); }
         das_map<string,StructureField> fields;
         DebugInfoHelper            helpA;
         StructInfo *               sti = nullptr;
