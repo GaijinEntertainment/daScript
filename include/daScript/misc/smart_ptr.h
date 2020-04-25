@@ -34,6 +34,7 @@ namespace das {
             return set(p.get());
         }
         __forceinline smart_ptr & operator = ( smart_ptr && p ) {
+			reset();
             ptr = p.ptr;
             p.ptr = nullptr;
             return *this;
