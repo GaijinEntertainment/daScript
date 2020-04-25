@@ -211,3 +211,12 @@ namespace das {
         unsigned int ref_count = 0;
     };
 }
+
+namespace std {
+    template <typename TT>
+    struct hash<das::smart_ptr<TT>> {
+        std::size_t operator() ( const das::smart_ptr<TT> & k ) const {
+            return hash<void *>()(k.get());
+        }
+    };
+}
