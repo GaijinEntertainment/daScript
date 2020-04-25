@@ -36,7 +36,7 @@ def test_native
     b?.fooPtr?.fooData ?? idummy = 4
     assert(b.fooPtr.fooData==4 & idummy==3)
 
-[sideeffects]
+[sideeffects,unsafe]
 def test_handled
     var a:TestObjectFoo?
     var b:TestObjectBar?
@@ -63,6 +63,8 @@ def test_handled
     assert(deref(b.getFooPtr).fooData==7)
     assert(deref(a)==deref(b.fooPtr))
     assert(!(deref(a)!=deref(b.fooPtr)))
+	delete a
+	delete b
 
 [export]
 def test:bool

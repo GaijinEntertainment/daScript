@@ -64,12 +64,6 @@ namespace das {
         __forceinline T * get() const { 
             return ptr; 
         }
-        __forceinline void addRef() { 
-            if ( ptr ) ptr->addRef(); 
-        }
-        __forceinline void delRef() { 
-            if ( ptr && ptr->delRef() ) ptr = nullptr;
-        }
         __forceinline operator bool() const { 
             return ptr != nullptr; 
         }
@@ -126,6 +120,12 @@ namespace das {
         __forceinline void init ( T * p = nullptr )  { 
             ptr = p; 
             addRef(); 
+        }
+        __forceinline void addRef() { 
+            if ( ptr ) ptr->addRef(); 
+        }
+        __forceinline void delRef() { 
+            if ( ptr && ptr->delRef() ) ptr = nullptr;
         }
     protected:
         T * ptr;
