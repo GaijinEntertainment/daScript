@@ -722,7 +722,8 @@ namespace das {
             if ( &i ) i = nullptr;
         }
         ~das_iterator() {
-            if (context) close(context, *(TT **)nullptr);
+            TT * dummy = nullptr;
+            if (context) close(context, dummy);
         }
         Array * that;
         TT * array_end;
@@ -751,7 +752,8 @@ namespace das {
             if ( &i ) i = nullptr;
         }
         ~das_iterator() {
-            if (context) close(context, *(const TT **)nullptr);
+            const TT * dummy = nullptr;
+            if (context) close(context, dummy);
         }
         const Array * that;
         const TT * array_end;

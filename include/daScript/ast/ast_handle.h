@@ -1,10 +1,10 @@
 #pragma once
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_interop.h"
 #include "daScript/simulate/interop.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate_nodes.h"
-
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das
@@ -85,7 +85,7 @@ namespace das
         }
         virtual void seal(Module * m) override;
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
-        virtual bool rtti_isBasicStructureAnnotation() const { return true; }
+        virtual bool rtti_isBasicStructureAnnotation() const override { return true; }
         virtual bool isRefType() const override { return true; }
         virtual TypeDeclPtr makeFieldType(const string & na) const override;
         virtual TypeDeclPtr makeSafeFieldType(const string & na) const override;
