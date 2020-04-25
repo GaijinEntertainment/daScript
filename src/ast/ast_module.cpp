@@ -573,7 +573,7 @@ namespace das {
         auto handles = findAnnotation(name,nullptr);
         if ( handles.size()==1 ) {
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
-                t->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
+				t->annotation = static_cast<TypeAnnotation*>(handles.back().get());
             } else {
                 DAS_FATAL_LOG("makeHandleType(%s) failed, not a handle type\n", name.c_str());
                 DAS_FATAL_ERROR;

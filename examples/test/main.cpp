@@ -290,6 +290,8 @@ bool run_module_test ( const string & path, const string & main, bool usePak ) {
 }
 
 int main() {
+	// _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	// _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
 #ifdef _MSC_VER
     #define    TEST_PATH "../"
@@ -311,7 +313,7 @@ int main() {
 #endif
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
-    // #define TEST_NAME   "examples/test/unit_tests/block_access_function_arg.das"
+    // #define TEST_NAME   "examples/test/unit_tests/_module_a.das"
     unit_test(TEST_PATH TEST_NAME,false);
     // unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();

@@ -134,8 +134,8 @@ namespace das {
         void addVariant(const string & name, const TypeDeclPtr & tt);
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
-        EnumerationPtr          enumType;
-        TypeAnnotationPtr       annotation;
+        Enumeration *           enumType = nullptr;
+        TypeAnnotation *        annotation = nullptr;
         ExpressionPtr           declTypeExpr;
         TypeDeclPtr             firstType;      // map.first or array, or pointer
         TypeDeclPtr             secondType;     // map.second

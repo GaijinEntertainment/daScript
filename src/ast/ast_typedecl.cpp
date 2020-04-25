@@ -11,7 +11,7 @@ namespace das
     // auto or generic type conversion
 
     TypeDecl::TypeDecl(const EnumerationPtr & ep) 
-        : baseType(ep->getEnumType()), enumType(ep) 
+        : baseType(ep->getEnumType()), enumType(ep.get()) 
     {
     }
 

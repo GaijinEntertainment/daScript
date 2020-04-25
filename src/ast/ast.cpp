@@ -2105,7 +2105,7 @@ namespace das {
             if ( handles.size()==1 ) {
                 if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                     auto pTD = new TypeDecl(Type::tHandle);
-                    pTD->annotation = static_pointer_cast<TypeAnnotation>(handles.back());
+                    pTD->annotation = static_cast<TypeAnnotation *>(handles.back().get());
                     pTD->at = at;
                     return pTD;
                 } else {
@@ -2122,7 +2122,7 @@ namespace das {
         } else if ( enums.size() ) {
             if ( enums.size()==1 ) {
                 auto pTD = new TypeDecl(enums.back());
-                pTD->enumType = enums.back();
+                pTD->enumType = enums.back().get();
                 pTD->at = at;
                 return pTD;
             } else {
