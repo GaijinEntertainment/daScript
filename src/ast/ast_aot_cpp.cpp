@@ -1656,12 +1656,11 @@ namespace das {
             const auto & seT = isPtr ? expr->subexpr->type->firstType : expr->subexpr->type;
             if ((seT->dim.size() || seT->isGoodArrayType() || seT->isGoodTableType())) {
                 ss << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << "::safe_index(";
-                if (isPtr) ss << "("; else ss << "&(";
             } else {
                 ss << "das_index<" << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
                     << ">::safe_at(";
-                if (isPtr) ss << "*("; else ss << "(";
             }
+			if (isPtr) ss << "("; else ss << "&(";
         }
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
             Visitor::preVisitSafeAtIndex(expr, index);

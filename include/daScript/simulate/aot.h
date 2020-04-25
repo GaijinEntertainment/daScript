@@ -284,27 +284,27 @@ namespace das {
             return (&value.x)[idx];
         }
     // safe index
-        static __forceinline TT * safe_at ( VecT & value, int32_t index, Context * ) {
-            if (!&value) return nullptr;
+        static __forceinline TT * safe_at ( VecT * value, int32_t index, Context * ) {
+            if (!value) return nullptr;
             uint32_t idx = uint32_t(index);
             if (idx >= size) return nullptr;
-            return (&value.x) + idx;
+            return (&value->x) + idx;
         }
-        static __forceinline const TT * safe_at ( const VecT & value, int32_t index, Context * ) {
-            if (!&value) return nullptr;
+        static __forceinline const TT * safe_at ( const VecT * value, int32_t index, Context * ) {
+            if (!value) return nullptr;
             uint32_t idx = uint32_t(index);
             if ( idx>=size ) return nullptr;
-            return (&value.x) + idx;
+            return (&value->x) + idx;
         }
-        static __forceinline TT * safe_at ( VecT & value, uint32_t idx, Context * ) {
-            if (!&value) return nullptr;
+        static __forceinline TT * safe_at ( VecT * value, uint32_t idx, Context * ) {
+            if (!value) return nullptr;
             if ( idx>=size ) return nullptr;
-            return (&value.x) + idx;
+            return (&value->x) + idx;
         }
-        static __forceinline const TT * safe_at ( const VecT & value, uint32_t idx, Context * ) {
-            if (!&value) return nullptr;
+        static __forceinline const TT * safe_at ( const VecT * value, uint32_t idx, Context * ) {
+            if (!value) return nullptr;
             if ( idx>=size ) return nullptr;
-            return (&value.x) + idx;
+            return (&value->x) + idx;
         }
     };
 
@@ -719,7 +719,7 @@ namespace das {
         __forceinline void close(Context * __context__, TT * & i) {
             array_unlock(*__context__, *that);
             context = nullptr;
-            if ( &i ) i = nullptr;
+            i = nullptr;
         }
         ~das_iterator() {
             TT * dummy = nullptr;
@@ -749,7 +749,7 @@ namespace das {
         __forceinline void close ( Context * __context__, const TT * & i ) {
             array_unlock(*__context__, *(Array *)(that));  // technically we don't need for the const array, but...
             context = nullptr;
-            if ( &i ) i = nullptr;
+            i = nullptr;
         }
         ~das_iterator() {
             const TT * dummy = nullptr;
