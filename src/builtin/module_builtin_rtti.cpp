@@ -599,7 +599,7 @@ namespace das {
     }
 
 #else
-    void rtti_builtin_compile_file ( char *, const Block &, Context * context ) {
+    void rtti_builtin_compile_file ( char *, const TBlock<void,bool,const RttiProgram,const string> &, Context * context ) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
 #endif
