@@ -277,11 +277,13 @@ namespace das
                 stream << "unspecified structure";
             }
         } else if ( baseType==Type::tPointer ) {
+            if ( smartPtr ) stream << "smart_ptr<";
             if ( firstType ) {
-                stream << firstType->describe(extra) << "?";
+                stream << firstType->describe(extra);
             } else {
-                stream << "void ?";
+                stream << "void";
             }
+            stream << (smartPtr ? ">" : "?");
         } else if ( isEnumT() ) {
             if ( enumType ) {
                 if (dmodule == DescribeModule::yes && enumType->module && !enumType->module->name.empty()) {
@@ -569,6 +571,8 @@ namespace das
             return false;
         } else if (baseType == Type::tIterator) {
             return false;
+        } else if (baseType == Type::tPointer) {
+            return !smartPtr;
         } else {
             return true;
         }
@@ -586,6 +590,8 @@ namespace das
                 if (!arg->canCopy()) return false;
             }
             return true;
+        } else if (baseType == Type::tPointer) {
+            return !smartPtr;
         } else {
             return true;
         }
@@ -670,7 +676,7 @@ namespace das
                 ss << "#" << secondType->getMangledName();
             }
         } else if ( baseType==Type::tPointer ) {
-            ss << "#ptr";
+            ss << (smartPtr ? "#smart_ptr" : "#ptr");
             if ( firstType ) {
                 ss << "#" << firstType->getMangledName();
             }
@@ -799,6 +805,9 @@ namespace das
             return false;
         }
         if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
+            if ( smartPtr != decl.smartPtr ) {
+                return false;
+            }
             if ( (firstType && !firstType->isVoid())
                 && (decl.firstType && !decl.firstType->isVoid())
                 && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes,false) ) {

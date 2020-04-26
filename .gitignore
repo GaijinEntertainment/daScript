@@ -7,5 +7,7 @@ tmtags
 *.output
 **/_aot_generated
 
+build/
+.vscode/
 
 

@@ -154,6 +154,7 @@ namespace das {
                 bool    removeDim : 1;
                 bool    removeTemporary : 1;
                 bool    aotAlias : 1;
+                bool    smartPtr : 1;
             };
             uint32_t flags = 0;
         };
@@ -231,6 +232,35 @@ namespace das {
             return t;
         }
     };
+
+    template <>
+    struct typeFactory<smart_ptr_stub> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_smart<TypeDecl>(Type::tPointer);
+            t->smartPtr = true;
+            return t;
+        }
+    };
+
+    template <>
+    struct typeFactory<const smart_ptr_stub &> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_smart<TypeDecl>(Type::tPointer);
+            t->smartPtr = true;
+            t->constant = true;
+            return t;
+        }
+    };
+
+    template <typename TT>
+    struct typeFactory<smart_ptr<TT>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_smart<TypeDecl>(Type::tPointer);
+            t->firstType = typeFactory<TT>::make(lib);
+            t->smartPtr = true;
+            return t;
+        }
+    };    
 
     template <>
     struct typeFactory<Array *> {

@@ -243,6 +243,14 @@ namespace das {
         }
     };
 
+        // Delete handle, default
+    struct SimNode_DeleteSmartHandlePtr : SimNode_Delete {
+        SimNode_DeleteSmartHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
+            : SimNode_Delete(a,s,t) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+    };
+
     // MakeBlock
     struct SimNode_MakeBlock : SimNode {
         SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a, uint32_t spp )

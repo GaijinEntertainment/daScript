@@ -131,6 +131,8 @@ namespace das {
             info->flags |= TypeInfo::flag_isImplicit;
         if (type->isRawPod())
             info->flags |= TypeInfo::flag_isRawPod;
+        if (type->smartPtr)
+            info->flags |= TypeInfo::flag_isSmartPtr;
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
         } else {

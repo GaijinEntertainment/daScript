@@ -273,6 +273,7 @@
 <normal>"in"                                            return DAS_IN;
 <normal>"implicit"                                      return DAS_IMPLICIT;
 <normal>"shared"                                        return DAS_SHARED;
+<normal>"smart_ptr"                                     return DAS_SMART_PTR;
 <normal>"as"                                            return DAS_AS;
 <normal>"is"                                            return DAS_IS;
 <normal>"deref"                                         return DAS_DEREF;

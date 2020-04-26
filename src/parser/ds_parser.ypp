@@ -170,6 +170,7 @@
 %token  DAS_GOTO            "goto"
 %token  DAS_IMPLICIT        "implicit"
 %token  DAS_SHARED          "shared"
+%token  DAS_SMART_PTR       "smart_ptr"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -1917,7 +1918,7 @@ type_declaration
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] '[' expr[dimExpr] ']' {
         int32_t dI = TypeDecl::dimConst;
-        if ( $dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don't get extra infer pass on every array
+        if ( $dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
             auto cI = (ExprConst *) $dimExpr;
             auto bt = cI->baseType;
             if ( bt==Type::tInt || bt==Type::tUInt ) {
@@ -1982,6 +1983,12 @@ type_declaration
     |   type_declaration[typeDecl] '?' {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(@typeDecl);
+        $$->firstType = TypeDeclPtr($typeDecl);
+    }
+    |   DAS_SMART_PTR[loc] '<' type_declaration[typeDecl] '>' {
+        $$ = new TypeDecl(Type::tPointer);
+        $$->at = tokAt(@loc);
+        $$->smartPtr = true;
         $$->firstType = TypeDeclPtr($typeDecl);
     }
     |   type_declaration[typeDecl] QQ {

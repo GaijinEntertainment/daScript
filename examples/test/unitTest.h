@@ -88,6 +88,10 @@ struct TestObjectFoo {
     }
 };
 
+struct TestObjectSmart : public das::ptr_ref_count {
+     int fooData;
+};
+
 __forceinline TestObjectFoo makeDummy() { TestObjectFoo x; x.fooData = 1; return x; }
 __forceinline int takeDummy ( const TestObjectFoo & x ) { return x.fooData; }
 
@@ -139,8 +143,8 @@ __forceinline bool start_effect(const char *, const das::float3x4 &, float) {
 
 void builtin_printw(char * utf8string);
 
-bool tempArrayExample(const das::TArray<char *> & arr, 
-    const das::TBlock<void, das::TTemporary<const das::TArray<char *>>> & blk, 
+bool tempArrayExample(const das::TArray<char *> & arr,
+    const das::TBlock<void, das::TTemporary<const das::TArray<char *>>> & blk,
     das::Context * context);
 
 __forceinline TestObjectFoo & fooPtr2Ref(TestObjectFoo * pMat) {
@@ -156,7 +160,7 @@ struct SampleVariant {
     };
 };
 
-template <> struct das::das_alias<SampleVariant> 
+template <> struct das::das_alias<SampleVariant>
     : das::das_alias_ref<SampleVariant,TVariant<sizeof(SampleVariant),int32_t,float,char *>> {};
 
 __forceinline SampleVariant makeSampleI() {

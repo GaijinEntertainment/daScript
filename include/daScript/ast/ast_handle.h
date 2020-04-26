@@ -80,7 +80,7 @@ namespace das
             uint32_t    offset;
             function<SimNode * (FactoryNodeType,Context &,const LineInfo &, const ExpressionPtr &)>   factory;
         };
-        BasicStructureAnnotation(const string & n, const string & cpn, ModuleLibrary * l) 
+        BasicStructureAnnotation(const string & n, const string & cpn, ModuleLibrary * l)
             : TypeAnnotation(n,cpn), mlib(l) {
         }
         virtual void seal(Module * m) override;
@@ -115,6 +115,7 @@ namespace das
             : BasicStructureAnnotation(n,cpn,&ml) { }
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
         virtual size_t getAlignOf() const override { return ManagedStructureAlignofAuto<ManagedType, is_abstract<ManagedType>::value>::alignment; }
+        virtual bool isSmart() const override { return is_base_of<ptr_ref_count,OT>::value; }
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
@@ -162,7 +163,11 @@ namespace das
             return context.code->makeNode<SimNode_NewHandle<ManagedType>>(at);
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
-            return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
+            if ( this->isSmart() ) {
+                return context.code->makeNode<SimNode_DeleteSmartHandlePtr>(at,sube,count);
+            } else {
+                return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
+            }
         }
     };
 
@@ -261,7 +266,7 @@ namespace das
             if ( na=="length" ) return make_smart<TypeDecl>(Type::tInt);
             return nullptr;
         }
-        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override { 
+        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override {
             if ( fieldName=="length" ) {
                 ss << ".size()";
             } else {

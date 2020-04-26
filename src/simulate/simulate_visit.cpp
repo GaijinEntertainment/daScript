@@ -87,6 +87,14 @@ namespace das {
         vis.sub(arguments, nArguments, "arguments");
     }
 
+    SimNode * SimNode_DeleteSmartHandlePtr::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(DeleteSmartHandlePtr);
+        V_SUB(subexpr);
+        V_ARG(total);
+        V_END();
+    }
+
     SimNode * SimNode_DeleteStructPtr::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(DeleteStructPtr);

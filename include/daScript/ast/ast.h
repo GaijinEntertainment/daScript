@@ -285,6 +285,7 @@ namespace das
         virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
         virtual bool isShareable ( ) const { return true; }
+        virtual bool isSmart() const { return false; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
         virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }

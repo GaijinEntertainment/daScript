@@ -543,6 +543,18 @@ namespace das
         return v_zero();
     }
 
+     vec4f SimNode_DeleteSmartHandlePtr::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        auto pH = (ptr_ref_count **) subexpr->evalPtr(context);
+        for ( uint32_t i=0; i!=total; ++i, pH++ ) {
+            if ( *pH ) {
+                (*pH)->delRef();
+                *pH = nullptr;
+            }
+        }
+        return v_zero();
+    }
+
     // Context
 
     Context::Context(uint32_t stackSize) : stack(stackSize) {

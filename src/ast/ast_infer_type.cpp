@@ -105,7 +105,21 @@ namespace das {
                         error("can't declare a pointer to a reference, " + decl->describe(), "", "",
                               ptrType->at,CompilationError::invalid_type);
                     }
+                    if ( decl->smartPtr ) {
+                        if ( ptrType->baseType != Type::tHandle ) {
+                            error("can't declare a smart pointer to anything other than annotation, " + decl->describe(), "", "",
+                                ptrType->at,CompilationError::invalid_type);
+                        } else if ( !ptrType->annotation->isSmart() ) {
+                            error("this annotation does not support smart pointers, " + decl->describe(), "", "",
+                                ptrType->at,CompilationError::invalid_type);
+                        }
+                    }
                     verifyType(ptrType);
+                } else {
+                    if ( decl->smartPtr ) {
+                        error("can't declare a void smart pointer, " + decl->describe(), "", "",
+                              ptrType->at,CompilationError::invalid_type);
+                    }
                 }
             } else if ( decl->baseType==Type::tIterator ) {
                 if ( auto ptrType = decl->firstType ) {
@@ -760,7 +774,7 @@ namespace das {
                         break;
                     }
                     if ( !fnArg->init ) {
-                        ss << "\t\twhile looking for argument " << arg->name 
+                        ss << "\t\twhile looking for argument " << arg->name
                             << ", can't skip function argument " << fnArg->name << " because it has no default value\n";
                         return ss.str();
                     }
@@ -1004,7 +1018,7 @@ namespace das {
             vector<TypeDeclPtr> argDummy;
             argDummy.push_back(make_smart<TypeDecl>(*left));
             argDummy.push_back(make_smart<TypeDecl>(*right));
-            return findMatchingFunctions("clone", argDummy);
+            return findMatchingFunctions("_::clone", argDummy);
         }
 
         bool verifyCloneFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
@@ -1337,16 +1351,18 @@ namespace das {
                 error("global variable " + var->name + " can't be moved",  "", "",
                     var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
-                error("global variable " + var->name + " can't be cloned",  "", "",
-                    var->at, CompilationError::cant_copy);
+                auto varType = make_smart<TypeDecl>(*var->type);
+                varType->ref = true;
+                auto fnList = getCloneFunc(varType, var->init->type);
+                if ( fnList.size() && verifyCloneFunc(fnList, var->at) ) {
+                    return promoteToCloneToMove(var);
+                } else {
+                    error("global variable " + var->name + " can't be cloned",  "", "",
+                        var->at, CompilationError::cant_copy);
+                }
             } else {
                 if ( var->init_via_clone ) {
-                    reportAstChanged();
-                    var->init_via_clone = false;
-                    var->init_via_move = true;
-                    auto c2m = make_smart<ExprCall>(var->at,"clone_to_move");
-                    c2m->arguments.push_back(var->init);
-                    return c2m;
+                    return promoteToCloneToMove(var);
                 }
             }
             return Visitor::visitGlobalLetInit(var, init);
@@ -2034,21 +2050,21 @@ namespace das {
                 }
                 // can't pass non-ref to reff
                 if ( argType->isRef() && !passType->isRef() ) {
-                    error("incomaptible argument. can't pass non-ref to ref " + to_string(i+1) + " " 
+                    error("incomaptible argument. can't pass non-ref to ref " + to_string(i+1) + " "
                         + passType->describe() + " vs " + argType->describe(), "", "",
                         expr->at, CompilationError::invalid_argument_type);
                 }
                 // ref types can only add constness
                 if ( argType->isRef() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument " + to_string(i+1) + " " 
-                        + passType->describe() + " vs " + argType->describe() 
+                    error("incomaptible argument " + to_string(i+1) + " "
+                        + passType->describe() + " vs " + argType->describe()
                         + ", passing const to non-const argument", "", "",
                             expr->at, CompilationError::invalid_argument_type);
                 }
                 // pointer types can only add constant
                 if ( argType->isPointer() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument " + to_string(i+1) 
-                        + " " + passType->describe() + " vs " + argType->describe() 
+                    error("incomaptible argument " + to_string(i+1)
+                        + " " + passType->describe() + " vs " + argType->describe()
                         + ", passing const pointer to non-const pointer argument", "", "",
                           expr->at, CompilationError::invalid_argument_type);
                 }
@@ -2325,7 +2341,7 @@ namespace das {
                         iterable = true;
                     } else if ( expr->typeexpr->isHandle() && expr->typeexpr->annotation->isIterable() ) {
                         iterable = true;
-                    } 
+                    }
                     return make_smart<ExprConstBool>(expr->at, iterable);
                 } else if ( expr->trait=="is_vector" ) {
                     reportAstChanged();
@@ -2532,6 +2548,10 @@ namespace das {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
                     error("delete of pointer requires [unsafe]",  "", "",
                         expr->at, CompilationError::unsafe);
+                } else if ( expr->subexpr->type->firstType && expr->subexpr->type->firstType->isHandle() &&
+                    expr->subexpr->type->firstType->annotation->isSmart() && !expr->subexpr->type->smartPtr ) {
+                        error("can't delete smart pointer type via regular pointer delete",  "", "",
+                            expr->at, CompilationError::bad_delete);
                 } else if ( !expr->native ) {
                     if ( expr->subexpr->type->firstType && expr->subexpr->type->firstType->needDelete() ) {
                         auto ptrf = getFinalizeFunc(expr->subexpr->type);
@@ -2867,7 +2887,7 @@ namespace das {
             auto ixT = expr->index->type;
             if ( seT->isGoodTableType() ) {
                 if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                    error("table index type mismatch, " 
+                    error("table index type mismatch, "
                         +seT->firstType->describe() + " vs " + ixT->describe(),  "", "",
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
@@ -2957,7 +2977,7 @@ namespace das {
                             expr->at, CompilationError::unsafe);
                     }
                     if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                        error("table safe-index type mismatch, " 
+                        error("table safe-index type mismatch, "
                             + seT->firstType->describe() + " vs " + ixT->describe(),  "", "",
                             expr->index->at, CompilationError::invalid_index_type);
                         return Visitor::visit(expr);
@@ -3010,7 +3030,7 @@ namespace das {
                         error("type can't be safe-indexed " + seT->describe(), "", "",
                             expr->subexpr->at, CompilationError::cant_index);
                         return Visitor::visit(expr);
-                    } 
+                    }
                 }
             } else if ( expr->subexpr->type->isGoodArrayType() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
@@ -3028,7 +3048,7 @@ namespace das {
                 }
                 const auto & seT = expr->subexpr->type;
                 if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                    error("table safe-index type mismatch, " 
+                    error("table safe-index type mismatch, "
                         + seT->firstType->describe() + " vs " + ixT->describe(),  "", "",
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
@@ -3144,7 +3164,7 @@ namespace das {
             }
             if (!arg->type->isAuto()) {
                 if (!arg->init->type || !arg->type->isSameType(*arg->init->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
-                    error("block argument default value type mismatch " 
+                    error("block argument default value type mismatch "
                         + arg->type->describe() + " vs " + arg->init->type->describe(),  "", "",
                         arg->init->at, CompilationError::invalid_argument_type);
                 }
@@ -3554,7 +3574,7 @@ namespace das {
                 for ( auto & var : vars ) {
                     errs << "\t" << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
                 }
-                error("too many matching variables " + expr->name, "candidates are:\n" + errs.str(), "", 
+                error("too many matching variables " + expr->name, "candidates are:\n" + errs.str(), "",
                     expr->at, CompilationError::variable_not_found);
             }
             return Visitor::visit(expr);
@@ -3600,10 +3620,19 @@ namespace das {
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
-            if ( expr->left->type->isPointer() && expr->right->type->isPointer() )
-                if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
-                    error("operations on incompatible pointers are prohibited", "", "",
+            if ( expr->left->type->isPointer() && expr->right->type->isPointer() ) {
+                auto lt_smart = expr->left->type->smartPtr;
+                auto rt_smart = expr->right->type->smartPtr;
+                expr->left->type->smartPtr = false;
+                expr->right->type->smartPtr = false;
+                if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                    error("operations on incompatible pointers are prohibited; " +
+                        expr->left->type->describe() + " vs " + expr->right->type->describe(), "", "",
                         expr->at, CompilationError::invalid_type);
+                }
+                expr->left->type->smartPtr = lt_smart;
+                expr->right->type->smartPtr = rt_smart;
+            }
             if ( expr->left->type->isEnum() && expr->right->type->isEnum() )
                 if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
                     error("operations on different enumerations are prohibited", "", "",
@@ -3721,6 +3750,9 @@ namespace das {
             } else if ( !expr->left->type->isRef() ) {
                 error("can only move to a reference"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_non_reference);
+            } else if ( !expr->right->type->isRef() ) {
+                error("can only move from a reference"+moveErrorInfo(expr), "", "",
+                    expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {
                 error("can't move to a constant value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_move_to_const);
@@ -3758,7 +3790,7 @@ namespace das {
                         expr->at, CompilationError::cant_pass_temporary);
             }
             if ( !expr->left->type->canCopy() ) {
-                error("this type can't be copied"+copyErrorInfo(expr), 
+                error("this type can't be copied"+copyErrorInfo(expr),
                     "", "use move (<-) or clone (:=) instead", expr->at, CompilationError::cant_copy);
             }
             expr->type = make_smart<TypeDecl>();  // we return nothing
@@ -3792,7 +3824,7 @@ namespace das {
                 error("can't write to a constant value", "", "",
                     expr->at, CompilationError::cant_write_to_const);
             } else if ( !expr->left->type->canClone() ) {
-                error("this type can't be cloned", "", "",
+                error("type " + expr->left->type->describe() + " can't be cloned from " + expr->right->type->describe(), "", "",
                     expr->at, CompilationError::cant_copy);
             } else {
                 auto cloneType = expr->left->type;
@@ -4378,6 +4410,14 @@ namespace das {
             verifyType(var->type);
             return Visitor::visitLet(expr,var,last);
         }
+        ExpressionPtr promoteToCloneToMove ( const VariablePtr & var ) {
+            reportAstChanged();
+            var->init_via_clone = false;
+            var->init_via_move = true;
+            auto c2m = make_smart<ExprCall>(var->at,"clone_to_move");
+            c2m->arguments.push_back(var->init);
+            return c2m;
+        }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
             local.push_back(var);
             if ( !var->init->type ) {
@@ -4418,16 +4458,19 @@ namespace das {
                 error("local variable " + var->name + " can't init (move) from a constant value", "", "",
                     var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
-                error("local variable " + var->name + " of type " + var->init->type->describe() + " can't be cloned","", "",
+                auto varType = make_smart<TypeDecl>(*var->type);
+                varType->ref = true;
+                auto fnList = getCloneFunc(varType, var->init->type);
+                if ( fnList.size() && verifyCloneFunc(fnList, expr->at) ) {
+                    return promoteToCloneToMove(var);
+                } else {
+                    error("local variable " + var->name + " of type " + var->type->describe()
+                    + " can't be cloned from " + var->init->type->describe(),"", "",
                       var->at, CompilationError::cant_copy);
+                }
             } else {
                 if ( var->init_via_clone ) {
-                    reportAstChanged();
-                    var->init_via_clone = false;
-                    var->init_via_move = true;
-                    auto c2m = make_smart<ExprCall>(var->at,"clone_to_move");
-                    c2m->arguments.push_back(var->init);
-                    return c2m;
+                    return promoteToCloneToMove(var);
                 }
             }
             return Visitor::visitLetInit(expr, var, init);
@@ -4614,7 +4657,7 @@ namespace das {
             for ( auto & ar : expr->arguments ) {
                 if ( !ar->type ) {
                     return nullptr;
-                } 
+                }
                 // if its an auto or an alias
                 // we only allow it, if its a block or lambda
                 if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda ) {
@@ -4705,9 +4748,9 @@ namespace das {
                                         arg->type = make_smart<TypeDecl>(*arg->init->type);
                                         continue;
                                     }
-                                } 
+                                }
                                 error("unknown type of argument " + clone->arguments[ai]->name
-                                    + "; can't instance " + oneGeneric->describe(), "", 
+                                    + "; can't instance " + oneGeneric->describe(), "",
                                     "provide argument type explicitly",
                                     expr->at, CompilationError::invalid_type);
                                 return nullptr;

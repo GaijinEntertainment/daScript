@@ -50,6 +50,16 @@ namespace  das {
         mod.addFunction( make_smart<BuiltInFn<Sim_NotEqu<TT>,      bool, const TT,  const TT>  >("!=",     lib, "NotEqu") );
     }
 
+    // basic operations
+    template <typename TT, typename QQ>
+    void addFunctionBasicEx(Module & mod, const ModuleLibrary & lib) {
+        //                                     policy               ret   arg1 arg2    name
+        mod.addFunction( make_smart<BuiltInFn<Sim_Equ<TT>,         bool, const TT,  const QQ>  >("==",     lib, "Equ") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_NotEqu<TT>,      bool, const TT,  const QQ>  >("!=",     lib, "NotEqu") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Equ<TT>,         bool, const QQ,  const TT>  >("==",     lib, "Equ") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_NotEqu<TT>,      bool, const QQ,  const TT>  >("!=",     lib, "NotEqu") );
+    }
+
     // built-in boolean types
     template <typename TT>
     void addFunctionBoolean(Module & mod, const ModuleLibrary & lib) {

@@ -241,7 +241,7 @@ bool run_exception_tests( const string & path ) {
 
 bool run_module_test ( const string & path, const string & main, bool usePak ) {
     tout << "testing MODULE at " << path << " ";
-    auto fAccess = usePak ? 
+    auto fAccess = usePak ?
             make_smart<FsFileAccess>( path + "/project.das_project", make_smart<FsFileAccess>()) :
             make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
@@ -317,6 +317,7 @@ int main() {
     unit_test(TEST_PATH TEST_NAME,false);
     // unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();
+    getchar();
     return 0;
 #endif
     bool ok = true;

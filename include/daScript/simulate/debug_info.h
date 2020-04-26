@@ -154,7 +154,8 @@ namespace das
             flag_isTemp = 1<<6,
             flag_isImplicit = 1<<7,
             flag_refValue = 1<<8,
-            flag_hasInitValue = 1<<9
+            flag_hasInitValue = 1<<9,
+            flag_isSmartPtr = 1<<10,
         };
         Type                type;
         StructInfo *        structType;
@@ -178,6 +179,7 @@ namespace das
         __forceinline bool isConst() const { return flags & flag_isConst; }
         __forceinline bool isTemp() const { return flags & flag_isTemp; }
         __forceinline bool isImplicit() const { return flags & flag_isImplicit; }
+        __forceinline bool isSmartPtr() const { return flags & flag_isSmartPtr; }
         TypeAnnotation * getAnnotation() const;
     };
 
