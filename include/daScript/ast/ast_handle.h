@@ -155,19 +155,16 @@ namespace das
     template <typename OT>
     struct ManagedStructureAnnotation<OT,true> : public ManagedStructureAnnotation<OT,false> {
         typedef OT ManagedType;
+        enum { is_smart = is_base_of<ptr_ref_count,OT>::value };
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
             : ManagedStructureAnnotation<OT,false>(n,ml,cpn) { }
         virtual bool canNew() const override { return true; }
         virtual bool canDeletePtr() const override { return true; }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code->makeNode<SimNode_NewHandle<ManagedType>>(at);
+            return context.code->makeNode<SimNode_NewHandle<ManagedType,is_smart>>(at);
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
-            if ( this->isSmart() ) {
-                return context.code->makeNode<SimNode_DeleteSmartHandlePtr>(at,sube,count);
-            } else {
-                return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType>>(at,sube,count);
-            }
+            return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType,is_smart>>(at,sube,count);
         }
     };
 

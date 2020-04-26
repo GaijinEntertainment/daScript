@@ -76,6 +76,7 @@ namespace das {
 
     void builtin_smart_ptr_clone_ptr ( smart_ptr_stub & dest, const void * src );
     void builtin_smart_ptr_clone ( smart_ptr_stub & dest, const smart_ptr_stub & src );
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_stub & src );
 
     __forceinline bool equ_sptr_sptr ( const smart_ptr_stub & left, const smart_ptr_stub & right ) { return left.ptr == right.ptr; }
     __forceinline bool nequ_sptr_sptr ( const smart_ptr_stub & left, const smart_ptr_stub & right ) { return left.ptr != right.ptr; }

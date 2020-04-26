@@ -404,3 +404,8 @@ def has_value ( a; key )
     else
         concept_assert(false,"can't iterate over source. has_value is meaningless")
         return false
+
+[unsafe]
+def get_ptr ( src : smart_ptr<auto(TT)> ) : TT?
+	return reinterpret<TT?>(src)
+

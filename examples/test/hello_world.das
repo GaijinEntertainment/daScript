@@ -2,10 +2,6 @@ options log = true
 
 require UnitTest
 
-[unsafe]
-def get ( src : smart_ptr<auto(TT)> ) : TT?
-	return reinterpret<TT?>(src)
-
 def clone ( var dest : smart_ptr<TestObjectSmart>&; src : TestObjectSmart? )
 	smart_ptr_clone(dest, src)
 
@@ -14,26 +10,36 @@ def clone ( var dest : smart_ptr<TestObjectSmart>&; src : smart_ptr<TestObjectSm
 
 [export, unsafe]
 def test
-
-	var ptr = new TestObjectSmart
-	var sptr : smart_ptr<TestObjectSmart>
-	assert(sptr==null)
-	sptr := ptr						// ref_count = 1
+	verify(getTotalTestObjectSmart()==0)
+	var sptr <- new TestObjectSmart			// ref_count = 1
+	verify(getTotalTestObjectSmart()==1)
+	assert(smart_ptr_use_count(sptr)==1u)
+	var ptr = get_ptr(sptr)
 	assert(sptr==ptr)
-	assert(get(sptr)==ptr)
+	assert(get_ptr(sptr)==ptr)
 	var qptr : smart_ptr<TestObjectSmart>
-	qptr := sptr					// ref_count = 2
+	qptr := sptr							// ref_count = 2
+	assert(smart_ptr_use_count(sptr)==2u)
 	assert(qptr==ptr)
-	assert(get(qptr)==ptr)
+	assert(get_ptr(qptr)==ptr)
 	assert(qptr==sptr)
-	var fptr := qptr				// ref_count = 3
+	var fptr := qptr						// ref_count = 3
+	assert(smart_ptr_use_count(sptr)==3u)
 	assert(fptr!=null)
-	assert(get(fptr)==sptr)
+	assert(get_ptr(fptr)==sptr)
 	assert(fptr==qptr)
 	assert(fptr==sptr)
-
-	delete sptr
-	delete qptr
-	delete fptr
-
+	assert(smart_ptr_use_count(sptr)==3u)
+	verify(getTotalTestObjectSmart()==1)
+	delete sptr								// ref_count = 2
+	verify(getTotalTestObjectSmart()==1)
+	assert(smart_ptr_use_count(sptr)==0u)
+	assert(smart_ptr_use_count(qptr)==2u)
+	delete qptr								// ref_count = 1
+	verify(getTotalTestObjectSmart()==1)
+	assert(smart_ptr_use_count(qptr)==0u)
+	assert(smart_ptr_use_count(fptr)==1u)
+	delete fptr								// physical delete
+	verify(getTotalTestObjectSmart()==0)
+	assert(smart_ptr_use_count(fptr)==0u)
 	return true

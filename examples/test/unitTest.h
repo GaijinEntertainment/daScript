@@ -90,7 +90,12 @@ struct TestObjectFoo {
 
 struct TestObjectSmart : public das::ptr_ref_count {
      int fooData;
+     TestObjectSmart() { total ++; }
+     virtual ~TestObjectSmart() { total --; }
+     static int32_t total;
 };
+
+__forceinline int32_t getTotalTestObjectSmart() { return TestObjectSmart::total; }
 
 __forceinline TestObjectFoo makeDummy() { TestObjectFoo x; x.fooData = 1; return x; }
 __forceinline int takeDummy ( const TestObjectFoo & x ) { return x.fooData; }

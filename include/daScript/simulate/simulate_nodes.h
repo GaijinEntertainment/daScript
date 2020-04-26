@@ -209,8 +209,11 @@ namespace das {
 #endif
 
     // New handle, default
+    template <typename TT, bool is_smart>
+    struct SimNode_NewHandle;
+
     template <typename TT>
-    struct SimNode_NewHandle : SimNode {
+    struct SimNode_NewHandle<TT,false> : SimNode {
         DAS_PTR_NODE;
         SimNode_NewHandle ( const LineInfo & a ) : SimNode(a) {}
         __forceinline char * compute ( Context & context ) {
@@ -220,13 +223,29 @@ namespace das {
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
 
+    template <typename TT>
+    struct SimNode_NewHandle<TT,true> : SimNode {
+        DAS_PTR_NODE;
+        SimNode_NewHandle ( const LineInfo & a ) : SimNode(a) {}
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            auto res = new TT();
+            res->addRef();
+            return (char *) res;
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+    };
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 
     // Delete handle, default
+    template <typename TT, bool is_smart>
+    struct SimNode_DeleteHandlePtr;
+
     template <typename TT>
-    struct SimNode_DeleteHandlePtr : SimNode_Delete {
+    struct SimNode_DeleteHandlePtr<TT,false> : SimNode_Delete {
         SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
             : SimNode_Delete(a,s,t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
@@ -243,12 +262,22 @@ namespace das {
         }
     };
 
-        // Delete handle, default
-    struct SimNode_DeleteSmartHandlePtr : SimNode_Delete {
-        SimNode_DeleteSmartHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
+    template <typename TT>
+    struct SimNode_DeleteHandlePtr<TT,true> : SimNode_Delete {
+        SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
             : SimNode_Delete(a,s,t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            auto pH = (TT **) subexpr->evalPtr(context);
+            for ( uint32_t i=0; i!=total; ++i, pH++ ) {
+                if ( *pH ) {
+                    (*pH)->delRef();
+                    *pH = nullptr;
+                }
+            }
+            return v_zero();
+        }
     };
 
     // MakeBlock

@@ -2835,6 +2835,7 @@ namespace das {
                     expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
                     expr->type->firstType->dim.clear();
                     expr->type->dim = expr->typeexpr->dim;
+                    expr->type->smartPtr = expr->typeexpr->annotation->isSmart();
                 } else {
                     error("can't new this type " + expr->typeexpr->describe(), "", "",
                           expr->at, CompilationError::invalid_new_type);

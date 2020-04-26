@@ -2,16 +2,33 @@
 
 namespace das {
     template <typename TT>
-    SimNode * SimNode_NewHandle<TT>::visit ( SimVisitor & vis ) {
+    SimNode * SimNode_NewHandle<TT,false>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(NewHandle);
         V_END();
     }
 
     template <typename TT>
-    SimNode * SimNode_DeleteHandlePtr<TT>::visit ( SimVisitor & vis ) {
+    SimNode * SimNode_NewHandle<TT,true>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(NewSmartHandle);
+        V_END();
+    }
+
+
+    template <typename TT>
+    SimNode * SimNode_DeleteHandlePtr<TT,false>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(DeleteHandlePtr);
+        V_SUB(subexpr);
+        V_ARG(total);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_DeleteHandlePtr<TT,true>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(DeleteSmartHandlePtr);
         V_SUB(subexpr);
         V_ARG(total);
         V_END();

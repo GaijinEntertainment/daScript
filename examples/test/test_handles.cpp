@@ -5,6 +5,8 @@
 
 #include "daScript/simulate/simulate_visit_op.h"
 
+ int32_t TestObjectSmart::total = 0;
+
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
 template<> struct das::cast <Point3>  : cast_fVec<Point3> {};
 
@@ -25,6 +27,7 @@ namespace das {
 DAS_BASE_BIND_ENUM_98(SomeEnum_16, SomeEnum_16, SomeEnum_16_zero, SomeEnum_16_one, SomeEnum_16_two)
 
 //sample of your engine annotated struct
+MAKE_TYPE_FACTORY(TestObjectSmart,TestObjectSmart)
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
@@ -53,18 +56,20 @@ namespace das {
   };
 };
 
-/*
-namespace das {
-    template <>
-    struct cast<TestObjectFoo> : cast_fVec_half<TestObjectFoo> {};
-}
-*/
-
 struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotLocal> {
     TestObjectNotLocalAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectNotLocal", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
     }
     virtual bool isLocal() const { return false; }
+};
+
+struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> {
+    TestObjectSmartAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectSmart", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
+    }
+    virtual bool isLocal() const override { return false; }
+    virtual bool canMove() const override { return false; }
+    virtual bool canCopy() const override { return false; }
 };
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
@@ -106,10 +111,10 @@ struct CheckRange : StructureAnnotation {
     CheckRange() : StructureAnnotation("checkRange") {}
     virtual bool touch(const StructurePtr & st, ModuleGroup &,
         const AnnotationArgumentList & args, string & ) override {
-        // this is here for the 'example' purposes 
+        // this is here for the 'example' purposes
         // lets add a sample 'dummy' field
         if (args.getBoolOption("dummy",false) && !st->findField("dummy")) {
-            st->fields.emplace_back("dummy", make_smart<TypeDecl>(Type::tInt), 
+            st->fields.emplace_back("dummy", make_smart<TypeDecl>(Type::tInt),
                 nullptr /*init*/, AnnotationArgumentList(), false /*move_to_init*/, LineInfo());
         }
         return true;
@@ -438,7 +443,7 @@ public:
 protected:
     virtual ExpressionPtr visit ( ExprCall * call ) override {
         if (    call->name=="CheckEid3"
-            &&  call->func->module==thisModule 
+            &&  call->func->module==thisModule
             &&  call->arguments.size()==2 ) {
             if (call->arguments[0]->rtti_isStringConstant()) {
                 auto cst = static_pointer_cast<ExprConstString>(call->arguments[0]);
@@ -507,7 +512,7 @@ void builtin_printw(char * utf8string) {
 
 #endif
 
-bool tempArrayExample( const TArray<char *> & arr, 
+bool tempArrayExample( const TArray<char *> & arr,
     const TBlock<void, TTemporary<const TArray<char *>>> & blk, Context * context ) {
     vec4f args[1];
     args[0] = cast<void *>::from(&arr);
@@ -541,6 +546,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
     addAnnotation(make_smart<TestObjectNotLocalAnnotation>(lib));
+    addAnnotation(make_smart<TestObjectSmartAnnotation>(lib));
     addAnnotation(make_smart<TestObjectFooAnnotation>(lib));
     addAnnotation(make_smart<TestObjectBarAnnotation>(lib));
     // events
@@ -549,7 +555,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<TestFunctionAnnotation>());
     // point3 array
     addAnnotation(make_smart<ManagedVectorAnnotation<Point3Array>>("Point3Array",lib));
-    addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array", 
+    addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
     // utf8 print
     addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw", SideEffects::modifyExternal, "builtin_printw");
@@ -599,12 +605,14 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(makeSampleI), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleI", SideEffects::none, "makeSampleI");
     addExtern<DAS_BIND_FUN(makeSampleF), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleF", SideEffects::none, "makeSampleF");
     addExtern<DAS_BIND_FUN(makeSampleS), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleS", SideEffects::none, "makeSampleS");
+    // smart ptr
+    addExtern<DAS_BIND_FUN(getTotalTestObjectSmart)>(*this, lib, "getTotalTestObjectSmart", SideEffects::modifyExternal, "getTotalTestObjectSmart");
     // and verify
     verifyAotReady();
 }
 
 Type Module_UnitTest::getOptionType ( const string & optName ) const {
-    if ( optName=="unit_test" ) return Type::tFloat;   
+    if ( optName=="unit_test" ) return Type::tFloat;
     return Type::none;
 }
 
