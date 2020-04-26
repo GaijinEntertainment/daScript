@@ -286,6 +286,7 @@ namespace das
         virtual bool isIterable ( ) const { return false; }
         virtual bool isShareable ( ) const { return true; }
         virtual bool isSmart() const { return false; }
+        virtual string getSmartAnnotationCloneFunction () const { return ""; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
         virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }
@@ -453,7 +454,7 @@ namespace das
     template <typename TT, typename ExprConstExt>
     struct ExprConstT : ExprConst {
         ExprConstT ( TT val, Type bt ) : ExprConst(bt) { value = cast<TT>::from(val); }
-        ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) { 
+        ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) {
 			value = v_zero();
 			memcpy(&value, &val, sizeof(TT));
 		}
@@ -539,7 +540,7 @@ namespace das
                 bool    generated : 1;
                 bool    privateFunction : 1;
                 bool    generator : 1;
-                
+
             };
             uint32_t flags = 0;
         };
@@ -572,9 +573,9 @@ namespace das
     };
 
     struct Error {
-        Error ( const string & w, const string & e, const string & f, LineInfo a, CompilationError ce ) 
+        Error ( const string & w, const string & e, const string & f, LineInfo a, CompilationError ce )
             : what(w), extra(e), fixme(f), at(a), cerr(ce)  {}
-        __forceinline bool operator < ( const Error & err ) const { 
+        __forceinline bool operator < ( const Error & err ) const {
             if (at == err.at) {
                 if (what == err.what) {
                     if (extra == err.extra) {

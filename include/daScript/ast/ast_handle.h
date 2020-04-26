@@ -160,6 +160,7 @@ namespace das
             : ManagedStructureAnnotation<OT,false>(n,ml,cpn) { }
         virtual bool canNew() const override { return true; }
         virtual bool canDeletePtr() const override { return true; }
+        virtual string getSmartAnnotationCloneFunction () const override { return "smart_ptr_clone"; }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
             return context.code->makeNode<SimNode_NewHandle<ManagedType,is_smart>>(at);
         }

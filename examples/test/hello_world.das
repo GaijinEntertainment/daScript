@@ -2,12 +2,6 @@ options log = true
 
 require UnitTest
 
-def clone ( var dest : smart_ptr<TestObjectSmart>&; src : TestObjectSmart? )
-	smart_ptr_clone(dest, src)
-
-def clone ( var dest : smart_ptr<TestObjectSmart>&; src : smart_ptr<TestObjectSmart> )
-	smart_ptr_clone(dest, src)
-
 [export, unsafe]
 def test
 	verify(getTotalTestObjectSmart()==0)
@@ -18,7 +12,7 @@ def test
 	assert(sptr==ptr)
 	assert(get_ptr(sptr)==ptr)
 	var qptr : smart_ptr<TestObjectSmart>
-	qptr := sptr							// ref_count = 2
+	qptr := get_ptr(sptr)					// ref_count = 2
 	assert(smart_ptr_use_count(sptr)==2u)
 	assert(qptr==ptr)
 	assert(get_ptr(qptr)==ptr)

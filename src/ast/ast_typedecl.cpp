@@ -10,8 +10,8 @@ namespace das
 
     // auto or generic type conversion
 
-    TypeDecl::TypeDecl(const EnumerationPtr & ep) 
-        : baseType(ep->getEnumType()), enumType(ep.get()) 
+    TypeDecl::TypeDecl(const EnumerationPtr & ep)
+        : baseType(ep->getEnumType()), enumType(ep.get())
     {
     }
 
@@ -359,7 +359,7 @@ namespace das
         }
         if ( constant ) {
             stream << " const";
-        } 
+        }
         for ( auto d : dim ) {
             stream << "[" << d << "]";
         }
@@ -460,7 +460,7 @@ namespace das
             return nullptr;
         }
     }
-    
+
     bool TypeDecl::canDelete() const {
         if ( baseType==Type::tHandle ) {
             return annotation->canDelete();
@@ -572,7 +572,7 @@ namespace das
         } else if (baseType == Type::tIterator) {
             return false;
         } else if (baseType == Type::tPointer) {
-            return !smartPtr;
+            return true;
         } else {
             return true;
         }
@@ -1108,7 +1108,7 @@ namespace das
                 firstType->collectAliasList(aliases);
             for ( auto & arg : argTypes )
                 arg->collectAliasList(aliases);
-        } 
+        }
     }
 
     bool TypeDecl::isAlias() const {
@@ -1140,7 +1140,7 @@ namespace das
             for ( auto & arg : argTypes )
                 any |= arg->isAlias();
             return any;
-        } 
+        }
         return false;
     }
 
@@ -1671,7 +1671,7 @@ namespace das
             size *= i;
         return size;
     }
-    
+
     int TypeDecl::getSizeOf() const {
         return getBaseSizeOf() * getCountOf();
     }
@@ -1695,7 +1695,7 @@ namespace das
     bool isCircularType ( const TypeDeclPtr & type, vector<const TypeDecl *> & all ) {
         if ( type->baseType==Type::tPointer ) {
             return false;
-        } 
+        }
         if ( type->firstType && isCircularType(type->firstType, all) ) return true;
         if ( type->secondType && isCircularType(type->secondType, all) ) return true;
         auto pt = type.get();
@@ -1713,7 +1713,7 @@ namespace das
             for ( auto & arg : type->argTypes ) {
                 if ( isCircularType(arg, all) ) return true;
             }
-        } 
+        }
         all.pop_back();
         return false;
     }

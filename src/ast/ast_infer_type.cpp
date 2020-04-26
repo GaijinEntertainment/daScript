@@ -3618,21 +3618,34 @@ namespace das {
                 || (op=="%=") || (op=="&=") || (op=="|=") || (op=="^=")
                 || (op=="<<=") || (op==">>=") || (op=="<<<=") || (op==">>>=");
         }
+
+        bool isSameSmartPtrType ( const TypeDeclPtr & lt, const TypeDeclPtr & rt, bool leftOnly = false ) {
+            auto lt_smart = lt->smartPtr;
+            auto rt_smart = rt->smartPtr;
+            if ( leftOnly ) {
+                // smart smart  - ok
+                // smart ptr    - ok
+                // ptr   smart  - not OK
+                // ptr   ptr    - ok
+                if ( !lt_smart && rt_smart ) return false;
+            }
+            lt->smartPtr = false;
+            rt->smartPtr = false;
+            bool res = lt->isSameType(*rt,RefMatters::no, ConstMatters::no, TemporaryMatters::no);
+            lt->smartPtr = lt_smart;
+            rt->smartPtr = rt_smart;
+            return res;
+        }
+
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
             if ( expr->left->type->isPointer() && expr->right->type->isPointer() ) {
-                auto lt_smart = expr->left->type->smartPtr;
-                auto rt_smart = expr->right->type->smartPtr;
-                expr->left->type->smartPtr = false;
-                expr->right->type->smartPtr = false;
-                if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                if ( !isSameSmartPtrType(expr->left->type,expr->right->type) ) {
                     error("operations on incompatible pointers are prohibited; " +
                         expr->left->type->describe() + " vs " + expr->right->type->describe(), "", "",
                         expr->at, CompilationError::invalid_type);
                 }
-                expr->left->type->smartPtr = lt_smart;
-                expr->right->type->smartPtr = rt_smart;
             }
             if ( expr->left->type->isEnum() && expr->right->type->isEnum() )
                 if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
@@ -3815,7 +3828,7 @@ namespace das {
                 }
             }
             // infer
-            if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+            if ( !isSameSmartPtrType(expr->left->type,expr->right->type,true) ) {
                 error("can only clone the same type " + expr->left->type->describe() + " vs " + expr->right->type->describe(), "", "",
                       expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
@@ -3837,6 +3850,18 @@ namespace das {
                     auto cloneFn = make_smart<ExprCall>(expr->at, "clone_string");
                     cloneFn->arguments.push_back(expr->right->clone());
                     return make_smart<ExprCopy>(expr->at, expr->left->clone(), cloneFn);
+                } else if ( cloneType->isPointer() && cloneType->smartPtr ) {
+                    auto fnClone = makeCloneSmartPtr(expr->at, cloneType, expr->right->type);
+                    if ( program->addFunction(fnClone) ) {
+                        reportAstChanged();
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
+                        cloneFn->arguments.push_back(expr->left->clone());
+                        cloneFn->arguments.push_back(expr->right->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        reportMissingFinalizer("smart pointer clone mismatch ", expr->at, cloneType);
+                        return Visitor::visit(expr);
+                    }
                 } else if ( cloneType->canCopy() ) {
                     if ( expr->right->type->isTemp(true,false) ) {
                         error("can't clone (copy) temporary value", "", "",

@@ -98,6 +98,13 @@ namespace das {
     FunctionPtr generateVariantFinalizer(const LineInfo & at, const TypeDeclPtr & variantType);
 
     /*
+     variant finalizer, i.e.
+      def clone(dest:smart_ptr<...>; src : any-ptr<...> )
+        smart_ptr_clone(dest, src)
+     */
+    FunctionPtr makeCloneSmartPtr ( const LineInfo & at, const TypeDeclPtr & left, const TypeDeclPtr & right );
+
+    /*
      struct __lambda_at_line_xxx
          __lambda = @lambda_fn
         (yield : int)
@@ -120,7 +127,7 @@ namespace das {
         lambda finalizer, i.e.
          def __lambda_finalizer_at_line_xxx(THIS:__lambda_at_line_xxx)
             with THIS
-                ...block_finally...    
+                ...block_finally...
      */
     FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
                                          const StructurePtr & ls, bool isUnsafe );

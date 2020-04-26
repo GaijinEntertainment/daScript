@@ -1128,5 +1128,37 @@ namespace das {
         verifyGenerated(fn->body);
         return fn;
     }
+
+    FunctionPtr makeCloneSmartPtr ( const LineInfo & at, const TypeDeclPtr & left, const TypeDeclPtr & right ) {
+        DAS_ASSERT(left->isPointer() && left->smartPtr && right->isPointer() && "can only clone smart-ptr <- any-ptr");
+        DAS_ASSERT(left->firstType && left->firstType->annotation && "can only clone smart handled types");
+        auto fn = make_smart<Function>();
+        fn->generated = true;
+        fn->name = "clone";
+        fn->at = at;
+        fn->result = make_smart<TypeDecl>(Type::tVoid);
+        auto arg0 = make_smart<Variable>();
+        arg0->name = "dest";
+        arg0->type = make_smart<TypeDecl>(*left);
+        arg0->type->constant = false;
+        arg0->type->ref = true;
+        fn->arguments.push_back(arg0);
+        auto arg1 = make_smart<Variable>();
+        arg1->name = "src";
+        arg1->type = make_smart<TypeDecl>(*right);
+        arg1->type->constant = true;
+        arg1->type->ref = false;
+        fn->arguments.push_back(arg1);
+        auto block = make_smart<ExprBlock>();
+        auto lv = make_smart<ExprVar>(at, "dest");
+        auto rv = make_smart<ExprVar>(at, "src");
+        auto cl = make_smart<ExprCall>(at, left->firstType->annotation->getSmartAnnotationCloneFunction());
+        cl->arguments.push_back(lv);
+        cl->arguments.push_back(rv);
+        block->list.push_back(cl);
+        fn->body = block;
+        verifyGenerated(fn->body);
+        return fn;
+    }
 }
 
