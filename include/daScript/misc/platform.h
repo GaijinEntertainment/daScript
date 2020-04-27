@@ -11,6 +11,7 @@
 #pragma warning(disable:4127)    // conditional expression is constant
 #pragma warning(disable:4702)    // unreachable code (due to exceptions)
 #pragma warning(disable:4316)    // '__m128': object allocated on the heap may not be aligned 16
+#pragma warning(disable:4714)    // marked as __forceinline not inlined
 #endif
 
 #ifdef __clang__

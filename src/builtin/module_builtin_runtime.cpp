@@ -615,9 +615,7 @@ namespace das
         addCall<ExprInvoke>("invoke");
         // smart ptr stuff
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone", SideEffects::modifyExternal, "builtin_smart_ptr_clone_ptr");
-        auto fn = addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone", SideEffects::modifyExternal, "builtin_smart_ptr_clone");
-        fn->arguments[1]->type->constant = true; // TODO: figure out how to bind 'by value' properly
-
+        addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone", SideEffects::modifyExternal, "builtin_smart_ptr_clone");
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count", SideEffects::none, "builtin_smart_ptr_use_count");
         addExtern<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
         addExtern<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");

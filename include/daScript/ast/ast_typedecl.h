@@ -396,7 +396,11 @@ namespace das {
     template <typename TT>
     inline TypeDeclPtr makeArgumentType(const ModuleLibrary & ctx) {
         auto tt = typeFactory<TT>::make(ctx);
-        if (tt->isRefType()) tt->ref = false;
+        if (tt->isRefType()) {
+            tt->ref = false;
+        } else if (!tt->isRef()) {
+            tt->constant = true;
+        }
         return tt;
     }
 

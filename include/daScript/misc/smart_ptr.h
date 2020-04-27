@@ -176,23 +176,23 @@ namespace das {
     }
 
     template< class T, class... Args >
-    inline smart_ptr<T> make_smart ( Args&&... args ) {
+    __forceinline smart_ptr<T> make_smart ( Args&&... args ) {
         T * p = new T(args...);
         return smart_ptr<T>(p);
     }
 
     template< class T, class U >
-    inline smart_ptr<T> static_pointer_cast(const smart_ptr<U> & r) {
+    __forceinline smart_ptr<T> static_pointer_cast(const smart_ptr<U> & r) {
         return static_cast<T *>(r.get());
     }
 
     template< class T, class U >
-    inline smart_ptr<T> dynamic_pointer_cast(const smart_ptr<U> & r) {
+    __forceinline smart_ptr<T> dynamic_pointer_cast(const smart_ptr<U> & r) {
         return dynamic_cast<T *>(r.get());
     }
 
     template< class T, class U >
-    inline smart_ptr<T> const_pointer_cast(const smart_ptr<U> & r) {
+    __forceinline smart_ptr<T> const_pointer_cast(const smart_ptr<U> & r) {
         return const_cast<T *>(r.get());
     }
 

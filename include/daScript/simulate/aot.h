@@ -946,7 +946,7 @@ namespace das {
 
     template <typename TT>
     struct das_delete_handle<TT *> {
-        static __forceinline void clear ( Context * __context__, TT * & ptr ) {
+        static __forceinline void clear ( Context *, TT * & ptr ) {
             delete ptr;
             ptr = nullptr;
         }
@@ -954,7 +954,7 @@ namespace das {
 
     template <typename TT>
     struct das_delete_handle<smart_ptr<TT>> {
-        static __forceinline void clear ( Context * __context__, smart_ptr<TT> & p ) {
+        static __forceinline void clear ( Context *, smart_ptr<TT> & p ) {
             p.reset();
         }
     };
