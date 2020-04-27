@@ -847,6 +847,41 @@ namespace das {
         const TT *      array_end;
     };
 
+    template <typename TT>
+    struct das_new {
+        static __forceinline TT * make ( Context * __context__ ) {
+            char * data = __context__->heap.allocate( sizeof(TT) );
+            memset ( data, 0, sizeof(TT) );
+            return (TT *) data;
+        }
+        template <typename QQ>
+        static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
+            TT * data = (TT *) __context__->heap.allocate( sizeof(TT) );
+            *data = init();
+            return data;
+        }
+    };
+
+    template <typename TT, bool is_smart>
+    struct das_new_handle;
+
+    template <typename TT>
+    struct das_new_handle<TT,false> {
+        static __forceinline TT * make ( Context * ) {
+            return new TT();
+        }
+    };
+
+    template <typename TT>
+    struct das_new_handle<TT,true> {
+        static __forceinline smart_ptr_raw<TT> make ( Context * ) {
+            smart_ptr_raw<TT> p;
+            p.ptr = new TT();
+            p.ptr->addRef();
+            return p;
+        }
+    };
+
     template <typename TT, int d>
     struct das_new_dim {
         static __forceinline TDim<TT *,d> make ( Context * __context__ ) {
@@ -888,41 +923,6 @@ namespace das {
                 res[i] = das_new_handle<TT,true>::make(__context__);
             }
             return res;
-        }
-    };
-
-    template <typename TT>
-    struct das_new {
-        static __forceinline TT * make ( Context * __context__ ) {
-            char * data = __context__->heap.allocate( sizeof(TT) );
-            memset ( data, 0, sizeof(TT) );
-            return (TT *) data;
-        }
-        template <typename QQ>
-        static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
-            TT * data = (TT *) __context__->heap.allocate( sizeof(TT) );
-            *data = init();
-            return data;
-        }
-    };
-
-    template <typename TT, bool is_smart>
-    struct das_new_handle;
-
-    template <typename TT>
-    struct das_new_handle<TT,false> {
-        static __forceinline TT * make ( Context * ) {
-            return new TT();
-        }
-    };
-
-    template <typename TT>
-    struct das_new_handle<TT,true> {
-        static __forceinline smart_ptr_raw<TT> make ( Context * ) {
-            smart_ptr_raw<TT> p;
-            p.ptr = new TT();
-            p.ptr->addRef();
-            return p;
         }
     };
 
