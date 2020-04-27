@@ -74,14 +74,14 @@ namespace das {
     __forceinline void set_variant_index(Variant & v, int32_t index) { memcpy(&v, &index, sizeof(int32_t)); }
 #endif
 
-    void builtin_smart_ptr_clone_ptr ( smart_ptr_stub & dest, const void * src );
-    void builtin_smart_ptr_clone ( smart_ptr_stub & dest, const smart_ptr_stub & src );
-    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_stub & src );
+    void builtin_smart_ptr_clone_ptr ( smart_ptr<void> & dest, const void * src );
+    void builtin_smart_ptr_clone ( smart_ptr<void> & dest, const smart_ptr<void> src );
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr<void> src );
 
-    __forceinline bool equ_sptr_sptr ( const smart_ptr_stub & left, const smart_ptr_stub & right ) { return left.ptr == right.ptr; }
-    __forceinline bool nequ_sptr_sptr ( const smart_ptr_stub & left, const smart_ptr_stub & right ) { return left.ptr != right.ptr; }
-    __forceinline bool equ_sptr_ptr ( const smart_ptr_stub & left, const void * right ) { return left.ptr == right; }
-    __forceinline bool nequ_sptr_ptr ( const smart_ptr_stub & left, const void * right ) { return left.ptr != right; }
-    __forceinline bool equ_ptr_sptr ( const void * left, const smart_ptr_stub & right ) { return left == right.ptr; }
-    __forceinline bool nequ_ptr_sptr ( const void * left, const smart_ptr_stub & right ) { return left != right.ptr; }
+    __forceinline bool equ_sptr_sptr ( const smart_ptr<void> & left, const smart_ptr<void> & right ) { return left == right; }
+    __forceinline bool nequ_sptr_sptr ( const smart_ptr<void> & left, const smart_ptr<void> & right ) { return left != right; }
+    __forceinline bool equ_sptr_ptr ( const smart_ptr<void> & left, const void * right ) { return left.get() == right; }
+    __forceinline bool nequ_sptr_ptr ( const smart_ptr<void> & left, const void * right ) { return left.get() != right; }
+    __forceinline bool equ_ptr_sptr ( const void * left, const smart_ptr<void> & right ) { return left == right.get(); }
+    __forceinline bool nequ_ptr_sptr ( const void * left, const smart_ptr<void> & right ) { return left != right.get(); }
 }

@@ -17,6 +17,7 @@ MACRO(SETUP_COMPILER)
 		ENDIF()
 		ADD_DEFINITIONS(-DITS_PLATFORM_WIN32=1)
 		ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS)
+		REMOVE_DEFINITIONS(-W3)
 		ADD_DEFINITIONS(-W4)
 		SET(CMAKE_CXX_FLAGS_RELEASE "/MD /Ox /Ob2 /Ot /Oi /DNDEBUG /Gy /GS- /GR- /EHa")
 		SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/Zi /MD /Ox /Ob2 /Ot /Oi /DNDEBUG /Gy /GS- /GR- /EHa")
@@ -72,7 +73,7 @@ MACRO(XXD input)
 	ELSE()
 		get_filename_component(input_src ${input} ABSOLUTE)
 		get_filename_component(input_dir ${input_src} DIRECTORY)
-		get_filename_component(input_name ${input} NAME)	
+		get_filename_component(input_name ${input} NAME)
 		ADD_CUSTOM_COMMAND(
 			DEPENDS ${input_src}
 			OUTPUT ${input_src}.inc
@@ -88,8 +89,8 @@ MACRO(FLEX input)
 	ELSE()
 		get_filename_component(input_src ${input} ABSOLUTE)
 		get_filename_component(input_dir ${input_src} DIRECTORY)
-		get_filename_component(input_name ${input} NAME_WE)	
-		get_filename_component(input_name_ext ${input} NAME)	
+		get_filename_component(input_name ${input} NAME_WE)
+		get_filename_component(input_name_ext ${input} NAME)
 		ADD_CUSTOM_COMMAND(
 			DEPENDS ${input_src}
 			OUTPUT ${input_dir}/${input_name}.cpp
@@ -105,8 +106,8 @@ MACRO(BISON input)
 	ELSE()
 		get_filename_component(input_src ${input} ABSOLUTE)
 		get_filename_component(input_dir ${input_src} DIRECTORY)
-		get_filename_component(input_name ${input} NAME_WE)	
-		get_filename_component(input_name_ext ${input} NAME)	
+		get_filename_component(input_name ${input} NAME_WE)
+		get_filename_component(input_name_ext ${input} NAME)
 		ADD_CUSTOM_COMMAND(
 			DEPENDS ${input_src}
 			OUTPUT ${input_dir}/${input_name}.cpp ${input_dir}/${input_name}.hpp ${input_dir}/${input_name}.output

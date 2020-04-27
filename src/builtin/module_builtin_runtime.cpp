@@ -492,22 +492,21 @@ namespace das
         memset ( &tab, 0, sizeof(Table) );
     }
 
-    void builtin_smart_ptr_clone_ptr ( smart_ptr_stub & dest, const void * src ) {
-        ptr_ref_count * t = dest.ptr;
-        dest.ptr = (ptr_ref_count *) src;
-        if ( dest.ptr ) dest.ptr->addRef();
-        if ( t ) t->delRef();
+    __forceinline smart_ptr<ptr_ref_count> & stub_ptr ( smart_ptr<void> & src ) {
+        return *((smart_ptr<ptr_ref_count> *)&src);
     }
 
-    void builtin_smart_ptr_clone ( smart_ptr_stub & dest, const smart_ptr_stub & src ) {
-        ptr_ref_count * t = dest.ptr;
-        dest.ptr = (ptr_ref_count *) src.ptr;
-        if ( dest.ptr ) dest.ptr->addRef();
-        if ( t ) t->delRef();
+    void builtin_smart_ptr_clone_ptr ( smart_ptr<void> & dest, const void * src ) {
+        stub_ptr(dest) = (ptr_ref_count *) src;
     }
 
-    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_stub & src ) {
-        return src.ptr ? src.ptr->use_count() : 0;
+    void builtin_smart_ptr_clone ( smart_ptr<void> & dest, const smart_ptr<void> src ) {
+        stub_ptr(dest) = (ptr_ref_count *) src.get();
+    }
+
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr<void> src ) {
+        auto psrc = (const ptr_ref_count *)src.get();
+        return psrc ? psrc->use_count() : 0;
     }
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
@@ -616,7 +615,9 @@ namespace das
         addCall<ExprInvoke>("invoke");
         // smart ptr stuff
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone", SideEffects::modifyExternal, "builtin_smart_ptr_clone_ptr");
-        addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone", SideEffects::modifyExternal, "builtin_smart_ptr_clone");
+        auto fn = addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone", SideEffects::modifyExternal, "builtin_smart_ptr_clone");
+        fn->arguments[1]->type->constant = true; // TODO: figure out how to bind 'by value' properly
+
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count", SideEffects::none, "builtin_smart_ptr_use_count");
         addExtern<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
         addExtern<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");

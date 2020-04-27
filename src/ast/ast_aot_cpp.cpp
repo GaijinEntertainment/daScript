@@ -207,7 +207,7 @@ namespace das {
                 }
             } else {
                 if ( type->firstType ) {
-                    stream  << "smart_ptr_raw<"
+                    stream  << "smart_ptr<"
                             <<  describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no)
                             << ">";
                 } else {

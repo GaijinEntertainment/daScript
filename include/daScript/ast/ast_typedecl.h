@@ -233,25 +233,6 @@ namespace das {
         }
     };
 
-    template <>
-    struct typeFactory<smart_ptr_stub> {
-        static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_smart<TypeDecl>(Type::tPointer);
-            t->smartPtr = true;
-            return t;
-        }
-    };
-
-    template <>
-    struct typeFactory<const smart_ptr_stub &> {
-        static TypeDeclPtr make(const ModuleLibrary &) {
-            auto t = make_smart<TypeDecl>(Type::tPointer);
-            t->smartPtr = true;
-            t->constant = true;
-            return t;
-        }
-    };
-
     template <typename TT>
     struct typeFactory<smart_ptr<TT>> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
@@ -260,7 +241,7 @@ namespace das {
             t->smartPtr = true;
             return t;
         }
-    };    
+    };
 
     template <>
     struct typeFactory<Array *> {
