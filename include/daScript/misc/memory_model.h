@@ -100,7 +100,7 @@ namespace das {
         MemoryModel ( uint32_t ps );
         virtual ~MemoryModel ();
         virtual void reset();
-        virtual void setInitialSize ( uint32_t size );
+        void setInitialSize ( uint32_t size );
         virtual uint32_t growPages(uint32_t pages) const { return pages * 2; }
         virtual void sweep();
         char * allocate ( uint32_t size );

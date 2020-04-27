@@ -5,8 +5,9 @@ require math
 // enable for test purposes only. this is slower
 // options intern_strings = true
 
-// 8Mb heap
-options string_heap=8388608
+// 8Mb heap in single page
+options string_heap=7999940
+options string_heap_page=7999940
 
 require testProfile
 
@@ -34,7 +35,8 @@ def test
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
+	// print("string heap watermark is {int(string_heap_high_watermark())}\n")
 	// print("string heap depth is {string_heap_depth()}\n")
-    verify(string_heap_depth()==1)
+	verify(string_heap_depth()==1)
     return true
 

@@ -560,7 +560,9 @@ namespace das
         thisHelper = ctx.thisHelper;
         ownStack = (ctx.stack.size() != 0);
         // heap
+        heap.pageSize = ctx.heap.pageSize;
         heap.setInitialSize(ctx.heap.initialSize);
+        stringHeap.pageSize = ctx.stringHeap.pageSize;
         stringHeap.setInitialSize(ctx.stringHeap.initialSize);
         stringHeap.setIntern(ctx.stringHeap.isIntern());
         // globals

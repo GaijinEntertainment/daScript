@@ -275,7 +275,7 @@ namespace das {
             if ( fnMod == program->thisModule.get() ) {
                 anyUnsafe |= fn->unsafe;
                 if ( fn->unsafe && checkUnsafe ) {
-                    program->error("unsafe function " + fn->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "", 
+                    program->error("unsafe function " + fn->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
                         fn->at, CompilationError::unsafe_function);
                 }
             }
@@ -289,7 +289,7 @@ namespace das {
             if ( checkUnusedArgument ) {
                 if ( !var->marked_used && var->isAccessUnused() ) {
                     program->error("unused function argument " + var->name, "",
-                          "use [unused_argument(" + var->name + ")] if intentional", 
+                          "use [unused_argument(" + var->name + ")] if intentional",
                         var->at, CompilationError::unused_function_argument);
                 }
             }
@@ -319,7 +319,9 @@ namespace das {
         "no_unused_function_arguments", Type::tBool,
     // memory
         "heap",                         Type::tInt,
+        "heap_page",                    Type::tInt,
         "string_heap",                  Type::tInt,
+        "string_heap_page",             Type::tInt,
         "stack",                        Type::tInt,
         "intern_const_strings",         Type::tBool,
         "intern_strings",               Type::tBool,

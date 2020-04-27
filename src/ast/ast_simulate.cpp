@@ -874,22 +874,22 @@ namespace das
         vec4f envalue = v_zero();
         int64_t iou = getConstExprIntOrUInt(cfa.first);
         switch (enumType->baseType) {
-        case Type::tInt8: 
+        case Type::tInt8:
         case Type::tUInt8: {
             int8_t tv = int8_t(iou); memcpy(&envalue, &tv, sizeof(int8_t));
             return context.code->makeNode<SimNode_ConstValue>(at, envalue);
         }
-        case Type::tInt16: 
+        case Type::tInt16:
         case Type::tUInt16: {
             int16_t tv = int16_t(iou); memcpy(&envalue, &tv, sizeof(int16_t));
             return context.code->makeNode<SimNode_ConstValue>(at, envalue);
         }
-        case Type::tInt: 
+        case Type::tInt:
         case Type::tUInt: {
             int32_t tv = int32_t(iou); memcpy(&envalue, &tv, sizeof(int32_t));
             return context.code->makeNode<SimNode_ConstValue>(at, envalue);
         }
-        case Type::tInt64: 
+        case Type::tInt64:
         case Type::tUInt64: {
             memcpy(&envalue, &iou, sizeof(int64_t));
             return context.code->makeNode<SimNode_ConstValue>(at, envalue);
@@ -1049,7 +1049,7 @@ namespace das
         context.thisProgram->error("internal compilation error, generating typeinfo(...)", "", "", at);
         return nullptr;
     }
-    
+
     SimNode * ExprDelete::simulate (Context & context) const {
         uint32_t total = uint32_t(subexpr->type->getCountOf());
         DAS_ASSERTF(total==1,"we should not be deleting more than one at a time");
@@ -1347,7 +1347,7 @@ namespace das
         }
         return simlist;
     }
-    
+
     void ExprBlock::simulateFinal ( Context & context, SimNode_Final * block ) const {
         vector<SimNode *> simFList = collectExpressions(context, finalList);
         block->totalFinal = int(simFList.size());
@@ -1666,7 +1666,7 @@ namespace das
                 } else {
                     return context.code->makeNode<SimNode_GetArgumentRefOff>(at, argumentIndex, extraOffset);
                 }
-            } 
+            }
         } else { // global
 
         }
@@ -1959,7 +1959,7 @@ namespace das
     SimNode * ExprWith::simulate (Context & context) const {
         return body->simulate(context);
     }
-    
+
     void ExprWhile::simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Block * blk ) {
         if ( bod->rtti_isBlock() ) {
             auto pBlock = static_pointer_cast<ExprBlock>(bod);
@@ -2036,7 +2036,7 @@ namespace das
                             context,
                             sources[t]->at,
                             sources[t]
-                        );                    
+                        );
                     }
                 } else if ( sources[t]->type->dim.size() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(
@@ -2289,12 +2289,15 @@ namespace das
         context.thisProgram = this;
         context.constStringHeap = make_smart<StringAllocator>();
         if ( globalStringHeapSize ) {
+            context.constStringHeap->pageSize = globalStringHeapSize;           // const string heap in 1 page
             context.constStringHeap->setInitialSize(globalStringHeapSize);
             context.constStringHeap->setIntern(true);
         }
+        context.heap.pageSize = options.getIntOption("heap_page",policies.heap_page);
         if ( auto optHeap = options.getIntOption("heap",policies.heap) ) {
             context.heap.setInitialSize( uint32_t(optHeap) );
         }
+        context.stringHeap.pageSize = options.getIntOption("string_heap_page",policies.string_heap_page);
         if ( auto optStringHeap = options.getIntOption("string_heap",policies.string_heap) ) {
             context.stringHeap.setInitialSize( uint32_t(optStringHeap) );
         }
@@ -2443,15 +2446,15 @@ namespace das
             logs << "globals       " << context.getGlobalSize() << "\n";
             logs << "shared        " << context.getSharedSize() << "\n";
             logs << "stack         " << context.stack.size() << "\n";
-            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated() 
+            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated()
                 << " pages (" << context.code->totalAlignedMemoryAllocated() << ")\n";
-            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->pagesAllocated() 
+            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->pagesAllocated()
                 << " pages (" << context.constStringHeap->totalAlignedMemoryAllocated() << ")\n";
-            logs << "debug         " << context.debugInfo->bytesAllocated() << " (" << 
+            logs << "debug         " << context.debugInfo->bytesAllocated() << " (" <<
                 context.debugInfo->totalAlignedMemoryAllocated() << ")\n";
-            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.pagesAllocated() 
+            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.pagesAllocated()
                 << " pages (" << context.heap.totalAlignedMemoryAllocated() << ")\n";
-            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.pagesAllocated() 
+            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.pagesAllocated()
                 << " pages(" << context.stringHeap.totalAlignedMemoryAllocated() << ")\n";
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";

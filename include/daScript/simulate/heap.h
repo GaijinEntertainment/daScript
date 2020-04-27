@@ -141,7 +141,6 @@ namespace das {
     class StringAllocator : public HeapAllocator {
     public:
         StringAllocator() : HeapAllocator() { alignMask = 3; }
-        virtual void setInitialSize ( uint32_t size ) override;
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
@@ -290,7 +289,7 @@ namespace das {
                 return nullptr;
             }
         }
-		
+
         template < template <int TT> class NodeType, typename... Params>
         SimNode * makeNodeUnrollNZ(int count, Params... args) {
             switch (count) {

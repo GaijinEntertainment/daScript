@@ -17,13 +17,6 @@ namespace das {
         return nullptr;
     }
 
-    void StringAllocator::setInitialSize ( uint32_t size ) {
-        if ( shelf.empty() ) {
-            pageSize = size;
-            shelf.emplace_back(pageSize,1);
-        }
-    }
-
     void StringAllocator::setIntern(bool on) {
         needIntern = on;
         if ( !needIntern ) {
