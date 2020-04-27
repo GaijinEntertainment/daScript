@@ -1326,8 +1326,9 @@ namespace das
             case Type::tFloat:
             case Type::tDouble:
             case Type::tString:
-            case Type::tPointer:
                 return true;
+            case Type::tPointer:
+                return !smartPtr;
             default:
                 return false;
         }

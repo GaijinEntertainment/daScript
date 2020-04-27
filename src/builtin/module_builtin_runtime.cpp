@@ -492,20 +492,22 @@ namespace das
         memset ( &tab, 0, sizeof(Table) );
     }
 
-    __forceinline smart_ptr<ptr_ref_count> & stub_ptr ( smart_ptr<void> & src ) {
-        return *((smart_ptr<ptr_ref_count> *)&src);
+    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = (void *) src;
+        ((ptr_ref_count *) src)->addRef();
+        if ( t ) t->delRef();
     }
 
-    void builtin_smart_ptr_clone_ptr ( smart_ptr<void> & dest, const void * src ) {
-        stub_ptr(dest) = (ptr_ref_count *) src;
+    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src ) {
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = src.ptr;
+        ((ptr_ref_count *) src.ptr)->addRef();
+        if ( t ) t->delRef();
     }
 
-    void builtin_smart_ptr_clone ( smart_ptr<void> & dest, const smart_ptr<void> src ) {
-        stub_ptr(dest) = (ptr_ref_count *) src.get();
-    }
-
-    uint32_t builtin_smart_ptr_use_count ( const smart_ptr<void> src ) {
-        auto psrc = (const ptr_ref_count *)src.get();
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src ) {
+        ptr_ref_count * psrc = (ptr_ref_count *) src.ptr;
         return psrc ? psrc->use_count() : 0;
     }
 

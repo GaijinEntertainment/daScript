@@ -243,6 +243,16 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct typeFactory<smart_ptr_raw<TT>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_smart<TypeDecl>(Type::tPointer);
+            t->firstType = typeFactory<TT>::make(lib);
+            t->smartPtr = true;
+            return t;
+        }
+    };
+
     template <>
     struct typeFactory<Array *> {
         static TypeDeclPtr make(const ModuleLibrary &) {

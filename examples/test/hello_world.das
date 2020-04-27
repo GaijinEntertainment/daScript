@@ -3,8 +3,40 @@ options log = true
 
 require UnitTest
 
+[unsafe]
+def inside_scope_test
+	var sptr <- new TestObjectSmart
+	verify(getTotalTestObjectSmart()==1)
+	return get_ptr(sptr)
+
+[unsafe]
+def scope_test
+	verify(getTotalTestObjectSmart()==0)
+	let lostPtr = inside_scope_test()		// we loose one in there, return regular pointer, and cast it to smart_ptr again
+	verify(getTotalTestObjectSmart()==1)
+	var sptr : smart_ptr<TestObjectSmart> <- reinterpret< smart_ptr<TestObjectSmart> >(lostPtr)
+	delete sptr
+	verify(getTotalTestObjectSmart()==0)
+
+[unsafe]
+def inside_move_test
+	verify(getTotalTestObjectSmart()==0)
+	var t1 <- new TestObjectSmart
+	var t2 <- t1							// unsafe operation
+	assert(smart_ptr_use_count(t1)==0u)
+	assert(smart_ptr_use_count(t2)==1u)
+	verify(getTotalTestObjectSmart()==1)
+	return <- t2
+
+[unsafe]
+def move_test
+	var t <- inside_move_test()
+	verify(getTotalTestObjectSmart()==1)
+	delete t
+	verify(getTotalTestObjectSmart()==0)
+
 [export, unsafe]
-def test
+def ref_count_test
 	verify(getTotalTestObjectSmart()==0)
 	var sptr <- new TestObjectSmart			// ref_count = 1
 	verify(getTotalTestObjectSmart()==1)
@@ -40,10 +72,9 @@ def test
 	verify(getTotalTestObjectSmart()==0)
 	assert(smart_ptr_use_count(fptr)==0u)
 
-	var t1 <- new TestObjectSmart
-	var t2 <- t1
-	assert(smart_ptr_use_count(t1)==0u)
-	assert(smart_ptr_use_count(t2)==1u)
-	delete t2
-
+[export, unsafe]
+def test
+	ref_count_test()
+	move_test()
+	scope_test()
 	return true

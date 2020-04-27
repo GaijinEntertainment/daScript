@@ -136,6 +136,12 @@ namespace das
         static __forceinline vec4f from ( const smart_ptr<T> p )       { return v_cast_vec4f(v_splats_ptr((const void *)p.get())); }
     };
 
+    template <typename T>
+    struct cast <smart_ptr_raw<T>> {
+        static __forceinline smart_ptr_raw<T> to ( vec4f a )           { smart_ptr_raw<T> p; p.ptr = (T *) v_extract_ptr(v_cast_vec4i((a))); return p; }
+        static __forceinline vec4f from ( const smart_ptr_raw<T> p )   { return v_cast_vec4f(v_splats_ptr((const void *)p.get())); }
+    };
+
     template <>
     struct cast <vec4f> {
         static __forceinline vec4f to ( vec4f x )              { return x; }

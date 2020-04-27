@@ -1,6 +1,18 @@
 #pragma once
 
 namespace das {
+
+    template <typename T>
+    struct smart_ptr_raw {
+        __forceinline T * get() const {
+            return ptr;
+        }
+        __forceinline operator smart_ptr_raw<void> & () const {
+            return *((smart_ptr_raw<void> *)this);
+        }
+        T * ptr;
+    };
+
     template <typename T>
     struct smart_ptr_policy {
         __forceinline static void addRef ( T * p ) { p->addRef(); }
@@ -32,8 +44,12 @@ namespace das {
         __forceinline smart_ptr ( const smart_ptr<Y> & p ) {
             init(p.get());
         }
-        operator smart_ptr<void> & () {
-            return *((smart_ptr<void> *)this);
+        __forceinline operator smart_ptr_raw<void> & () const {
+            return *((smart_ptr_raw<void> *)this);
+        }
+        template <typename Y>
+        __forceinline operator smart_ptr_raw<Y> & () const {
+            return *((smart_ptr_raw<Y> *)this);
         }
         __forceinline smart_ptr ( smart_ptr && p ) {
             ptr = p.ptr;

@@ -183,7 +183,7 @@ namespace das {
             return reinterpret_cast<TT *>(expr);
         }
         template <typename QQ>
-        static __forceinline TT * cast ( const smart_ptr<QQ> & expr ) {
+        static __forceinline TT * cast ( const smart_ptr_raw<QQ> & expr ) {
             return reinterpret_cast<TT *>(expr.get());
         }
     };
@@ -882,8 +882,8 @@ namespace das {
 
     template <typename TT, int d>
     struct das_new_dim_handle<TT,d,true> {
-        static __forceinline TDim<smart_ptr<TT>,d> make ( Context * __context__ ) {
-            TDim<smart_ptr<TT>,d> res;
+        static __forceinline TDim<smart_ptr_raw<TT>,d> make ( Context * __context__ ) {
+            TDim<smart_ptr_raw<TT>,d> res;
             for ( int i=0; i!=d; ++i ) {
                 res[i] = das_new_handle<TT,true>::make(__context__);
             }
@@ -918,8 +918,11 @@ namespace das {
 
     template <typename TT>
     struct das_new_handle<TT,true> {
-        static __forceinline smart_ptr<TT> make ( Context * ) {
-            return make_smart<TT>();
+        static __forceinline smart_ptr_raw<TT> make ( Context * ) {
+            smart_ptr_raw<TT> p;
+            p.ptr = new TT();
+            p.ptr->addRef();
+            return p;
         }
     };
 
@@ -953,9 +956,10 @@ namespace das {
     };
 
     template <typename TT>
-    struct das_delete_handle<smart_ptr<TT>> {
-        static __forceinline void clear ( Context *, smart_ptr<TT> & p ) {
-            p.reset();
+    struct das_delete_handle<smart_ptr_raw<TT>> {
+        static __forceinline void clear ( Context *, smart_ptr_raw<TT> & p ) {
+            p.ptr->delRef();
+            p.ptr = nullptr;
         }
     };
 

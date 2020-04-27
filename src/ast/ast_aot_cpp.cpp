@@ -207,11 +207,11 @@ namespace das {
                 }
             } else {
                 if ( type->firstType ) {
-                    stream  << "smart_ptr<"
+                    stream  << "smart_ptr_raw<"
                             <<  describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no)
                             << ">";
                 } else {
-                    stream << "smart_ptr_stub";
+                    stream << "smart_ptr_raw<void>";
                 }
             }
         } else if ( type->isEnumT() ) {
