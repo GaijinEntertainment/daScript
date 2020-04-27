@@ -199,10 +199,20 @@ namespace das {
                 stream << "/* unspecified structure */";
             }
         } else if ( baseType==Type::tPointer ) {
-            if ( type->firstType ) {
-                stream << describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no) << " *";
+            if ( !type->smartPtr ) {
+                if ( type->firstType ) {
+                    stream << describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no) << " *";
+                } else {
+                    stream << "void *";
+                }
             } else {
-                stream << "void *";
+                if ( type->firstType ) {
+                    stream  << "smart_ptr_raw<"
+                            <<  describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no)
+                            << ">";
+                } else {
+                    stream << "smart_ptr_stub";
+                }
             }
         } else if ( type->isEnumT() ) {
             if ( type->enumType ) {
@@ -525,7 +535,7 @@ namespace das {
             if (info->argCount && info->argNames) {
                 ss << ", (char **)" << typeInfoName(info) << "_arg_names" << suffix;
             } else {
-                ss << ", nullptr";                      
+                ss << ", nullptr";
             }
             ss << ", " << info->argCount;
 
@@ -1088,7 +1098,12 @@ namespace das {
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
-            ss << " = ";
+            if ( var->init_via_move ) {
+                ss  << "; das_zero(" << collector.getVarName(var) << ")"
+                    << "; das_move(" << collector.getVarName(var) << ", ";
+            } else {
+                ss << " = ";
+            }
             if ( var->type->constant ) {
                 ss << "(";
                 describeVarLocalCppType(ss, var->type);
@@ -1112,6 +1127,9 @@ namespace das {
                 ss << ")";
             }
             if ( var->type->ref ) {
+                ss << ")";
+            }
+            if ( var->init_via_move ) {
                 ss << ")";
             }
             return Visitor::visitLetInit(let, var, expr);
@@ -2010,7 +2028,11 @@ namespace das {
     // delete
         virtual void preVisit ( ExprDelete * edel ) override {
             Visitor::preVisit(edel);
-            ss << "das_delete<";
+            if ( edel->subexpr->type->isPointer() && edel->subexpr->type->firstType->baseType==Type::tHandle ) {
+                ss << "das_delete_handle<";
+            } else {
+                ss << "das_delete<";
+            }
             ss <<  describeCppType(edel->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
             ss << ">::clear(__context__,";
         }
@@ -2041,24 +2063,46 @@ namespace das {
         virtual void preVisit ( ExprNew * enew ) override {
             Visitor::preVisit(enew);
             if ( enew->type->dim.size() ) {
-                ss << "das_new_dim<";
-                ss << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
-                for ( auto dd : enew->type->dim ) {
-                    ss << "," << uint32_t(dd);
-                }
-                if ( enew->initializer ) {
-                    ss << ">::make_and_init(__context__,[&](){ return ";
-                    CallFunc_preVisit(enew);
+                if ( enew->type->firstType->isHandle() ) {
+                    ss << "das_new_dim_handle<"
+                       << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                       << "," << enew->type->dim.back()
+                       << "," << (enew->type->smartPtr ? "true" : "false");
+                    if ( enew->initializer ) {
+                        DAS_ASSERT(0 && "internal error. initializer for enew is not supported");
+                    } else {
+                        ss << ">::make(__context__";
+                    }
                 } else {
-                    ss << ">::make(__context__";
+                    ss << "das_new_dim<"
+                       << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                       << "," << enew->type->dim.back();
+                    if ( enew->initializer ) {
+                        ss << ">::make_and_init(__context__,[&](){ return ";
+                        CallFunc_preVisit(enew);
+                    } else {
+                        ss << ">::make(__context__";
+                    }
                 }
             } else {
-                ss << "das_new<" << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
-                if ( enew->initializer ) {
-                    ss << ">::make_and_init(__context__,[&](){ return ";
-                    CallFunc_preVisit(enew);
+                if ( enew->type->firstType->isHandle() ) {
+                    ss  << "das_new_handle<"
+                        << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                        << ","
+                        << (enew->type->smartPtr ? "true" : "false");
+                    if ( enew->initializer ) {
+                        DAS_ASSERT(0 && "internal error. initializer for enew is not supported");
+                    } else {
+                        ss << ">::make(__context__";
+                    }
                 } else {
-                    ss << ">::make(__context__";
+                    ss << "das_new<" << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
+                    if ( enew->initializer ) {
+                        ss << ">::make_and_init(__context__,[&](){ return ";
+                        CallFunc_preVisit(enew);
+                    } else {
+                        ss << ">::make(__context__";
+                    }
                 }
             }
         }
@@ -2659,7 +2703,7 @@ namespace das {
                 }
                 ss << forSrcName(var->name) << ".next(__context__,";
                 if (var->type->aotAlias) {
-                    ss  << "reinterpret_cast<" 
+                    ss  << "reinterpret_cast<"
                         << (var->type->constant ? "const " : "")
                         << var->type->alias << " *&>";
                 }
@@ -2701,7 +2745,7 @@ namespace das {
             ss << string(tab, '\t') << nl << " = " << forSrcName(var->name)
                 << ".first(__context__,";
             if (var->type->aotAlias) {
-                ss  << "reinterpret_cast<" 
+                ss  << "reinterpret_cast<"
                     << (var->type->constant ? "const " : "")
                     << var->type->alias << " *&>";
             }
@@ -2714,7 +2758,7 @@ namespace das {
             for ( auto & var : ffor->iteratorVariables ) {
                 ss << string(tab, '\t') << forSrcName(var->name) << ".close(__context__,";
                 if (var->type->aotAlias) {
-                    ss  << "reinterpret_cast<" 
+                    ss  << "reinterpret_cast<"
                         << (var->type->constant ? "const " : "")
                         << var->type->alias << " *&>";
                 }

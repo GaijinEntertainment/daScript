@@ -1,4 +1,5 @@
 options log = true
+// options log_cpp = true
 
 require UnitTest
 
@@ -9,6 +10,8 @@ def test
 	verify(getTotalTestObjectSmart()==1)
 	assert(smart_ptr_use_count(sptr)==1u)
 	var ptr = get_ptr(sptr)
+	var pptr : TestObjectSmart?
+	pptr = get_ptr(sptr)
 	assert(sptr==ptr)
 	assert(get_ptr(sptr)==ptr)
 	var qptr : smart_ptr<TestObjectSmart>
@@ -36,4 +39,11 @@ def test
 	delete fptr								// physical delete
 	verify(getTotalTestObjectSmart()==0)
 	assert(smart_ptr_use_count(fptr)==0u)
+
+	var t1 <- new TestObjectSmart
+	var t2 <- t1
+	assert(smart_ptr_use_count(t1)==0u)
+	assert(smart_ptr_use_count(t2)==1u)
+	delete t2
+
 	return true

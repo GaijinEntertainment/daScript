@@ -79,10 +79,10 @@ namespace das {
     bool MemoryModel::free ( char * ptr, uint32_t size ) {
         if ( !size ) return true;
         size = (size + alignMask) & ~alignMask;
-        totalAllocated -= size;
         for ( auto & book : shelf ) {
             if ( book.isOwnPtr(ptr) ) {
                 book.free(ptr, size);
+                totalAllocated -= size;
                 return true;
             }
         }
@@ -91,6 +91,7 @@ namespace das {
             DAS_ASSERTF(itb->second==size, "free size mismatch, %u allocated vs %u freed", itb->second, size );
             das_aligned_free16(itb->first);
             bigStuff.erase(itb);
+            totalAllocated -= size;
             return true;
         }
         return false;

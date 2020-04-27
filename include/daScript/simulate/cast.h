@@ -130,20 +130,16 @@ namespace das
         static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_splats_ptr((const void *)&p)); }
     };
 
-    template <>
-    struct cast <smart_ptr_stub> {
-        static __forceinline smart_ptr_stub to ( vec4f a )               { smart_ptr_stub p; p.ptr = (ptr_ref_count *) v_extract_ptr(v_cast_vec4i((a))); return p; }
-        static __forceinline vec4f from ( const smart_ptr_stub p )       { return v_cast_vec4f(v_splats_ptr((const void *)p.ptr)); }
+    template <typename T>
+    struct cast <smart_ptr_raw<T>> {
+        static __forceinline smart_ptr_raw<T> to ( vec4f a )               { smart_ptr_raw<T> p; p.ptr = (T *) v_extract_ptr(v_cast_vec4i((a))); return p; }
+        static __forceinline vec4f from ( const smart_ptr_raw<T> p )       { return v_cast_vec4f(v_splats_ptr((const void *)p.ptr)); }
     };
 
-    template <>
-    struct cast <const smart_ptr_stub &> {
-        static __forceinline smart_ptr_stub to ( vec4f a )               { smart_ptr_stub p; p.ptr = (ptr_ref_count *) v_extract_ptr(v_cast_vec4i((a))); return p; }
-        static __forceinline vec4f from ( const smart_ptr_stub & p )     { return v_cast_vec4f(v_splats_ptr((const void *)p.ptr)); }
-    };
-
-    template <typename TT>
-    struct cast <const smart_ptr_raw<TT>> : cast<smart_ptr_raw<TT>> {
+    template <typename T>
+    struct cast <const smart_ptr_raw<T> &> {
+        static __forceinline smart_ptr_raw<T> to ( vec4f a )               { smart_ptr_raw<T> p; p.ptr = (T *) v_extract_ptr(v_cast_vec4i((a))); return p; }
+        static __forceinline vec4f from ( const smart_ptr_raw<T> & p )     { return v_cast_vec4f(v_splats_ptr((const void *)p.ptr)); }
     };
 
     template <>

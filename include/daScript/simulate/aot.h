@@ -182,6 +182,10 @@ namespace das {
         static __forceinline TT * cast ( QQ * expr ) {
             return reinterpret_cast<TT *>(expr);
         }
+        template <typename QQ>
+        static __forceinline TT * cast ( const smart_ptr_raw<QQ> & expr ) {
+            return reinterpret_cast<TT *>(expr.ptr);
+        }
     };
 
     template <typename TT>
@@ -843,6 +847,50 @@ namespace das {
         const TT *      array_end;
     };
 
+    template <typename TT, int d>
+    struct das_new_dim {
+        static __forceinline TDim<TT *,d> make ( Context * __context__ ) {
+            TDim<TT *,d> res;
+            for ( int i=0; i!=d; ++i ) {
+                res[i] = das_new<TT>::make(__context__);
+            }
+            return res;
+        }
+        template <typename QQ>
+        static __forceinline TDim<TT *,d> make_and_init ( Context * __context__, QQ && init ) {
+            TDim<TT *,d> res;
+            for ( int i=0; i!=d; ++i ) {
+                res[i] = das_new<TT>::make_and_init(__context__,init);
+            }
+            return res;
+        }
+    };
+
+    template <typename TT, int d, bool is_smart>
+    struct das_new_dim_handle;
+
+    template <typename TT, int d>
+    struct das_new_dim_handle<TT,d,false> {
+        static __forceinline TDim<TT *,d> make ( Context * __context__ ) {
+            TDim<TT *,d> res;
+            for ( int i=0; i!=d; ++i ) {
+                res[i] = das_new_handle<TT,false>::make(__context__);
+            }
+            return res;
+        }
+    };
+
+    template <typename TT, int d>
+    struct das_new_dim_handle<TT,d,true> {
+        static __forceinline TDim<smart_ptr_raw<TT>,d> make ( Context * __context__ ) {
+            TDim<smart_ptr_raw<TT>,d> res;
+            for ( int i=0; i!=d; ++i ) {
+                res[i] = das_new_handle<TT,true>::make(__context__);
+            }
+            return res;
+        }
+    };
+
     template <typename TT>
     struct das_new {
         static __forceinline TT * make ( Context * __context__ ) {
@@ -858,24 +906,22 @@ namespace das {
         }
     };
 
-    template <typename TT, int d0 = 0, int d1 = 0, int d2 = 0>
-    struct das_new_dim;
+    template <typename TT, bool is_smart>
+    struct das_new_handle;
 
-    template <typename TT, int d>
-    struct das_new_dim<TT,d,0,0> {
-        static __forceinline TDim<TT *,d> make ( Context * __context__ ) {
-            TDim<TT *,d> res;
-            for ( int i=0; i!=d; ++i ) {
-                res[i] = das_new<TT>::make(__context__);
-            }
-            return res;
+    template <typename TT>
+    struct das_new_handle<TT,false> {
+        static __forceinline TT * make ( Context * ) {
+            return new TT();
         }
-        template <typename QQ>
-        static __forceinline TDim<TT *,d> make_and_init ( Context * __context__, QQ && init ) {
-            TDim<TT *,d> res;
-            for ( int i=0; i!=d; ++i ) {
-                res[i] = das_new<TT>::make_and_init(__context__,init);
-            }
+    };
+
+    template <typename TT>
+    struct das_new_handle<TT,true> {
+        static __forceinline smart_ptr_raw<TT> make ( Context * ) {
+            smart_ptr_raw<TT> res;
+            res.ptr = new TT();
+            res.ptr->addRef();
             return res;
         }
     };
@@ -895,6 +941,25 @@ namespace das {
         static __forceinline void clear ( Context * __context__, char * string ) {
             const uint32_t size = stringLengthSafe(*__context__, string);
             __context__->stringHeap.freeString(string, size);
+        }
+    };
+
+    template <typename TT>
+    struct das_delete_handle;
+
+    template <typename TT>
+    struct das_delete_handle<TT *> {
+        static __forceinline void clear ( Context * __context__, TT * & ptr ) {
+            delete ptr;
+            ptr = nullptr;
+        }
+    };
+
+    template <typename TT>
+    struct das_delete_handle<smart_ptr_raw<TT>> {
+        static __forceinline void clear ( Context * __context__, smart_ptr_raw<TT> & p ) {
+            p.ptr->delRef();
+            p.ptr = nullptr;
         }
     };
 

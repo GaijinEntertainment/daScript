@@ -5,6 +5,12 @@ namespace das {
     template <typename T>
     class smart_ptr_raw {
     public:
+        smart_ptr_raw () {}
+        smart_ptr_raw ( T * p ) { ptr = p; }
+        template <typename Y> smart_ptr_raw ( const smart_ptr_raw<Y> & p ) { ptr = p.ptr; }
+        template <typename Y> operator smart_ptr_raw<Y> & () { return * reinterpret_cast<smart_ptr_raw<Y> *>(this); }
+        template <typename Y> operator const smart_ptr_raw<Y> & () const { return * reinterpret_cast<const smart_ptr_raw<Y> *>(this); }
+    public:
         T * ptr;
     };
 
@@ -209,7 +215,7 @@ namespace das {
                 return false;
             }
         }
-        __forceinline unsigned int use_count() {
+        __forceinline unsigned int use_count() const {
             return ref_count;
         }
     private:
