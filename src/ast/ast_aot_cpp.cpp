@@ -1521,8 +1521,8 @@ namespace das {
             if ( field->type->aotAlias ) {
                 ss << "das_alias<" << field->type->alias << ">::from(";
             }
-            ss << "das_safe_navigation";
-            auto vtype = field->value->type->firstType;
+            const auto & vtype = field->value->type->firstType;
+            ss << (vtype->isHandle() ? "das_safe_navigation_handle" : "das_safe_navigation");
             if ( vtype->isGoodTupleType() ) ss << "_tuple";
             else if ( vtype->isGoodVariantType() ) ss << "_variant";
             else if ( field->skipQQ ) ss << "_ptr";
@@ -1536,35 +1536,31 @@ namespace das {
                 ss << describeCppType(field->type->firstType);
             }
             if ( vtype->isHandle() ) {
-                ss << ",&";
-                if ( vtype->annotation->cppName.empty() ) {
-                    ss << vtype->annotation->name;
-                } else {
-                    ss << vtype->annotation->cppName;
-                }
+                ss  << ">::get(";
             } else if ( vtype->isGoodTupleType() ) {
-                ss << ", " << vtype->getTupleFieldOffset(field->tupleOrVariantIndex) <<  ">::get(";
+                ss  << ", " << vtype->getTupleFieldOffset(field->tupleOrVariantIndex)
+                    << ">::get(";
             } else if ( vtype->isGoodVariantType() ) {
-                ss << ", " << vtype->getVariantFieldOffset(field->tupleOrVariantIndex)
-                   << ", " << field->tupleOrVariantIndex
-                   <<  ">::get(";
+                ss  << ", " << vtype->getVariantFieldOffset(field->tupleOrVariantIndex)
+                    << ", " << field->tupleOrVariantIndex
+                    <<  ">::get(";
             } else {
-                ss << ",&" << vtype->structType->name;
+                ss  << ",&" << vtype->structType->name << "::" << field->name
+                    << ">::get(";
             }
-            if ( !vtype->isGoodTupleType() && !vtype->isGoodVariantType() ) {
-                ss << "::" << field->name <<  ">::get(";
-            }
-            /*
-            if ( field->value->type->isHandle() ) {
-                field->value->type->annotation->aotPreVisitGetField(ss, field->name);
-            }
-            */
         }
         virtual ExpressionPtr visit ( ExprSafeField * field ) override {
-            /*
-            if ( field->value->type->isHandle() ) {
-                field->value->type->annotation->aotVisitGetField(ss, field->name);
-            } */
+            const auto & vtype = field->value->type->firstType;
+            if ( vtype->isHandle() ) {
+                ss  << ",([&](const "
+                    << describeCppType(vtype,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::yes,CpptRedundantConst::yes)
+                    << " * __any) -> auto & {return ";
+                vtype->annotation->aotPreVisitGetFieldPtr(ss, field->name);
+                ss  << "__any";
+                vtype->annotation->aotVisitGetFieldPtr(ss, field->name);
+                ss << " /*" << field->name << "*/";
+                ss << ";})";
+            }
             ss << ")";
             if ( field->type->aotAlias ) {
                 ss << ")";

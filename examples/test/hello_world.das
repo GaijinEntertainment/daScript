@@ -1,4 +1,5 @@
 options log = true
+// options log_nodes = true
 // options log_cpp = true
 
 require UnitTest
@@ -35,7 +36,7 @@ def move_test
 	delete t
 	verify(getTotalTestObjectSmart()==0)
 
-[export, unsafe]
+[unsafe]
 def ref_count_test
 	verify(getTotalTestObjectSmart()==0)
 	var sptr <- new TestObjectSmart			// ref_count = 1
@@ -72,9 +73,30 @@ def ref_count_test
 	verify(getTotalTestObjectSmart()==0)
 	assert(smart_ptr_use_count(fptr)==0u)
 
+[unsafe]
+def access_test
+	var ptr <- new TestObjectSmart
+	assert(ptr.fooData == 1234)		//	.
+	var t = ptr ?. fooData ?? 1		// ?? rvalue
+	assert(t==1234)
+	ptr ?. fooData ?? t = 13		// ?? lvalue
+	assert(ptr.fooData == 13)
+	delete ptr
+	t = ptr ?. fooData ?? 2
+	assert(t==2)
+	ptr <- new TestObjectSmart
+	ptr.first <- new TestObjectSmart
+	assert(ptr.first.fooData==1234)
+	assert(ptr ?. first ?. fooData ?? 13==1234)
+	delete ptr.first
+	delete ptr
+
 [export, unsafe]
 def test
+	/*
 	ref_count_test()
 	move_test()
 	scope_test()
+	*/
+	access_test()
 	return true

@@ -165,7 +165,7 @@ namespace das {
 
     template <typename VT, typename ST>
     struct DebugInfoIterator : PointerDimIterator {
-        DebugInfoIterator  ( ST * ar ) 
+        DebugInfoIterator  ( ST * ar )
             : PointerDimIterator((char **)ar->fields, ar->count, sizeof(DebugInfoIterator<VT,ST>)) {}
     };
 
@@ -417,21 +417,21 @@ namespace das {
         nada._variant = 8;  // nothing
         nada.nothing = v_zero();
         switch (info.type) {
-        case Type::tBool:   
-            nada._variant = 0; 
-            nada.bValue = info.bValue; 
+        case Type::tBool:
+            nada._variant = 0;
+            nada.bValue = info.bValue;
             break;
-        case Type::tInt:    
-            nada._variant = 1; 
-            nada.iValue = info.iValue; 
+        case Type::tInt:
+            nada._variant = 1;
+            nada.iValue = info.iValue;
             break;
-        case Type::tFloat:  
-            nada._variant = 5; 
-            nada.fValue = info.fValue; 
+        case Type::tFloat:
+            nada._variant = 5;
+            nada.fValue = info.fValue;
             break;
-        case Type::tString: 
-            nada._variant = 7; 
-            nada.sValue = context->stringHeap.allocateString(info.sValue); 
+        case Type::tString:
+            nada._variant = 7;
+            nada.sValue = context->stringHeap.allocateString(info.sValue);
             break;
         default:;
         }
@@ -540,7 +540,7 @@ namespace das {
         }
     }
 
-    void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann, 
+    void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann,
         const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context ) {
         DebugInfoHelper helper;
         helper.rtti = true;
@@ -609,12 +609,6 @@ namespace das {
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
-        void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
-            rec->mlib = &lib;
-            rec->init();
-            rec->mlib = nullptr;
-        }
-        template <typename RecAnn>
         void addRecAnnotation ( ModuleLibrary & lib ) {
             auto rec = make_smart<RecAnn>(lib);
             addAnnotation(rec);
@@ -654,13 +648,13 @@ namespace das {
             //      hence SideEffects::modifyExternal is essencial for it to not be optimized out
             addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "get_type_info",
                 SideEffects::modifyExternal,"rtti_getTypeInfo");
-            addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "get_dim", 
+            addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "get_dim",
                 SideEffects::modifyExternal, "rtti_getDimTypeInfo");
-            addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "get_dim", 
+            addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "get_dim",
                 SideEffects::modifyExternal, "rtti_getDimVarInfo");
-            addExtern<DAS_BIND_FUN(rtti_contextTotalFunctions)>(*this, lib, "get_total_functions", 
+            addExtern<DAS_BIND_FUN(rtti_contextTotalFunctions)>(*this, lib, "get_total_functions",
                 SideEffects::modifyExternal, "rtti_contextTotalFunctions");
-            addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "get_total_variables", 
+            addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "get_total_variables",
                 SideEffects::modifyExternal, "rtti_contextTotalVariables");
             addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "get_function_info",
                 SideEffects::modifyExternal, "rtti_contextFunctionInfo");
@@ -670,37 +664,37 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_get_this_module");
             addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "get_module",
                 SideEffects::modifyExternal, "rtti_get_builtin_module");
-            addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile",
                 SideEffects::modifyExternal, "rtti_builtin_compile");
-            addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
                 SideEffects::modifyExternal, "rtti_builtin_compile_file");
-            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "program_for_each_module", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "program_for_each_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_module");
-            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_registered_module)>(*this, lib, "program_for_each_registered_module", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_registered_module)>(*this, lib, "program_for_each_registered_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_registered_module");
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_structure)>(*this, lib, "module_for_each_structure", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_structure)>(*this, lib, "module_for_each_structure",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_structure");
-            addExtern<DAS_BIND_FUN(rtti_builtin_variable_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_variable_value", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_variable_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_variable_value",
                 SideEffects::modifyExternal, "rtti_builtin_variable_value");
-            addExtern<DAS_BIND_FUN(rtti_builtin_argument_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_annotation_argument_value", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_argument_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_annotation_argument_value",
                 SideEffects::modifyExternal, "rtti_builtin_argument_value");
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "module_for_each_enumeration", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "module_for_each_enumeration",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_enumeration");
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_function)>(*this, lib, "module_for_each_function", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_function)>(*this, lib, "module_for_each_function",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_function");
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_generic)>(*this, lib, "module_for_each_generic", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_generic)>(*this, lib, "module_for_each_generic",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_generic");
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_global)>(*this, lib, "module_for_each_global", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_global)>(*this, lib, "module_for_each_global",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_global");
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_annotation)>(*this, lib, "module_for_each_annotation", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_annotation)>(*this, lib, "module_for_each_annotation",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_annotation");
-            addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation",
                 SideEffects::modifyExternal, "rtti_builtin_structure_for_each_annotation");
-            addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_field)>(*this, lib, "basic_struct_for_each_field", 
+            addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_field)>(*this, lib, "basic_struct_for_each_field",
                 SideEffects::modifyExternal, "rtti_builtin_basic_struct_for_each_field");
-            addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type", 
+            addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type",
                 SideEffects::modifyExternal, "isSameType");
-            addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast", 
+            addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast",
                 SideEffects::modifyExternal, "isCompatibleCast");
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name");

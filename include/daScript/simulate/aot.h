@@ -31,14 +31,16 @@ namespace das {
         memset(&a, 0, sizeof(TT));
     }
 
-    template <typename TT>
-    __forceinline void das_move ( TT & a, const TT & b ) {
+    template <typename TT, typename QQ>
+    __forceinline void das_move ( TT & a, const QQ & b ) {
+        static_assert(sizeof(TT)<=sizeof(QQ),"can't move from smaller type");
         memcpy(&a, &b, sizeof(TT));
         memset((TT *)&b, 0, sizeof(TT));
     }
 
     template <typename TT, typename QQ>
     __forceinline void das_copy ( TT & a, const QQ b ) {
+        static_assert(sizeof(TT)<=sizeof(QQ),"can't copy from smaller type");
         memcpy(&a, &b, sizeof(TT));
     }
 
@@ -209,6 +211,10 @@ namespace das {
         static __forceinline TT get ( const TT * ptr, TT value ) {
             return ptr ? *((TT *)ptr) : value;
         }
+        static __forceinline TT get ( const smart_ptr_raw<TT> & sp, TT value ) {
+            TT * ptr = sp.get();
+            return ptr ? *((TT *)ptr) : value;
+        }
     };
 
     template <typename TT>
@@ -216,11 +222,19 @@ namespace das {
         static __forceinline TT & get ( const TT * ptr, TT & value ) {
             return ptr ? *((TT *)ptr) : value;
         }
+        static __forceinline TT get ( const smart_ptr_raw<TT> & sp, TT & value ) {
+            TT * ptr = sp.get();
+            return ptr ? *((TT *)ptr) : value;
+        }
     };
 
     template <typename TT>
     struct das_null_coalescing<const TT &> {
         static __forceinline const TT & get ( const TT * ptr, const TT & value ) {
+            return ptr ? *ptr : value;
+        }
+        static __forceinline TT get ( const smart_ptr_raw<TT> & sp, const TT & value ) {
+            TT * ptr = sp.get();
             return ptr ? *ptr : value;
         }
     };
@@ -234,6 +248,14 @@ namespace das {
                 return nullptr;
             }
         }
+        static __forceinline RR * get ( const smart_ptr_raw<TT> & sp ) {
+            TT * ptr = sp.get();
+            if ( ptr ) {
+                return (RR *) &(ptr->*Member);
+            } else {
+                return nullptr;
+            }
+        }
     };
 
     template <typename TT, typename RR, RR TT::*Member>
@@ -241,6 +263,56 @@ namespace das {
         static __forceinline RR get ( const TT * ptr ) {
             if ( ptr ) {
                 return (RR)(ptr->*Member);
+            } else {
+                return nullptr;
+            }
+        }
+        static __forceinline RR get ( const smart_ptr_raw<TT> & sp ) {
+            TT * ptr = sp.get();
+            if ( ptr ) {
+                return (RR)(ptr->*Member);
+            } else {
+                return nullptr;
+            }
+        }
+    };
+
+    template <typename TT, typename RR>
+    struct das_safe_navigation_handle {
+        template <typename QQ>
+        static __forceinline RR * get ( const TT * ptr, QQ && nav ) {
+            if ( ptr ) {
+                return (RR *) & nav(ptr);
+            } else {
+                return nullptr;
+            }
+        }
+        template <typename QQ>
+        static __forceinline RR * get ( const smart_ptr_raw<TT> & sp, QQ && nav ) {
+            TT * ptr = sp.get();
+            if ( ptr ) {
+                return (RR *) & nav(ptr);
+            } else {
+                return nullptr;
+            }
+        }
+    };
+
+    template <typename TT, typename RR>
+    struct das_safe_navigation_handle_ptr {
+        template <typename QQ>
+        static __forceinline RR get ( const TT * ptr, QQ && nav ) {
+            if ( ptr ) {
+                return (RR) nav(ptr);
+            } else {
+                return nullptr;
+            }
+        }
+        template <typename QQ>
+        static __forceinline RR get ( const smart_ptr_raw<TT> & sp, QQ && nav ) {
+            TT * ptr = sp.get();
+            if ( ptr ) {
+                return (RR) nav(ptr);
             } else {
                 return nullptr;
             }

@@ -15,7 +15,6 @@ namespace das {
         V_END();
     }
 
-
     template <typename TT>
     SimNode * SimNode_DeleteHandlePtr<TT,false>::visit ( SimVisitor & vis ) {
         V_BEGIN();
@@ -352,5 +351,4 @@ namespace das {
         V_ARG(size);
         V_END();
     }
-
 }

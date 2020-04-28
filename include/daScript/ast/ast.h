@@ -652,6 +652,13 @@ namespace das
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
     public:
+        template <typename RecAnn>
+        void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
+            rec->mlib = &lib;
+            rec->init();
+            rec->mlib = nullptr;
+        }
+    public:
         template <typename TT, typename ...TARG>
         __forceinline void addCall ( const string & fnName, TARG ...args ) {
             if ( callThis.find(fnName)!=callThis.end() ) {

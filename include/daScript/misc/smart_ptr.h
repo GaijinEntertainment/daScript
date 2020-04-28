@@ -4,7 +4,12 @@ namespace das {
 
     template <typename T>
     struct smart_ptr_raw {
+        smart_ptr_raw () {}
+        smart_ptr_raw ( T * p ) : ptr(p) {}
         __forceinline T * get() const {
+            return ptr;
+        }
+        __forceinline T * operator -> () const {
             return ptr;
         }
         __forceinline operator smart_ptr_raw<void> & () const {
@@ -47,9 +52,8 @@ namespace das {
         __forceinline operator smart_ptr_raw<void> & () const {
             return *((smart_ptr_raw<void> *)this);
         }
-        template <typename Y>
-        __forceinline operator smart_ptr_raw<Y> & () const {
-            return *((smart_ptr_raw<Y> *)this);
+        __forceinline operator smart_ptr_raw<T> & () const {
+            return *((smart_ptr_raw<T> *)this);
         }
         __forceinline smart_ptr ( smart_ptr && p ) {
             ptr = p.ptr;

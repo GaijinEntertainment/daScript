@@ -409,6 +409,9 @@ namespace das {
         if (tt->isRefType()) {
             tt->ref = false;
         } else if (!tt->isRef()) {
+            // note:
+            //  C ++ does not differenciate between void foo ( Foo ); and void foo ( const Foo );
+            //  DAS differenciates for pointers
             tt->constant = true;
         }
         return tt;

@@ -3764,9 +3764,6 @@ namespace das {
             } else if ( !expr->left->type->isRef() ) {
                 error("can only move to a reference"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_non_reference);
-            } else if ( !expr->right->type->isRef() ) {
-                error("can only move from a reference"+moveErrorInfo(expr), "", "",
-                    expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {
                 error("can't move to a constant value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_move_to_const);

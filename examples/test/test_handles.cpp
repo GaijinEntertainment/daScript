@@ -67,6 +67,11 @@ struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> 
     TestObjectSmartAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectSmart", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
     }
+    void init() {
+        // this needs to be separate
+        // reason: recursive type
+        addField<DAS_BIND_MANAGED_FIELD(first)>("first");
+    }
     virtual bool isLocal() const override { return false; }
     virtual bool canMove() const override { return false; }
     virtual bool canCopy() const override { return false; }
@@ -546,9 +551,12 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
     addAnnotation(make_smart<TestObjectNotLocalAnnotation>(lib));
-    addAnnotation(make_smart<TestObjectSmartAnnotation>(lib));
     addAnnotation(make_smart<TestObjectFooAnnotation>(lib));
     addAnnotation(make_smart<TestObjectBarAnnotation>(lib));
+    // smart object recursive type
+    auto tosa = make_smart<TestObjectSmartAnnotation>(lib);
+    addAnnotation(tosa);
+    initRecAnnotation(tosa, lib);
     // events
     addAnnotation(make_smart<EventRegistrator>());
     // test
@@ -558,55 +566,88 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
     // utf8 print
-    addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw", SideEffects::modifyExternal, "builtin_printw");
+    addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw",
+        SideEffects::modifyExternal, "builtin_printw");
     // register function
     addEquNeq<TestObjectFoo>(*this, lib);
-    addExtern<DAS_BIND_FUN(complex_bind)>(*this, lib, "complex_bind", SideEffects::modifyExternal, "complex_bind");
-    addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init", SideEffects::none, "new_and_init");
-    addExtern<DAS_BIND_FUN(get_screen_dimensions)>(*this, lib, "get_screen_dimensions", SideEffects::none, "get_screen_dimensions");
-    addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string", SideEffects::modifyExternal, "test_das_string");
-    addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo", SideEffects::modifyArgument, "testFoo");
-    addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd", SideEffects::modifyArgument, "testAdd");
-    addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields", SideEffects::modifyExternal, "testFields");
-    addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3", SideEffects::modifyExternal, "getSamplePoint3");
-    addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3", SideEffects::none, "doubleSamplePoint3");
-    addExtern<DAS_BIND_FUN(project_to_nearest_navmesh_point)>(*this, lib, "project_to_nearest_navmesh_point", SideEffects::modifyArgument, "project_to_nearest_navmesh_point");
-    addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr", SideEffects::modifyExternal, "getPtr");
+    addExtern<DAS_BIND_FUN(complex_bind)>(*this, lib, "complex_bind",
+        SideEffects::modifyExternal, "complex_bind");
+    addInterop<new_and_init,void *,vec4f>(*this, lib, "new_and_init",
+        SideEffects::none, "new_and_init");
+    addExtern<DAS_BIND_FUN(get_screen_dimensions)>(*this, lib, "get_screen_dimensions",
+        SideEffects::none, "get_screen_dimensions");
+    addExtern<DAS_BIND_FUN(test_das_string)>(*this, lib, "test_das_string",
+        SideEffects::modifyExternal, "test_das_string");
+    addExtern<DAS_BIND_FUN(testFoo)>(*this, lib, "testFoo",
+        SideEffects::modifyArgument, "testFoo");
+    addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd",
+        SideEffects::modifyArgument, "testAdd");
+    addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields",
+        SideEffects::modifyExternal, "testFields");
+    addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3",
+        SideEffects::modifyExternal, "getSamplePoint3");
+    addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3",
+        SideEffects::none, "doubleSamplePoint3");
+    addExtern<DAS_BIND_FUN(project_to_nearest_navmesh_point)>(*this, lib, "project_to_nearest_navmesh_point",
+        SideEffects::modifyArgument, "project_to_nearest_navmesh_point");
+    addExtern<DAS_BIND_FUN(getPtr)>(*this, lib, "getPtr",
+        SideEffects::modifyExternal, "getPtr");
     /*
      addExtern<DAS_BIND_FUN(makeDummy)>(*this, lib, "makeDummy", SideEffects::none, "makeDummy");
      */
-    addExtern<DAS_BIND_FUN(makeDummy), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeDummy", SideEffects::none, "makeDummy");
-    addExtern<DAS_BIND_FUN(takeDummy)>(*this, lib, "takeDummy", SideEffects::none, "takeDummy");
+    addExtern<DAS_BIND_FUN(makeDummy), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeDummy",
+        SideEffects::none, "makeDummy");
+    addExtern<DAS_BIND_FUN(takeDummy)>(*this, lib, "takeDummy",
+        SideEffects::none, "takeDummy");
     // register Cpp alignment functions
-    addExtern<DAS_BIND_FUN(CppS1Size)>(*this, lib, "CppS1Size", SideEffects::modifyExternal, "CppS1Size");
-    addExtern<DAS_BIND_FUN(CppS2Size)>(*this, lib, "CppS2Size", SideEffects::modifyExternal, "CppS2Size");
-    addExtern<DAS_BIND_FUN(CppS2DOffset)>(*this, lib, "CppS2DOffset", SideEffects::modifyExternal, "CppS2DOffset");
+    addExtern<DAS_BIND_FUN(CppS1Size)>(*this, lib, "CppS1Size",
+        SideEffects::modifyExternal, "CppS1Size");
+    addExtern<DAS_BIND_FUN(CppS2Size)>(*this, lib, "CppS2Size",
+        SideEffects::modifyExternal, "CppS2Size");
+    addExtern<DAS_BIND_FUN(CppS2DOffset)>(*this, lib, "CppS2DOffset",
+        SideEffects::modifyExternal, "CppS2DOffset");
     // register CheckEid functions
-    addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid", SideEffects::modifyExternal, "CheckEidHint");
-    auto ceid = addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid", SideEffects::modifyExternal, "CheckEid");
+    addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid",
+        SideEffects::modifyExternal, "CheckEidHint");
+    auto ceid = addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib,
+        "CheckEid", SideEffects::modifyExternal, "CheckEid");
     auto ceid_decl = make_smart<AnnotationDeclaration>();
     ceid_decl->annotation = make_smart<CheckEidFunctionAnnotation>();
     ceid->annotations.push_back(ceid_decl);
     // register CheckEid2 functoins and macro
-    addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEidHint");
-    addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid2", SideEffects::modifyExternal, "CheckEid");
+    addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid2",
+        SideEffects::modifyExternal, "CheckEidHint");
+    addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid2",
+        SideEffects::modifyExternal, "CheckEid");
     macros.push_back(make_unique<CheckEid2Macro>(this));
-    addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid3", SideEffects::modifyExternal, "CheckEid");
+    addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid3",
+        SideEffects::modifyExternal, "CheckEid");
     lintMacros.push_back(make_unique<LintEidMacro>(this));
     // extra tests
-    addExtern<DAS_BIND_FUN(start_effect)>(*this, lib, "start_effect", SideEffects::modifyExternal, "start_effect");
-    addExtern<DAS_BIND_FUN(tempArrayExample)>(*this, lib, "temp_array_example", SideEffects::modifyExternal, "tempArrayExample");
+    addExtern<DAS_BIND_FUN(start_effect)>(*this, lib, "start_effect",
+        SideEffects::modifyExternal, "start_effect");
+    addExtern<DAS_BIND_FUN(tempArrayExample)>(*this, lib, "temp_array_example",
+        SideEffects::modifyExternal, "tempArrayExample");
     // ptr2ref
-    addExtern<DAS_BIND_FUN(fooPtr2Ref),SimNode_ExtFuncCallRef>(*this, lib, "fooPtr2Ref", SideEffects::none, "fooPtr2Ref");
+    addExtern<DAS_BIND_FUN(fooPtr2Ref),SimNode_ExtFuncCallRef>(*this, lib, "fooPtr2Ref",
+        SideEffects::none, "fooPtr2Ref");
     // compiled functions
     appendCompiledFunctions();
     // add sample variant type
     addAlias(typeFactory<SampleVariant>::make(lib));
-    addExtern<DAS_BIND_FUN(makeSampleI), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleI", SideEffects::none, "makeSampleI");
-    addExtern<DAS_BIND_FUN(makeSampleF), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleF", SideEffects::none, "makeSampleF");
-    addExtern<DAS_BIND_FUN(makeSampleS), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleS", SideEffects::none, "makeSampleS");
+    addExtern<DAS_BIND_FUN(makeSampleI), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleI",
+        SideEffects::none, "makeSampleI");
+    addExtern<DAS_BIND_FUN(makeSampleF), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleF",
+        SideEffects::none, "makeSampleF");
+    addExtern<DAS_BIND_FUN(makeSampleS), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeSampleS",
+        SideEffects::none, "makeSampleS");
     // smart ptr
-    addExtern<DAS_BIND_FUN(getTotalTestObjectSmart)>(*this, lib, "getTotalTestObjectSmart", SideEffects::modifyExternal, "getTotalTestObjectSmart");
+    addExtern<DAS_BIND_FUN(getTotalTestObjectSmart)>(*this, lib, "getTotalTestObjectSmart",
+        SideEffects::modifyExternal, "getTotalTestObjectSmart");
+    addExtern<DAS_BIND_FUN(makeTestObjectSmart)>(*this, lib, "makeTestObjectSmart",
+        SideEffects::modifyExternal, "makeTestObjectSmart");
+    addExtern<DAS_BIND_FUN(countTestObjectSmart)>(*this, lib, "countTestObjectSmart",
+        SideEffects::modifyExternal, "countTestObjectSmart");
     // and verify
     verifyAotReady();
 }

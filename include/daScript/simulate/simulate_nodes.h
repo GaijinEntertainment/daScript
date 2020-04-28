@@ -483,8 +483,9 @@ namespace das {
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
-            char ** prv = (char **) value->evalPtr(context);
-            return prv ? *(prv + offset) : nullptr;
+            char * prv = (char *) value->evalPtr(context);
+            if ( !prv ) return nullptr;
+            return *(char **)( prv + offset );
         }
     };
 

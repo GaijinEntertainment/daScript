@@ -495,14 +495,14 @@ namespace das
     void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = (void *) src;
-        ((ptr_ref_count *) src)->addRef();
+        if ( src ) ((ptr_ref_count *) src)->addRef();
         if ( t ) t->delRef();
     }
 
     void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src ) {
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = src.ptr;
-        ((ptr_ref_count *) src.ptr)->addRef();
+        if ( src.ptr ) ((ptr_ref_count *) src.ptr)->addRef();
         if ( t ) t->delRef();
     }
 

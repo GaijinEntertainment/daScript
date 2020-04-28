@@ -89,11 +89,15 @@ struct TestObjectFoo {
 };
 
 struct TestObjectSmart : public das::ptr_ref_count {
-     int fooData;
+     int fooData = 1234;
+     das::smart_ptr<TestObjectSmart> first;
      TestObjectSmart() { total ++; }
      virtual ~TestObjectSmart() { total --; }
      static int32_t total;
 };
+
+__forceinline das::smart_ptr<TestObjectSmart> makeTestObjectSmart() { return das::make_smart<TestObjectSmart>(); }
+__forceinline uint32_t countTestObjectSmart( const das::smart_ptr<TestObjectSmart> & p ) { return p->use_count(); }
 
 __forceinline int32_t getTotalTestObjectSmart() { return TestObjectSmart::total; }
 
