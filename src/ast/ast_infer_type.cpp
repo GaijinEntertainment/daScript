@@ -5018,6 +5018,15 @@ namespace das {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visit(expr);
             }
+            if ( expr->makeType && expr->makeType->isAlias() ) {
+                if ( auto aT = inferAlias(expr->makeType) ) {
+                    expr->makeType = aT;
+                    reportAstChanged();
+                } else {
+                    error("undefined type " + expr->makeType->describe(),  "", "",
+                        expr->makeType->at, CompilationError::type_not_found );
+                }
+            }
             // promote to make variant
             if ( expr->makeType->baseType == Type::tVariant ) {
                 auto mkv = make_smart<ExprMakeVariant>(expr->at);
