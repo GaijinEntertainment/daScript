@@ -6,7 +6,9 @@
 	],
 	"settings": {
 		"files.associations": {
-			"xstring": "cpp"
+			"xstring": "cpp",
+			"type_traits": "cpp",
+			"xtr1common": "cpp"
 		}
 	}
 }

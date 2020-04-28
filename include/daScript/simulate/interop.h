@@ -48,7 +48,12 @@ namespace das
         }
     };
 
-    template <typename Result, typename CType, bool Pointer=is_pointer<Result>::value&&is_pointer<CType>::value>
+    template <typename T>
+    struct is_any_pointer {
+        enum { value = is_pointer<T>::value || is_smart_ptr<T>::value };
+    };
+
+    template <typename Result, typename CType,bool Pointer=is_any_pointer<Result>::value && is_any_pointer<CType>::value>
     struct ImplCallStaticFunctionImm {
         enum { valid = false };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -58,6 +63,24 @@ namespace das
                         "this means that this template needs to be revisited."
                         "we should not even be here, because code above verifies 'valid' field.");
             return CType();
+        }
+    };
+
+    template <typename Result, typename CType>
+    struct ImplCallStaticFunctionImm<smart_ptr<Result>, CType, true> {
+        enum { valid = true };
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
+            return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...).orphan();
+        }
+    };
+
+    template <typename Result, typename CType>
+    struct ImplCallStaticFunctionImm<smart_ptr_raw<Result>, CType, true> {
+        enum { valid = true };
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
+            return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...).get();
         }
     };
 

@@ -647,7 +647,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(makeTestObjectSmart)>(*this, lib, "makeTestObjectSmart",
         SideEffects::modifyExternal, "makeTestObjectSmart");
     addExtern<DAS_BIND_FUN(countTestObjectSmart)>(*this, lib, "countTestObjectSmart",
-        SideEffects::modifyExternal, "countTestObjectSmart");
+        SideEffects::none, "countTestObjectSmart");
     // and verify
     verifyAotReady();
 }

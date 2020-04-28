@@ -2,6 +2,12 @@
 
 namespace das {
 
+    template<typename T, typename TP>
+    class smart_ptr;
+
+    template <typename T>
+    struct smart_ptr_policy;
+
     template <typename T>
     struct smart_ptr_raw {
         smart_ptr_raw () {}
@@ -14,6 +20,9 @@ namespace das {
         }
         __forceinline operator smart_ptr_raw<void> & () const {
             return *((smart_ptr_raw<void> *)this);
+        }
+        __forceinline operator smart_ptr<T,smart_ptr_policy<T>> & () const {
+            return *((smart_ptr<T> *)this);
         }
         T * ptr;
     };
@@ -103,6 +112,11 @@ namespace das {
         __forceinline T * get() const {
             return ptr;
         }
+        __forceinline T * orphan() {
+            T * t = ptr;
+            ptr = nullptr;
+            return t;
+        }
         __forceinline operator bool() const {
             return ptr != nullptr;
         }
@@ -169,6 +183,10 @@ namespace das {
     protected:
         T * ptr;
     };
+
+    template <typename T>   struct is_smart_ptr { enum { value = false }; };
+    template <typename T>   struct is_smart_ptr < smart_ptr<T> > { enum { value = true }; };
+    template <typename T>   struct is_smart_ptr < smart_ptr_raw<T> > { enum { value = true }; };
 
     template <class T, class U>
     __forceinline bool operator == (T * l, const smart_ptr<U> & r) {

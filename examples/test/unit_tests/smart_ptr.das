@@ -1,7 +1,3 @@
-options log = true
-// options log_nodes = true
-// options log_cpp = true
-
 require UnitTest
 
 [unsafe]
