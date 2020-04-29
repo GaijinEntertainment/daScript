@@ -1,4 +1,5 @@
 options log = true
+// options log_infer_passes = true
 // options log_nodes = true
 // options log_cpp = true
 
@@ -100,6 +101,14 @@ def fn_test
 	delete ptr
 	verify(getTotalTestObjectSmart()==0)
 
+[export, unsafe]
+def pass_by_value_is_unsafe ( p:smart_ptr<TestObjectSmart> )	// passing smart ptr by value is unsafe
+	pass
+
+[export, unsafe]
+def clone_smart_ptr_is_unsafe
+	var a, b : smart_ptr<TestObjectSmart>
+	a <- b														// moving smar ptr value is unsafe
 
 [export, unsafe]
 def test

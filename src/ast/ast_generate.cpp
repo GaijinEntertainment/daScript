@@ -293,6 +293,7 @@ namespace das {
         pFunc->result = make_smart<TypeDecl>(Type::tVoid);
         auto cTHIS = make_smart<Variable>();
         cTHIS->name = "__this";
+        cTHIS->at = at;
         cTHIS->type = make_smart<TypeDecl>(*ptrType);
         cTHIS->type->constant = false;
         cTHIS->type->removeConstant = true;
@@ -330,6 +331,7 @@ namespace das {
         pFunc->body = fb;
         pFunc->result = make_smart<TypeDecl>(Type::tVoid);
         auto cTHIS = make_smart<Variable>();
+        cTHIS->at = ls->at;
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
@@ -374,6 +376,7 @@ namespace das {
         pFunc->body = fb;
         pFunc->result = make_smart<TypeDecl>(Type::tVoid);
         auto cTHIS = make_smart<Variable>();
+        cTHIS->at = ls->at;
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(Type::tPointer);
         cTHIS->type->firstType = make_smart<TypeDecl>(ls);
@@ -414,6 +417,7 @@ namespace das {
         pFunc->body = fb;
         pFunc->result = make_smart<TypeDecl>(*block->type);
         auto cTHIS = make_smart<Variable>();
+        cTHIS->at = block->at;
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
@@ -969,12 +973,14 @@ namespace das {
         fn->at = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
+        arg0->at = at;
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*tupleType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
+        arg1->at = at;
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*tupleType);
         arg1->type->constant = true;
@@ -1003,6 +1009,7 @@ namespace das {
         fn->at = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
+        arg0->at = at;
         arg0->name = "__this";
         arg0->type = make_smart<TypeDecl>(*tupleType);
         arg0->type->constant = false;
@@ -1035,12 +1042,14 @@ namespace das {
         fn->at = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
+        arg0->at = at;
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*variantType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
+        arg1->at = at;
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*variantType);
         arg1->type->constant = true;
@@ -1091,6 +1100,7 @@ namespace das {
         fn->at = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
+        arg0->at = at;
         arg0->name = "__this";
         arg0->type = make_smart<TypeDecl>(*variantType);
         arg0->type->constant = false;
@@ -1133,17 +1143,20 @@ namespace das {
         DAS_ASSERT(left->isPointer() && left->smartPtr && right->isPointer() && "can only clone smart-ptr <- any-ptr");
         DAS_ASSERT(left->firstType && left->firstType->annotation && "can only clone smart handled types");
         auto fn = make_smart<Function>();
+        fn->unsafe = right->smartPtr;
         fn->generated = true;
         fn->name = "clone";
         fn->at = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
+        arg0->at = at;
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*left);
         arg0->type->constant = false;
         arg0->type->ref = true;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
+        arg1->at = at;
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*right);
         arg1->type->constant = true;

@@ -307,8 +307,9 @@ int main() {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Functional);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/const_ref.das",true);
+    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/smart_ptr.das",true);
     Module::Shutdown();
+    getchar();
     return 0;
 #endif
 #if 0 // Debug this one test

@@ -89,6 +89,7 @@ def binary_load(var obj; data:array<uint8>)
     concept_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_load(obj,data)
 
+[unsafe]    // when cloning smart-ptr
 def clone_to_move(clone_src:auto(TT)) : TT delete const
     var clone_dest : TT
     clone_dest := clone_src

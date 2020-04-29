@@ -1443,7 +1443,14 @@ namespace das {
             }
             if ( var->type->ref && var->type->isRefType() ) {
                 error("can't pass boxed type by reference", "", "remove & from the type declaration",
-                    var->at,CompilationError::invalid_argument_type);
+                    var->at, CompilationError::invalid_argument_type);
+            }
+            if ( !var->type->ref && var->type->isPointer() && var->type->smartPtr ) {
+                if ( !fn->unsafe ) {
+                    error("passing smart pointer by value requires [unsafe]",  "",
+                        "try " + var->name + " : " + var->type->describe(TypeDecl::DescribeExtra::no) + "& instead",
+                        var->at, CompilationError::unsafe);
+                }
             }
             verifyType(var->type);
             return Visitor::visitArgument(fn, var, lastArg);
@@ -3776,6 +3783,13 @@ namespace das {
             } else if ( expr->right->type->isTemp(true,false) ) {
                 error("can't move temporary value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_pass_temporary);
+            } else if ( expr->right->type->isPointer() && expr->right->type->smartPtr ) {
+                if ( func && !func->unsafe && !expr->alwaysSafe ) {
+                    error("moving from the smart pointer value requires [unsafe]",  "",
+                        "try moving from reference instead",
+                        expr->at, CompilationError::unsafe);
+                    return Visitor::visit(expr);
+                }
             }
             expr->type = make_smart<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
