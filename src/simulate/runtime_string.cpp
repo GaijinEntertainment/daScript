@@ -126,6 +126,7 @@ namespace das
                     text << " ";
                     col ++;
                 }
+                continue;
             } else if ( CH=='\n' ) {
                 text << "\n";
                 break;
