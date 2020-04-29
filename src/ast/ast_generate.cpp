@@ -45,6 +45,34 @@ namespace das {
             if ( expr->rtti_isFakeContext() ) return;
             DAS_ASSERT(expr->at.column && expr->at.line);
         }
+        virtual void preVisit ( Structure * var ) override {
+            Visitor::preVisit(var);
+            DAS_ASSERT(var->at.column && var->at.line);
+        }
+        virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
+            Visitor::preVisitStructureField(var,decl,last);
+            DAS_ASSERT(decl.at.column && decl.at.line);
+        }
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let,var,last);
+            DAS_ASSERT(var->at.column && var->at.line);
+        }
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
+            Visitor::preVisitGlobalLet(var);
+            DAS_ASSERT(var->at.column && var->at.line);
+        }
+        virtual void preVisit ( Function * fn ) override {
+            Visitor::preVisit(fn);
+            DAS_ASSERT(fn->at.column && fn->at.line);
+        }
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn, var, lastArg);
+            DAS_ASSERT(var->at.column && var->at.line);
+        }
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block, var, lastArg);
+            DAS_ASSERT(var->at.column && var->at.line);
+        }
     };
 
     void verifyGenerated ( const ExpressionPtr & expr ) {
@@ -215,6 +243,7 @@ namespace das {
         fn->at = str->at;
         fn->result = make_smart<TypeDecl>(str);
         auto block = make_smart<ExprBlock>();
+        block->at = str->at;
         auto makeT = make_smart<ExprMakeStructureOrDefaultValue>(str->at);
         makeT->useInitializer = true;
         makeT->makeType = make_smart<TypeDecl>(str);
@@ -249,6 +278,7 @@ namespace das {
         fn->arguments.push_back(varA);
         fn->arguments.push_back(varB);
         auto block = make_smart<ExprBlock>();
+        block->at = str->at;
         for ( auto & fi : str->fields ) {
             auto lA = make_smart<ExprVar>(fi.at, "a");
             auto lAdotF = make_smart<ExprField>(fi.at, lA, fi.name);
@@ -434,6 +464,7 @@ namespace das {
                                        const das_safe_set<VariablePtr> & capt, bool needYield ) {
         auto lsn = lambdaName;
         auto pStruct = make_smart<Structure>(lsn);
+        pStruct->at = block->at;
         auto btd = block->makeBlockType();
         btd->baseType = Type::tFunction;
         btd->constant = false;
@@ -987,6 +1018,7 @@ namespace das {
         arg1->type->ref = false;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
+        block->at = at;
         for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
             string argn = "_" + to_string(argi);
             auto lv = make_smart<ExprVar>(at, "dest");
@@ -1016,6 +1048,7 @@ namespace das {
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto block = make_smart<ExprBlock>();
+        block->at = at;
         for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
             if (tupleType->argTypes[argi]->needDelete()) {
                 string argn = "_" + to_string(argi);
@@ -1056,10 +1089,12 @@ namespace das {
         arg1->type->ref = false;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
+        block->at = at;
         smart_ptr<ExprIfThenElse> topIf, lastIf;
         for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
             const string & argn = variantType->argNames[argi];
             auto cb = make_smart<ExprBlock>();
+            cb->at = at;
             auto vd = make_smart<ExprVar>(at, "dest");
             auto vi = make_smart<ExprConstInt>(at, int32_t(argi));
             auto svi = make_smart<ExprCall>(at, "set_variant_index");
@@ -1107,6 +1142,7 @@ namespace das {
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto block = make_smart<ExprBlock>();
+        block->at = at;
         smart_ptr<ExprIfThenElse> topIf, lastIf;
         for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
             if (variantType->argTypes[argi]->needDelete()) {
@@ -1116,6 +1152,7 @@ namespace das {
                 lf->alwaysSafe = true;
                 auto cl = make_smart<ExprDelete>(at, lf);
                 auto cb = make_smart<ExprBlock>();
+                cb->at = at;
                 cb->list.push_back(cl);
                 auto av = make_smart<ExprVar>(at, "__this");
                 auto isv = make_smart<ExprIsVariant>(at, av, argn);
@@ -1163,6 +1200,7 @@ namespace das {
         arg1->type->ref = false;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
+        block->at = at;
         auto lv = make_smart<ExprVar>(at, "dest");
         auto rv = make_smart<ExprVar>(at, "src");
         auto cl = make_smart<ExprCall>(at, left->firstType->annotation->getSmartAnnotationCloneFunction());
