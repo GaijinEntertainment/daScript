@@ -103,8 +103,9 @@ extern int das_yydebug;
 
     extern bool das_need_oxford_comma;
     extern bool das_force_oxford_comma;
+    extern bool das_supress_errors;
 
-#line 108 "ds_parser.hpp"
+#line 109 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -261,7 +262,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 80 "ds_parser.ypp"
+#line 82 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -286,7 +287,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 290 "ds_parser.hpp"
+#line 291 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

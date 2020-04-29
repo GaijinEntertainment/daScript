@@ -49,6 +49,7 @@
 
     extern bool das_need_oxford_comma;
     extern bool das_force_oxford_comma;
+    extern bool das_supress_errors;
 }
 
 %{
@@ -64,7 +65,8 @@
 
     using namespace das;
 
-    void das_yyerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
+    void das_yyerror (const string & error);
+    void das_yyfatalerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
 	void das_checkName(const string & name, const LineInfo &at);
     int yylex();
@@ -1656,9 +1658,13 @@ global_let
         }
         deleteVariableDeclarationList($list);
     }
-    | kwd_let optional_shared[glob_shar] { das_force_oxford_comma = true; }  error[loc] ';' {
+    | kwd_let optional_shared[glob_shar] {
+            das_force_oxford_comma = true;
+            das_supress_errors = true;
+        } error[loc] ';' {
         das_yyerror("global variable declaration requires new line", tokAt(@loc),
             CompilationError::syntax_error);
+        das_supress_errors = false;
         yyerrok;
     }
     ;
@@ -2314,9 +2320,17 @@ void das_yyerror(const string & error, const LineInfo & at, CompilationError cer
     g_Program->error(error,"","",at,cerr);
 }
 
-void das_yyerror(const string & error, CompilationError cerr) {
+void das_yyfatalerror(const string & error, CompilationError cerr) {
     g_Program->error(error,"","",LineInfo(g_FileAccessStack.back(),
         yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line),cerr);
+}
+
+void das_yyerror(const string & error) {
+    if ( !das_supress_errors ) {
+        g_Program->error(error,"","",LineInfo(g_FileAccessStack.back(),
+            yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line),
+                CompilationError::syntax_error);
+    }
 }
 
 vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {

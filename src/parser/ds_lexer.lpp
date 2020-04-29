@@ -18,7 +18,8 @@
 
     #define YY_NO_INPUT
 
-    void das_yyerror(const string & error, CompilationError cerr = CompilationError::syntax_error);
+    void das_yyerror(const string & error);
+    void das_yyfatalerror(const string & error, CompilationError cerr = CompilationError::syntax_error);
 
     int das_current_line_indent = 0;
     int das_indent_level = 0;
@@ -32,6 +33,7 @@
     int das_c_style_depth = 0;
     bool das_need_oxford_comma = true;
     bool das_force_oxford_comma = false;
+    bool das_supress_errors = true;
     bool das_in_normal = false;
     vector<int> das_line_no;
     das_set<string> das_already_include;
@@ -75,7 +77,7 @@
         string incFileName = g_Access->getIncludeFileName(cfi->name,lFile);
         auto info = g_Access->getFileInfo(incFileName);
         if ( !info ) {
-            das_yyerror("can't open "+incFileName);
+            das_yyfatalerror("can't open "+incFileName);
         } else {
             g_FileAccessStack.pop_back();
             g_FileAccessStack.push_back(info);
@@ -83,13 +85,13 @@
             das_yycolumn = lCol;
         }
     } else {
-        das_yyerror ("can't process line directive " + string(yytext),
+        das_yyfatalerror ("can't process line directive " + string(yytext),
             CompilationError::invalid_line_directive); return LEXER_ERROR;
     }
 }
-<indent>"*/"                        das_yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<indent>"*/"                        das_yyfatalerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <indent>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = false;
-<normal>"*/"                        das_yyerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<normal>"*/"                        das_yyfatalerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <normal>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = true;
 <indent>"\/\/"                      BEGIN(cpp_comment);
 <normal>"\/\/"                      BEGIN(cpp_comment);
@@ -110,7 +112,7 @@
 <c_comment>.                        /* skipping comment body */
 <c_comment>[\r\n]                   /* skipping comment eol */
 <c_comment><<EOF>>             {
-    das_yyerror("end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
+    das_yyfatalerror("end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
     BEGIN(normal);
 }
 <strb>\"                {
@@ -125,7 +127,7 @@
 	return BEGIN_STRING_EXPR;
 }
 <strb><<EOF>>             {
-    das_yyerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das_yyfatalerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
     return END_STRING;
 }
@@ -172,7 +174,7 @@
             #ifdef FLEX_DEBUG
             printf("INVALID INDENT at %i, emit {\n", das_current_line_indent);
             #endif
-            das_yyerror("invalid indentation"); // pretend tab was pressed
+            das_yyfatalerror("invalid indentation"); // pretend tab was pressed
             das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
         }
         das_indent_level++;
@@ -217,7 +219,7 @@
     string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
     auto info = g_Access->getFileInfo(incFileName);
     if ( !info ) {
-        das_yyerror("can't open "+incFileName);
+        das_yyfatalerror("can't open "+incFileName);
     } else {
         if ( das_already_include.find(incFileName) == das_already_include.end() ) {
             das_already_include.insert(incFileName);
@@ -336,7 +338,7 @@
 			return LEXER_ERROR;
 		} else {
 			if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-				das_yyerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+				das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
 			}
 			das_yylval.i = int32_t(int_const);
 			return INTEGER;
@@ -352,7 +354,7 @@
 			return LEXER_ERROR;
 		} else {
 			if ( int_const>UINT32_MAX ) {
-				das_yyerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+				das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
 			}
 			das_yylval.ui = uint32_t(int_const);
 			return UNSIGNED_INTEGER;
@@ -365,7 +367,7 @@
 			return LEXER_ERROR;
 		} else {
 			if ( int_const>UINT32_MAX ) {
-				das_yyerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+				das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
 			}
 			das_yylval.ui = uint32_t(int_const);
 			return UNSIGNED_INTEGER;
@@ -383,7 +385,7 @@
 <normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>\)                                  {
     if ( !das_nested_parentheses ) {
-        das_yyerror("mismatching parentheses", CompilationError::mismatching_parentheses);
+        das_yyfatalerror("mismatching parentheses", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     das_nested_parentheses --;
@@ -395,7 +397,7 @@
 }
 <normal>\]                                  {
     if ( !das_nested_square_braces ) {
-        das_yyerror("mismatching square braces", CompilationError::mismatching_parentheses);
+        das_yyfatalerror("mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     das_nested_square_braces --;
@@ -416,7 +418,7 @@
         }
     } else {
         if ( !das_nested_curly_braces ) {
-            das_yyerror("mismatching curly braces", CompilationError::mismatching_curly_bracers);
+            das_yyfatalerror("mismatching curly braces", CompilationError::mismatching_curly_bracers);
             return LEXER_ERROR;
         }
         das_nested_curly_braces --;
