@@ -102,8 +102,9 @@ extern int das_yydebug;
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
     extern bool das_need_oxford_comma;
+    extern bool das_force_oxford_comma;
 
-#line 107 "ds_parser.hpp"
+#line 108 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -260,7 +261,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 79 "ds_parser.ypp"
+#line 80 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -285,7 +286,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 289 "ds_parser.hpp"
+#line 290 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

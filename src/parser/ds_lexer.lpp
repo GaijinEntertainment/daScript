@@ -13,13 +13,13 @@
     #ifndef SCNx64
       #define SCNx64       "llx"
     #endif
-    
+
     using namespace das;
-    
+
     #define YY_NO_INPUT
-    
+
     void das_yyerror(const string & error, CompilationError cerr = CompilationError::syntax_error);
-    
+
     int das_current_line_indent = 0;
     int das_indent_level = 0;
     int das_def_tab_size = 4;
@@ -31,6 +31,7 @@
     int das_yycolumn = 1;
     int das_c_style_depth = 0;
     bool das_need_oxford_comma = true;
+    bool das_force_oxford_comma = false;
     bool das_in_normal = false;
     vector<int> das_line_no;
     das_set<string> das_already_include;
@@ -38,13 +39,13 @@
     namespace das {
         das_map<string,string>   das_module_alias;
     }
-    
+
     #define YY_USER_ACTION \
         das_yylloc.first_line = das_yylloc.last_line = yylineno; \
         das_yylloc.first_column = das_yycolumn; \
         das_yylloc.last_column = das_yycolumn + yyleng - 1; \
         das_yycolumn += yyleng;
-        
+
 %}
 
 %option prefix="das_yy"
@@ -144,22 +145,22 @@
 <indent>[ \t\r]*\n		/* skip empty line */ {
     das_current_line_indent = 0;
 }
-<indent>" "             { 
-	das_current_line_indent++; 
+<indent>" "             {
+	das_current_line_indent++;
 	#ifdef FLEX_DEBUG
 		printf("[ ], indent=%i\n", das_current_line_indent);
 	#endif
 }
-<indent>"\t"            { 
-	das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);  
+<indent>"\t"            {
+	das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
 	#ifdef FLEX_DEBUG
 		printf("\\t, cli=%i\n", das_current_line_indent);
 	#endif
 }
-<indent>(\/\/.*)*\n     { 
-	das_current_line_indent = 0; 
-	das_need_oxford_comma = true; 
-	das_yycolumn = 1; 
+<indent>(\/\/.*)*\n     {
+	das_current_line_indent = 0;
+	das_need_oxford_comma = true;
+	das_yycolumn = 1;
 	#ifdef FLEX_DEBUG
 		printf("new line\n");
 	#endif
@@ -167,6 +168,13 @@
 <indent>.               {
     unput(*yytext);
     if (das_current_line_indent > das_indent_level*das_tab_size ) {
+        if ( das_current_line_indent % das_tab_size ) {
+            #ifdef FLEX_DEBUG
+            printf("INVALID INDENT at %i, emit {\n", das_current_line_indent);
+            #endif
+            das_yyerror("invalid indentation"); // pretend tab was pressed
+            das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
+        }
         das_indent_level++;
         #ifdef FLEX_DEBUG
         printf("emit {, cli=%i, indent =%i\n", das_current_line_indent, das_indent_level);
@@ -235,10 +243,8 @@
 <normal>"def"                                           das_need_oxford_comma = false; return DAS_DEF;
 <normal>"with"                                          das_need_oxford_comma = false; return DAS_WITH;
 <normal>"let"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return DAS_LET;
-<normal>"let"[ \t\r]*\(                                 das_need_oxford_comma = false; unput('(');  return DAS_LET;
 <normal>"let"                                           return DAS_LET;
 <normal>"var"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return DAS_VAR;
-<normal>"var"[ \t\r]*\(                                 das_need_oxford_comma = false; unput('(');  return DAS_VAR;
 <normal>"var"                                           return DAS_VAR;
 <normal>"struct"                                        das_need_oxford_comma = false; return DAS_STRUCT;
 <normal>"enum"                                          das_need_oxford_comma = false; return DAS_ENUM;
@@ -335,7 +341,7 @@
 			das_yylval.i = int32_t(int_const);
 			return INTEGER;
 		}
-	}	
+	}
 
 <normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
 <normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
@@ -352,7 +358,7 @@
 			return UNSIGNED_INTEGER;
 		}
 	}
-		
+
 <normal>0[xX][0-9a-fA-F]+               {
 		uint64_t int_const;
 		if ( sscanf(yytext, "%" SCNx64,  &int_const)!=1 ) {
@@ -508,7 +514,11 @@
 <normal>(\/\/.*)*\n {
     das_yycolumn = 1;
     if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
-        bool ns = (das_current_line_indent!=0) && das_need_oxford_comma;
+        bool ns = ((das_current_line_indent!=0) && das_need_oxford_comma) || das_force_oxford_comma;
+        #ifdef FLEX_DEBUG
+        if ( das_force_oxford_comma ) printf ( "forcing oxford comma\n");
+        #endif
+        das_force_oxford_comma = false;
         das_current_line_indent = 0;
         das_need_oxford_comma = true;
         BEGIN(indent);
@@ -565,6 +575,7 @@ void das_yybegin(const char * str) {
 	das_nested_square_braces = 0;
     das_nested_sb = 0;
     das_need_oxford_comma = true;
+    das_force_oxford_comma = false;
     das_c_style_depth = 0;
     BEGIN(normal);
     yy_scan_string(str);

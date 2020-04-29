@@ -48,6 +48,7 @@
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
     extern bool das_need_oxford_comma;
+    extern bool das_force_oxford_comma;
 }
 
 %{
@@ -1654,6 +1655,11 @@ global_let
             }
         }
         deleteVariableDeclarationList($list);
+    }
+    | kwd_let optional_shared[glob_shar] { das_force_oxford_comma = true; }  error[loc] ';' {
+        das_yyerror("global variable declaration requires new line", tokAt(@loc),
+            CompilationError::syntax_error);
+        yyerrok;
     }
     ;
 

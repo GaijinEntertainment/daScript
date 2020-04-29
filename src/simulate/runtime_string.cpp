@@ -109,12 +109,14 @@ namespace das
         TextWriter text;
         int col=0, row=1;
         auto it = st;
-        while ( *it ) {
-            auto CH = *it++;
-            if ( CH=='\n' ) {
-                row++;
-                col=0;
-                if ( row==ROW ) break;
+        if ( ROW>1 ) {
+            while ( *it ) {
+                auto CH = *it++;
+                if ( CH=='\n' ) {
+                    row++;
+                    col=0;
+                    if ( row==ROW ) break;
+                }
             }
         }
         if ( row!=ROW ) return "";
@@ -135,7 +137,7 @@ namespace das
             }
             col ++;
         }
-        text << string(das::max(COL ? COL + 1 : 0,0), ' ') << string(das::max(LCOL-COL-1,1),'^') << "\n";
+        text << string(das::max(COL,0), ' ') << string(das::max(LCOL-COL,1),'^') << "\n";
         text << COL << ":" << ROW << " - " << LCOL << ":" << LROW << "\n";
         return text.str();
     }
