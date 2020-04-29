@@ -64,7 +64,7 @@ extern int das_yydebug;
         CorM_MOVE   = (1<<0),
         CorM_CLONE  = (1<<1)
     };
-    
+
     namespace das {
         extern ProgramPtr			    g_Program;
         extern FileAccessPtr            g_Access;
@@ -72,7 +72,7 @@ extern int das_yydebug;
         extern das_map<string,string>   das_module_alias;
     }
     using namespace das;
-    
+
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
@@ -91,14 +91,14 @@ extern int das_yydebug;
         bool                    override = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
-    
+
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = false );
-    
+
     LineInfo tokAt ( const struct YYLTYPE & li );
-    
+
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
     extern bool das_need_oxford_comma;

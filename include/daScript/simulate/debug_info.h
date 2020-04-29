@@ -88,6 +88,7 @@ namespace das
         string                name;
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
+        int32_t               tabSize = 4;
 #if DAS_ENABLE_PROFILER
         vector<uint64_t>      profileData;
 #endif
@@ -133,14 +134,17 @@ namespace das
 
     struct LineInfo {
         LineInfo() = default;
-        LineInfo(FileInfo * fi, int c, int l)
-            : fileInfo(fi), column(uint32_t(c)), line(uint32_t(l)) {}
+        LineInfo(FileInfo * fi, int c, int l, int lc, int ll)
+            : fileInfo(fi)
+            , column(uint32_t(c)), line(uint32_t(l))
+            , last_column(uint32_t(lc)), last_line(uint32_t(ll)) {}
         bool operator < ( const LineInfo & info ) const;
         bool operator == ( const LineInfo & info ) const;
         bool operator != ( const LineInfo & info ) const;
         string describe() const;
         FileInfo *  fileInfo = nullptr;
         uint32_t    column = 0, line = 0;
+        uint32_t    last_column = 0, last_line = 0;
     };
 
     struct TypeInfo {
@@ -190,7 +194,7 @@ namespace das
         vec4f                       value = v_zero();
         char *                      sValue = nullptr;
         VarInfo() = default;
-        VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name, 
+        VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name,
                 TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,
                 uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,
                 uint32_t _hash, const char * _name, uint32_t _offset ) {

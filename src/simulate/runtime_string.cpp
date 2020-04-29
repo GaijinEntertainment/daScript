@@ -105,21 +105,37 @@ namespace das
         return result;
     }
 
-    string getFewLines ( const char* st, int ROW, int COL ) {
+    string getFewLines ( const char* st, int ROW, int COL, int LROW, int LCOL, int TAB ) {
         TextWriter text;
-        int col=1, row=1;
+        int col=0, row=1;
         auto it = st;
-        for ( ; ROW>=row && *it; ++it, ++col ) {
-            if ( row==ROW /* || row==ROW-1 */ )
-                text << *it;
-            if ( *it=='\n' ) {
-                row ++;
-                col = 1;
+        while ( *it ) {
+            auto CH = *it++;
+            if ( CH=='\n' ) {
+                row++;
+                col=0;
+                if ( row==ROW ) break;
             }
         }
-        text << string(das::max(COL-2,0), ' ') << "^" << "\n";
-//        while ( *it!='\n' && it!=st.end() )
-//            text << *it++;
+        if ( row!=ROW ) return "";
+        while ( *it ) {
+            auto CH = *it++;
+            if ( CH=='\t' ) {
+                int tcol = (col + TAB) & ~(TAB-1);
+                while ( col < tcol ) {
+                    text << " ";
+                    col ++;
+                }
+            } else if ( CH=='\n' ) {
+                text << "\n";
+                break;
+            } else {
+                text << CH;
+            }
+            col ++;
+        }
+        text << string(das::max(COL ? COL + 1 : 0,0), ' ') << string(das::max(LCOL-COL-1,1),'^') << "\n";
+        text << COL << ":" << ROW << " - " << LCOL << ":" << LROW << "\n";
         return text.str();
     }
 
@@ -143,12 +159,14 @@ namespace das
         return stst;
     }
 
-    string reportError(const struct LineInfo & at, const string & message, 
+    string reportError(const struct LineInfo & at, const string & message,
         const string & extra, const string & fixme, CompilationError erc) {
         return reportError(
                 at.fileInfo ? at.fileInfo->source : nullptr,
                 at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
-                at.line, at.column, message, extra, fixme, erc );
+                at.line, at.column, at.last_line, at.last_column,
+                at.fileInfo ? at.fileInfo->tabSize : 4,
+                message, extra, fixme, erc );
     }
 
     string reportErrorJson(const struct LineInfo & at, const string & message,
@@ -156,14 +174,17 @@ namespace das
         return reportErrorJson(
             at.fileInfo ? at.fileInfo->source : nullptr,
             at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
-            at.line, at.column, message, extra,fixme, erc );
+            at.line, at.column, at.last_line, at.last_column,
+            at.fileInfo ? at.fileInfo->tabSize : 4,
+            message, extra,fixme, erc );
     }
 
-    string reportError ( const char * st, const char * fileName, int row, int col, const string & message, 
+    string reportError ( const char * st, const char * fileName,
+        int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
         if ( row && col ) {
-            auto text = st ? getFewLines(st, row, col ) : "";
+            auto text = st ? getFewLines(st, row, col, lrow, lcol, tabSize) : "";
             ssw << fileName << ":" << row << ":" << col << ":\n" << text;
             if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
             ssw << message << "\n";
@@ -176,11 +197,14 @@ namespace das
         return ssw.str();
     }
 
-    string reportErrorJson ( const char *, const char * fileName, int row, int col, const string & message,
+    string reportErrorJson ( const char *, const char * fileName,
+    int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
         int line = das::max(row - 1, 0);
         int character = das::max(col - 1, 0);
+        int lline = das::max(lrow - 2, line);
+        int lcharacter = das::max(lcol - 1, character);
         ssw <<  "{\n"
             <<  " \"uri\": \"" << escapeString(fileName ? fileName : "") << "\",\n"
             <<  " \"range\": {\n"
@@ -189,8 +213,8 @@ namespace das
             <<  "   \"character\": " << character << "\n"
             <<  "  },\n"
             <<  "  \"end\": {\n"
-            <<  "   \"line\": " << line << ",\n"
-            <<  "   \"character\": " << character << "\n"
+            <<  "   \"line\": " << lline << ",\n"
+            <<  "   \"character\": " << lcharacter << "\n"
             <<  "  }\n"
             <<  " },\n"
             <<  " \"message\" : \"" << escapeString(message) << "\",\n"
@@ -202,14 +226,15 @@ namespace das
                 <<  "  {\n"
                 <<  "   \"location\" : {\n"
                 <<  "    \"uri\" : \"" << escapeString(fileName ? fileName : "") << "\",\n"
+                <<  "    \"tab\" : " << tabSize << ",\n"
                 <<  "    \"range\": {\n"
                 <<  "     \"start\": {\n"
                 <<  "      \"line\": " << line << ",\n"
                 <<  "      \"character\": " << character << "\n"
                 <<  "     },\n"
                 <<  "     \"end\": {\n"
-                <<  "      \"line\": " << line << ",\n"
-                <<  "      \"character\": " << character << "\n"
+                <<  "      \"line\": " << lline << ",\n"
+                <<  "      \"character\": " << lcharacter << "\n"
                 <<  "     }\n"
                 <<  "    }\n"
                 <<  "   },\n"

@@ -10,7 +10,7 @@
         CorM_MOVE   = (1<<0),
         CorM_CLONE  = (1<<1)
     };
-    
+
     namespace das {
         extern ProgramPtr			    g_Program;
         extern FileAccessPtr            g_Access;
@@ -18,7 +18,7 @@
         extern das_map<string,string>   das_module_alias;
     }
     using namespace das;
-    
+
     struct VariableDeclaration {
         VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
             : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
@@ -37,14 +37,14 @@
         bool                    override = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
-    
+
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = false );
-    
+
     LineInfo tokAt ( const struct YYLTYPE & li );
-    
+
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
     extern bool das_need_oxford_comma;
@@ -60,9 +60,9 @@
 	#pragma warning(disable:4127)
 	#pragma warning(disable:4702)
 	#endif
-    
+
     using namespace das;
-    
+
     void das_yyerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
 	void das_checkName(const string & name, const LineInfo &at);
@@ -423,7 +423,8 @@ string_constant
 string_builder_body
     :   {
         $$ = new ExprStringBuilder();
-		$$->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
+		$$->at = LineInfo(g_FileAccessStack.back(),
+            yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
     |   string_builder_body[sb] character_sequence[sconst] {
         bool err;
@@ -473,6 +474,7 @@ options_declaration
 				das_tab_size = das_def_tab_size;
 			else
 				das_tab_size = opt->iValue ? opt->iValue : das_def_tab_size;//0 is default
+            g_FileAccessStack.back()->tabSize = das_tab_size;
 		}
 		delete $list;
 	}
@@ -756,7 +758,8 @@ optional_function_argument_list
 optional_function_type
     :   {
         $$ = new TypeDecl(Type::autoinfer);
-        $$->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
+        $$->at = LineInfo(g_FileAccessStack.back(),
+            yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
     |   ':' type_declaration[typeDecl]  {
         $$ = $typeDecl;
@@ -765,9 +768,9 @@ optional_function_type
     ;
 
 function_name
-    :   NAME[name]        { 
+    :   NAME[name]        {
 		das_checkName(*$name,tokAt(@name));
-		$$ = $name; 
+		$$ = $name;
 	}
     |   DAS_OPERATOR '!'     { $$ = new string("!"); }
     |   DAS_OPERATOR '~'     { $$ = new string("~"); }
@@ -917,7 +920,8 @@ expression_any
 expressions
     :   {
         $$ = new ExprBlock();
-		$$->at = LineInfo(g_FileAccessStack.back(), yylloc.first_column,yylloc.first_line);
+		$$->at = LineInfo(g_FileAccessStack.back(),
+            yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
     |   expressions[block] expression_any[subexpr]      {
         $$ = $block;
@@ -1286,20 +1290,20 @@ expr_method_call
     ;
 
 func_addr_expr
-    :   '@' '@'[loc] name_in_namespace[name]     { 
-		$$ = new ExprAddr(tokAt(@loc),*$name); 
-		delete $name; 
+    :   '@' '@'[loc] name_in_namespace[name]     {
+		$$ = new ExprAddr(tokAt(@loc),*$name);
+		delete $name;
 	}
     |   '@' '@'[loc] '<' type_declaration[blockType] '>' name_in_namespace[name] {
-		auto expr = new ExprAddr(tokAt(@loc),*$name); 
-		delete $name; 
+		auto expr = new ExprAddr(tokAt(@loc),*$name);
+		delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($blockType);
 		$$ = expr;
     }
-    |   '@' '@'[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' name_in_namespace[name] { 
-		auto expr = new ExprAddr(tokAt(@loc),*$name); 
-		delete $name; 
+    |   '@' '@'[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' name_in_namespace[name] {
+		auto expr = new ExprAddr(tokAt(@loc),*$name);
+		delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($result);
         if ( $list ) {
@@ -1484,13 +1488,13 @@ struct_variable_declaration_list
     ;
 
 function_argument_declaration
-    :   optional_field_annotation[ann] variable_declaration[decl]          { 
+    :   optional_field_annotation[ann] variable_declaration[decl]          {
 			$$ = $decl;
-			$decl->pTypeDecl->constant = true; 
+			$decl->pTypeDecl->constant = true;
 			$decl->annotation = $ann;
 		}
     |   optional_field_annotation[ann] DAS_VAR variable_declaration[decl]  {
-			$$ = $decl; 
+			$$ = $decl;
 			$decl->pTypeDecl->removeConstant = true;
 			$decl->annotation = $ann;
 		}
@@ -1704,7 +1708,7 @@ enum_declaration
 		das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@loc);
-        pEnum->name = *$name; 
+        pEnum->name = *$name;
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);
@@ -1715,7 +1719,7 @@ enum_declaration
 		das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@loc);
-        pEnum->name = *$name; 
+        pEnum->name = *$name;
 		pEnum->baseType = $ebt;
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
@@ -2306,7 +2310,7 @@ void das_yyerror(const string & error, const LineInfo & at, CompilationError cer
 
 void das_yyerror(const string & error, CompilationError cerr) {
     g_Program->error(error,"","",LineInfo(g_FileAccessStack.back(),
-        yylloc.first_column,yylloc.first_line),cerr);
+        yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line),cerr);
 }
 
 vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
@@ -2341,7 +2345,8 @@ void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
 }
 
 LineInfo tokAt ( const struct YYLTYPE & li ) {
-    return LineInfo(g_FileAccessStack.back(), li.first_column,li.first_line);
+    return LineInfo(g_FileAccessStack.back(),
+        li.first_column,li.first_line,yylloc.last_column,yylloc.last_line);
 }
 
 Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
