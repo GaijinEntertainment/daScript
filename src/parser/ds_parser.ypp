@@ -44,6 +44,7 @@
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = false );
 
     LineInfo tokAt ( const struct YYLTYPE & li );
+    LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie );
 
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
@@ -2366,8 +2367,16 @@ void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
 
 LineInfo tokAt ( const struct YYLTYPE & li ) {
     return LineInfo(g_FileAccessStack.back(),
-        li.first_column,li.first_line,yylloc.last_column,yylloc.last_line);
+        li.first_column,li.first_line,
+        li.last_column,li.last_line);
 }
+
+LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie ) {
+    return LineInfo(g_FileAccessStack.back(),
+        li.first_column,li.first_line,
+        lie.last_column,lie.last_line);
+}
+
 
 Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
     auto ann = g_Program->findAnnotation(name);
