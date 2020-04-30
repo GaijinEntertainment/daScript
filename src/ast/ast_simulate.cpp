@@ -2307,23 +2307,25 @@ namespace das
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;
         context.sharedSize = 0;
-        for (auto & pm : library.modules ) {
-            for (auto & pvar : pm->globalsInOrder) {
-                if (!pvar->used)
-                    continue;
-                DAS_ASSERTF(pvar->index >= 0, "we are simulating variable, which is not used");
-                auto & gvar = context.globalVariables[pvar->index];
-                gvar.name = context.code->allocateName(pvar->name);
-                gvar.size = pvar->type->getSizeOf();
-                gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
-                gvar.flags = 0;
-                if ( pvar->global_shared ) {
-                    gvar.offset = pvar->stackTop = context.sharedSize;
-                    gvar.shared = true;
-                    context.sharedSize = (context.sharedSize + gvar.size + 0xf) & ~0xf;
-                } else {
-                    gvar.offset = pvar->stackTop = context.globalsSize;
-                    context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
+        if ( totalVariables ) {
+            for (auto & pm : library.modules ) {
+                for (auto & pvar : pm->globalsInOrder) {
+                    if (!pvar->used)
+                        continue;
+                    DAS_ASSERTF(pvar->index >= 0, "we are simulating variable, which is not used");
+                    auto & gvar = context.globalVariables[pvar->index];
+                    gvar.name = context.code->allocateName(pvar->name);
+                    gvar.size = pvar->type->getSizeOf();
+                    gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
+                    gvar.flags = 0;
+                    if ( pvar->global_shared ) {
+                        gvar.offset = pvar->stackTop = context.sharedSize;
+                        gvar.shared = true;
+                        context.sharedSize = (context.sharedSize + gvar.size + 0xf) & ~0xf;
+                    } else {
+                        gvar.offset = pvar->stackTop = context.globalsSize;
+                        context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
+                    }
                 }
             }
         }
@@ -2333,46 +2335,50 @@ namespace das
         context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.code->allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
-        for (auto & pm : library.modules) {
-            for (auto & it : pm->functions) {
-                auto pfun = it.second;
-                if (pfun->index < 0 || !pfun->used)
-                    continue;
-                auto & gfun = context.functions[pfun->index];
-                auto mangledName = pfun->getMangledName();
-                gfun.name = context.code->allocateName(pfun->name);
-                gfun.mangledName = context.code->allocateName(mangledName);
-                gfun.code = pfun->simulate(context);
-                gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
-                gfun.stackSize = pfun->totalStackSize;
-                gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
-                gfun.flags = 0;
-                gfun.fastcall = pfun->fastCall;
+        if ( totalFunctions ) {
+            for (auto & pm : library.modules) {
+                for (auto & it : pm->functions) {
+                    auto pfun = it.second;
+                    if (pfun->index < 0 || !pfun->used)
+                        continue;
+                    auto & gfun = context.functions[pfun->index];
+                    auto mangledName = pfun->getMangledName();
+                    gfun.name = context.code->allocateName(pfun->name);
+                    gfun.mangledName = context.code->allocateName(mangledName);
+                    gfun.code = pfun->simulate(context);
+                    gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
+                    gfun.stackSize = pfun->totalStackSize;
+                    gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
+                    gfun.flags = 0;
+                    gfun.fastcall = pfun->fastCall;
+                }
             }
         }
-        for (auto & pm : library.modules ) {
-            for (auto & pvar : pm->globalsInOrder) {
-                if (!pvar->used)
-                    continue;
-                auto & gvar = context.globalVariables[pvar->index];
-                if ( pvar->init ) {
-                    if ( pvar->init->rtti_isMakeLocal() ) {
-                        if ( pvar->global_shared ) {
-                            auto sl = context.code->makeNode<SimNode_GetShared>(pvar->init->at, pvar->stackTop);
-                            auto sr = ExprLet::simulateInit(context, pvar, false);
-                            auto gvari = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
-                            auto cndb = context.code->makeNode<SimNode_GetArgument>(pvar->init->at, 1); // arg 1 of init script is "init_globals"
-                            gvar.init = context.code->makeNode<SimNode_IfThen>(pvar->init->at, cndb, gvari);
+        if ( totalVariables ) {
+            for (auto & pm : library.modules ) {
+                for (auto & pvar : pm->globalsInOrder) {
+                    if (!pvar->used)
+                        continue;
+                    auto & gvar = context.globalVariables[pvar->index];
+                    if ( pvar->init ) {
+                        if ( pvar->init->rtti_isMakeLocal() ) {
+                            if ( pvar->global_shared ) {
+                                auto sl = context.code->makeNode<SimNode_GetShared>(pvar->init->at, pvar->stackTop);
+                                auto sr = ExprLet::simulateInit(context, pvar, false);
+                                auto gvari = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
+                                auto cndb = context.code->makeNode<SimNode_GetArgument>(pvar->init->at, 1); // arg 1 of init script is "init_globals"
+                                gvar.init = context.code->makeNode<SimNode_IfThen>(pvar->init->at, cndb, gvari);
+                            } else {
+                                auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
+                                auto sr = ExprLet::simulateInit(context, pvar, false);
+                                gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
+                            }
                         } else {
-                            auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
-                            auto sr = ExprLet::simulateInit(context, pvar, false);
-                            gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
+                            gvar.init = ExprLet::simulateInit(context, pvar, false);
                         }
                     } else {
-                        gvar.init = ExprLet::simulateInit(context, pvar, false);
+                        gvar.init = nullptr;
                     }
-                } else {
-                    gvar.init = nullptr;
                 }
             }
         }

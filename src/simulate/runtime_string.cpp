@@ -137,7 +137,7 @@ namespace das
             }
             col ++;
         }
-        text << string(das::max(COL,0), ' ') << string(das::max(LCOL-COL,1),'^') << "\n";
+        text << string(das::max(COL,0), ' ') << string(das::max(LCOL-COL+1,1),'^') << "\n";
         text << COL << ":" << ROW << " - " << LCOL << ":" << LROW << "\n";
         return text.str();
     }
@@ -186,7 +186,7 @@ namespace das
         int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
-        if ( row && col ) {
+        if ( row ) {
             auto text = st ? getFewLines(st, row, col, lrow, lcol, tabSize) : "";
             ssw << fileName << ":" << row << ":" << col << ":\n" << text;
             if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";

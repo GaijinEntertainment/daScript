@@ -29,11 +29,11 @@
     int das_nested_curly_braces = 0;
 	int das_nested_square_braces = 0;
     int das_nested_sb = 0;
-    int das_yycolumn = 1;
+    int das_yycolumn = 0;
     int das_c_style_depth = 0;
     bool das_need_oxford_comma = true;
     bool das_force_oxford_comma = false;
-    bool das_supress_errors = true;
+    bool das_supress_errors = false;
     bool das_in_normal = false;
     vector<int> das_line_no;
     das_set<string> das_already_include;
@@ -46,7 +46,23 @@
         das_yylloc.first_line = das_yylloc.last_line = yylineno; \
         das_yylloc.first_column = das_yycolumn; \
         das_yylloc.last_column = das_yycolumn + yyleng - 1; \
-        das_yycolumn += yyleng;
+        YYCOLUMN (das_yycolumn += yyleng, "YY_USER_ACTION");
+
+#ifdef FLEX_DEBUG
+    void YYCOLUMN ( int, const char * comment ) {
+        printf("%i:%i %s\n", das_yycolumn, yylineno, comment ? comment : "");
+    }
+#else
+    #define YYCOLUMN(expr,comment)  ((expr))
+#endif
+
+void YYTAB() {
+    YYCOLUMN(das_yycolumn = (das_yycolumn - 1 + das_tab_size) & ~(das_tab_size-1), "TAB");
+}
+
+void YYNEWLINE() {
+    YYCOLUMN(das_yycolumn = 0,"NEW LINE");
+}
 
 %}
 
@@ -82,7 +98,7 @@
             g_FileAccessStack.pop_back();
             g_FileAccessStack.push_back(info);
             yylineno = lRow;
-            das_yycolumn = lCol;
+            YYCOLUMN ( das_yycolumn = lCol, "LINE DIRECTIVE");
         }
     } else {
         das_yyfatalerror ("can't process line directive " + string(yytext),
@@ -135,8 +151,14 @@
     das_yylval.ch = yytext[1];
     return STRING_CHARACTER;
 }
-<strb>[\r]              /* do exactly nothing */
-<strb>[\n\t]              {
+<strb>\r              /* do exactly nothing */
+<strb>\n                {
+    das_yylval.ch = *yytext;
+    YYNEWLINE();
+    return STRING_CHARACTER;
+}
+<strb>\t                {
+    YYTAB();
     das_yylval.ch = *yytext;
     return STRING_CHARACTER;
 }
@@ -146,6 +168,7 @@
 }
 <indent>[ \t\r]*\n		/* skip empty line */ {
     das_current_line_indent = 0;
+    YYNEWLINE();
 }
 <indent>" "             {
 	das_current_line_indent++;
@@ -153,22 +176,24 @@
 		printf("[ ], indent=%i\n", das_current_line_indent);
 	#endif
 }
-<indent>"\t"            {
+<indent>\t            {
 	das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
 	#ifdef FLEX_DEBUG
 		printf("\\t, cli=%i\n", das_current_line_indent);
 	#endif
+    YYTAB();
 }
 <indent>(\/\/.*)*\n     {
 	das_current_line_indent = 0;
 	das_need_oxford_comma = true;
-	das_yycolumn = 1;
+	YYNEWLINE();
 	#ifdef FLEX_DEBUG
 		printf("new line\n");
 	#endif
 }
 <indent>.               {
     unput(*yytext);
+    YYCOLUMN(das_yycolumn--, "UNPUT");
     if (das_current_line_indent > das_indent_level*das_tab_size ) {
         if ( das_current_line_indent % das_tab_size ) {
             #ifdef FLEX_DEBUG
@@ -187,7 +212,6 @@
         #ifdef FLEX_DEBUG
         printf("emit }, cli=%i, indent =%i\n", das_current_line_indent, das_indent_level);
         #endif
-        das_yycolumn--;
         return '}';
     } else {
         BEGIN(normal);
@@ -213,7 +237,10 @@
     }
 }
 
-<include>[ \t]*                     /* eat the whitespace */
+<include>[ ]*                     /* eat the whitespace */
+<include>\t {
+    YYTAB();
+}
 <include>[^ \t\r\n]+                { /* got the include file name */
     auto cfi = g_FileAccessStack.back();
     string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
@@ -439,6 +466,7 @@
 <normal>\<\|[ \t\r]*\n                      das_need_oxford_comma = false; unput('\n'); return LBPIPE;
 <normal>\<\|[ \t]\$                         {
     unput('$');
+    YYCOLUMN(das_yycolumn--, "UNPUT $");
     if ( das_nested_parentheses ) {
         return LPIPE;
     } else {
@@ -448,6 +476,7 @@
 }
 <normal>\<\|[ \t]\@                         {
     unput('@');
+    YYCOLUMN(das_yycolumn--, "UNPUT @");
     if ( das_nested_parentheses ) {
         return LPIPE;
     } else {
@@ -457,6 +486,7 @@
 }
 <normal>\@[ \t]*\<\|               {
     unput('@');
+    YYCOLUMN(das_yycolumn--, "UNPUT @");
     if ( das_nested_parentheses ) {
         return LAPIPE;
     } else {
@@ -512,9 +542,12 @@
 		das_nested_curly_braces ++;
 		return CBRCBRB;
 	}
-<normal>[ \t\r]                             /* skip white space */
+<normal>[ \r]                             /* skip white space */
+<normal>\t {
+    YYTAB();
+}
 <normal>(\/\/.*)*\n {
-    das_yycolumn = 1;
+    YYCOLUMN(das_yycolumn = 0, "NEW LINE");
     if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
         bool ns = ((das_current_line_indent!=0) && das_need_oxford_comma) || das_force_oxford_comma;
         #ifdef FLEX_DEBUG
@@ -534,7 +567,7 @@
 }
 <normal><<EOF>>         {
     if ( g_FileAccessStack.size()==1 ) {
-        das_yycolumn = 1;
+        YYCOLUMN(das_yycolumn = 0,"EOF");
         if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
             bool ns = (das_current_line_indent!=0) && das_need_oxford_comma;
             das_current_line_indent = 0;
@@ -569,7 +602,7 @@ void das_yybegin(const char * str) {
     yylineno = 1;
 	das_tab_size = das_def_tab_size;
     das_line_no.clear();
-    das_yycolumn = 1;
+    YYCOLUMN(das_yycolumn = 0,"YYBEGIN");
     das_current_line_indent = 0;
     das_indent_level = 0;
     das_nested_parentheses = 0;
