@@ -289,6 +289,69 @@ bool run_module_test ( const string & path, const string & main, bool usePak ) {
     }
 }
 
+bool debug_unit_test ( const string & fn, int CURSOR_X, int CURSOR_Y, bool useAot ) {
+    tout << fn << " ";
+    auto fAccess = make_smart<FsFileAccess>();
+    ModuleGroup dummyLibGroup;
+    CodeOfPolicies policies;
+    // policies.intern_strings = true;
+    // policies.intern_const_strings = true;
+    // policies.no_unsafe = true;
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
+        // CURSOR
+        auto cinfo = program->cursor(LineInfo(nullptr,CURSOR_X,CURSOR_Y,CURSOR_X,CURSOR_Y));
+        tout << cinfo.reportJson();
+        if ( program->failed() ) {
+            tout << "failed to compile\n";
+            for ( auto & err : program->errors ) {
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+            }
+            return false;
+        } else {
+            if (program->unsafe) tout << "[unsafe] ";
+            Context ctx(program->getContextStackSize());
+            if ( !program->simulate(ctx, tout) ) {
+                tout << "failed to simulate\n";
+                for ( auto & err : program->errors ) {
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+                }
+                return false;
+            }
+            if ( useAot ) {
+                // now, what we get to do is to link AOT
+                AotLibrary aotLib;
+                AotListBase::registerAot(aotLib);
+                program->linkCppAot(ctx, aotLib, tout);
+            }
+            if ( auto fnTest = ctx.findFunction("test") ) {
+                if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
+                    tout << "function 'test', call arguments do not match\n";
+                    return false;
+                }
+                ctx.restart();
+                ctx.runInitScript();    // this is here for testing purposes only
+                bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
+                if ( auto ex = ctx.getException() ) {
+                    tout << "exception: " << ex << "\n";
+                    return false;
+                }
+                if ( !result ) {
+                    tout << "failed\n";
+                    return false;
+                }
+                tout << (useAot ? "ok AOT\n" : "ok\n");
+                return true;
+            } else {
+                tout << "function 'test' not found\n";
+                return false;
+            }
+        }
+    } else {
+        return false;
+    }
+}
+
+
 int main() {
 	// _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 	// _CrtSetBreakAlloc(6836533);
@@ -315,8 +378,8 @@ int main() {
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
     // #define TEST_NAME   "examples/test/unit_tests/new_delete.das"
-    unit_test(TEST_PATH TEST_NAME,false);
-    unit_test(TEST_PATH TEST_NAME,true);
+    debug_unit_test(TEST_PATH TEST_NAME,5,6,false);
+    // unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();
     getchar();
     return 0;

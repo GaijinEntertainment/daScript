@@ -490,7 +490,7 @@ namespace das
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context );
-        string describe() const;
+        string describe(bool moduleName = false) const;
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr setSideEffects ( SideEffects seFlags );
         bool isGeneric() const;
@@ -509,7 +509,7 @@ namespace das
         int                 index = -1;
         uint32_t            totalStackSize = 0;
         int32_t             totalGenLabel = 0;
-        LineInfo            at;
+        LineInfo            at, atDecl;
         Module *            module = nullptr;
         das_set<Function *>     useFunctions;
         das_set<Variable *>     useGlobalVariables;
@@ -791,6 +791,13 @@ namespace das
         bool no_unused_function_arguments = false;
     };
 
+    struct CursorInfo {
+        LineInfo        at;         // cursor location
+        FunctionPtr     function;   // function, whre cursor is
+        ExpressionPtr   call;       // call, if cursor is pointing at one
+        string reportJson() const;
+    };
+
     class Program : public ptr_ref_count {
     public:
         Program();
@@ -843,6 +850,7 @@ namespace das
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
         void buildMNLookup ( Context & context, TextWriter & logs );
         void buildADLookup ( Context & context, TextWriter & logs );
+        CursorInfo cursor ( const LineInfo & info );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {

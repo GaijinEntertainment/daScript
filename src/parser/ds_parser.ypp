@@ -815,10 +815,11 @@ function_name
     ;
 
 function_declaration
-    :   optional_annotation_list[annL] DAS_DEF[loc] function_name[name]
+    :   optional_annotation_list[annL] DAS_DEF function_name[name]
             optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_smart<Function>();
-        pFunction->at = tokAt(@loc);
+        pFunction->at = tokAt(@name);
+        pFunction->atDecl = tokRangeAt(@annL, @block);
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
@@ -857,11 +858,11 @@ function_declaration
                         string err;
                         if ( !ann->apply(pFunction, *g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror("can't apply annotation\n" + err,
-                                tokAt(@loc), CompilationError::invalid_annotation);
+                                tokAt(@annL), CompilationError::invalid_annotation);
                         }
                     } else {
                         das_yyerror("functions are only allowed function annotations",
-                            tokAt(@loc), CompilationError::invalid_annotation);
+                            tokAt(@annL), CompilationError::invalid_annotation);
                     }
                 }
             }
@@ -871,14 +872,14 @@ function_declaration
         if ( pFunction->isGeneric() ) {
             if ( !g_Program->addGeneric(pFunction) ) {
                 das_yyerror("generic function is already defined " +
-                    pFunction->getMangledName(),tokAt(@loc),
+                    pFunction->getMangledName(),tokAt(@name),
                         CompilationError::function_already_declared);
                 pFunction.reset();
             }
         } else {
             if ( !g_Program->addFunction(pFunction) ) {
                 das_yyerror("function is already defined " +
-                    pFunction->getMangledName(),tokAt(@loc),
+                    pFunction->getMangledName(),tokAt(@name),
                         CompilationError::function_already_declared);
                 pFunction.reset();
             }
@@ -2376,7 +2377,6 @@ LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie ) {
         li.first_column,li.first_line,
         lie.last_column,lie.last_line);
 }
-
 
 Annotation * findAnnotation ( const string & name, const LineInfo & at ) {
     auto ann = g_Program->findAnnotation(name);

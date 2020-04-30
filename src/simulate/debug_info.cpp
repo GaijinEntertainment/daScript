@@ -115,7 +115,7 @@ namespace das
         switch ( type ) {
             case anyArgument:   return alignof(vec4f);
             case tPointer:      return alignof(void *);
-            case tIterator:     return alignof(Sequence);          
+            case tIterator:     return alignof(Sequence);
             case tHandle:       DAS_ASSERTF(0, "we should not be here. if this happens iterator was somehow placed on stack. how?");
                                 return alignof(void *);
             case tString:       return alignof(char *);
@@ -427,6 +427,25 @@ namespace das
         }
     }
 
+    string LineInfo::describeJson() const {
+        string fileName = fileInfo ? fileInfo->name : "";
+        int tabSize = fileInfo ? fileInfo->tabSize : 4;
+        TextWriter ss;
+        ss  <<  "\"uri\" : \"" << escapeString(fileName) << "\",\n"
+            <<  "\"tab\" : " << tabSize << ",\n"
+            <<  "\"range\": {\n"
+            <<  " \"start\": {\n"
+            <<  "  \"line\": " << line << ",\n"
+            <<  "  \"character\": " << column << "\n"
+            <<  " },\n"
+            <<  " \"end\": {\n"
+            <<  "  \"line\": " << last_line << ",\n"
+            <<  "  \"character\": " << last_column << "\n"
+            <<  " }\n"
+            <<  "}\n";
+        return ss.str();
+    }
+
     bool LineInfo::operator < ( const LineInfo & info ) const {
         if ( fileInfo && info.fileInfo && fileInfo->name != info.fileInfo->name)
             return fileInfo->name<info.fileInfo->name;
@@ -440,6 +459,14 @@ namespace das
     }
     bool LineInfo::operator != ( const LineInfo & info ) const {
         return !(*this == info);
+    }
+
+    bool LineInfo::inside ( const LineInfo & info ) const {
+        if ( fileInfo && fileInfo != info.fileInfo ) return false;
+        if ( line < info.line || line > info.last_line ) return false;
+        int from = line==info.line ? info.column : 0;
+        int to = line==info.last_line ? info.last_column : 100500;
+        return (line>=from) && (line<=to);
     }
 
     void FileInfo::reserveProfileData() {

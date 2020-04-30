@@ -8,7 +8,10 @@
 		"files.associations": {
 			"xstring": "cpp",
 			"type_traits": "cpp",
-			"xtr1common": "cpp"
+			"xtr1common": "cpp",
+			"regex": "cpp",
+			"xlocale": "cpp",
+			"cstddef": "cpp"
 		}
 	}
 }

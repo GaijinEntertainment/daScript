@@ -62,8 +62,8 @@ namespace das {
         return (module ? module->name+"::"+name : name) + "#" + das_to_string(baseType);
     }
 
-    TypeDeclPtr Enumeration::makeBaseType() const { 
-        return make_smart<TypeDecl>(baseType); 
+    TypeDeclPtr Enumeration::makeBaseType() const {
+        return make_smart<TypeDecl>(baseType);
     }
 
     Type Enumeration::getEnumType() const {
@@ -398,8 +398,11 @@ namespace das {
         return ss.str();
     }
 
-    string Function::describe() const {
+    string Function::describe(bool moduleName) const {
         TextWriter ss;
+        if ( moduleName && module && !module->name.empty() ) {
+            ss << module->name << "::";
+        }
         if ( !isalpha(name[0]) && name[0]!='_' && name[0]!='`' ) {
             ss << "operator ";
         }
@@ -1309,7 +1312,7 @@ namespace das {
         auto cexpr = clonePtr<ExprVar>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
-        cexpr->variable = variable; 
+        cexpr->variable = variable;
         cexpr->local = local;
         cexpr->block = block;
         cexpr->pBlock = pBlock;
@@ -1458,7 +1461,7 @@ namespace das {
         return cexpr;
     }
 
-    
+
     // ExprClone
 
     ExpressionPtr ExprClone::visit(Visitor & vis) {

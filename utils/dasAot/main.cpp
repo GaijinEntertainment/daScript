@@ -22,6 +22,10 @@ void operator delete(void * p) throw()
 static bool quiet = false;
 static bool json = false;
 
+static int cursor_x = 0;
+static int cursor_y = 0;
+static bool cursor = false;
+
 TextPrinter tout;
 
 bool saveToFile ( const string & fname, const string & str ) {
@@ -42,6 +46,10 @@ bool compile ( const string & fn, const string & cppFn ) {
     ModuleGroup dummyGroup;
     bool firstError = true;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
+        if ( cursor ) {
+            auto cinfo = program->cursor(LineInfo(nullptr,cursor_x,cursor_y,cursor_x,cursor_y));
+            tout << cinfo.reportJson();
+        }
         if ( program->failed() ) {
             if (json)
                 tout << "{ \"result\": \"failed to compile\",\n\"diagnostics\": [\n";
@@ -69,7 +77,7 @@ bool compile ( const string & fn, const string & cppFn ) {
                     tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
                     if (json) {
-                        if (!firstError) 
+                        if (!firstError)
                             tout << ",\n";
                         firstError = false;
                         tout << reportErrorJson(err.at, err.what, err.extra, err.fixme, err.cerr);
@@ -197,6 +205,16 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
                 quiet = true;
             } else if ( strcmp(argv[ai],"-j")==0 ) {
                 json = true;
+            } else if ( strcmp(argv[ai],"-cursor")==0 ) {
+                if ( ai+2 < argc ) {
+                    cursor = true;
+                    cursor_x = atoi(argv[ai+1]);
+                    cursor_y = atoi(argv[ai+2]);
+                    ai += 2;
+                } else {
+                    tout << "-cursor requires X and Y\n";
+                    return -1;
+                }
             } else {
                 tout << "unsupported option " << argv[ai];
                 return -1;
