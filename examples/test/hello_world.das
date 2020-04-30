@@ -6,11 +6,8 @@ def operator + ( a, b : Foo )
 	print("here\n")
 	return [[Foo a.t + b.t]]
 
-
-def add(a,b)
-	print("a + b = {a + b}\n")
-
 [export]
 def test()
-	add(1,2)
+	let c = [[Foo t=1]] + [[Foo t=2]]	// + at 24:11
+	print("t ={c}\n")
 	return true

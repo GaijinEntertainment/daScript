@@ -36,7 +36,13 @@ namespace das {
                 if ( cexpr->func ) {
                     describeFunction(ss,cexpr->func, "function");
                 }
-            };
+            } else if ( call->rtti_isOp1() || call->rtti_isOp2() || call->rtti_isOp3() ) {
+                auto cexpr = static_pointer_cast<ExprCallFunc>(call);
+                ss  << "name : \"" << cexpr->name << "\",\n";
+                if ( cexpr->func ) {
+                    describeFunction(ss,cexpr->func, "function");
+                }
+            }
             ss  <<  call->at.describeJson()
                 <<  "}\n"
             ;
@@ -62,6 +68,24 @@ namespace das {
             }
         }
         virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( cursor.inside(expr->at) ) {
+                info.call = expr;
+            }
+        }
+        virtual void preVisit ( ExprOp1 * expr ) override {
+            Visitor::preVisit(expr);
+            if ( cursor.inside(expr->at) ) {
+                info.call = expr;
+            }
+        }
+        virtual void preVisit ( ExprOp2 * expr ) override {
+            Visitor::preVisit(expr);
+            if ( cursor.inside(expr->at) ) {
+                info.call = expr;
+            }
+        }
+        virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
             if ( cursor.inside(expr->at) ) {
                 info.call = expr;
