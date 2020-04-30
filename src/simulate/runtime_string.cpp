@@ -204,20 +204,17 @@ namespace das
     int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
-        int line = das::max(row - 1, 0);
-        int character = das::max(col - 1, 0);
-        int lline = das::max(lrow - 2, line);
-        int lcharacter = das::max(lcol - 1, character);
         ssw <<  "{\n"
             <<  " \"uri\": \"" << escapeString(fileName ? fileName : "") << "\",\n"
+            <<  " \"tab\" : " << tabSize << ",\n"
             <<  " \"range\": {\n"
             <<  "  \"start\": {\n"
-            <<  "   \"line\": " << line << ",\n"
-            <<  "   \"character\": " << character << "\n"
+            <<  "   \"line\": " << row << ",\n"
+            <<  "   \"character\": " << col << "\n"
             <<  "  },\n"
             <<  "  \"end\": {\n"
-            <<  "   \"line\": " << lline << ",\n"
-            <<  "   \"character\": " << lcharacter << "\n"
+            <<  "   \"line\": " << lrow << ",\n"
+            <<  "   \"character\": " << lcol << "\n"
             <<  "  }\n"
             <<  " },\n"
             <<  " \"message\" : \"" << escapeString(message) << "\",\n"
@@ -229,15 +226,14 @@ namespace das
                 <<  "  {\n"
                 <<  "   \"location\" : {\n"
                 <<  "    \"uri\" : \"" << escapeString(fileName ? fileName : "") << "\",\n"
-                <<  "    \"tab\" : " << tabSize << ",\n"
                 <<  "    \"range\": {\n"
                 <<  "     \"start\": {\n"
-                <<  "      \"line\": " << line << ",\n"
-                <<  "      \"character\": " << character << "\n"
+                <<  "      \"line\": " << row << ",\n"
+                <<  "      \"character\": " << col << "\n"
                 <<  "     },\n"
                 <<  "     \"end\": {\n"
-                <<  "      \"line\": " << lline << ",\n"
-                <<  "      \"character\": " << lcharacter << "\n"
+                <<  "      \"line\": " << lrow << ",\n"
+                <<  "      \"character\": " << lcol << "\n"
                 <<  "     }\n"
                 <<  "    }\n"
                 <<  "   },\n"
