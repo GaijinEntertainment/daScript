@@ -130,6 +130,8 @@ namespace das
                 }
                 continue;
             } else if ( CH=='\n' ) {
+                row++;
+                col=0;
                 text << "\n";
                 break;
             } else {
@@ -137,7 +139,24 @@ namespace das
             }
             col ++;
         }
-        text << string(das::max(COL,0), ' ') << string(das::max(LCOL-COL+1,1),'^') << "\n";
+        const char * tail = it + COL;
+        while ( *it && it != tail ) {
+            auto CH = *it++;
+            if ( CH=='\t' ) {
+                int tcol = (col + TAB) & ~(TAB-1);
+                while ( col < tcol ) {
+                    text << " ";
+                    col ++;
+                }
+                continue;
+            } else if ( CH=='\n' ) {
+                break;
+            } else {
+                text << " ";
+            }
+            col ++;
+        }
+        text << string(das::max(LCOL-COL+1,1),'^') << "\n";
         text << COL << ":" << ROW << " - " << LCOL << ":" << LROW << "\n";
         return text.str();
     }

@@ -1186,7 +1186,7 @@ char *yytext;
 #endif
 
 void YYTAB() {
-    YYCOLUMN(das_yycolumn = (das_yycolumn - 1 + das_tab_size) & ~(das_tab_size-1), "TAB");
+    // YYCOLUMN(das_yycolumn = (das_yycolumn - 1 + das_tab_size) & ~(das_tab_size-1), "TAB");
 }
 
 void YYNEWLINE() {
