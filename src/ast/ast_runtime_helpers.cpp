@@ -44,10 +44,45 @@ namespace das {
                 }
             }
             ss  <<  call->at.describeJson()
+                <<  "},\n"
+            ;
+        } else {
+            ss  <<  "\"call\" : null,\n";
+        }
+        if ( variable ) {
+            ss  <<  "\"variable\" : {\n";
+            if ( variable->rtti_isVar() ) {
+                auto vexpr = static_pointer_cast<ExprVar>(variable);
+                ss  << "\"name\" : \"" << vexpr->name << "\",\n";
+                if ( vexpr->variable ) {
+                    ss  << "\"type\" : \"" << vexpr->variable->type->describe() << "\",\n";
+                    if ( vexpr->local ) {
+                        ss  << "\"category\" : \"local\",\n";
+                    } else if ( vexpr->pBlock ) {
+                        ss  << "\"category\" : \"block argument\",\n"
+                            << "\"index\" : " << vexpr->argumentIndex << ",\n";
+                    } else if ( vexpr->argument ) {
+                        ss  << "\"category\" : \"function argument\",\n"
+                            << "\"index\" : " << vexpr->argumentIndex << ",\n";
+                    } else {
+                        ss  << "\"category\" : \"global\",\n";
+                    }
+                    ss  << vexpr->variable->at.describeJson();
+                }
+            } else if ( variable->rtti_isField() ) {
+                auto fexpr = static_pointer_cast<ExprField>(variable);
+                ss  << "\"name\" : \"" << fexpr->name << "\",\n";
+                if ( fexpr->field ) {
+                    ss  << "\"type\" : \"" << fexpr->field->type->describe() << "\",\n"
+                        << "\"category\" : \"structure field\",\n"
+                        << fexpr->field->at.describeJson();
+                }
+            }
+            ss  <<  variable->at.describeJson()
                 <<  "}\n"
             ;
         } else {
-            ss  <<  "\"call\" : null\n";
+            ss  <<  "\"variable\" : null\n";
         }
         ss  << "}\n";
         return ss.str();
@@ -89,6 +124,18 @@ namespace das {
             Visitor::preVisit(expr);
             if ( cursor.inside(expr->at) ) {
                 info.call = expr;
+            }
+        }
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            if ( cursor.inside(expr->at) ) {
+                info.variable = expr;
+            }
+        }
+        virtual void preVisit ( ExprField * expr ) override {
+            Visitor::preVisit(expr);
+            if ( cursor.inside(expr->atField) ) {
+                info.variable = expr;
             }
         }
     protected:

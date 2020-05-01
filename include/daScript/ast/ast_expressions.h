@@ -200,7 +200,9 @@ namespace das
     struct ExprField : Expression {
         ExprField () = default;
         ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : Expression(a), value(val), name(n) {}
+            : Expression(a), value(val), name(n), atField(a) {}
+        ExprField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n )
+            : Expression(a), value(val), name(n), atField(af) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
@@ -210,6 +212,7 @@ namespace das
         int variantFieldIndex() const;
         ExpressionPtr   value;
         string          name;
+        LineInfo        atField;
         const Structure::FieldDeclaration * field = nullptr;
         int             tupleOrVariantIndex = -1;
         TypeAnnotationPtr annotation;

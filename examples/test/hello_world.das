@@ -4,7 +4,7 @@ struct Foo
 [export]
 def operator + ( a, b : Foo )
 	print("here\n")
-	return [[Foo a.t + b.t]]
+	return [[Foo a.t + b.t]]	// a at 17:7, .t at 19.7
 
 [export]
 def test()

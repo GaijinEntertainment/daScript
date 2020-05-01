@@ -795,6 +795,7 @@ namespace das
         LineInfo        at;         // cursor location
         FunctionPtr     function;   // function, whre cursor is
         ExpressionPtr   call;       // call, if cursor is pointing at one
+        ExpressionPtr   variable;   // variable
         string reportJson() const;
     };
 

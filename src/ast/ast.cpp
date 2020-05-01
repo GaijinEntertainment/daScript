@@ -375,6 +375,7 @@ namespace das {
         cfun->totalStackSize = 0;
         cfun->totalGenLabel = totalGenLabel;
         cfun->at = at;
+        cfun->atDecl = atDecl;
         cfun->module = nullptr;
         cfun->flags = flags;
         cfun->sideEffectFlags = sideEffectFlags;
@@ -1194,6 +1195,7 @@ namespace das {
         cexpr->field = field;
         cexpr->tupleOrVariantIndex = tupleOrVariantIndex;
         cexpr->unsafeDeref = unsafeDeref;
+        cexpr->atField = atField;
         return cexpr;
     }
 

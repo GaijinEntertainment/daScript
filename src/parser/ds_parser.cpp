@@ -5815,7 +5815,7 @@ yyreduce:
 
   case 253:
 #line 1359 "ds_parser.ypp"
-    { (yyval.pExpression) = new ExprField(tokAt((yylsp[-1])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s)); delete (yyvsp[0].s); }
+    { (yyval.pExpression) = new ExprField(tokAt((yylsp[-1])), tokAt((yylsp[0])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s)); delete (yyvsp[0].s); }
 #line 5820 "ds_parser.cpp"
     break;
 
