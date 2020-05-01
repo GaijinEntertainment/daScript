@@ -193,6 +193,11 @@ namespace das {
             if ( last ) ss << "\n";
             Visitor::visitStructureField(var, decl, last);
         }
+    // alias
+        virtual void preVisitAlias ( const string & name, TypeDecl * td ) override {
+            Visitor::preVisitAlias(name,td);
+            ss  << "typedef\n" << "\t" << name << " = " << td->describe() << "\n\n";
+        }
     // global
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
@@ -567,7 +572,7 @@ namespace das {
             if ( !name.empty() ) {
                 ss << c->bitfieldType->alias << " " << name;
             } else {
-                ss << "0x" << HEX << c->getValue() << DEC;
+                ss << "bitfield(0x" << HEX << c->getValue() << DEC << ")";
             }
             return Visitor::visit(c);
         }

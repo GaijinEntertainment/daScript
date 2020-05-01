@@ -33,6 +33,9 @@ namespace das {
         // TYPE
         virtual void preVisit ( TypeDecl * td ) {}
         virtual TypeDeclPtr visit ( TypeDecl * td ) { return td; }
+        // ALIAS
+        virtual void preVisitAlias ( const string & name, TypeDecl * td ) {}
+        virtual  TypeDeclPtr visitAlias ( const string & name, TypeDecl * td ) { return td; }
         // ENUMERATOIN
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) { }

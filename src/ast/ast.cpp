@@ -2294,9 +2294,11 @@ namespace das {
         }
         // aliases
         for ( auto & als : thisModule->aliasTypes ) {
+            vis.preVisitAlias ( als.first, als.second.get());
             vis.preVisit(als.second.get());
             als.second = als.second->visit(vis);
-            als.second = vis.visit(als.second.get());
+            if ( als.second ) als.second = vis.visit(als.second.get());
+            if ( als.second ) als.second = vis.visitAlias(als.first, als.second.get());
         }
         // real things
         vis.preVisitProgramBody(this);

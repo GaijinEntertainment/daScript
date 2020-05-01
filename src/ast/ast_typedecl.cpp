@@ -353,14 +353,17 @@ namespace das
             }
             stream << ">";
         } else if ( baseType==Type::tBitfield ) {
-            stream << das_to_string(baseType) << "<";
-            int ai = 0;
-            for ( const auto & arg : argNames ) {
-                if ( ai !=0 ) stream << ";";
-                stream << arg;
-                ai ++;
+            stream << das_to_string(baseType);
+            if ( argNames.size() ) {
+                stream << "<";
+                int ai = 0;
+                for ( const auto & arg : argNames ) {
+                    if ( ai !=0 ) stream << ";";
+                    stream << arg;
+                    ai ++;
+                }
+                stream << ">";
             }
-            stream << ">";
         }else {
             stream << das_to_string(baseType);
         }
