@@ -7,10 +7,10 @@ namespace das {
 
     void describeFunction ( TextWriter & ss, const FunctionPtr & function, const string & sectionName ) {
         ss  <<  sectionName << " : {\n"
-            <<  "name : \"" << function->describe(true) << "\",\n"
+            <<  "\"name\" : \"" << function->describe(true) << "\",\n"
             ;
         if ( function->fromGeneric ) {
-            describeFunction(ss, function->fromGeneric, "generic");
+            describeFunction(ss, function->fromGeneric, "\"generic\"");
         }
         ss  <<  function->atDecl.describeJson()
             <<  "},\n"
@@ -20,34 +20,34 @@ namespace das {
     string CursorInfo::reportJson() const {
         TextWriter ss;
         ss  <<  "{\n"
-            <<  "cursor: {\n"
+            <<  "\"cursor\": {\n"
             <<   at.describeJson()
             <<  "},\n";
         if ( function ) {
-            describeFunction(ss, function, "function");
+            describeFunction(ss, function, "\"function\"");
         } else {
-            ss  << "function : null,\n";
+            ss  << "\"function\" : null,\n";
         }
         if ( call ) {
-            ss  <<  "call : {\n";
+            ss  <<  "\"call\" : {\n";
             if ( call->rtti_isCall() ) {
                 auto cexpr = static_pointer_cast<ExprCall>(call);
-                ss  << "name : \"" << cexpr->name << "\",\n";
+                ss  << "\"name\" : \"" << cexpr->name << "\",\n";
                 if ( cexpr->func ) {
-                    describeFunction(ss,cexpr->func, "function");
+                    describeFunction(ss,cexpr->func, "\"function\"");
                 }
             } else if ( call->rtti_isOp1() || call->rtti_isOp2() || call->rtti_isOp3() ) {
                 auto cexpr = static_pointer_cast<ExprCallFunc>(call);
-                ss  << "name : \"" << cexpr->name << "\",\n";
+                ss  << "\"name\" : \"" << cexpr->name << "\",\n";
                 if ( cexpr->func ) {
-                    describeFunction(ss,cexpr->func, "function");
+                    describeFunction(ss,cexpr->func, "\"function\"");
                 }
             }
             ss  <<  call->at.describeJson()
                 <<  "}\n"
             ;
         } else {
-            ss  <<  "call : null\n";
+            ss  <<  "\"call\" : null\n";
         }
         ss  << "}\n";
         return ss.str();
