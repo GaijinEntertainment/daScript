@@ -526,6 +526,8 @@ namespace das
     struct ExprConstBitfield : ExprConstT<uint32_t,ExprConstBitfield> {
         ExprConstBitfield(uint32_t i = 0)  : ExprConstT(i,Type::tBitfield) {}
         ExprConstBitfield(const LineInfo & a, uint32_t i = 0)  : ExprConstT(a,i,Type::tBitfield) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        TypeDeclPtr bitfieldType;
     };
 
     struct ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {

@@ -1720,6 +1720,18 @@ namespace das
         return -1;
     }
 
+    string TypeDecl::findBitfieldName ( uint32_t val ) const {
+       if ( argNames.size() ) {
+            if ( val && (val & (val-1))==0 ) {  // if bit is set, and only one bit
+                int index = 31 - __builtin_clz(val);
+                if ( index < argNames.size() ) {
+                    return argNames[index];
+                }
+            }
+        }
+        return "";
+    }
+
     bool isCircularType ( const TypeDeclPtr & type, vector<const TypeDecl *> & all ) {
         if ( type->baseType==Type::tPointer ) {
             return false;

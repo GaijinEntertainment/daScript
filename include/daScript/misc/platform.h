@@ -179,7 +179,7 @@ inline void das_aligned_free16(void *ptr) {
     free(ptr);
 #endif
 }
+#endif
 
 #include "daScript/misc/smart_ptr.h"
 
-#endif

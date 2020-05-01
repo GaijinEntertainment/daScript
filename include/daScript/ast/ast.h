@@ -808,6 +808,7 @@ namespace das
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<EnumerationPtr> findEnum ( const string & name ) const;
+        vector<TypeDeclPtr> findAlias ( const string & name ) const;
         bool addAlias ( const TypeDeclPtr & at );
         bool addVariable ( const VariablePtr & var );
         bool addStructure ( const StructurePtr & st );

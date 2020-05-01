@@ -560,7 +560,15 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstBitfield * c ) override {
-            ss << "0x" << HEX << c->getValue() << DEC;
+            string name;
+            if ( c->bitfieldType && !c->bitfieldType->alias.empty() ) {
+                name = c->bitfieldType->findBitfieldName(c->getValue());
+            }
+            if ( !name.empty() ) {
+                ss << c->bitfieldType->alias << " " << name;
+            } else {
+                ss << "0x" << HEX << c->getValue() << DEC;
+            }
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstBool * c ) override {

@@ -69,6 +69,7 @@ namespace das
     ,   enumeration_not_found                   =   30308       //  WTF WTF enum
     ,   enumeration_value_not_found             =   30309       //  enumt WTF
     ,   type_alias_not_found                    =   30310       //  typedef A =; typedef A =; ...
+    ,   bitfield_not_found                      =   30311       //  bitfield<one;two> a; a.three
 
     ,   cant_initialize                         =   30401       //  block type declaration, default values
 

@@ -665,6 +665,15 @@ namespace das {
         return cexpr;
     }
 
+    // ConstBitfield
+
+    ExpressionPtr ExprConstBitfield::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprConstBitfield>(expr);
+        ExprConstT<uint32_t,ExprConstBitfield>::clone(cexpr);
+        cexpr->bitfieldType = make_smart<TypeDecl>(*bitfieldType);
+        return cexpr;
+    }
+
     // ConstEnumeration
 
     ExpressionPtr ExprConstEnumeration::visit(Visitor & vis) {
@@ -2007,6 +2016,10 @@ namespace das {
 
     vector<EnumerationPtr> Program::findEnum ( const string & name ) const {
         return library.findEnum(name,thisModule.get());
+    }
+
+    vector<TypeDeclPtr> Program::findAlias ( const string & name ) const {
+        return library.findAlias(name,thisModule.get());
     }
 
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {

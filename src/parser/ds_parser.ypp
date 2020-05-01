@@ -1435,30 +1435,51 @@ expr
         }
     }
     | name_in_namespace[ena] NAME[eni] {
-		ExprConstEnumeration * resEnum = nullptr;
+        Enumeration * pEnum = nullptr;
+		Expression * resConst = nullptr;
         auto enums = g_Program->findEnum(*$ena);
-        if ( enums.size()!=1 ) {
-            if ( enums.size() ) {
-                string candidates = g_Program->describeCandidates(enums);
-                das_yyerror("enumeraiton not found " + *$ena + "\n" + candidates, tokAt(@ena),
-                    CompilationError::enumeration_not_found);
-            } else {
-                das_yyerror("enumeraiton not found " + *$ena, tokAt(@ena),
-                    CompilationError::enumeration_not_found);
+        auto aliases = g_Program->findAlias(*$ena);
+        if ( enums.size()+aliases.size() > 1 ) {
+            string candidates;
+            if ( enums.size() ) candidates += g_Program->describeCandidates(enums);
+            if ( aliases.size() ) candidates += g_Program->describeCandidates(aliases);
+            das_yyerror("too many options for " + *$ena + "\n" + candidates, tokAt(@ena),
+                CompilationError::type_not_found);
+        } else if ( enums.size()==0 && aliases.size()==0 ) {
+            das_yyerror("enumeration or bitfield not found " + *$ena, tokAt(@ena),
+                CompilationError::type_not_found);
+        } else if ( enums.size()==1 ) {
+            pEnum = enums.back().get();
+        } else if ( aliases.size()==1 ) {
+            auto alias = aliases.back();
+            if ( alias->isEnum() ) {
+                pEnum = alias->enumType;
+            } else if ( alias->isBitfield() ) {
+                int bit = alias->findArgumentIndex(*$eni);
+                if ( bit!=-1 ) {
+                    auto td = make_smart<TypeDecl>(*alias);
+                    td->ref = false;
+                    auto bitConst = new ExprConstBitfield(tokAt(@eni), 1u << bit);
+                    bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
+                    resConst = bitConst;
+                } else {
+                    das_yyerror("enumeration or bitfield not found " + *$ena, tokAt(@ena),
+                        CompilationError::bitfield_not_found);
+                }
             }
-        } else {
-            auto pEnum = enums.back();
+        }
+        if ( pEnum ) {
             auto ff = pEnum->find(*$eni);
             if ( ff.second ) {
 				auto td = make_smart<TypeDecl>(pEnum);
-                resEnum = new ExprConstEnumeration(tokAt(@eni), *$eni, td);
+                resConst = new ExprConstEnumeration(tokAt(@eni), *$eni, td);
             } else {
                 das_yyerror("enumeraiton value not found " + *$ena + " " + *$eni, tokAt(@eni),
                     CompilationError::enumeration_not_found);
             }
         }
-		if ( resEnum ) {
-			$$ = resEnum;
+		if ( resConst ) {
+			$$ = resConst;
 		} else {
 			$$ = new ExprConstInt(0);	// dummy
 		}

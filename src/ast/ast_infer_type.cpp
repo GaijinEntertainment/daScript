@@ -1528,6 +1528,15 @@ namespace das {
                 auto cE = static_cast<ExprConstEnumeration *>(c);
                 c->type = cE->enumType->makeEnumType();
                 c->type->constant = true;
+            } else if ( c->baseType==Type::tBitfield ) {
+                auto cB = static_cast<ExprConstBitfield *>(c);
+                if ( cB->bitfieldType ) {
+                    c->type = make_smart<TypeDecl>(*cB->bitfieldType);
+                    c->type->ref = false;
+                } else {
+                    c->type = make_smart<TypeDecl>(Type::tBitfield);
+                }
+                c->type->constant = true;
             } else {
                 c->type = make_smart<TypeDecl>(c->baseType);
                 c->type->constant = true;

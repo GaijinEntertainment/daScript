@@ -133,6 +133,7 @@ namespace das {
         const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
         int findArgumentIndex(const string & name) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
+        string findBitfieldName ( uint32_t value ) const;
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
         Enumeration *           enumType = nullptr;
