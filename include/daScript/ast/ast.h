@@ -796,6 +796,7 @@ namespace das
         FunctionPtr     function;   // function, whre cursor is
         ExpressionPtr   call;       // call, if cursor is pointing at one
         ExpressionPtr   variable;   // variable
+        int             variableIndex = -1; // variable index in the 'let', function argument, or block argument
         string reportJson() const;
     };
 
