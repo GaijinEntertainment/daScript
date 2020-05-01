@@ -77,6 +77,13 @@ namespace das {
                         << "\"category\" : \"structure field\",\n"
                         << fexpr->field->at.describeJson();
                 }
+            } else if ( variable->rtti_isLet() ) {
+                auto lexpr = static_pointer_cast<ExprLet>(variable);
+                auto lvar = lexpr->variables[variableIndex];
+                ss  << "\"name\" : \"" << lvar->name << "\",\n";
+                ss  << "\"type\" : \"" <<lvar->type->describe() << "\",\n"
+                    << "\"category\" : \"local\",\n"
+                    << lvar->at.describeJson();
             }
             ss  <<  variable->at.describeJson()
                 <<  "}\n"
@@ -136,6 +143,17 @@ namespace das {
             Visitor::preVisit(expr);
             if ( cursor.inside(expr->atField) ) {
                 info.variable = expr;
+            }
+        }
+        virtual void preVisit ( ExprLet * expr ) override {
+            Visitor::preVisit(expr);
+            int vi = 0;
+            for ( const auto v : expr->variables ) {
+                if ( cursor.inside(v->at) ) {
+                    info.variable = expr;
+                    info.variableIndex = vi;
+                }
+                vi ++;
             }
         }
     protected:
