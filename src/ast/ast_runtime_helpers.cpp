@@ -53,9 +53,9 @@ namespace das {
             ss  <<  "\"variable\" : {\n";
             if ( variable->rtti_isVar() ) {
                 auto vexpr = static_pointer_cast<ExprVar>(variable);
-                ss  << "\"name\" : \"" << vexpr->name << "\",\n";
+                ss  << "\"name\" : \"" << vexpr->name << "\"\n";
                 if ( vexpr->variable ) {
-                    ss  << "\"type\" : \"" << vexpr->variable->type->describe() << "\",\n";
+                    ss  << ",\"type\" : \"" << vexpr->variable->type->describe() << "\",\n";
                     if ( vexpr->local ) {
                         ss  << "\"category\" : \"local\",\n";
                     } else if ( vexpr->pBlock ) {
@@ -67,20 +67,20 @@ namespace das {
                     } else {
                         ss  << "\"category\" : \"global\",\n";
                     }
-                    ss  << vexpr->variable->at.describeJson();
                 }
+                ss << vexpr->variable->at.describeJson();
             } else if ( variable->rtti_isField() ) {
                 auto fexpr = static_pointer_cast<ExprField>(variable);
-                ss  << "\"name\" : \"" << fexpr->name << "\",\n";
+                ss  << "\"name\" : \"" << fexpr->name << "\"\n";
                 if ( fexpr->field ) {
-                    ss  << "\"type\" : \"" << fexpr->field->type->describe() << "\",\n"
+                    ss  << ",\"type\" : \"" << fexpr->field->type->describe() << "\",\n"
                         << "\"category\" : \"structure field\",\n"
                         << fexpr->field->at.describeJson();
                 }
+            } else {
+                ss << variable->at.describeJson();
             }
-            ss  <<  variable->at.describeJson()
-                <<  "}\n"
-            ;
+            ss  <<  "}\n";
         } else {
             ss  <<  "\"variable\" : null\n";
         }
