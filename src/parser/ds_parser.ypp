@@ -1976,6 +1976,10 @@ bitfield_type_declaration
     :   DAS_TBITFIELD[basicType] '<' bitfield_bits[nl] '>' {
             $$ = new TypeDecl(Type::tBitfield);
             $$->argNames = *$nl;
+            if ( $$->argNames.size()>32 ) {
+                das_yyerror("only 32 different bits allowed",tokAt(@basicType),
+                    CompilationError::invalid_type);
+            }
             $$->at = tokAt(@basicType);
             delete $nl;
     }
@@ -2173,6 +2177,10 @@ bitfield_alias_declaration
         btype->alias = *$vname;
         btype->at = tokAt(@vname);
         btype->argNames = *$list;
+        if ( btype->argNames.size()>32 ) {
+            das_yyerror("only 32 different bits allowed",tokAt(@vname),
+                CompilationError::invalid_type);
+        }
         if ( !g_Program->addAlias(btype) ) {
             das_yyerror("type alias is already defined "+*$vname,tokAt(@vname),
                 CompilationError::type_alias_already_declared);
