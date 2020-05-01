@@ -1193,7 +1193,7 @@ namespace das {
         cexpr->name = name;
         cexpr->value = value->clone();
         cexpr->field = field;
-        cexpr->tupleOrVariantIndex = tupleOrVariantIndex;
+        cexpr->fieldIndex = fieldIndex;
         cexpr->unsafeDeref = unsafeDeref;
         cexpr->atField = atField;
         return cexpr;
@@ -1221,6 +1221,10 @@ namespace das {
         auto vT = value->type->isPointer() ? value->type->firstType : value->type;
         if (!vT) return -1;
         return vT->findArgumentIndex(name);
+    }
+
+    int ExprField::bitFieldIndex() const {
+        return value->type->findArgumentIndex(name);
     }
 
     // ExprIs
@@ -2179,14 +2183,15 @@ namespace das {
                      "expecting constant. something in enumeration (or otherwise) did not fold.");
         auto econst = static_pointer_cast<ExprConst>(expr);
         switch (econst->baseType) {
-        case Type::tInt8:   return static_pointer_cast<ExprConstInt8>(expr)->getValue();
-        case Type::tUInt8:  return static_pointer_cast<ExprConstUInt8>(expr)->getValue();
-        case Type::tInt16:  return static_pointer_cast<ExprConstInt16>(expr)->getValue();
-        case Type::tUInt16: return static_pointer_cast<ExprConstUInt16>(expr)->getValue();
-        case Type::tInt:    return static_pointer_cast<ExprConstInt>(expr)->getValue();
-        case Type::tUInt:   return static_pointer_cast<ExprConstUInt>(expr)->getValue();
-        case Type::tInt64:  return static_pointer_cast<ExprConstInt64>(expr)->getValue();
-        case Type::tUInt64: return static_pointer_cast<ExprConstUInt64>(expr)->getValue();
+        case Type::tInt8:       return static_pointer_cast<ExprConstInt8>(expr)->getValue();
+        case Type::tUInt8:      return static_pointer_cast<ExprConstUInt8>(expr)->getValue();
+        case Type::tInt16:      return static_pointer_cast<ExprConstInt16>(expr)->getValue();
+        case Type::tUInt16:     return static_pointer_cast<ExprConstUInt16>(expr)->getValue();
+        case Type::tInt:        return static_pointer_cast<ExprConstInt>(expr)->getValue();
+        case Type::tUInt:       return static_pointer_cast<ExprConstUInt>(expr)->getValue();
+        case Type::tBitfield:   return static_pointer_cast<ExprConstBitfield>(expr)->getValue();
+        case Type::tInt64:      return static_pointer_cast<ExprConstInt64>(expr)->getValue();
+        case Type::tUInt64:     return static_pointer_cast<ExprConstUInt64>(expr)->getValue();
         default:
             DAS_ASSERTF ( 0,
                 "we should not even be here. there is an enumeration of unsupported type."
@@ -2210,6 +2215,7 @@ namespace das {
             case Type::tUInt16:         return make_smart<ExprConstUInt16>(at, cast<uint16_t>::to(value));
             case Type::tUInt64:         return make_smart<ExprConstUInt64>(at, cast<uint64_t>::to(value));
             case Type::tUInt:           return make_smart<ExprConstUInt>(at, cast<uint32_t>::to(value));
+            case Type::tBitfield:       return make_smart<ExprConstBitfield>(at, cast<uint32_t>::to(value));
             case Type::tUInt2:          return make_smart<ExprConstUInt2>(at, cast<uint2>::to(value));
             case Type::tUInt3:          return make_smart<ExprConstUInt3>(at, cast<uint3>::to(value));
             case Type::tUInt4:          return make_smart<ExprConstUInt4>(at, cast<uint4>::to(value));

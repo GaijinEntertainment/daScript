@@ -25,7 +25,7 @@ DAS_BASE_BIND_ENUM_98(Type, Type,
     tPointer,       tFunction,      tLambda,        tIterator,
     tArray,         tTable,         tBlock,         tInt8,
     tUInt8,         tInt16,         tUInt16,        tTuple,
-    tEnumeration8,  tEnumeration16, tVariant
+    tEnumeration8,  tEnumeration16, tVariant,       tBitfield
 )
 
 MAKE_TYPE_FACTORY(Annotation,Annotation)
@@ -447,6 +447,7 @@ namespace das {
             switch (info.type) {
             case Type::tBool:   nada._variant = 0; break;
             case Type::tInt:    nada._variant = 1; break;
+            case Type::tBitfield:
             case Type::tUInt:   nada._variant = 2; break;
             case Type::tInt64:  nada._variant = 3; break;
             case Type::tUInt64: nada._variant = 4; break;

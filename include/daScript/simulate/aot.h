@@ -154,6 +154,10 @@ namespace das {
         }
     };
 
+    __forceinline bool das_get_bitfield ( uint32_t value, uint32_t mask ) {
+        return (value & mask) == mask;
+    }
+
     template <typename TT>
     struct cast_vec_ref {
         static __forceinline TT & to(vec4f & x) {

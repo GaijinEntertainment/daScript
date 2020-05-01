@@ -337,6 +337,7 @@ void YYNEWLINE() {
 <normal>"int3"                                          return DAS_TINT3;
 <normal>"int4"                                          return DAS_TINT4;
 <normal>"uint"                                          return DAS_TUINT;
+<normal>"bitfield"                                      return DAS_TBITFIELD;
 <normal>"uint8"                                         return DAS_TUINT8;
 <normal>"uint16"                                        return DAS_TUINT16;
 <normal>"uint64"                                        return DAS_TUINT64;

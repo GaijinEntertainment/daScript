@@ -210,11 +210,12 @@ namespace das
         virtual bool rtti_isField() const override { return true; }
         int tupleFieldIndex() const;
         int variantFieldIndex() const;
+        int bitFieldIndex() const;
         ExpressionPtr   value;
         string          name;
         LineInfo        atField;
         const Structure::FieldDeclaration * field = nullptr;
-        int             tupleOrVariantIndex = -1;
+        int             fieldIndex = -1;
         TypeAnnotationPtr annotation;
         union {
             struct {
@@ -520,6 +521,11 @@ namespace das
     struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
         ExprConstInt64(int64_t i = 0)  : ExprConstT(i,Type::tInt64) {}
         ExprConstInt64(const LineInfo & a, int64_t i = 0)  : ExprConstT(a,i,Type::tInt64) {}
+    };
+
+    struct ExprConstBitfield : ExprConstT<uint32_t,ExprConstBitfield> {
+        ExprConstBitfield(uint32_t i = 0)  : ExprConstT(i,Type::tBitfield) {}
+        ExprConstBitfield(const LineInfo & a, uint32_t i = 0)  : ExprConstT(a,i,Type::tBitfield) {}
     };
 
     struct ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {

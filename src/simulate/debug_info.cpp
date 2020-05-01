@@ -35,6 +35,7 @@ namespace das
         {   Type::tInt3,        "int3"  },
         {   Type::tInt4,        "int4"  },
         {   Type::tUInt,        "uint"  },
+        {   Type::tBitfield,    "bitfield"  },
         {   Type::tUInt2,       "uint2" },
         {   Type::tUInt3,       "uint3" },
         {   Type::tUInt4,       "uint4" },
@@ -87,6 +88,7 @@ namespace das
             case tInt3:         return sizeof(int3);
             case tInt4:         return sizeof(int4);
             case tUInt:         return sizeof(uint32_t);
+            case tBitfield:     return sizeof(uint32_t);
             case tUInt2:        return sizeof(uint2);
             case tUInt3:        return sizeof(uint3);
             case tUInt4:        return sizeof(uint4);
@@ -134,6 +136,7 @@ namespace das
             case tInt3:         return alignof(int3);
             case tInt4:         return alignof(int4);
             case tUInt:         return alignof(uint32_t);
+            case tBitfield:     return alignof(uint32_t);
             case tUInt2:        return alignof(uint2);
             case tUInt3:        return alignof(uint3);
             case tUInt4:        return alignof(uint4);

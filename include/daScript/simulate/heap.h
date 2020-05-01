@@ -199,6 +199,7 @@ namespace das {
                 case Type::tDouble:     return makeNode<NodeType<double>>(args...);
                 case Type::tPointer:    return makeNode<NodeType<void *>>(args...);
                 case Type::tLambda:     return makeNode<NodeType<Lambda>>(args...);
+                case Type::tBitfield:   return makeNode<NodeType<uint32_t>>(args...);
                 default:
                     DAS_ASSERTF(0, "we should not even be here. we are calling makeNumericValueNode on an uspported baseType."
                                 "likely new numeric type been added.");
@@ -219,6 +220,7 @@ namespace das {
             case Type::tEnumeration:    return makeNode<NodeType<int32_t>>(args...);
             case Type::tEnumeration8:   return makeNode<NodeType<int8_t>>(args...);
             case Type::tEnumeration16:  return makeNode<NodeType<int16_t>>(args...);
+            case Type::tBitfield:       return makeNode<NodeType<uint32_t>>(args...);
             case Type::tInt:            return makeNode<NodeType<int32_t>>(args...);
             case Type::tInt2:           return makeNode<NodeType<int2>>(args...);
             case Type::tInt3:           return makeNode<NodeType<int3>>(args...);

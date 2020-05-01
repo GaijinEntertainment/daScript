@@ -112,4 +112,35 @@ namespace das
     typedef EnumStubAny<int32_t> EnumStub;
     typedef EnumStubAny<int8_t>  EnumStub8;
     typedef EnumStubAny<int16_t> EnumStub16;
+
+    struct Bitfield {
+        uint32_t    value;
+        __forceinline Bitfield ( int32_t v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( uint32_t v ) : value(v) {}
+        __forceinline Bitfield ( int64_t v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( uint64_t v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( int8_t v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( uint8_t v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( int16_t v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( uint16_t v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( float v ) : value(uint32_t(v)) {}
+        __forceinline Bitfield ( double v ) : value(uint32_t(v)) {}
+        __forceinline operator uint32_t & () { return value; }
+        __forceinline operator const uint32_t & () const { return value; }
+        __forceinline operator float () const { return float(value); }
+        __forceinline operator double () const { return double(value); }
+        __forceinline operator int32_t () const { return int32_t(value); }
+        __forceinline operator int16_t () const { return int16_t(value); }
+        __forceinline operator uint16_t () const { return uint16_t(value); }
+        __forceinline operator int64_t () const { return int64_t(value); }
+        __forceinline operator uint64_t () const { return uint64_t(value); }
+    };
+}
+
+namespace std {
+    template <> struct hash<das::Bitfield> {
+        std::size_t operator() ( das::Bitfield b ) const {
+            return hash<uint32_t>()(b.value);
+        }
+    };
 }

@@ -4,7 +4,7 @@
 #include "daScript/ast/ast_expressions.h"
 
 namespace das {
-    
+
     // NOTE: parameters here are unreferenced for a reason
     //            the idea is you copy the function defintion, and paste to your code
 #if defined(_MSC_VER)
@@ -137,7 +137,7 @@ namespace das {
         // MAKE VARIANT
         virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
         virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField) {
-            return decl; 
+            return decl;
         }
             // MAKE STRUCTURE
         virtual void preVisitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastIndex ) {}
@@ -206,6 +206,7 @@ namespace das {
         VISIT_EXPR(ExprFakeContext)
         VISIT_EXPR(ExprConstPtr)
         VISIT_EXPR(ExprConstEnumeration)
+        VISIT_EXPR(ExprConstBitfield)
         VISIT_EXPR(ExprConstInt8)
         VISIT_EXPR(ExprConstInt16)
         VISIT_EXPR(ExprConstInt64)

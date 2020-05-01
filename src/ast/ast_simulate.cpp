@@ -885,7 +885,8 @@ namespace das
             return context.code->makeNode<SimNode_ConstValue>(at, envalue);
         }
         case Type::tInt:
-        case Type::tUInt: {
+        case Type::tUInt:
+        case Type::tBitfield: {
             int32_t tv = int32_t(iou); memcpy(&envalue, &tv, sizeof(int32_t));
             return context.code->makeNode<SimNode_ConstValue>(at, envalue);
         }
@@ -1233,7 +1234,9 @@ namespace das
             } else {
                 switch ( type->baseType ) {
                     case tInt:      return context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);
-                    case tUInt:     return context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
+                    case tUInt:
+                    case tBitfield:
+                                    return context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
                     case tFloat:    return context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range);
                     default:
                         DAS_ASSERTF(0, "we should not even be here. infer type should have failed on unsupported_vector[blah]");
@@ -1458,7 +1461,11 @@ namespace das
     }
 
     SimNode * ExprField::simulate (Context & context) const {
-        if ( !field  && tupleOrVariantIndex==-1 ) {
+        if ( value->type->isBitfield() ) {
+            auto simV = value->simulate(context);
+            uint32_t mask = 1u << fieldIndex;
+            return context.code->makeNode<SimNode_GetBitField>(at, simV, mask);
+        } else if ( !field  && fieldIndex==-1 ) {
             if ( r2v ) {
                 auto resN = annotation->simulateGetFieldR2V(name, context, at, value);
                 if ( !resN ) {
@@ -1480,22 +1487,25 @@ namespace das
     }
 
     SimNode * ExprField::trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const {
-        if ( !field && tupleOrVariantIndex==-1 ) {
+        if ( !field && fieldIndex==-1 ) {
+            return nullptr;
+        }
+        if ( value->type->isBitfield() ) {
             return nullptr;
         }
         int fieldOffset = -1;
-        if ( tupleOrVariantIndex != - 1 ) {
+        if ( fieldIndex != - 1 ) {
             if ( value->type->isPointer() ) {
                 if ( value->type->firstType->isVariant() ) {
-                    fieldOffset = value->type->firstType->getVariantFieldOffset(tupleOrVariantIndex);
+                    fieldOffset = value->type->firstType->getVariantFieldOffset(fieldIndex);
                 } else {
-                    fieldOffset = value->type->firstType->getTupleFieldOffset(tupleOrVariantIndex);
+                    fieldOffset = value->type->firstType->getTupleFieldOffset(fieldIndex);
                 }
             } else {
                 if ( value->type->isVariant() ) {
-                    fieldOffset = value->type->getVariantFieldOffset(tupleOrVariantIndex);
+                    fieldOffset = value->type->getVariantFieldOffset(fieldIndex);
                 } else {
-                    fieldOffset = value->type->getTupleFieldOffset(tupleOrVariantIndex);
+                    fieldOffset = value->type->getTupleFieldOffset(fieldIndex);
                 }
             }
         } else {
@@ -1539,29 +1549,29 @@ namespace das
     }
 
     SimNode * ExprIsVariant::simulate(Context & context) const {
-        DAS_ASSERT(tupleOrVariantIndex != -1);
-        return context.code->makeNode<SimNode_IsVariant>(at, value->simulate(context), tupleOrVariantIndex);
+        DAS_ASSERT(fieldIndex != -1);
+        return context.code->makeNode<SimNode_IsVariant>(at, value->simulate(context), fieldIndex);
     }
 
     SimNode * ExprAsVariant::simulate (Context & context) const {
-        int fieldOffset = value->type->getVariantFieldOffset(tupleOrVariantIndex);
+        int fieldOffset = value->type->getVariantFieldOffset(fieldIndex);
         auto simV = value->simulate(context);
         if ( r2v ) {
-            return context.code->makeValueNode<SimNode_VariantFieldDerefR2V>(type->baseType, at, simV, fieldOffset, tupleOrVariantIndex);
+            return context.code->makeValueNode<SimNode_VariantFieldDerefR2V>(type->baseType, at, simV, fieldOffset, fieldIndex);
         } else {
-            return context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, tupleOrVariantIndex);
+            return context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, fieldIndex);
         }
     }
 
     SimNode * ExprSafeAsVariant::simulate (Context & context) const {
         int fieldOffset = value->type->isPointer() ?
-            value->type->firstType->getVariantFieldOffset(tupleOrVariantIndex) :
-            value->type->getVariantFieldOffset(tupleOrVariantIndex);
+            value->type->firstType->getVariantFieldOffset(fieldIndex) :
+            value->type->getVariantFieldOffset(fieldIndex);
         auto simV = value->simulate(context);
         if ( skipQQ ) {
-            return context.code->makeNode<SimNode_SafeVariantFieldDerefPtr>(at,simV,fieldOffset, tupleOrVariantIndex);
+            return context.code->makeNode<SimNode_SafeVariantFieldDerefPtr>(at,simV,fieldOffset, fieldIndex);
         } else {
-            return context.code->makeNode<SimNode_SafeVariantFieldDeref>(at,simV,fieldOffset, tupleOrVariantIndex);
+            return context.code->makeNode<SimNode_SafeVariantFieldDeref>(at,simV,fieldOffset, fieldIndex);
         }
     }
 
@@ -1572,11 +1582,11 @@ namespace das
     SimNode * ExprSafeField::simulate (Context & context) const {
         int fieldOffset = -1;
         if ( !annotation ) {
-            if ( tupleOrVariantIndex != - 1 ) {
+            if ( fieldIndex != - 1 ) {
                 if ( value->type->firstType->isVariant() ) {
-                    fieldOffset = value->type->firstType->getVariantFieldOffset(tupleOrVariantIndex);
+                    fieldOffset = value->type->firstType->getVariantFieldOffset(fieldIndex);
                 } else {
-                    fieldOffset = value->type->firstType->getTupleFieldOffset(tupleOrVariantIndex);
+                    fieldOffset = value->type->firstType->getTupleFieldOffset(fieldIndex);
                 }
             } else {
                 fieldOffset = field->offset;

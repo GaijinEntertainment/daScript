@@ -43,11 +43,11 @@ namespace  das {
     };
 
     // basic operations
-    template <typename TT>
+    template <typename TT, typename PT = TT>
     void addFunctionBasic(Module & mod, const ModuleLibrary & lib) {
         //                                     policy               ret   arg1 arg2    name
-        mod.addFunction( make_smart<BuiltInFn<Sim_Equ<TT>,         bool, const TT,  const TT>  >("==",     lib, "Equ") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_NotEqu<TT>,      bool, const TT,  const TT>  >("!=",     lib, "NotEqu") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Equ<PT>,         bool, const TT,  const TT>  >("==",     lib, "Equ") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_NotEqu<PT>,      bool, const TT,  const TT>  >("!=",     lib, "NotEqu") );
     }
 
     // basic operations
@@ -85,7 +85,7 @@ namespace  das {
         mod.addFunction( make_smart<BuiltInFn<Sim_Gt<TT>,         bool, TT,  TT>  >(">",      lib, "Gt") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Less<TT>,       bool, TT,  TT>  >("<",      lib, "Less") );
     }
-    
+
     // concatination types
     template <typename TT>
     void addFunctionConcat(Module & mod, const ModuleLibrary & lib) {
@@ -157,30 +157,37 @@ namespace  das {
     }
 
     // built-in numeric types
-    template <typename TT>
-    void addFunctionBit(Module & mod, const ModuleLibrary & lib) {
+    template <typename TT,typename PT = TT>
+    void addFunctionBitLogic(Module & mod, const ModuleLibrary & lib) {
         //                                     policy              ret   arg1 arg2    name
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinNot<TT>,     TT,   TT>       >("~",      lib, "BinNot") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinAnd<TT>,     TT,   TT,  TT>  >("&",      lib, "BinAnd") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinOr<TT>,      TT,   TT,  TT>  >("|",      lib, "BinOr") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinXor<TT>,     TT,   TT,  TT>  >("^",      lib, "BinXor") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinShl<TT>,     TT,   TT,  TT>  >("<<",     lib, "BinShl") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinShr<TT>,     TT,   TT,  TT>  >(">>",     lib, "BinShr") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinRotl<TT>,    TT,   TT,  TT>  >("<<<",    lib, "BinRotl") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_BinRotr<TT>,    TT,   TT,  TT>  >(">>>",    lib, "BinRotr") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinAnd<TT>,  void, TT&, TT>  >("&=",     lib, "SetBinAnd")
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinNot<PT>,     TT,   TT>       >("~",      lib, "BinNot") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinAnd<PT>,     TT,   TT,  TT>  >("&",      lib, "BinAnd") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinOr<PT>,      TT,   TT,  TT>  >("|",      lib, "BinOr") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinXor<PT>,     TT,   TT,  TT>  >("^",      lib, "BinXor") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinAnd<PT>,  void, TT&, TT>  >("&=",     lib, "SetBinAnd")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinOr<TT>,   void, TT&, TT>  >("|=",     lib, "SetBinOr")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinOr<PT>,   void, TT&, TT>  >("|=",     lib, "SetBinOr")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinXor<TT>,  void, TT&, TT>  >("^=",     lib, "SetBinXor")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinXor<PT>,  void, TT&, TT>  >("^=",     lib, "SetBinXor")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinShl<TT>,  void, TT&, TT>  >("<<=",    lib, "SetBinShl")
+    }
+
+    // built-in numeric types
+    template <typename TT,typename PT = TT>
+    void addFunctionBit(Module & mod, const ModuleLibrary & lib) {
+        addFunctionBitLogic<TT,PT>(mod,lib);
+        //                                     policy              ret   arg1 arg2    name
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinShl<PT>,     TT,   TT,  TT>  >("<<",     lib, "BinShl") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinShr<PT>,     TT,   TT,  TT>  >(">>",     lib, "BinShr") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinRotl<PT>,    TT,   TT,  TT>  >("<<<",    lib, "BinRotl") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_BinRotr<PT>,    TT,   TT,  TT>  >(">>>",    lib, "BinRotr") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinShl<PT>,  void, TT&, TT>  >("<<=",    lib, "SetBinShl")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinShr<TT>,  void, TT&, TT>  >(">>=",    lib, "SetBinShr")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinShr<PT>,  void, TT&, TT>  >(">>=",    lib, "SetBinShr")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinRotl<TT>,  void, TT&, TT>  >("<<<=",  lib, "SetBinRotl")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinRotl<PT>,  void, TT&, TT>  >("<<<=",  lib, "SetBinRotl")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinRotr<TT>,  void, TT&, TT>  >(">>>=",  lib, "SetBinRotr")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBinRotr<PT>,  void, TT&, TT>  >(">>>=",  lib, "SetBinRotr")
                         ->setSideEffects(SideEffects::modifyArgument) );
     }
 }

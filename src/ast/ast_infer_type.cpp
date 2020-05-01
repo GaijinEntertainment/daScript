@@ -1113,14 +1113,15 @@ namespace das {
         ExpressionPtr makeEnumConstValue(Enumeration * enu, int64_t nextInt) const {
             vec4f nextV = v_zero();
             switch (enu->baseType) {
-            case Type::tInt8:   nextV = cast<int8_t>  ::from(int8_t  (nextInt)); break;
-            case Type::tUInt8:  nextV = cast<uint8_t> ::from(uint8_t (nextInt)); break;
-            case Type::tInt16:  nextV = cast<int16_t> ::from(int16_t (nextInt)); break;
-            case Type::tUInt16: nextV = cast<uint16_t>::from(uint16_t(nextInt)); break;
-            case Type::tInt:    nextV = cast<int32_t> ::from(int32_t (nextInt)); break;
-            case Type::tUInt:   nextV = cast<uint32_t>::from(uint32_t(nextInt)); break;
-            case Type::tInt64:  nextV = cast<int64_t> ::from(int64_t (nextInt)); break;
-            case Type::tUInt64: nextV = cast<uint64_t>::from(uint64_t(nextInt)); break;
+            case Type::tInt8:       nextV = cast<int8_t>  ::from(int8_t  (nextInt)); break;
+            case Type::tUInt8:      nextV = cast<uint8_t> ::from(uint8_t (nextInt)); break;
+            case Type::tInt16:      nextV = cast<int16_t> ::from(int16_t (nextInt)); break;
+            case Type::tUInt16:     nextV = cast<uint16_t>::from(uint16_t(nextInt)); break;
+            case Type::tInt:        nextV = cast<int32_t> ::from(int32_t (nextInt)); break;
+            case Type::tUInt:       nextV = cast<uint32_t>::from(uint32_t(nextInt)); break;
+            case Type::tBitfield:   nextV = cast<uint32_t>::from(uint32_t(nextInt)); break;
+            case Type::tInt64:      nextV = cast<int64_t> ::from(int64_t (nextInt)); break;
+            case Type::tUInt64:     nextV = cast<uint64_t>::from(uint64_t(nextInt)); break;
             default: DAS_ASSERTF(0,"we should not be here. unsupported enum type");
             }
             auto nextValue = Program::makeConst(enu->at, enu->makeBaseType(), nextV);
@@ -3267,8 +3268,8 @@ namespace das {
                     expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
-            expr->tupleOrVariantIndex = index;
-            expr->type = make_smart<TypeDecl>(*valT->argTypes[expr->tupleOrVariantIndex]);
+            expr->fieldIndex = index;
+            expr->type = make_smart<TypeDecl>(*valT->argTypes[expr->fieldIndex]);
             expr->type->ref = true;
             expr->type->constant |= valT->constant;
             propagateTempType(expr->value->type, expr->type);
@@ -3294,8 +3295,8 @@ namespace das {
                     expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
-            expr->tupleOrVariantIndex = index;
-            expr->type = make_smart<TypeDecl>(*valT->argTypes[expr->tupleOrVariantIndex]);
+            expr->fieldIndex = index;
+            expr->type = make_smart<TypeDecl>(*valT->argTypes[expr->fieldIndex]);
             expr->skipQQ = expr->type->isPointer();
             if ( !expr->skipQQ ) {
                 auto fieldType = expr->type;
@@ -3322,7 +3323,7 @@ namespace das {
                     expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
-            expr->tupleOrVariantIndex = index;
+            expr->fieldIndex = index;
             expr->type = make_smart<TypeDecl>(Type::tBool);
             return Visitor::visit(expr);
         }
@@ -3334,6 +3335,16 @@ namespace das {
             if ( valT->isVectorType() ) {
                 reportAstChanged();
                 return make_smart<ExprSwizzle>(expr->at,expr->value,expr->name);
+            } else if ( valT->isBitfield() ) {
+                expr->value = Expression::autoDereference(expr->value);
+                valT = expr->value->type;
+                int index = expr->bitFieldIndex();
+                if ( index==-1 || index>=int(valT->argNames.size()) ) {
+                    error("can't get bit field " + expr->name + " in " + valT->describe(), "", "",
+                        expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+                expr->fieldIndex = index;
             } else if ( valT->isHandle() ) {
                 expr->annotation = valT->annotation;
                 expr->type = expr->annotation->makeFieldType(expr->name);
@@ -3354,7 +3365,7 @@ namespace das {
                             expr->at, CompilationError::cant_get_field);
                         return Visitor::visit(expr);
                     }
-                    expr->tupleOrVariantIndex = index;
+                    expr->fieldIndex = index;
                 } else if ( valT->firstType->isGoodVariantType() ) {
                     if ( func && !func->unsafe && !expr->alwaysSafe ) {
                         error("variant.field requires [unsafe]", "", "",
@@ -3367,7 +3378,7 @@ namespace das {
                             expr->at, CompilationError::cant_get_field);
                         return Visitor::visit(expr);
                     }
-                    expr->tupleOrVariantIndex = index;
+                    expr->fieldIndex = index;
                 }
             } else if ( valT->isGoodTupleType() ) {
                 int index = expr->tupleFieldIndex();
@@ -3376,7 +3387,7 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                expr->tupleOrVariantIndex = index;
+                expr->fieldIndex = index;
             } else if ( valT->isGoodVariantType() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
                     error("variant.field requires [unsafe]", "", "",
@@ -3389,7 +3400,7 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                expr->tupleOrVariantIndex = index;
+                expr->fieldIndex = index;
             } else {
                 error("can't get field of " + expr->value->type->describe(), "", "",
                       expr->at, CompilationError::cant_get_field);
@@ -3406,11 +3417,15 @@ namespace das {
                 if ( !expr->ignoreCaptureConst ) {
                     expr->type->constant |= expr->field->capturedConstant;
                 }
-            } else if ( expr->tupleOrVariantIndex!=-1 ) {
-                auto tupleT = valT->isPointer() ? valT->firstType : valT;
-                expr->type = make_smart<TypeDecl>(*tupleT->argTypes[expr->tupleOrVariantIndex]);
-                expr->type->ref = true;
-                expr->type->constant |= tupleT->constant;
+            } else if ( expr->fieldIndex!=-1 ) {
+                if ( valT->isBitfield() ) {
+                    expr->type = make_smart<TypeDecl>(Type::tBool);
+                } else {
+                    auto tupleT = valT->isPointer() ? valT->firstType : valT;
+                    expr->type = make_smart<TypeDecl>(*tupleT->argTypes[expr->fieldIndex]);
+                    expr->type->ref = true;
+                    expr->type->constant |= tupleT->constant;
+                }
             } else if ( !expr->type ) {
                 error("field " + expr->name + " not found in " + expr->value->type->describe(), "", "",
                       expr->at, CompilationError::cant_get_field);
@@ -3455,8 +3470,8 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                expr->tupleOrVariantIndex = index;
-                expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
+                expr->fieldIndex = index;
+                expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->fieldIndex]);
             } else if ( valT->firstType->isGoodVariantType() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
                     error("variant?.field requires [unsafe]", "", "",
@@ -3469,8 +3484,8 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                expr->tupleOrVariantIndex = index;
-                expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->tupleOrVariantIndex]);
+                expr->fieldIndex = index;
+                expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->fieldIndex]);
             } else {
                 error("can only safe dereference a pointer to a tuple, a structure or a handle " + valT->describe(), "", "",
                       expr->at, CompilationError::cant_get_field);

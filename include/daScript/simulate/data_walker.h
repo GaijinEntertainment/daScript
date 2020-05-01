@@ -77,6 +77,7 @@ namespace das {
         virtual void Float ( float & ) {}
         virtual void Int ( int32_t & ) {}
         virtual void UInt ( uint32_t & ) {}
+        virtual void Bitfield ( uint32_t &, TypeInfo * ti ) {}
         virtual void Int2 ( int2 & ) {}
         virtual void Int3 ( int3 & ) {}
         virtual void Int4 ( int4 & ) {}

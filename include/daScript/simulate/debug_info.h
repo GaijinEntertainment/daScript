@@ -43,6 +43,7 @@ namespace das
         tEnumeration,
         tEnumeration8,
         tEnumeration16,
+        tBitfield,
         tPointer,
         tFunction,
         tLambda,

@@ -348,10 +348,20 @@ namespace das
                     if ( arg != argTypes.back() ) {
                         stream << ";";
                     }
+                    ai ++;
                 }
             }
             stream << ">";
-        } else {
+        } else if ( baseType==Type::tBitfield ) {
+            stream << das_to_string(baseType) << "<";
+            int ai = 0;
+            for ( const auto & arg : argNames ) {
+                if ( ai !=0 ) stream << ";";
+                stream << arg;
+                ai ++;
+            }
+            stream << ">";
+        }else {
             stream << das_to_string(baseType);
         }
         if ( extra==DescribeExtra::yes && baseType!=Type::autoinfer && baseType!=Type::alias && !alias.empty() ) {
@@ -1070,6 +1080,10 @@ namespace das
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
 
+    bool TypeDecl::isBitfield() const {
+        return (baseType==Type::tBitfield) && (dim.size()==0);
+    }
+
     bool TypeDecl::isIterator() const {
         return (baseType==Type::tIterator) && (dim.size()==0);
     }
@@ -1194,6 +1208,7 @@ namespace das
             case Type::tInt4:
             case Type::tInt64:
             case Type::tUInt:
+            case Type::tBitfield:
             case Type::tUInt2:
             case Type::tUInt3:
             case Type::tUInt4:
@@ -1259,6 +1274,7 @@ namespace das
             case Type::tInt3:
             case Type::tInt4:
             case Type::tUInt:
+            case Type::tBitfield:
             case Type::tUInt2:
             case Type::tUInt3:
             case Type::tUInt4:
@@ -1290,6 +1306,7 @@ namespace das
             case Type::tInt3:
             case Type::tInt4:
             case Type::tUInt:
+            case Type::tBitfield:
             case Type::tUInt2:
             case Type::tUInt3:
             case Type::tUInt4:
@@ -1323,6 +1340,7 @@ namespace das
             case Type::tUInt64:
             case Type::tInt:
             case Type::tUInt:
+            case Type::tBitfield:
             case Type::tFloat:
             case Type::tDouble:
             case Type::tString:
@@ -1353,6 +1371,7 @@ namespace das
             case Type::tUInt64:
             case Type::tInt:
             case Type::tUInt:
+            case Type::tBitfield:
             case Type::tFloat:
             case Type::tDouble:
             case Type::tPointer:
@@ -1514,6 +1533,7 @@ namespace das
         switch (baseType) {
         case Type::tInt:
         case Type::tUInt:
+        case Type::tBitfield:
         case Type::tInt8:
         case Type::tUInt8:
         case Type::tInt16:
@@ -1532,6 +1552,7 @@ namespace das
         switch (baseType) {
         case Type::tInt:
         case Type::tUInt:
+        case Type::tBitfield:
         case Type::tInt8:
         case Type::tUInt8:
         case Type::tInt16:
@@ -1551,6 +1572,7 @@ namespace das
         switch (baseType) {
         case Type::tInt:
         case Type::tUInt:
+        case Type::tBitfield:
         case Type::tInt64:
         case Type::tUInt64:
         case Type::tFloat:

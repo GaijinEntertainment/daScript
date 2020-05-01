@@ -165,7 +165,7 @@ namespace das {
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(pa) << DEC 
+                ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(pa) << DEC
                     << (ti->flags & TypeInfo::flag_isSmartPtr ? " smart_ptr = " : " ptr = ");
             }
         }
@@ -257,6 +257,12 @@ namespace das {
                 ss << "u";
             }
         }
+        virtual void Bitfield ( uint32_t & ui, TypeInfo * ) override {
+            ss << "0x" << HEX << ui << DEC;
+            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                ss << "u";
+            }
+        }
         virtual void Int2 ( int2 & i ) override {
             ss << i;
         }
@@ -335,7 +341,7 @@ namespace das {
                 else {
                     ss << fn->index - 1;
                 }
-            }   
+            }
             else {
                 ss << "null";
             }

@@ -282,14 +282,15 @@ namespace das {
             if ( expr->type->isEnumT() ) {
                 int64_t ival = 0;
                 switch ( expr->type->enumType->baseType ) {
-                case Type::tInt8:   ival = cast<int8_t>::to(value); break;
-                case Type::tUInt8:  ival = cast<uint8_t>::to(value); break;
-                case Type::tInt16:  ival = cast<int16_t>::to(value); break;
-                case Type::tUInt16: ival = cast<uint16_t>::to(value); break;
-                case Type::tInt:    ival = cast<int32_t>::to(value); break;
-                case Type::tUInt:   ival = cast<uint32_t>::to(value); break;
-                case Type::tInt64:  ival = cast<int64_t>::to(value); break;
-                case Type::tUInt64: ival = cast<uint64_t>::to(value); break;
+                case Type::tInt8:       ival = cast<int8_t>::to(value); break;
+                case Type::tUInt8:      ival = cast<uint8_t>::to(value); break;
+                case Type::tInt16:      ival = cast<int16_t>::to(value); break;
+                case Type::tUInt16:     ival = cast<uint16_t>::to(value); break;
+                case Type::tInt:        ival = cast<int32_t>::to(value); break;
+                case Type::tUInt:       ival = cast<uint32_t>::to(value); break;
+                case Type::tBitfield:   ival = cast<uint32_t>::to(value); break;
+                case Type::tInt64:      ival = cast<int64_t>::to(value); break;
+                case Type::tUInt64:     ival = cast<uint64_t>::to(value); break;
                 default: DAS_ASSERTF(0,"we should not be here. unsupported enum type");
                 }
                 auto cef = expr->type->enumType->find(ival, "");

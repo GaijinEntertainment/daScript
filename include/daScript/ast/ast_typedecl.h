@@ -115,6 +115,7 @@ namespace das {
         void collectAliasList(vector<string> & aliases) const;
         bool isAuto() const;
         bool isVectorType() const;
+        bool isBitfield() const;
         bool isLocal() const;
         bool isLocal( das_set<Structure*> & dep ) const;
         Type getVectorBaseType() const;
@@ -164,6 +165,7 @@ namespace das {
     };
 
     template <typename TT> struct ToBasicType;
+    template<> struct ToBasicType<Bitfield>     { enum { type = Type::tBitfield }; };
     template<> struct ToBasicType<EnumStub>     { enum { type = Type::tEnumeration }; };
     template<> struct ToBasicType<EnumStub8>    { enum { type = Type::tEnumeration8 }; };
     template<> struct ToBasicType<EnumStub16>   { enum { type = Type::tEnumeration16 }; };

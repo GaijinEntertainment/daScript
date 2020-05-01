@@ -774,6 +774,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GetBitField::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetBitField);
+        V_SUB(x);
+        V_ARG(mask);
+        V_END();
+    }
+
     SimNode * SimNode_RangeIterator::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(RangeIterator);

@@ -191,6 +191,13 @@ namespace das
     };
 
     template <>
+    struct cast <Bitfield> {
+        static __forceinline Bitfield to ( vec4f x )           { return v_extract_xi(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( Bitfield x )         { return v_cast_vec4f(v_splatsi(x.value)); }
+    };
+
+
+    template <>
     struct cast <int64_t> {
         static __forceinline int64_t to ( vec4f x )            { return v_extract_xi64(v_cast_vec4i(x)); }
         static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_splatsi64(x)); }

@@ -2338,6 +2338,20 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * r = nullptr;
     };
 
+    struct SimNode_GetBitField : SimNode {
+        DAS_BOOL_NODE;
+        SimNode_GetBitField ( const LineInfo & at, SimNode * s, uint32_t m )
+            : SimNode(at), x(s), mask(m) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            uint32_t bits = x->evalUInt(context);
+            return (bits & mask)==mask;
+        }
+        SimNode * x = nullptr;
+        uint32_t mask = 0;
+    };
+
     struct Sim_BoolAnd : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_BoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}

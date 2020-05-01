@@ -186,6 +186,7 @@
 %token  DAS_TINT3           "int3"
 %token  DAS_TINT4           "int4"
 %token  DAS_TUINT           "uint"
+%token  DAS_TBITFIELD       "bitfield"
 %token  DAS_TUINT2          "uint2"
 %token  DAS_TUINT3          "uint3"
 %token  DAS_TUINT4          "uint4"
@@ -265,11 +266,13 @@
 %token		BEGIN_STRING_EXPR       "{"
 %token		END_STRING_EXPR         "}"
 
+%type <pNameList>       bitfield_bits
 %type <pNameList>       variable_name_list
 %type <type>            basic_type_declaration
 %type <type>            enum_basic_type_declaration
 %type <pTypeDecl>       type_declaration
 %type <pTypeDecl>       auto_type_declaration
+%type <pTypeDecl>       bitfield_type_declaration
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
 %type <pVarDeclList>    struct_variable_declaration_list
@@ -1894,6 +1897,7 @@ basic_type_declaration
     |   DAS_TRANGE      { $$ = Type::tRange; }
     |   DAS_TURANGE     { $$ = Type::tURange; }
     |   DAS_TDOUBLE     { $$ = Type::tDouble; }
+    |   DAS_TBITFIELD   { $$ = Type::tBitfield; }
     ;
 
 enum_basic_type_declaration
@@ -1930,9 +1934,35 @@ auto_type_declaration
     }
     ;
 
+bitfield_bits
+    :   NAME[name]  {
+		das_checkName(*$name,tokAt(@name));
+        auto pSL = new vector<string>();
+        pSL->push_back(*$name);
+        $$ = pSL;
+        delete $name;
+    }
+    |   bitfield_bits[list] ';' NAME[name] {
+		das_checkName(*$name,tokAt(@name));
+        $list->push_back(*$name);
+        $$ = $list;
+        delete $name;
+    }
+    ;
+
+bitfield_type_declaration
+    :   DAS_TBITFIELD[basicType] '<' bitfield_bits[nl] '>' {
+            $$ = new TypeDecl(Type::tBitfield);
+            $$->argNames = *$nl;
+            $$->at = tokAt(@basicType);
+            delete $nl;
+    }
+    ;
+
 type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(@basicType); }
     |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
+    |   bitfield_type_declaration[typeDecl]                 { $$ = $typeDecl; }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration[typeDecl] '[' expr[dimExpr] ']' {
         int32_t dI = TypeDecl::dimConst;

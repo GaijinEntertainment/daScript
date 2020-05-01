@@ -76,6 +76,7 @@ namespace das
     addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,double>,CTYPE,double>>(#TYPE,lib,#CTYPE,false) );        \
     addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,int32_t>,CTYPE,int32_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,uint32_t>,CTYPE,uint32_t>>(#TYPE,lib,#CTYPE,false) );    \
+    addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,Bitfield>,CTYPE,Bitfield>>(#TYPE,lib,#CTYPE,false) );    \
     addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,int8_t>,CTYPE,int8_t>>(#TYPE,lib,#CTYPE,false) );        \
     addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,uint8_t>,CTYPE,uint8_t>>(#TYPE,lib,#CTYPE,false) );      \
     addFunction ( make_smart<BuiltInFn<SimNode_Cast<CTYPE,int16_t>,CTYPE,int16_t>>(#TYPE,lib,#CTYPE,false) );      \
@@ -122,22 +123,26 @@ namespace das
         addFunctionBit<uint32_t>(*this,lib);
         ADD_NUMERIC_CASTS(uint, uint32_t);
         ADD_NUMERIC_LIMITS_UNSIGNED(UINT, uint32_t);
-        ADD_NUMERIC_CASTS(int64, int64_t);
-        ADD_NUMERIC_LIMITS(LONG, int64_t);
-        ADD_NUMERIC_CASTS(uint64, uint64_t);
-        ADD_NUMERIC_LIMITS_UNSIGNED(ULONG, uint64_t);
+        // bitfields
+        ADD_NUMERIC_CASTS(bitfield, Bitfield);
+        addFunctionBasic<Bitfield,uint32_t>(*this,lib);
+        addFunctionBitLogic<Bitfield,uint32_t>(*this,lib);
         // int64
         addFunctionBasic<int64_t>(*this,lib);
         addFunctionNumericWithMod<int64_t>(*this,lib);
         addFunctionIncDec<int64_t>(*this,lib);
         addFunctionOrdered<int64_t>(*this,lib);
         addFunctionBit<int64_t>(*this,lib);
+        ADD_NUMERIC_CASTS(int64, int64_t);
+        ADD_NUMERIC_LIMITS(LONG, int64_t);
         // uint64
         addFunctionBasic<uint64_t>(*this,lib);
         addFunctionNumericWithMod<uint64_t>(*this,lib);
         addFunctionIncDec<uint64_t>(*this,lib);
         addFunctionOrdered<uint64_t>(*this,lib);
         addFunctionBit<uint64_t>(*this,lib);
+        ADD_NUMERIC_CASTS(uint64, uint64_t);
+        ADD_NUMERIC_LIMITS_UNSIGNED(ULONG, uint64_t);
         // float
         addFunctionBasic<float>(*this,lib);
         addFunctionNumericWithMod<float>(*this,lib);

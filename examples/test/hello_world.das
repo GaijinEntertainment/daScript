@@ -1,13 +1,16 @@
-struct Foo
-	t : int
+// options log = true
 
-[export]
-def operator + ( a, b : Foo )
-	print("here\n")
-	return [[Foo a.t + b.t]]	// a at 17:7, .t at 19.7
+typedef
+	bits123 = bitfield < one; two; three >
+
+[sideeffects]
+def bit(b:int)
+	return bitfield(1 << b)
 
 [export]
 def test()
-	let c = [[Foo t=1]] + [[Foo t=2]]	// + at 24:11
-	print("t ={c}\n")
+	var t : bits123 = bitfield(1<<1) | bit(2)
+	assert(!t.one & t.two & t.three)
+	t ^= bitfield(1<<1)
+	assert(!t.one & !t.two & t.three)
 	return true

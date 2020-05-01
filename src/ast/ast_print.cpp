@@ -559,6 +559,10 @@ namespace das {
             ss << "0x" << HEX << c->getValue() << DEC;
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit ( ExprConstBitfield * c ) override {
+            ss << "0x" << HEX << c->getValue() << DEC;
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstBool * c ) override {
             ss << (c->getValue() ? "true" : "false");
             return Visitor::visit(c);

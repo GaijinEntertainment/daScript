@@ -347,6 +347,12 @@ namespace das {
             label(c, ss.str());
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit(ExprConstBitfield * c) override {
+            TextWriter ss;
+            ss << "0x" << HEX << intptr_t(c->getValue()) << DEC;
+            label(c, ss.str());
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit(ExprConstBool * c) override {
             label(c, c->getValue() ? "true" : "false");
             return Visitor::visit(c);
