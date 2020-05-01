@@ -136,7 +136,12 @@ namespace das
         __forceinline operator uint64_t () const { return uint64_t(value); }
         __forceinline bool operator == ( const Bitfield & f ) const { return value==f.value; }
         __forceinline bool operator != ( const Bitfield & f ) const { return value!=f.value; }
+        __forceinline bool operator == ( uint32_t f ) const { return value==f; }
+        __forceinline bool operator != ( uint32_t f ) const { return value!=f; }
     };
+    __forceinline bool operator == ( uint32_t f, const Bitfield & t ) { return t.value==f; }
+    __forceinline bool operator != ( uint32_t f, const Bitfield & t ) { return t.value!=f; }
+
 }
 
 namespace std {

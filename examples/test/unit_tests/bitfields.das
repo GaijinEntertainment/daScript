@@ -1,7 +1,3 @@
-// options log = true
-// options log_infer_passes = true
-// options log_nodes=true
-
 bitfield bits123
 	one
 	two

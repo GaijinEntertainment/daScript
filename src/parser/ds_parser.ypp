@@ -403,6 +403,7 @@ program
 	|	program options_declaration
     |   program alias_declaration
     |   program variant_alias_declaration
+    |   program bitfield_alias_declaration
     |   program ';'
     ;
 
@@ -2151,14 +2152,8 @@ type_declaration
     }
     ;
 
-variant_keyword
-    : DAS_TVARIANT {
-        das_need_oxford_comma=false;
-    }
-    ;
-
 variant_alias_declaration
-    :   variant_keyword NAME[vname] '{' variant_type_list[list] ';' '}' {
+    :   DAS_TVARIANT { das_need_oxford_comma=false; } NAME[vname] '{' variant_type_list[list] ';' '}' {
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
         vtype->at = tokAt(@vname);
@@ -2171,6 +2166,22 @@ variant_alias_declaration
         delete $vname;
     }
     ;
+
+bitfield_alias_declaration
+    :   DAS_TBITFIELD { das_need_oxford_comma=false; } NAME[vname] '{' bitfield_bits[list] ';' '}' {
+        auto btype = make_smart<TypeDecl>(Type::tBitfield);
+        btype->alias = *$vname;
+        btype->at = tokAt(@vname);
+        btype->argNames = *$list;
+        if ( !g_Program->addAlias(btype) ) {
+            das_yyerror("type alias is already defined "+*$vname,tokAt(@vname),
+                CompilationError::type_alias_already_declared);
+        }
+        delete $vname;
+        delete $list;
+    }
+    ;
+
 
 make_decl
     :   make_struct_decl[msd]    { $$ = $msd; }
