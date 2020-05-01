@@ -729,6 +729,11 @@ namespace das
             } else {
                 ss << "structue?";
             }
+        } else if ( baseType==Type::tBitfield ) {
+            ss << "#" << das_to_string(baseType);
+            for ( auto & arg : argNames ) {
+                ss << "#`" << arg;
+            }
         } else {
             ss << das_to_string(baseType);
         }

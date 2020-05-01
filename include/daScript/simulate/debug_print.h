@@ -257,10 +257,29 @@ namespace das {
                 ss << "u";
             }
         }
-        virtual void Bitfield ( uint32_t & ui, TypeInfo * ) override {
-            ss << "0x" << HEX << ui << DEC;
-            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
-                ss << "u";
+        virtual void Bitfield ( uint32_t & ui, TypeInfo * info ) override {
+            if ( info->argNames ) {
+                if ( ui ) {
+                    ss << "(";
+                    bool any = false;
+                    for ( uint32_t bit=0; bit!=info->argCount; ++bit ) {
+                        if ( ui & (1<<bit) ) {
+                            if ( any ) ss << "|"; else any = true;
+                            ss << info->argNames[bit];
+                            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                                ss << "(" << (1u<<bit) << ")";
+                            }
+                        }
+                    }
+                    ss << ")";
+                } else {
+                    ss << "(0)";
+                }
+            } else {
+                ss << "0x" << HEX << ui << DEC;
+                if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                    ss << "u";
+                }
             }
         }
         virtual void Int2 ( int2 & i ) override {

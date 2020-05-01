@@ -134,6 +134,8 @@ namespace das
         __forceinline operator uint16_t () const { return uint16_t(value); }
         __forceinline operator int64_t () const { return int64_t(value); }
         __forceinline operator uint64_t () const { return uint64_t(value); }
+        __forceinline bool operator == ( const Bitfield & f ) const { return value==f.value; }
+        __forceinline bool operator != ( const Bitfield & f ) const { return value!=f.value; }
     };
 }
 

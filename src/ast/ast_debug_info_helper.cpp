@@ -143,7 +143,8 @@ namespace das {
         } else {
             info->secondType = nullptr;
         }
-        if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant || 
+        info->argTypes = nullptr;
+        if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant ||
                 type->baseType==Type::tFunction || type->baseType==Type::tLambda ||
                     type->baseType==Type::tBlock ) {
             info->argCount = uint32_t(type->argTypes.size());
@@ -152,14 +153,16 @@ namespace das {
                 for ( uint32_t i=0; i!=info->argCount; ++i ) {
                     info->argTypes[i] = makeTypeInfo(nullptr, type->argTypes[i]);
                 }
-                if ( type->baseType==Type::tVariant && !type->argNames.empty() ) {
-                    info->argNames = (char **) debugInfo->allocate(sizeof(char *) * info->argCount );
-                    for ( uint32_t i=0; i!=info->argCount; ++i ) {
-                        info->argNames[i] = debugInfo->allocateName(type->argNames[i]);
-                    }
+            }
+        }
+        info->argNames = nullptr;
+        if ( type->baseType==Type::tVariant || type->baseType==Type::tBitfield ) {
+            info->argCount = uint32_t(type->argNames.size());
+            if ( info->argCount ) {
+                info->argNames = (char **) debugInfo->allocate(sizeof(char *) * info->argCount );
+                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                    info->argNames[i] = debugInfo->allocateName(type->argNames[i]);
                 }
-            } else {
-                info->argTypes = nullptr;
             }
         }
         auto mangledName = type->getMangledName();
