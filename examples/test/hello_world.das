@@ -1,13 +1,17 @@
-options log = true
 options rtti = true
 
 require rtti
 
-def fooFn ( a : int[3]; b : bitfield<one;two> )
-	print("a = {a} b = {b}\n")
+def take ( a : auto! )
+	print("const\n")
+
+def take ( var a : auto! )
+	print("value\n")
 
 [export]
 def test()
-	let fooT <- get_typedecl(@@fooFn)
-	print("fooT = {fooT}\n")
+	let c = 1
+	take(c)
+	var v = 1
+	take(v)
 	return true

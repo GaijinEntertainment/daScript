@@ -385,6 +385,9 @@ namespace das
         if ( implicit ) {
             stream << " implicit";
         }
+        if ( explicitConst ) {
+            stream << "!";
+        }
         if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {
                 stream << " delete ";
@@ -744,6 +747,7 @@ namespace das
         if ( ref )          ss << "#ref";
         if ( temporary )    ss << "#temporary";
         if ( implicit )     ss << "#implicit";
+        if ( explicitConst )ss << "#explicitconst";
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "#" << d;

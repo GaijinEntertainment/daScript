@@ -2054,6 +2054,10 @@ type_declaration
         $typeDecl->removeTemporary = true;
         $$ = $typeDecl;
     }
+    |   type_declaration[typeDecl] '!' {
+        $typeDecl->explicitConst = true;
+        $$ = $typeDecl;
+    }
     |   type_declaration[typeDecl] '?' {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(@typeDecl);

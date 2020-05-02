@@ -145,7 +145,12 @@ def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type keyT))
     return <- it
 
-def values(a:table<auto(keyT);auto(valT)>) : iterator<valT &>
+def values(a:table<auto(keyT);auto(valT)>!) : iterator<valT & const>
+    var it : iterator<valT & const>
+    __builtin_table_values(it,a,typeinfo(sizeof type valT))
+    return <- it
+
+def values(var a:table<auto(keyT);auto(valT)>!) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type valT))
     return <- it

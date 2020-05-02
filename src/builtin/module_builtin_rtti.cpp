@@ -178,6 +178,7 @@ namespace das {
                 bool    removeConstant : 1;
                 bool    removeDim : 1;
                 bool    removeTemporary : 1;
+                bool    explicitConst : 1;
                 bool    aotAlias : 1;
                 bool    smartPtr : 1;
             };
@@ -195,7 +196,7 @@ namespace das {
         ft->alias = "TypeDeclFlags";
         ft->argNames = { "ref", "constant", "temporary", "implicit",
             "removeRef", "removeConstant", "removeDim",
-            "removeTemporary", "aotAlias", "smartPtr" };
+            "removeTemporary", "explicitConst", "aotAlias", "smartPtr" };
         return ft;
     }
 
@@ -789,10 +790,6 @@ namespace das {
         __forceinline char * compute(Context &) {
             DAS_PROFILE_NODE
             return (char *) typeExpr;
-        }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
-            SimNode * node = SimNode::copyNode(context,code);
-            return node;
         }
         TypeDecl *  typeExpr;   // requires RTTI
     };

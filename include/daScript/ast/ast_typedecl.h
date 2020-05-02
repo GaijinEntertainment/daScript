@@ -154,6 +154,7 @@ namespace das {
                 bool    removeConstant : 1;
                 bool    removeDim : 1;
                 bool    removeTemporary : 1;
+                bool    explicitConst : 1;
                 bool    aotAlias : 1;
                 bool    smartPtr : 1;
             };

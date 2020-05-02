@@ -620,6 +620,10 @@ namespace das {
             if (!passType) {
                 return false;
             }
+            // explicit const mast match
+            if ( argType->explicitConst && (argType->constant != passType->constant) ) {
+                return false;
+            }
             if ( argType->baseType==Type::anyArgument ) {
                 return true;
             }
@@ -2363,6 +2367,12 @@ namespace das {
                 } else if ( expr->trait=="is_vector" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isVectorType());
+                } else if ( expr->trait=="is_array" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isGoodArrayType());
+                } else if ( expr->trait=="is_table" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isGoodTableType());
                 } else if ( expr->trait=="is_numeric" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isNumeric());
@@ -4790,8 +4800,9 @@ namespace das {
                                 auto & passT = types[sz];
                                 auto resT = TypeDecl::inferGenericType(argT, passT, &aliases);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
-                                resT->ref = false;                  // by default no ref
-                                resT->implicit = argT->implicit;    // copy implicit on the arguments
+                                resT->ref = false;                          // by default no ref
+                                resT->implicit = argT->implicit;            // copy implicit on the arguments
+                                resT->explicitConst = argT->explicitConst;  // copy const explicitness
                                 TypeDecl::applyAutoContracts(resT, argT);
                                 if (resT->isRefType()) {   // we don't pass boxed type by reference ever
                                     resT->ref = false;
