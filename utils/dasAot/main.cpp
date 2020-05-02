@@ -49,8 +49,10 @@ bool compile ( const string & fn, const string & cppFn ) {
     policies.no_optimizations = cursor;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( cursor ) {
-            auto cinfo = program->cursor(LineInfo(nullptr,cursor_x,cursor_y,cursor_x,cursor_y));
+            auto fi = access->getFileInfo(fn);
+            auto cinfo = program->cursor(LineInfo(fi,cursor_x,cursor_y,cursor_x,cursor_y));
             tout << cinfo.reportJson();
+            return true;
         }
         if ( program->failed() ) {
             if (json)
