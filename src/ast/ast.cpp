@@ -2340,6 +2340,10 @@ namespace das {
         vis.visitProgram(this);
     }
 
+    bool Program::getOptimize() const {
+        return !policies.no_optimizations && options.getBoolOption("optimize",true);
+    }
+
     void Program::optimize(TextWriter & logs, ModuleGroup & libGroup) {
         const bool log = options.getBoolOption("log_optimization_passes",false);
         bool any, last;

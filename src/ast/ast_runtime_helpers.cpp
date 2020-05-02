@@ -103,62 +103,77 @@ namespace das {
             info.at = i;
         }
     protected:
+        bool canPointAt () const  {
+            if ( function ) {
+                if ( function->generated ) return false;
+                // if ( function->fromGeneric )
+            }
+            return true;
+        }
         virtual void preVisit ( Function * func ) override {
             Visitor::preVisit (func);
-            if ( cursor.inside(func->atDecl) ) {
+            function = func;
+            if ( canPointAt() && cursor.inside(func->atDecl) ) {
                 info.function = func;
             }
         }
+        virtual FunctionPtr visit ( Function * func ) override {
+            function = nullptr;
+            return Visitor::visit(func);
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            if ( cursor.inside(expr->at) ) {
+            if ( canPointAt() && cursor.inside(expr->at) ) {
                 info.call = expr;
             }
         }
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
-            if ( cursor.inside(expr->at) ) {
+            if ( canPointAt() && cursor.inside(expr->at) ) {
                 info.call = expr;
             }
         }
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
-            if ( cursor.inside(expr->at) ) {
+            if ( canPointAt() && cursor.inside(expr->at) ) {
                 info.call = expr;
             }
         }
         virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
-            if ( cursor.inside(expr->at) ) {
+            if ( canPointAt() && cursor.inside(expr->at) ) {
                 info.call = expr;
             }
         }
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            if ( cursor.inside(expr->at) ) {
+            if ( canPointAt() && cursor.inside(expr->at) ) {
                 info.variable = expr;
             }
         }
         virtual void preVisit ( ExprField * expr ) override {
             Visitor::preVisit(expr);
-            if ( cursor.inside(expr->atField) ) {
+            if ( canPointAt() && cursor.inside(expr->atField) ) {
                 info.variable = expr;
             }
         }
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
-            int vi = 0;
-            for ( const auto v : expr->variables ) {
-                if ( cursor.inside(v->at) ) {
-                    info.variable = expr;
-                    info.variableIndex = vi;
+            if ( canPointAt() ) {
+                int vi = 0;
+                for ( const auto v : expr->variables ) {
+                    if ( cursor.inside(v->at) ) {
+                        info.variable = expr;
+                        info.variableIndex = vi;
+                    }
+                    vi ++;
                 }
-                vi ++;
             }
         }
     protected:
         ProgramPtr  prog;
         LineInfo    cursor;
+        Function *  function = nullptr;
     public:
         CursorInfo  info;
     };

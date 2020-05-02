@@ -45,7 +45,9 @@ bool compile ( const string & fn, const string & cppFn ) {
     auto access = get_file_access();
     ModuleGroup dummyGroup;
     bool firstError = true;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
+    CodeOfPolicies policies;
+    policies.no_optimizations = cursor;
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( cursor ) {
             auto cinfo = program->cursor(LineInfo(nullptr,cursor_x,cursor_y,cursor_x,cursor_y));
             tout << cinfo.reportJson();

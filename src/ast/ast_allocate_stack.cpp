@@ -73,7 +73,7 @@ namespace das {
         AllocateStack( const ProgramPtr & prog, TextWriter & ls ) : logs(ls) {
             program = prog;
             log = prog->options.getBoolOption("log_stack");
-            optimize = prog->options.getBoolOption("optimize");
+            optimize = prog->getOptimize();
             if( log ) {
                 logs << "\nSTACK INFORMATION:\n";
             }

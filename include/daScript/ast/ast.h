@@ -789,6 +789,8 @@ namespace das
         bool only_fast_aot = false;
         bool aot_order_side_effects = false;
         bool no_unused_function_arguments = false;
+    // environment
+        bool no_optimizations = false;                  // disable optimizations, regardless of settings
     };
 
     struct CursorInfo {
@@ -854,6 +856,7 @@ namespace das
         void buildMNLookup ( Context & context, TextWriter & logs );
         void buildADLookup ( Context & context, TextWriter & logs );
         CursorInfo cursor ( const LineInfo & info );
+        bool getOptimize() const;
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
