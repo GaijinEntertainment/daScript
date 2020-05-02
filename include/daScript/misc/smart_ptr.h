@@ -22,7 +22,7 @@ namespace das {
             return *((smart_ptr_raw<void> *)this);
         }
         __forceinline operator smart_ptr<T,smart_ptr_policy<T>> & () const {
-            return *((smart_ptr<T> *)this);
+            return *((smart_ptr<T,smart_ptr_policy<T>> *)this);
         }
         T * ptr;
     };
