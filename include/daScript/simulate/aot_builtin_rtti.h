@@ -7,7 +7,7 @@ DAS_BIND_ENUM_CAST(RefMatters);
 DAS_BIND_ENUM_CAST(ConstMatters);
 DAS_BIND_ENUM_CAST(TemporaryMatters);
 
-DAS_BIND_ENUM_CAST_98(Type);
+DAS_BIND_ENUM_CAST(Type);
 
 namespace das {
 
@@ -36,7 +36,7 @@ namespace das {
         };
     };
 
-    template <> struct das_alias<RttiValue> 
+    template <> struct das_alias<RttiValue>
         : das_alias_ref<RttiValue,TVariant<sizeof(RttiValue),bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>> {};
 
     template <typename TT, typename PD>
@@ -72,19 +72,19 @@ namespace das {
     };
 
     template <>
-    struct das_iterator<EnumInfo const> : 
+    struct das_iterator<EnumInfo const> :
         das_rtti_iterator<EnumValueInfo, EnumInfo> {
         das_iterator(EnumInfo const & info) : das_rtti_iterator<EnumValueInfo, EnumInfo>(info) {}
     };
 
     template <>
-    struct das_iterator<FuncInfo const> : 
+    struct das_iterator<FuncInfo const> :
         das_rtti_iterator<VarInfo, FuncInfo> {
         das_iterator(FuncInfo const & info) : das_rtti_iterator<VarInfo, FuncInfo>(info) {}
     };
 
     template <>
-    struct das_iterator<StructInfo const> : 
+    struct das_iterator<StructInfo const> :
         das_rtti_iterator<VarInfo, StructInfo> {
         das_iterator(StructInfo const & info) : das_rtti_iterator<VarInfo, StructInfo>(info) {}
     };

@@ -11,7 +11,8 @@
 			"xtr1common": "cpp",
 			"regex": "cpp",
 			"xlocale": "cpp",
-			"cstddef": "cpp"
+			"cstddef": "cpp",
+			"vector": "cpp"
 		}
 	}
 }

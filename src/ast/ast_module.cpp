@@ -579,8 +579,12 @@ namespace das {
                 DAS_FATAL_ERROR;
                 return nullptr;
             }
-        } else {
+        } else if ( handles.size()==0 ) {
             DAS_FATAL_LOG("makeHandleType(%s) failed, missing annotation\n", name.c_str());
+            DAS_FATAL_ERROR;
+            return nullptr;
+        } else {
+            DAS_FATAL_LOG("makeHandleType(%s) failed, duplicate annotation\n", name.c_str());
             DAS_FATAL_ERROR;
             return nullptr;
         }

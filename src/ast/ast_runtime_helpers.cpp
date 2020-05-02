@@ -105,7 +105,7 @@ namespace das {
     protected:
         bool canPointAt () const  {
             if ( function ) {
-                if ( function->generated ) return false;
+                if ( function->generated /*&& !function->generator*/ ) return false;
                 // if ( function->fromGeneric )
             }
             return true;

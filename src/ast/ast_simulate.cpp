@@ -320,7 +320,7 @@ namespace das
         }
     }
 
-    SimNode * Function::makeSimNode ( Context & context ) {
+    SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
         if ( copyOnReturn || moveOnReturn ) {
             return context.code->makeNodeUnroll<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
         } else if ( fastCall ) {
@@ -1756,12 +1756,13 @@ namespace das
     }
 
     SimNode * ExprOp1::simulate (Context & context) const {
+        vector<ExpressionPtr> sarguments = { subexpr };
         if ( func->builtIn && !func->callBased ) {
-            auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context));
+            auto pSimOp1 = static_cast<SimNode_Op1 *>(func->makeSimNode(context,sarguments));
             pSimOp1->x = subexpr->simulate(context);
             return pSimOp1;
         } else {
-            auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
+            auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,sarguments));
             pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
             pCall->fnIndex = func->index;
@@ -1774,13 +1775,14 @@ namespace das
     }
 
     SimNode * ExprOp2::simulate (Context & context) const {
+        vector<ExpressionPtr> sarguments = { left, right };
         if ( func->builtIn && !func->callBased ) {
-            auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context));
+            auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context,sarguments));
             pSimOp2->l = left->simulate(context);
             pSimOp2->r = right->simulate(context);
             return pSimOp2;
         } else {
-            auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
+            auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,sarguments));
             pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
             pCall->fnIndex = func->index;
@@ -2237,7 +2239,7 @@ namespace das
     }
 
     SimNode * ExprCall::simulate (Context & context) const {
-        auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context));
+        auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,arguments));
         simulateCall(func, this, context, pCall);
         if ( !doesNotNeedSp && stackTop ) {
             pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);

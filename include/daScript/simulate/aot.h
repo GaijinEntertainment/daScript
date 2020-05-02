@@ -342,6 +342,13 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct das_index<vector<TT>> : das_default_vector_index<vector<TT>, TT> {};
+
+    template <typename TT>
+    struct das_index<vector<TT> const> : das_default_vector_index<vector<TT>, TT> {};
+
+
     template <typename TT, typename VecT, uint32_t size>
     struct das_vec_index {
     // index

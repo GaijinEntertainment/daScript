@@ -25,7 +25,6 @@ void operator delete(void * p) throw()
 #include "test_profile.h"
 
 MAKE_TYPE_FACTORY(Object, Object)
-MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
 
 TextPrinter tout;
 

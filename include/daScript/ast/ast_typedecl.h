@@ -138,7 +138,6 @@ namespace das {
         Structure *             structType = nullptr;
         Enumeration *           enumType = nullptr;
         TypeAnnotation *        annotation = nullptr;
-        ExpressionPtr           declTypeExpr;
         TypeDeclPtr             firstType;      // map.first or array, or pointer
         TypeDeclPtr             secondType;     // map.second
         vector<TypeDeclPtr>     argTypes;       // block arguments
@@ -419,6 +418,28 @@ namespace das {
         }
         return tt;
     }
+
+    template <typename TT>
+    struct typeName<vector<TT>> {
+        static string name() {
+            return "dasvector`" + typeName<TT>::name();
+        }
+    };
+
+    template <typename TT>
+    struct typeFactory<vector<TT>> {
+        using VT = vector<TT>;
+        static TypeDeclPtr make(const ModuleLibrary & library ) {
+            auto declN = typeName<VT>::name();
+            if ( library.findAnnotation(declN,nullptr).size()==0 ) {
+				auto declT = makeType<TT>(library);
+                auto ann = make_smart<ManagedVectorAnnotation<VT,false>>(declN,const_cast<ModuleLibrary &>(library));
+				ann->cppName = "das::vector<" + describeCppType(declT) + ">";
+                library.front()->addAnnotation(ann);
+            }
+            return makeHandleType(library,declN.c_str());
+        }
+    };
 
     das::TypeDeclPtr makeHandleType(const das::ModuleLibrary & library, const char * typeName);
 

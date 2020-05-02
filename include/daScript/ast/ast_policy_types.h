@@ -37,7 +37,7 @@ namespace  das {
                 }
             }
         }
-        virtual SimNode * makeSimNode ( Context & context ) override {
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             return context.code->makeNode<SimT>(at);
         }
     };

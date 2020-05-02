@@ -11,6 +11,12 @@ namespace das {
 
     template <typename TT> struct typeName<const TT> : typeName<TT> {};
 
+    template <typename TT, typename PP> struct typeName<smart_ptr<TT,PP>> {
+        static string name() {
+            return "smart_ptr<" + typeName<TT>::name() + ">";
+        }
+    };
+
     template <> struct typeName<int32_t>  { static string name() { return "int"; } };
     template <> struct typeName<uint32_t> { static string name() { return "uint"; } };
     template <> struct typeName<Bitfield> { static string name() { return "bitfield"; } };

@@ -57,7 +57,7 @@ namespace das
                 }
             }
         }
-        virtual SimNode * makeSimNode ( Context & context ) override {
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);
             return context.code->makeNode<SimNodeT>(at, fnName);
         }
@@ -91,7 +91,7 @@ namespace das
             this->callBased = true;
             this->interopFn = true;
         }
-        virtual SimNode * makeSimNode ( Context & context ) override {
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);
             return context.code->makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at,fnName);
         }

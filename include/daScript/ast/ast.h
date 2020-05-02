@@ -489,7 +489,7 @@ namespace das
         string getMangledName() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
-        virtual SimNode * makeSimNode ( Context & context );
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & arguments );
         string describe(bool moduleName = false) const;
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr setSideEffects ( SideEffects seFlags );
@@ -729,6 +729,7 @@ namespace das
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;
+		Module* front() const { return modules.front(); }
     protected:
         vector<Module *>                modules;
     };

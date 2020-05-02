@@ -5,8 +5,8 @@
 #include "daScript/simulate/aot.h"
 
 struct Object {
-    das::float3   pos;  
-    das::float3   vel;  
+    das::float3   pos;
+    das::float3   vel;
 
     __forceinline bool operator == (const Object & that) const {
         return pos == that.pos && vel == that.vel;
@@ -18,7 +18,6 @@ struct Object {
 };
 
 typedef das::vector<Object> ObjectArray;
-typedef das::vector<int32_t> ManagedIntArray;
 
 namespace das {
     template<>
@@ -28,16 +27,6 @@ namespace das {
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) { return to(a) == to(b); }
         static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) { return to(a) != to(b); }
     };
-
-    template <>
-    struct das_index<ObjectArray> : das_default_vector_index<ObjectArray, ObjectArray::value_type> {};
-    template <>
-    struct das_index<ObjectArray const> : das_default_vector_index<ObjectArray, ObjectArray::value_type> {};
-
-    template <>
-    struct das_index<ManagedIntArray> : das_default_vector_index<ManagedIntArray, ManagedIntArray::value_type> {};
-    template <>
-    struct das_index<ManagedIntArray const> : das_default_vector_index<ManagedIntArray, ManagedIntArray::value_type> {};
 }
 
 int AddOne(int a);
@@ -55,7 +44,7 @@ int testPrimes(int n);
 void testTryCatch(das::Context * context);
 int testTree();
 
-void testManagedInt(const das::TBlock<void, const ManagedIntArray> & blk, das::Context * context);
+void testManagedInt(const das::TBlock<void, const das::vector<int32_t>> & blk, das::Context * context);
 
 void updateObject(Object & obj);
 void updateTest(ObjectArray & objects);

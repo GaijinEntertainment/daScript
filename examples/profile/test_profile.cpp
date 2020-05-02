@@ -20,13 +20,13 @@ using namespace das;
 #define __noinline    __declspec(noinline)
 #endif
 
-void testManagedInt(const TBlock<void,const ManagedIntArray> & blk, Context * context) {
-    ManagedIntArray arr;
+void testManagedInt(const TBlock<void,const vector<int32_t>> & blk, Context * context) {
+    vector<int32_t> arr;
     for (int32_t x = 0; x != 10; ++x) {
         arr.push_back(x);
     }
     vec4f args[1];
-    args[0] = cast<ManagedIntArray *>::from(&arr);
+    args[0] = cast<vector<int32_t> *>::from(&arr);
     context->invoke(blk, args, nullptr);
 }
 
@@ -74,8 +74,6 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 };
 
 MAKE_TYPE_FACTORY(Object, Object)
-MAKE_TYPE_FACTORY(ObjectArray, ObjectArray)
-MAKE_TYPE_FACTORY(ManagedIntArray, ManagedIntArray)
 
 namespace das {
 
@@ -899,8 +897,6 @@ public:
         // register types
         addAnnotation(make_smart<ObjectStructureTypeAnnotation>(lib));
         addFunctionBasic<Object>(*this, lib);
-        addAnnotation(make_smart<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
-        addAnnotation(make_smart<ManagedVectorAnnotation<ManagedIntArray>>("ManagedIntArray",lib));
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal,"updateObject");

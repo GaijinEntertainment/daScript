@@ -14,7 +14,7 @@
 #include "daScript/simulate/simulate_visit_op.h"
 
 using namespace das;
-DAS_BASE_BIND_ENUM_98(Type, Type,
+DAS_BASE_BIND_ENUM(Type, Type,
     none,           autoinfer,      alias,          fakeContext,
     anyArgument,    tVoid,          tBool,          tInt64,
     tUInt64,        tInt,           tInt2,          tInt3,
@@ -46,7 +46,176 @@ DAS_BASE_BIND_ENUM(RefMatters,   RefMatters,   no, yes)
 DAS_BASE_BIND_ENUM(ConstMatters, ConstMatters, no, yes)
 DAS_BASE_BIND_ENUM(TemporaryMatters, TemporaryMatters, no, yes)
 
+MAKE_TYPE_FACTORY(TypeDecl,TypeDecl)
+
 namespace das {
+
+/*
+    struct TypeDecl : ptr_ref_count {
+        enum {
+            dimAuto = -1,
+            dimConst = -2,
+        };
+        enum class DescribeExtra     { no, yes };
+        enum class DescribeContracts { no, yes };
+        enum class DescribeModule    { no, yes };
+        TypeDecl() = default;
+        TypeDecl(const TypeDecl & decl);
+        TypeDecl & operator = (const TypeDecl & decl) = delete;
+        TypeDecl(Type tt) : baseType(tt) {}
+        TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp.get()) {}
+        TypeDecl(const EnumerationPtr & ep);
+        TypeDeclPtr visit ( Visitor & vis );
+        friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
+        string getMangledName() const;
+        bool canAot() const;
+        bool canAot( das_set<Structure *> & recAot ) const;
+        bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel = true ) const;
+        bool isExprType() const;
+        bool isSimpleType () const;
+        bool isSimpleType ( Type typ ) const;
+        bool isArray() const;
+        bool isGoodIteratorType() const;
+        bool isGoodArrayType() const;
+        bool isGoodTableType() const;
+        bool isGoodBlockType() const;
+        bool isGoodFunctionType() const;
+        bool isGoodLambdaType() const;
+        bool isGoodTupleType() const;
+        bool isGoodVariantType() const;
+        bool isVoid() const;
+        bool isRef() const;
+        bool isRefType() const;
+        bool isTemp( bool topLevel = true, bool refMatters = true) const;
+        bool isTemp(bool topLevel, bool refMatters, das_set<Structure*> & dep) const;
+        bool isTempType(bool refMatters = true) const;
+        bool isShareable(das_set<Structure*> & dep) const;
+        bool isShareable() const;
+        bool isIndex() const;
+        bool isInteger() const;
+        bool isNumeric() const;
+        bool isNumericComparable() const;
+        bool isPointer() const;
+        bool isIterator() const;
+        bool isEnum() const;
+        bool isEnumT() const;
+        bool isHandle() const;
+        bool isStructure() const;
+        bool isTuple() const;
+        bool isVariant() const;
+        int getSizeOf() const;
+        int getCountOf() const;
+        int getAlignOf() const;
+        int getBaseSizeOf() const;
+        int getStride() const;
+        int getTupleSize() const;
+        int getTupleAlign() const;
+        int getTupleFieldOffset ( int index ) const;
+        int getVariantSize() const;
+        int getVariantAlign() const;
+        int getVariantFieldOffset ( int index ) const;
+        string describe ( DescribeExtra extra = DescribeExtra::yes, DescribeContracts contracts = DescribeContracts::yes, DescribeModule module = DescribeModule::yes) const;
+        bool canCopy() const;
+        bool canMove() const;
+        bool canClone() const;
+        bool canDelete() const;
+        bool needDelete() const;
+        bool isPod() const;
+        bool isRawPod() const;
+        bool isNoHeapType() const;
+        bool isWorkhorseType() const; // we can return this, or pass this
+        bool isPolicyType() const;
+        bool isVecPolicyType() const;
+        bool isReturnType() const;
+        bool isCtorType() const;
+        bool isRange() const;
+        bool isString() const;
+        bool isConst() const;
+        bool isFoldable() const;
+        bool isAlias() const;
+        void collectAliasList(vector<string> & aliases) const;
+        bool isAuto() const;
+        bool isVectorType() const;
+        bool isBitfield() const;
+        bool isLocal() const;
+        bool isLocal( das_set<Structure*> & dep ) const;
+        Type getVectorBaseType() const;
+        int getVectorDim() const;
+        bool canInitWithZero() const;
+        static Type getVectorType ( Type baseType, int dim );
+        static int getMaskFieldIndex ( char ch );
+        static bool isSequencialMask ( const vector<uint8_t> & fields );
+        static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
+        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases = nullptr );
+        static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases = nullptr );
+        static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
+        static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases );
+        Type getRangeBaseType() const;
+        const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
+        int findArgumentIndex(const string & name) const;
+        void addVariant(const string & name, const TypeDeclPtr & tt);
+        string findBitfieldName ( uint32_t value ) const;
+        Type                    baseType = Type::tVoid;
+
+        Structure *             structType = nullptr;
+        Enumeration *           enumType = nullptr;
+        TypeAnnotation *        annotation = nullptr;
+
+        TypeDeclPtr             firstType;      // map.first or array, or pointer
+        TypeDeclPtr             secondType;     // map.second
+        vector<TypeDeclPtr>     argTypes;       // block arguments
+
+        vector<string>          argNames;
+        vector<int32_t>         dim;
+        vector<ExpressionPtr>   dimExpr;
+        union {
+            struct {
+                bool    ref : 1 ;
+                bool    constant : 1;
+                bool    temporary : 1;
+                bool    implicit : 1;
+                bool    removeRef : 1;
+                bool    removeConstant : 1;
+                bool    removeDim : 1;
+                bool    removeTemporary : 1;
+                bool    aotAlias : 1;
+                bool    smartPtr : 1;
+            };
+            uint32_t flags = 0;
+        };
+        string              alias;
+        LineInfo            at;
+        Module *            module = nullptr;
+    };
+
+*/
+
+    TypeDeclPtr makeTypeDeclFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "TypeDeclFlags";
+        ft->argNames = { "ref", "constant", "temporary", "implicit",
+            "removeRef", "removeConstant", "removeDim",
+            "removeTemporary", "aotAlias", "smartPtr" };
+        return ft;
+    }
+
+    struct TypeDeclAnnnotation : ManagedStructureAnnotation <TypeDecl> {
+        TypeDeclAnnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TypeDecl", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
+            addField<DAS_BIND_MANAGED_FIELD(argNames)>("argNames");
+            addField<DAS_BIND_MANAGED_FIELD(dim)>("dim");
+            addField<DAS_BIND_MANAGED_FIELD(alias)>("alias");
+            // NOTE: make sure flags match the typedecl
+            addFieldEx ( "flags", "flags", offsetof(TypeDecl, flags), makeTypeDeclFlags() );
+        }
+        void init () {
+            addField<DAS_BIND_MANAGED_FIELD(firstType)>("firstType");
+            addField<DAS_BIND_MANAGED_FIELD(secondType)>("secondType");
+            addField<DAS_BIND_MANAGED_FIELD(argTypes)>("argTypes");
+            // addField<DAS_BIND_MANAGED_FIELD(dimExpr)>("dimExpr");
+        }
+    };
+
 
     template <>
     struct typeFactory<RttiValue> {
@@ -92,7 +261,7 @@ namespace das {
 
     struct AnnotationArgumentAnnotation : ManagedStructureAnnotation <AnnotationArgument,false> {
         AnnotationArgumentAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("AnnotationArgument", ml) {
-            addFieldEx ( "basicType", "type", offsetof(AnnotationArgument, type), makeType<Type_DasProxy>(ml) );
+            addFieldEx ( "basicType", "type", offsetof(AnnotationArgument, type), makeType<Type>(ml) );
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
             addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
@@ -229,7 +398,7 @@ namespace das {
         ManagedTypeInfoAnnotation ( const string & st, ModuleLibrary & ml )
             : ManagedStructureAnnotation<TT,false> (st, ml) {
             using ManagedType = TT;
-            this->addFieldEx ( "basicType", "type", offsetof(TypeInfo, type), makeType<Type_DasProxy>(ml) );
+            this->addFieldEx ( "basicType", "type", offsetof(TypeInfo, type), makeType<Type>(ml) );
             this->template addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
             this->template addField<DAS_BIND_MANAGED_FIELD(dimSize)>("dimSize");
             this->template addField<DAS_BIND_MANAGED_FIELD(argCount)>("argCount");
@@ -605,6 +774,41 @@ namespace das {
     }
 #endif
 
+    struct SimNode_RttiGetTypeDecl : SimNode_CallBase {
+        DAS_PTR_NODE;
+        SimNode_RttiGetTypeDecl ( const LineInfo & at, const ExpressionPtr & d )
+            : SimNode_CallBase(at) {
+            typeExpr = d->type.get();
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(RttiGetTypeDecl);
+            V_ARG(typeExpr->getMangledName().c_str());
+            V_END();
+        }
+        __forceinline char * compute(Context &) {
+            DAS_PROFILE_NODE
+            return (char *) typeExpr;
+        }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            SimNode * node = SimNode::copyNode(context,code);
+            return node;
+        }
+        TypeDecl *  typeExpr;   // requires RTTI
+    };
+
+    template  <typename SimT, typename RetT>
+    class RttiBuiltInFn : public BuiltInFn<SimNode_Zero,RetT,vec4f> {
+    public:
+        RttiBuiltInFn(const string & fn, const ModuleLibrary & lib, const string & cna = string(), bool pbas = true)
+            : BuiltInFn<SimNode_Zero,RetT,vec4f>(fn,lib,cna,pbas) {
+            noAot = true;
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & args ) override {
+            return (args.size()==1) ? context.code->makeNode<SimT>(at,args[0]) : nullptr;
+        }
+    };
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -699,6 +903,17 @@ namespace das {
                 SideEffects::modifyExternal, "isCompatibleCast");
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name");
+
+
+            // FLAGS?
+            addAlias(makeTypeDeclFlags());
+            // AST TYPES
+            auto tda = make_smart<TypeDeclAnnnotation>(lib);
+            addAnnotation(tda);
+            initRecAnnotation(tda, lib);
+            // THE MAGNIFICENT TWO
+            addFunction ( make_smart<RttiBuiltInFn<SimNode_RttiGetTypeDecl,TypeDeclPtr>>("get_typedecl",lib,"get_typedecl",false) );
+
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready
