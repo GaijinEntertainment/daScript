@@ -1414,6 +1414,10 @@ namespace das {
                         var->at, CompilationError::type_not_found );
                 }
             }
+            if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
+                reportAstChanged();
+                var->type->ref = false;
+            }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
             if (arg->type->isAuto() && arg->init->type) {
@@ -1445,10 +1449,6 @@ namespace das {
             if ( var->type->isAuto() ) {
                 error("unresolved generics are not supported",  "", "",
                     var->at, CompilationError::cant_infer_generic );
-            }
-            if ( var->type->ref && var->type->isRefType() ) {
-                error("can't pass boxed type by reference", "", "remove & from the type declaration",
-                    var->at, CompilationError::invalid_argument_type);
             }
             if ( !var->type->ref && var->type->isPointer() && var->type->smartPtr ) {
                 if ( !fn->unsafe ) {

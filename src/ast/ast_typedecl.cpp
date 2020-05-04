@@ -158,7 +158,7 @@ namespace das
             }
         }
         // auto & can't be infered from non-ref
-        if ( autoT->ref && !initT->ref )
+        if ( autoT->ref && !initT->isRef() )
             return nullptr;
         // auto[][][] can't be infered from non-array
         if ( autoT->dim.size() ) {

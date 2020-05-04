@@ -1,17 +1,14 @@
-options rtti = true
+options log = true
 
-require rtti
+struct Foo
+	a : int
 
-def take ( a : auto! )
-	print("const\n")
-
-def take ( var a : auto! )
-	print("value\n")
+def take ( a& )
+	print("a = {a}\n")
 
 [export]
 def test()
-	let c = 1
-	take(c)
-	var v = 1
-	take(v)
+	take([[Foo a = 2]])
+	let t = 2
+	take(t)
 	return true

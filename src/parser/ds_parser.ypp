@@ -1573,9 +1573,10 @@ copy_or_move
     ;
 
 variable_declaration        /* this one can have uninitialized variable which has no type */
-    :   variable_name_list[list] {
+    :   variable_name_list[list] optional_ref[ref] {
         auto autoT = new TypeDecl(Type::autoinfer);
         autoT->at = tokAt(@list);
+        autoT->ref = $ref;
         $$ = new VariableDeclaration(tokAt(@list),$list,autoT,nullptr);
     }
     |   variable_name_list[list] ':' type_declaration[typeDecl]  {
