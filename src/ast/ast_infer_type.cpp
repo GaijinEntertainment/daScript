@@ -4832,7 +4832,7 @@ namespace das {
                         // now we verify if tail end can indeed be fully infered
                         if (!program->addFunction(clone)) {
                             auto exf = program->thisModule->functions[clone->getMangledName()];
-                            DAS_VERIFYF(exf, "if we can't add, this means there is function with exactly this mangled name");
+                            DAS_ASSERTF(exf, "if we can't add, this means there is function with exactly this mangled name");
                             if (exf->fromGeneric != clone->fromGeneric) {
                                 error("can't instance generic " + clone->describe(),
                                     + "\ttrying to instance from module " + clone->fromGeneric->module->name + "\n"

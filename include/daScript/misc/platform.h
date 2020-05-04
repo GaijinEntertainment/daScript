@@ -150,14 +150,6 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
     #define DAS_ASSERTF(a, msg, ...)   assert((a) && (msg))
 #endif
 
-#ifndef DAS_VERIFYF
-    #ifdef NDEBUG
-        #define DAS_VERIFYF(a, msg, ...)    (a)
-    #else
-        #define DAS_VERIFYF(a, msg, ...)   assert((a) && (msg))
-    #endif
-#endif
-
 #ifndef DAS_ALIGNED_ALLOC
 #define DAS_ALIGNED_ALLOC 1
 inline void *das_aligned_alloc16(uint32_t size) {

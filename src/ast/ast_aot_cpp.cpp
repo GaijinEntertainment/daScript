@@ -2489,8 +2489,8 @@ namespace das {
         bool isHybridCall ( Function * func ) {
             if ( func->builtIn ) {
                 auto bif = (BuiltInFunction *) func;
-                DAS_VERIFYF(!func->policyBased, "we should not be here. policy based calls are handled elsewhere");
-                DAS_VERIFYF(!func->callBased, "we should not be here. call-based calls handled elsewhere");
+                DAS_ASSERTF(!func->policyBased, "we should not be here. policy based calls are handled elsewhere");
+                DAS_ASSERTF(!func->callBased, "we should not be here. call-based calls handled elsewhere");
                 if ( bif->cppName.empty() ) {
                     return true;
                 }

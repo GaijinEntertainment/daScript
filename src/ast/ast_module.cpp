@@ -111,7 +111,7 @@ namespace das {
         for ( auto m = modules; m != nullptr; m = m->next ) {
             auto tt = m->getOptionType(name);
             if ( tt != Type::none ) {
-                DAS_VERIFYF(optT==Type::none, "duplicate module option %s", name.c_str());
+                DAS_ASSERTF(optT==Type::none, "duplicate module option %s", name.c_str());
                 optT = tt;
             }
         }
@@ -454,7 +454,7 @@ namespace das {
                 }
             }
         }
-        DAS_VERIFYF(!failed, "verifyBuiltinNames failed");
+        DAS_ASSERTF(!failed, "verifyBuiltinNames failed");
     }
 
     void Module::verifyAotReady() {
@@ -469,7 +469,7 @@ namespace das {
                 }
             }
         }
-        DAS_VERIFYF(!failed, "verifyAotReady failed");
+        DAS_ASSERTF(!failed, "verifyAotReady failed");
     }
 
     // MODULE LIBRARY
