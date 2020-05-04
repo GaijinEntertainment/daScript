@@ -27,6 +27,7 @@ def inside_move_test
 
 [unsafe]
 def move_test
+	verify(getTotalTestObjectSmart()==0)
 	var t <- inside_move_test()
 	verify(getTotalTestObjectSmart()==1)
 	delete t
@@ -71,6 +72,7 @@ def ref_count_test
 
 [unsafe]
 def access_test
+	verify(getTotalTestObjectSmart()==0)
 	var ptr <- new TestObjectSmart
 	assert(ptr.fooData == 1234)		//	.
 	var t = ptr ?. fooData ?? 1		// ?? rvalue
@@ -86,6 +88,7 @@ def access_test
 	assert(ptr ?. first ?. fooData ?? 13==1234)
 	delete ptr.first
 	delete ptr
+	verify(getTotalTestObjectSmart()==0)
 
 [unsafe]
 def fn_test
