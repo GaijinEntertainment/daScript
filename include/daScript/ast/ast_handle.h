@@ -347,6 +347,28 @@ namespace das
         }
     };
 
+    template <typename TT>
+    struct typeName<vector<TT>> {
+        static string name() {
+            return "dasvector`" + typeName<TT>::name();
+        }
+    };
+
+    template <typename TT>
+    struct typeFactory<vector<TT>> {
+        using VT = vector<TT>;
+        static TypeDeclPtr make(const ModuleLibrary & library ) {
+            auto declN = typeName<VT>::name();
+            if ( library.findAnnotation(declN,nullptr).size()==0 ) {
+                auto declT = makeType<TT>(library);
+                auto ann = make_smart<ManagedVectorAnnotation<VT,false>>(declN,const_cast<ModuleLibrary &>(library));
+                ann->cppName = "das::vector<" + describeCppType(declT) + ">";
+                library.front()->addAnnotation(ann);
+            }
+            return makeHandleType(library,declN.c_str());
+        }
+    };
+
     template <typename OT>
     struct ManagedValueAnnotation : TypeAnnotation {
         static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");

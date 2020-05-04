@@ -799,10 +799,10 @@ namespace das {
     public:
         RttiBuiltInFn(const string & fn, const ModuleLibrary & lib, const string & cna = string(), bool pbas = true)
             : BuiltInFn<SimNode_Zero,RetT,vec4f>(fn,lib,cna,pbas) {
-            noAot = true;
+            this->noAot = true;
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & args ) override {
-            return (args.size()==1) ? context.code->makeNode<SimT>(at,args[0]) : nullptr;
+            return (args.size()==1) ? context.code->makeNode<SimT>(this->at,args[0]) : nullptr;
         }
     };
 
