@@ -2380,9 +2380,11 @@ namespace das {
                 return true;
             };
             Module::foreach(modMacro);
-            if ( failed() ) break;  any |= last;
+            if ( failed() ) break;  
+            any |= last;
             libGroup.foreach(modMacro,"*");
-            if ( failed() ) break;  any |= last;
+            if ( failed() ) break;  
+            any |= last;
             if ( log ) logs << "MACROS:" << (last ? "optimized" : "nothing") << "\n" << *this;
         } while ( any );
     }
