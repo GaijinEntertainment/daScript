@@ -39,6 +39,22 @@ namespace das
         }
     };
 
+    template <typename Result>
+    struct ImplCallStaticFunction<smart_ptr<Result>> {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            return cast<Result *>::from( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ).orphan() );
+        }
+    };
+
+    template <typename Result>
+    struct ImplCallStaticFunction<smart_ptr_raw<Result>> {
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            return cast<Result *>::from( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ).get() );
+        }
+    };
+
     template <>
     struct ImplCallStaticFunction<void> {
         template <typename FunctionType, typename ArgumentsType, size_t... I>
