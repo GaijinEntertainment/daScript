@@ -1226,5 +1226,24 @@ namespace das {
         verifyGenerated(fn->body);
         return fn;
     }
+
+    class LocationSwapVisitor : public Visitor {
+    public:
+        LocationSwapVisitor( const LineInfo & na )
+            : Visitor(), newAt(na) {
+        }
+    protected:
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            expr->at = newAt;
+        }
+    protected:
+        LineInfo    newAt;
+    };
+
+    ExpressionPtr forceAt ( const ExpressionPtr & expr, const LineInfo & at ) {
+        LocationSwapVisitor swapAt(at);
+        return expr->visit(swapAt);
+    }
 }
 

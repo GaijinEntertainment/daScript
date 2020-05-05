@@ -13,6 +13,9 @@ namespace das {
     // make sure generated code contains line information etc
     void verifyGenerated ( const ExpressionPtr & expr );
 
+    // puts all expression's subexpressions at new location
+    ExpressionPtr forceAt ( const ExpressionPtr & expr, const LineInfo & at );
+
     /*
      def STRUCT_NAME
         return [[STRUCT_NAME field1=init1, field2=init2, ...]]

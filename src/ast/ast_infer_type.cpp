@@ -3560,7 +3560,7 @@ namespace das {
             // with
             if ( auto eW = hasMatchingWith(expr->name) ) {
                 reportAstChanged();
-                return make_smart<ExprField>(expr->at, eW->with->clone(), expr->name);
+                return make_smart<ExprField>(expr->at, forceAt(eW->with->clone(),expr->at), expr->name);
             }
             // block arguments
             for ( auto it = blocks.rbegin(); it!=blocks.rend(); ++it ) {
