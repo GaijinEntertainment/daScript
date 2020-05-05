@@ -31,6 +31,7 @@
     int das_nested_sb = 0;
     int das_yycolumn = 0;
     int das_c_style_depth = 0;
+    int das_arrow_depth = 0;
     bool das_need_oxford_comma = true;
     bool das_force_oxford_comma = false;
     bool das_supress_errors = false;
@@ -519,9 +520,26 @@ void YYNEWLINE() {
 <normal>"\>\="                              return GREQU;
 <normal>"\=\="                              return EQUEQU;
 <normal>"\!\="                              return NOTEQU;
-<normal>"\>\>\>"                            return ROTR;
+<normal>"\>\>\>" {
+    if ( das_arrow_depth ) {
+        unput('>');
+        unput('>');
+        YYCOLUMN(das_yycolumn-=2, "UNPUT");
+        return '>';
+    } else {
+        return ROTR;
+    }
+}
+<normal>"\>\>" {
+    if ( das_arrow_depth ) {
+        unput('>');
+        YYCOLUMN(das_yycolumn--, "UNPUT");
+        return '>';
+    } else {
+        return SHR;
+    }
+}
 <normal>"\<\<\<"                            return ROTL;
-<normal>"\>\>"                              return SHR;
 <normal>"\<\<"                              return SHL;
 <normal>"\>\>\="                            return SHREQU;
 <normal>"\<\<\="                            return SHLEQU;
@@ -613,6 +631,7 @@ void das_yybegin(const char * str) {
     das_need_oxford_comma = true;
     das_force_oxford_comma = false;
     das_c_style_depth = 0;
+    das_arrow_depth = 0;
     BEGIN(normal);
     yy_scan_string(str);
 }

@@ -50,6 +50,7 @@
     extern bool das_need_oxford_comma;
     extern bool das_force_oxford_comma;
     extern bool das_supress_errors;
+    extern int das_arrow_depth;
 }
 
 %{
@@ -1109,15 +1110,15 @@ expression_let
     ;
 
 expr_cast
-    :   DAS_CAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+    :   DAS_CAST[loc] '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } expr[subexpr] {
         $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
-    |   DAS_UPCAST[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+    |   DAS_UPCAST[loc] '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } expr[subexpr] {
         auto pCast = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
         pCast->upcast = true;
         $$ = pCast;
     }
-    |   DAS_REINTERPRET[loc] '<' type_declaration[decl] '>' expr[subexpr] {
+    |   DAS_REINTERPRET[loc] '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } expr[subexpr] {
         auto pCast = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
         pCast->reinterpret = true;
         $$ = pCast;
@@ -1314,14 +1315,14 @@ func_addr_expr
 		$$ = new ExprAddr(tokAt(@loc),*$name);
 		delete $name;
 	}
-    |   '@' '@'[loc] '<' type_declaration[blockType] '>' name_in_namespace[name] {
+    |   '@' '@'[loc] '<' { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } name_in_namespace[name] {
 		auto expr = new ExprAddr(tokAt(@loc),*$name);
 		delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($blockType);
 		$$ = expr;
     }
-    |   '@' '@'[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' name_in_namespace[name] {
+    |   '@' '@'[loc] '<' { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } name_in_namespace[name] {
 		auto expr = new ExprAddr(tokAt(@loc),*$name);
 		delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
@@ -1584,10 +1585,16 @@ copy_or_move
     ;
 
 variable_declaration        /* this one can have uninitialized variable which has no type */
-    :   variable_name_with_pos_list[list] optional_ref[ref] {
+    :   variable_name_with_pos_list[list] {
         auto autoT = new TypeDecl(Type::autoinfer);
         autoT->at = tokAt(@list);
-        autoT->ref = $ref;
+        autoT->ref = false;
+        $$ = new VariableDeclaration($list,autoT,nullptr);
+    }
+    |   variable_name_with_pos_list[list] '&' {
+        auto autoT = new TypeDecl(Type::autoinfer);
+        autoT->at = tokAt(@list);
+        autoT->ref = true;
         $$ = new VariableDeclaration($list,autoT,nullptr);
     }
     |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl]  {
@@ -1985,7 +1992,7 @@ bitfield_bits
     ;
 
 bitfield_type_declaration
-    :   DAS_TBITFIELD[basicType] '<' bitfield_bits[nl] '>' {
+    :   DAS_TBITFIELD[basicType] '<' { das_arrow_depth ++; } bitfield_bits[nl] '>' { das_arrow_depth --; } {
             $$ = new TypeDecl(Type::tBitfield);
             $$->argNames = *$nl;
             if ( $$->argNames.size()>32 ) {
@@ -2075,7 +2082,7 @@ type_declaration
         $$->at = tokAt(@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_SMART_PTR[loc] '<' type_declaration[typeDecl] '>' {
+    |   DAS_SMART_PTR[loc] '<' { das_arrow_depth ++; } type_declaration[typeDecl] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(@loc);
         $$->smartPtr = true;
@@ -2088,18 +2095,18 @@ type_declaration
 		$$->firstType->at = tokAt(@typeDecl);
 		$$->firstType->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_ARRAY[loc] '<' type_declaration[typeDecl] '>' {
+    |   DAS_ARRAY[loc] '<' { das_arrow_depth ++; } type_declaration[typeDecl] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_TABLE[loc] '<' type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] '>' {
+    |   DAS_TABLE[loc] '<' { das_arrow_depth ++; } type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);
         $$->secondType = TypeDeclPtr($valueTypeDecl);
     }
-    |   DAS_ITERATOR[loc] '<' type_declaration[itTypeDecl] '>' {
+    |   DAS_ITERATOR[loc] '<'  { das_arrow_depth ++; } type_declaration[itTypeDecl] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tIterator);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($itTypeDecl);
@@ -2108,12 +2115,12 @@ type_declaration
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
     }
-    |   DAS_TBLOCK[loc] '<' type_declaration[blockType] '>' {
+    |   DAS_TBLOCK[loc] '<'  { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   DAS_TBLOCK[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+    |   DAS_TBLOCK[loc] '<'  { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -2126,12 +2133,12 @@ type_declaration
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
     }
-    |   DAS_TFUNCTION[loc] '<' type_declaration[blockType] '>' {
+    |   DAS_TFUNCTION[loc] '<' { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   DAS_TFUNCTION[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+    |   DAS_TFUNCTION[loc] '<' { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -2144,12 +2151,12 @@ type_declaration
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
     }
-    |   DAS_TLAMBDA[loc] '<' type_declaration[blockType] '>' {
+    |   DAS_TLAMBDA[loc] '<' { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   DAS_TLAMBDA[loc] '<' optional_function_argument_list[list] optional_function_type[result] '>' {
+    |   DAS_TLAMBDA[loc] '<' { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -2158,13 +2165,13 @@ type_declaration
             deleteVariableDeclarationList($list);
         }
     }
-    |   DAS_TTUPLE[loc] '<' tuple_type_list[list] '>' {
+    |   DAS_TTUPLE[loc] '<' { das_arrow_depth ++; } tuple_type_list[list] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tTuple);
         $$->at = tokAt(@loc);
         varDeclToTypeDecl($$, $list, true);
         deleteVariableDeclarationList($list);
     }
-    |   DAS_TVARIANT[loc] '<' variant_type_list[list] '>' {
+    |   DAS_TVARIANT[loc] '<' { das_arrow_depth ++; } variant_type_list[list] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tVariant);
         $$->at = tokAt(@loc);
         varDeclToTypeDecl($$, $list, true);
