@@ -499,6 +499,7 @@ namespace das
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & arguments );
+        string describeName(bool moduleName = false) const;
         string describe(bool moduleName = false) const;
         virtual FunctionPtr visit(Visitor & vis);
         FunctionPtr setSideEffects ( SideEffects seFlags );

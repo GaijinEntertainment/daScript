@@ -399,6 +399,18 @@ namespace das {
         return ss.str();
     }
 
+    string Function::describeName(bool moduleName) const {
+        TextWriter ss;
+        if ( moduleName && module && !module->name.empty() ) {
+            ss << module->name << "::";
+        }
+        if ( !isalpha(name[0]) && name[0]!='_' && name[0]!='`' ) {
+            ss << "operator ";
+        }
+        ss << name;
+        return ss.str();
+    }
+
     string Function::describe(bool moduleName) const {
         TextWriter ss;
         if ( moduleName && module && !module->name.empty() ) {
