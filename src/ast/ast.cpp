@@ -1675,6 +1675,7 @@ namespace das {
         auto cexpr = clonePtr<ExprFor>(expr);
         Expression::clone(cexpr);
         cexpr->iterators = iterators;
+        cexpr->iteratorsAt = iteratorsAt;
         for ( auto & src : sources )
             cexpr->sources.push_back(src->clone());
         for ( auto & var : iteratorVariables )

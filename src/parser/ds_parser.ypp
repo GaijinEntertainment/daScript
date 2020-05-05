@@ -91,6 +91,7 @@
 	double                          fd;
     string *                        s;
     vector<string> *                pNameList;
+    vector<pair<string,LineInfo>> * pNameWithPosList;
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;
     TypeDecl *                      pTypeDecl;
@@ -107,6 +108,7 @@
 
 %destructor { delete $$; } <s>
 %destructor { delete $$; } <pNameList>
+%destructor { delete $$; } <pNameWithPosList>
 %destructor { delete $$; } <pVarDecl>
 %destructor { deleteVariableDeclarationList($$); } <pVarDeclList>
 %destructor { delete $$; } <pTypeDecl>
@@ -268,6 +270,7 @@
 
 %type <pNameList>       bitfield_bits
 %type <pNameList>       variable_name_list
+%type <pNameWithPosList>variable_name_with_pos_list
 %type <type>            basic_type_declaration
 %type <type>            enum_basic_type_declaration
 %type <pTypeDecl>       type_declaration
@@ -623,9 +626,12 @@ expression_if_then_else
     ;
 
 expression_for_loop
-    :   DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs] ';' expression_block[block] {
+    :   DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ';' expression_block[block] {
         auto pFor = new ExprFor(tokAt(@loc));
-        pFor->iterators = *$iters;
+        for ( const auto & np : *$iters ) {
+            pFor->iterators.push_back(np.first);
+            pFor->iteratorsAt.push_back(np.second);
+        }
         delete $iters;
         pFor->sources = sequenceToList($srcs);
         pFor->body = ExpressionPtr($block);
@@ -819,11 +825,18 @@ function_name
     ;
 
 function_declaration
-    :   optional_annotation_list[annL] DAS_DEF function_name[name]
+    :   optional_annotation_list[annL] DAS_DEF[from] function_name[name]
             optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_smart<Function>();
         pFunction->at = tokAt(@name);
-        pFunction->atDecl = tokRangeAt(@annL, @block);
+        pFunction->atDecl = tokRangeAt(@from, @block);
+        /*
+        TextPrinter tp;
+        tp  << *$name << " at " << pFunction->at.describe(true) << "\n"
+            << " range: " << pFunction->atDecl.describe(true) << "\n"
+            << " from:" << tokAt(@from).describe(true) << "\n"
+            << " block: " << tokAt(@block).describe(true) << "\n";
+        */
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
@@ -1895,6 +1908,22 @@ variable_name_list
     }
     ;
 
+variable_name_with_pos_list
+    :   NAME[name]  {
+		das_checkName(*$name,tokAt(@name));
+        auto pSL = new vector<pair<string,LineInfo>>();
+        pSL->push_back(pair<string,LineInfo>(*$name,tokAt(@name)));
+        $$ = pSL;
+        delete $name;
+    }
+    |   variable_name_with_pos_list[list] ',' NAME[name] {
+		das_checkName(*$name,tokAt(@name));
+        $list->push_back(pair<string,LineInfo>(*$name,tokAt(@name)));
+        $$ = $list;
+        delete $name;
+    }
+    ;
+
 basic_type_declaration
     :   DAS_TBOOL       { $$ = Type::tBool; }
     |   DAS_TSTRING     { $$ = Type::tString; }
@@ -2355,9 +2384,12 @@ array_comprehension_where
     ;
 
 array_comprehension
-    :   BRABRAB DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' {
+    :   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' {
         auto pFor = make_smart<ExprFor>(tokAt(@loc));
-        pFor->iterators = *$iters;
+        for ( const auto & np : *$iters ) {
+            pFor->iterators.push_back(np.first);
+            pFor->iteratorsAt.push_back(np.second);
+        }
         delete $iters;
         pFor->sources = sequenceToList($srcs);
         auto pAC = new ExprArrayComprehension(tokAt(@loc));
@@ -2369,9 +2401,12 @@ array_comprehension
         }
         $$ = pAC;
     }
-    |   BRACBRB DAS_FOR[loc] variable_name_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' {
+    |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' {
         auto pFor = make_smart<ExprFor>(tokAt(@loc));
-        pFor->iterators = *$iters;
+        for ( const auto & np : *$iters ) {
+            pFor->iterators.push_back(np.first);
+            pFor->iteratorsAt.push_back(np.second);
+        }
         delete $iters;
         pFor->sources = sequenceToList($srcs);
         auto pAC = new ExprArrayComprehension(tokAt(@loc));

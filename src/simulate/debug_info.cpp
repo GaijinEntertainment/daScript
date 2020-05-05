@@ -420,10 +420,11 @@ namespace das
         return stream.str();
     }
 
-    string LineInfo::describe() const {
+    string LineInfo::describe(bool fully) const {
         if ( fileInfo ) {
             TextWriter ss;
             ss << fileInfo->name << ":" << line << ":" << column;
+            if ( fully ) ss << "-" << last_line << ":" << last_column;
             return ss.str();
         } else {
             return string();
@@ -434,17 +435,17 @@ namespace das
         string fileName = fileInfo ? fileInfo->name : "";
         int tabSize = fileInfo ? fileInfo->tabSize : 4;
         TextWriter ss;
-        ss  <<  "\"uri\" : \"" << escapeString(fileName) << "\",\n"
-            <<  "\"tab\" : " << tabSize << ",\n"
-            <<  "\"range\": {\n"
-            <<  " \"start\": {\n"
-            <<  "  \"line\": " << line << ",\n"
-            <<  "  \"character\": " << column << "\n"
-            <<  " },\n"
-            <<  " \"end\": {\n"
-            <<  "  \"line\": " << last_line << ",\n"
-            <<  "  \"character\": " << last_column << "\n"
-            <<  " }\n"
+        ss  <<  "\"uri\":\"" << escapeString(fileName) << "\",\n"
+            <<  "\"tab\":" << tabSize << ","
+            <<  "\"range\":{"
+            <<  "\"start\":{"
+            <<  "\"line\":" << line << ","
+            <<  "\"character\": " << column
+            <<  "},"
+            <<  "\"end\":{"
+            <<  "\"line\":" << last_line << ","
+            <<  "\"character\":" << last_column
+            <<  "}"
             <<  "}\n";
         return ss.str();
     }

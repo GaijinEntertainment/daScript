@@ -276,6 +276,7 @@ union DAS_YYSTYPE
 	double                          fd;
     string *                        s;
     vector<string> *                pNameList;
+    vector<pair<string,LineInfo>> * pNameWithPosList;
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;
     TypeDecl *                      pTypeDecl;
@@ -289,7 +290,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 293 "ds_parser.hpp"
+#line 294 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

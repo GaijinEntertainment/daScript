@@ -414,6 +414,7 @@ namespace das
         union{
             struct {
                 bool    alwaysSafe : 1;
+                bool    generated : 1;
             };
             uint32_t    genFlags = 0;
         };
@@ -802,12 +803,20 @@ namespace das
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
     };
 
+    struct CursorVariable {
+        ExpressionPtr   expr;
+        int32_t         index;
+        Function *      function;
+        CursorVariable ( Expression * e, int32_t i, Function * f )
+            : expr(e), index(i), function(f) {
+        }
+    };
+
     struct CursorInfo {
-        LineInfo        at;         // cursor location
-        FunctionPtr     function;   // function, whre cursor is
-        ExpressionPtr   call;       // call, if cursor is pointing at one
-        ExpressionPtr   variable;   // variable
-        int             variableIndex = -1; // variable index in the 'let', function argument, or block argument
+        LineInfo               at;         // cursor location
+        vector<FunctionPtr>    function;   // function, whre cursor is
+        vector<ExpressionPtr>  call;       // call, if cursor is pointing at one (ExprCall, ExprLooksLikeCall, etc)
+        vector<CursorVariable> variable;   // variables (ExprVar, ExprField, etc)
         string reportJson() const;
     };
 

@@ -12,7 +12,8 @@
 			"regex": "cpp",
 			"xlocale": "cpp",
 			"cstddef": "cpp",
-			"vector": "cpp"
+			"vector": "cpp",
+			"utility": "cpp"
 		}
 	}
 }

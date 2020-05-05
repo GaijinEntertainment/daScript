@@ -126,6 +126,7 @@ namespace das {
         pPushVal->at = expr->at;
         pPushVal->name = compName;
         auto pPush = make_smart<ExprCall>();
+        pPush->generated = true;
         pPush->at = expr->at;
         pPush->name = expr->subexpr->type->canCopy() ? "push" : "emplace";
         pPush->arguments.push_back(pPushVal);
@@ -900,6 +901,7 @@ namespace das {
                 svar->init = src->clone();
             } else {
                 auto ceach = make_smart<ExprCall>(expr->at, "each");
+                ceach->generated = true;
                 ceach->alwaysSafe = true;
                 ceach->arguments.push_back(src->clone());
                 svar->init = ceach;
@@ -910,7 +912,7 @@ namespace das {
             auto srci = make_smart<ExprLet>();
             srci->at = expr->at;
             auto srcv = make_smart<Variable>();
-            srcv->at = expr->at;
+            srcv->at = iterv->at;
             srcv->name = srcVarName;
             if ( iterv->type->ref ) {
                 srcv->do_not_delete = true;
@@ -950,6 +952,7 @@ namespace das {
             blk->list.push_back(veqt);
             // loop &= _builtin_iterator_first(it0,pvar0)
             auto cbif = make_smart<ExprCall>(expr->at, "_builtin_iterator_first");
+            cbif->generated = true;
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, srcName));
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, pVarName));
             auto lande = make_smart<ExprOp2>(expr->at,"&=",
@@ -977,6 +980,7 @@ namespace das {
             const string & srcName = srcNames[si];
             const string & pVarName = pVarNames[si];
             auto cbif = make_smart<ExprCall>(expr->at, "_builtin_iterator_next");
+            cbif->generated = true;
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, srcName));
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, pVarName));
             auto lande = make_smart<ExprOp2>(expr->at,"&=",
@@ -998,6 +1002,7 @@ namespace das {
             const string & srcName = srcNames[si];
             const string & pVarName = pVarNames[si];
             auto cbif = make_smart<ExprCall>(expr->at, "_builtin_iterator_close");
+            cbif->generated = true;
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, srcName));
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, pVarName));
             blk->list.push_back(cbif);

@@ -1415,7 +1415,6 @@ namespace das {
                 }
             }
             if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
-                reportAstChanged();
                 var->type->ref = false;
             }
         }
@@ -1897,6 +1896,7 @@ namespace das {
                                 }
                                 yva->name = (makeRef ? "_ryield" : "_yield_") + to_string(block->at.line);
                                 yva->at = block->at;
+                                yva->generated = true;
                                 block->arguments.push_back(yva);
                             }
                             // make it all
@@ -1912,6 +1912,7 @@ namespace das {
                                         auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
                                         // each ( [[ ]]] )
                                         auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
+                                        cEach->generated = true;
                                         cEach->arguments.push_back(ms);
                                         return cEach;
                                     } else {
@@ -3171,9 +3172,8 @@ namespace das {
                     "initializer or to be passed to the function with the explicit block definition", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
-            if ( var->type->ref && var->type->isRefType() ) {
-                error("can't pass boxed type by reference\n\tremove & from the type declaration", "", "",
-                    var->at,CompilationError::invalid_argument_type);
+            if ( var->type->ref && var->type->isRefType() ) { // silently fix a : Foo& into a : Foo
+                var->type->ref = false;
             }
             verifyType(var->type);
         }
@@ -4348,7 +4348,7 @@ namespace das {
                 }
                 auto pVar = make_smart<Variable>();
                 pVar->name = expr->iterators[idx];
-                pVar->at = expr->at;
+                pVar->at = expr->iteratorsAt[idx];
                 if ( src->type->dim.size() ) {
                     pVar->type = make_smart<TypeDecl>(*src->type);
                     pVar->type->ref = true;
