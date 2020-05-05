@@ -390,18 +390,17 @@ namespace das
         }
         if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {
-                stream << " delete ";
                 if (removeConstant) {
-                    stream << "const";
+                    stream << " -const";
                 }
                 if (removeRef) {
-                    stream << "&";
+                    stream << " -&";
                 }
                 if (removeDim ) {
-                    stream << "[]";
+                    stream << " -[]";
                 }
                 if (removeTemporary) {
-                    stream << "#";
+                    stream << " -#";
                 }
             }
         }
