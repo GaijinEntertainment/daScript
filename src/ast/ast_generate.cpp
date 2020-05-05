@@ -76,6 +76,7 @@ namespace das {
     };
 
     void verifyGenerated ( const ExpressionPtr & expr ) {
+        (void)expr;
 #if LOG_GENERATED
         TextPrinter pp;
         pp << "VERIFY:\n" << *expr << "\n";
@@ -106,6 +107,7 @@ namespace das {
         pClosure->returnType = make_smart<TypeDecl>(Type::autoinfer);
         // temp : Array<expr->subexpr->type>
         auto pVar = make_smart<Variable>();
+        pVar->generated = true;
         pVar->at = expr->at;
         pVar->name = compName;
         pVar->type = make_smart<TypeDecl>(Type::tArray);
@@ -420,6 +422,7 @@ namespace das {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
+        pFunc->lambda = true;
         pFunc->at = block->at;
         pFunc->name = lfn;
         pFunc->unsafe = isUnsafe;
@@ -447,6 +450,7 @@ namespace das {
         pFunc->body = fb;
         pFunc->result = make_smart<TypeDecl>(*block->type);
         auto cTHIS = make_smart<Variable>();
+        cTHIS->generated = true;
         cTHIS->at = block->at;
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(ls);
@@ -464,6 +468,7 @@ namespace das {
                                        const das_safe_set<VariablePtr> & capt, bool needYield ) {
         auto lsn = lambdaName;
         auto pStruct = make_smart<Structure>(lsn);
+        pStruct->generated = true;
         pStruct->at = block->at;
         auto btd = block->makeBlockType();
         btd->baseType = Type::tFunction;
@@ -471,6 +476,7 @@ namespace das {
         auto thisArg = make_smart<TypeDecl>(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
+        pStruct->fields.back().generated = true;
         auto finFunc = make_smart<TypeDecl>(Type::tFunction);
         auto finArg = make_smart<TypeDecl>(Type::tPointer);
         finArg->firstType = make_smart<TypeDecl>(pStruct);
@@ -482,6 +488,7 @@ namespace das {
         if ( needYield ) {
             auto yt = make_smart<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
+            pStruct->fields.back().generated = true;
         }
         for ( auto var : capt ) {
             auto td = make_smart<TypeDecl>(*var->type);
@@ -866,6 +873,7 @@ namespace das {
         auto leqt = make_smart<ExprLet>();
         leqt->at = expr->at;
         auto lvar = make_smart<Variable>();
+        lvar->generated = true;
         lvar->at = expr->at;
         lvar->name = loopVar;
         lvar->type = make_smart<TypeDecl>(Type::tBool);
@@ -883,6 +891,7 @@ namespace das {
             auto seqt = make_smart<ExprLet>();
             seqt->at = expr->at;
             auto svar = make_smart<Variable>();
+            svar->generated = true;
             svar->at = expr->at;
             svar->name = srcName;
             svar->type = make_smart<TypeDecl>(Type::autoinfer);
@@ -932,6 +941,7 @@ namespace das {
             auto veqt = make_smart<ExprLet>();
             veqt->at = expr->at;
             auto vvar = make_smart<Variable>();
+            vvar->generated = true;
             vvar->at = expr->at;
             vvar->name = pVarName;
             vvar->type = make_smart<TypeDecl>(*pvoid);

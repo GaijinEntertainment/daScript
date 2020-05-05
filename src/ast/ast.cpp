@@ -161,7 +161,7 @@ namespace das {
         cs->module = module;
         cs->genCtor = genCtor;
         cs->cppLayout = cppLayout;
-        cs->cppLayoutPod = cppLayoutPod;
+        cs->flags = flags;
         cs->annotations = annotations;
         return cs;
     }
@@ -260,7 +260,7 @@ namespace das {
             if ( cppLayout ) {
                 auto fp = findFieldParent(fd.name);
                 if ( fp!=cppLayoutParent ) {
-                    if (DAS_NON_POD_PADDING || cppLayoutPod) {
+                    if (DAS_NON_POD_PADDING || !cppLayoutNotPod) {
                         size = cppLayoutParent ? cppLayoutParent->getSizeOf() : 0;
                     }
                     cppLayoutParent = fp;
@@ -2380,10 +2380,10 @@ namespace das {
                 return true;
             };
             Module::foreach(modMacro);
-            if ( failed() ) break;  
+            if ( failed() ) break;
             any |= last;
             libGroup.foreach(modMacro,"*");
-            if ( failed() ) break;  
+            if ( failed() ) break;
             any |= last;
             if ( log ) logs << "MACROS:" << (last ? "optimized" : "nothing") << "\n" << *this;
         } while ( any );

@@ -162,7 +162,7 @@ namespace das
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
                            const AnnotationArgumentList & args, string & ) override {
             ps->cppLayout = true;
-            ps->cppLayoutPod = args.getBoolOption("pod", true);
+            ps->cppLayoutNotPod = !args.getBoolOption("pod", true);
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,

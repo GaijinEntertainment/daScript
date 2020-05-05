@@ -137,6 +137,7 @@ namespace das
                     bool            moveSemantic : 1;
                     bool            parentType : 1;
                     bool            capturedConstant : 1;
+                    bool            generated : 1;
                 };
                 uint32_t            flags = 0;
             };
@@ -174,11 +175,17 @@ namespace das
         vector<FieldDeclaration>    fields;
         LineInfo                    at;
         Module *                    module = nullptr;
-        bool                        genCtor = false;
-        bool                        cppLayout = false;
-        bool                        cppLayoutPod = true;
         Structure *                 parent = nullptr;
         AnnotationList              annotations;
+        union {
+            struct {
+                bool    genCtor : 1;
+                bool    cppLayout : 1;
+                bool    cppLayoutNotPod : 1;
+                bool    generated : 1;
+            };
+            uint32_t    flags = 0;
+        };
     };
 
     struct Variable : ptr_ref_count {
@@ -205,6 +212,7 @@ namespace das
                 bool    marked_used : 1;
                 bool    global_shared : 1;
                 bool    do_not_delete : 1;
+                bool    generated : 1;
             };
             uint32_t flags = 0;
         };
@@ -540,7 +548,7 @@ namespace das
                 bool    generated : 1;
                 bool    privateFunction : 1;
                 bool    generator : 1;
-
+                bool    lambda : 1;
             };
             uint32_t flags = 0;
         };

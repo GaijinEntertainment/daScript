@@ -1191,7 +1191,7 @@ namespace das {
             fieldOffset = 0;
             auto tp = make_smart<TypeDecl>(that);
             cppLayout = that->cppLayout;
-            cppLayoutPod = that->cppLayoutPod;
+            cppLayoutPod = !that->cppLayoutNotPod;
             cppLayoutParent = nullptr;
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
