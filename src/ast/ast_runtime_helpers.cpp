@@ -34,7 +34,7 @@ namespace das {
                 } else {
                     ss  << "\"category\":\"global\",\n";
                 }
-                if ( func && vexpr->local || vexpr->pBlock || vexpr->argument ) {
+                if ( func && (vexpr->local || vexpr->pBlock || vexpr->argument) ) {
                      describeFunction(ss, func, "\"function:\"");
                      ss << ",\n";
                 }
