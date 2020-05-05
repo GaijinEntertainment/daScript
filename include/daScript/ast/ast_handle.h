@@ -361,7 +361,7 @@ namespace das
             auto declN = typeName<VT>::name();
             if ( library.findAnnotation(declN,nullptr).size()==0 ) {
                 auto declT = makeType<TT>(library);
-                auto ann = make_smart<ManagedVectorAnnotation<VT,false>>(declN,const_cast<ModuleLibrary &>(library));
+                auto ann = make_smart<ManagedVectorAnnotation<VT>>(declN,const_cast<ModuleLibrary &>(library));
                 ann->cppName = "das::vector<" + describeCppType(declT) + ">";
                 library.front()->addAnnotation(ann);
             }
