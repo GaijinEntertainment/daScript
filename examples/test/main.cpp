@@ -379,8 +379,8 @@ int main() {
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
     // #define TEST_NAME   "examples/test/unit_tests/new_delete.das"
-    debug_unit_test(TEST_PATH TEST_NAME,10,10,false);
-    // unit_test(TEST_PATH TEST_NAME,false);
+    // debug_unit_test(TEST_PATH TEST_NAME,10,10,false);
+    unit_test(TEST_PATH TEST_NAME,false);
     // unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();
     getchar();

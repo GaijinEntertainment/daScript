@@ -15,7 +15,6 @@ State 374 conflicts: 7 shift/reduce
 State 513 conflicts: 45 shift/reduce
 State 532 conflicts: 1 shift/reduce
 State 677 conflicts: 6 shift/reduce
-State 800 conflicts: 31 shift/reduce
 
 
 Grammar
@@ -22691,37 +22690,6 @@ State 800
     '.'    shift, and go to state 432
     '['    shift, and go to state 433
 
-    "is"      [reduce using rule 187 (block_or_simple_block)]
-    "as"      [reduce using rule 187 (block_or_simple_block)]
-    "<<"      [reduce using rule 187 (block_or_simple_block)]
-    ">>"      [reduce using rule 187 (block_or_simple_block)]
-    "++"      [reduce using rule 187 (block_or_simple_block)]
-    "--"      [reduce using rule 187 (block_or_simple_block)]
-    "<="      [reduce using rule 187 (block_or_simple_block)]
-    ">="      [reduce using rule 187 (block_or_simple_block)]
-    "=="      [reduce using rule 187 (block_or_simple_block)]
-    "!="      [reduce using rule 187 (block_or_simple_block)]
-    "->"      [reduce using rule 187 (block_or_simple_block)]
-    "??"      [reduce using rule 187 (block_or_simple_block)]
-    "?."      [reduce using rule 187 (block_or_simple_block)]
-    "?["      [reduce using rule 187 (block_or_simple_block)]
-    "<|"      [reduce using rule 187 (block_or_simple_block)]
-    "|>"      [reduce using rule 187 (block_or_simple_block)]
-    "<<<"     [reduce using rule 187 (block_or_simple_block)]
-    ">>>"     [reduce using rule 187 (block_or_simple_block)]
-    '?'       [reduce using rule 187 (block_or_simple_block)]
-    '|'       [reduce using rule 187 (block_or_simple_block)]
-    '^'       [reduce using rule 187 (block_or_simple_block)]
-    '&'       [reduce using rule 187 (block_or_simple_block)]
-    '<'       [reduce using rule 187 (block_or_simple_block)]
-    '>'       [reduce using rule 187 (block_or_simple_block)]
-    '-'       [reduce using rule 187 (block_or_simple_block)]
-    '+'       [reduce using rule 187 (block_or_simple_block)]
-    '*'       [reduce using rule 187 (block_or_simple_block)]
-    '/'       [reduce using rule 187 (block_or_simple_block)]
-    '%'       [reduce using rule 187 (block_or_simple_block)]
-    '.'       [reduce using rule 187 (block_or_simple_block)]
-    '['       [reduce using rule 187 (block_or_simple_block)]
     $default  reduce using rule 187 (block_or_simple_block)
 
 

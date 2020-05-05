@@ -372,6 +372,7 @@
 
 /* operation precedence*/
 %left       ','
+%nonassoc    MAPTO
 %right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU ROTLEQU ROTREQU
 %right      '?' ':'
 %left       '|'
