@@ -35,7 +35,7 @@ namespace das {
                     ss  << "\"category\":\"global\",\n";
                 }
                 if ( func && (vexpr->local || vexpr->pBlock || vexpr->argument) ) {
-                     describeFunction(ss, func, "\"function:\"");
+                     describeFunction(ss, func, "\"function\"");
                      ss << ",\n";
                 }
                 ss << vexpr->variable->at.describeJson();
@@ -65,7 +65,7 @@ namespace das {
                     ss << "\"category\":\"unknown field lookup\",\n";
                 }
                 if ( func ) {
-                    describeFunction(ss, func, "\"function:\"");
+                    describeFunction(ss, func, "\"function\"");
                     ss << ",\n";
                 }
                 ss  << fexpr->field->at.describeJson();
@@ -77,7 +77,7 @@ namespace das {
             ss  << "\"type\":\"" <<lvar->type->describe() << "\",\n"
                 << "\"category\":\"local\",\n";
             if ( func ) {
-                describeFunction(ss, func, "\"function:\"");
+                describeFunction(ss, func, "\"function\"");
                 ss << ",\n";
             }
             ss  << lvar->at.describeJson();
