@@ -90,7 +90,7 @@ def binary_load(var obj; data:array<uint8>)
     _builtin_binary_load(obj,data)
 
 [unsafe]    // when cloning smart-ptr
-def clone_to_move(clone_src:auto(TT)) : TT delete const
+def clone_to_move(clone_src:auto(TT)) : TT -const
     var clone_dest : TT
     clone_dest := clone_src
     return <- clone_dest
@@ -132,7 +132,7 @@ def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>#)
 def clone(var a:das_string;b:string)
     set(a,b)
 
-def make_clone(res:auto(TT)) : TT delete const
+def make_clone(res:auto(TT)) : TT -const
 	static_if typeinfo(can_copy type TT)
 		return res
 	else
@@ -145,12 +145,12 @@ def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type keyT))
     return <- it
 
-def values(a:table<auto(keyT);auto(valT)>!) : iterator<valT & const>
+def values(a:table<auto(keyT);auto(valT)> =const) : iterator<valT & const>
     var it : iterator<valT & const>
     __builtin_table_values(it,a,typeinfo(sizeof type valT))
     return <- it
 
-def values(var a:table<auto(keyT);auto(valT)>!) : iterator<valT &>
+def values(var a:table<auto(keyT);auto(valT)> =const) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type valT))
     return <- it
@@ -215,9 +215,9 @@ def each ( a : array<auto(TT)> ) : iterator<TT&>
     _builtin_make_good_array_iterator(it, a, typeinfo(sizeof type TT))
     return <- it
 
-def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT delete &>
+def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
 	concept_assert(typeinfo(is_ref type argT),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
-    var it : iterator<argT delete &>
+    var it : iterator<argT -&>
     _builtin_make_lambda_iterator(it,lam)
     return <- it
 
@@ -226,9 +226,9 @@ def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
     _builtin_make_lambda_iterator(it, lam)
     return <- it
 
-def each_enum(tt:auto(TT)) : iterator<TT delete const &>
+def each_enum(tt:auto(TT)) : iterator<TT -const -&>
     concept_assert(typeinfo(is_enum tt),"expecting each_enum(any enum value)")
-    var iter : iterator<TT delete const &>
+    var iter : iterator<TT -const -&>
     _builtin_make_enum_iterator(iter)
     return <- iter
 
@@ -237,14 +237,14 @@ def nothing( var it : iterator<auto(TT)> ) : iterator<TT>
 	return <- it
 
 [unsafe]
-def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
-    var arr : array<TT delete const &>
+def to_array ( it : iterator<auto(TT)> ) : array<TT -const -&>
+    var arr : array<TT -const -&>
     for x in it
         push_clone(arr,x)
 /*
     // this is here to show internal implementation of the 'for' loop with iterator
     static_if typeinfo(is_ref_value type TT)
-        var rkey : TT delete const &?
+        var rkey : TT -const -&?
         var pkey : void? = reinterpret<void?>(addr(rkey))
         var loop = _builtin_iterator_first(it,pkey)
         while loop
@@ -263,33 +263,33 @@ def to_array ( it : iterator<auto(TT)> ) : array<TT delete const &>
     return <- arr
 
 [unsafe]
-def to_array(a:auto(TT)[]) : array<TT delete const>
-    var arr : array<TT delete const>
+def to_array(a:auto(TT)[]) : array<TT -const>
+    var arr : array<TT -const>
     resize(arr,length(a))
-    reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) := a
+    reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) := a
     return <- arr
 
 [unsafe]
-def to_array_move(var a:auto(TT)[]) : array<TT delete const>
-    var arr : array<TT delete const>
+def to_array_move(var a:auto(TT)[]) : array<TT -const>
+    var arr : array<TT -const>
     static_if typeinfo(can_copy a)
         resize(arr,length(a))
-        reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) = a
+        reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) = a
     static_elif typeinfo(can_move a)
         resize(arr,length(a))
-        reinterpret<TT delete const[typeinfo(dim a)]>(addr(arr[0])) <- a
+        reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) <- a
     else
         concept_assert(false,"this array can't be copied or moved")
     return <- arr
 
-def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const;valT>
-    var tab : table<keyT delete const;valT>
+def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
+    var tab : table<keyT -const;valT>
     for x in a
         tab[x._0] := x._1
     return <- tab
 
-def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT delete const;valT>
-    var tab : table<keyT delete const;valT>
+def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
+    var tab : table<keyT -const;valT>
     static_if typeinfo(can_copy type valT)
 		for x in a
 			tab[x._0] = x._1

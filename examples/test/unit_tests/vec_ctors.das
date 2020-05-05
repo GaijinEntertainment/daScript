@@ -3,7 +3,7 @@
 options log=false, optimize=false
 options no_unused_function_arguments = false
 
-def test_vec2(a:auto(vec2) delete const&)
+def test_vec2(a:auto(vec2) -const -&)
     let f2_0  = vec2()
     let f2_x  = vec2(1.0,2.0)
     let f2_y  = vec2(1,2)
@@ -23,7 +23,7 @@ def test_vec2(a:auto(vec2) delete const&)
     assert("{f2_zz}"=="1,1")
     assert("{f2_ww}"=="1,1")
 
-def test_vec3(a:auto(vec3) delete const&)
+def test_vec3(a:auto(vec3) -const -&)
     let f3_0  = vec3()
     let f3_x  = vec3(1.0,2.0,3.0)
     let f3_y  = vec3(1,2,3)
@@ -43,7 +43,7 @@ def test_vec3(a:auto(vec3) delete const&)
     assert("{f3_zz}"=="1,1,1")
     assert("{f3_ww}"=="1,1,1")
 
-def test_vec4(a:auto(vec4)delete const&)
+def test_vec4(a:auto(vec4) -const -&)
     let f4_0  = vec4()
     let f4_x  = vec4(1.0,2.0,3.0,4.0)
     let f4_y  = vec4(1,2,3,4)

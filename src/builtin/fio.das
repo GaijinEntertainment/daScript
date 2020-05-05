@@ -24,13 +24,13 @@ def fstat(f:FILE const?):FStat
     return fs
 
 let
-	df_magic = 0x12345678  
-  
+	df_magic = 0x12345678
+
 struct df_header
 	magic:uint
 	size:int
-  
-def fload(f:FILE const?;buf:auto(BufType)delete const)
+
+def fload(f:FILE const?;buf:auto(BufType) -const)
 	var dfh:df_header
 	let r1 = _builtin_read(f,dfh,typeinfo(sizeof type df_header))
 	if r1<0

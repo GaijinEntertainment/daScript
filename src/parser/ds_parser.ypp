@@ -2030,7 +2030,7 @@ type_declaration
         $typeDecl->removeDim = false;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] DAS_DELETE '[' ']' {
+    |   type_declaration[typeDecl] '-' '[' ']' {
         $typeDecl->removeDim = true;
         $$ = $typeDecl;
     }
@@ -2039,7 +2039,7 @@ type_declaration
         $typeDecl->removeConstant = false;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] DAS_DELETE DAS_CONST {
+    |   type_declaration[typeDecl] '-' DAS_CONST {
         $typeDecl->constant = false;
         $typeDecl->removeConstant = true;
         $$ = $typeDecl;
@@ -2049,14 +2049,7 @@ type_declaration
         $typeDecl->removeRef = false;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] DAS_DELETE DAS_CONST '&' {
-        $typeDecl->ref = false;
-        $typeDecl->constant = false;
-        $typeDecl->removeRef = true;
-        $typeDecl->removeConstant = true;
-        $$ = $typeDecl;
-    }
-    |   type_declaration[typeDecl] DAS_DELETE '&' {
+    |   type_declaration[typeDecl] '-' '&' {
         $typeDecl->ref = false;
         $typeDecl->removeRef = true;
         $$ = $typeDecl;
@@ -2069,12 +2062,12 @@ type_declaration
         $$ = $typeDecl;
         $$->implicit = true;
     }
-    |   type_declaration[typeDecl] DAS_DELETE '#' {
+    |   type_declaration[typeDecl] '-' '#' {
         $typeDecl->temporary = false;
         $typeDecl->removeTemporary = true;
         $$ = $typeDecl;
     }
-    |   type_declaration[typeDecl] '!' {
+    |   type_declaration[typeDecl] '=' DAS_CONST {
         $typeDecl->explicitConst = true;
         $$ = $typeDecl;
     }

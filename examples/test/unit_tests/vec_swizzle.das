@@ -1,6 +1,6 @@
 options no_unused_function_arguments = false
 
-def test_vec2(a:auto(vec2) delete const&)
+def test_vec2(a:auto(vec2) -const -&)
     var f2_x  = vec2(1,2)
     let x : auto(numT) = f2_x[0]
     assert("{f2_x}"=="1,2")
@@ -14,7 +14,7 @@ def test_vec2(a:auto(vec2) delete const&)
     f2_y = f2_x.xy
     assert("{f2_y}"=="5,6")
 
-def test_vec3(a:auto(vec3) delete const&)
+def test_vec3(a:auto(vec3) -const -&)
     var f3_x  = vec3(1,2,3)
     let x : auto(numT) = f3_x[0]
     let y : auto(vec2) = f3_x.xy
@@ -35,7 +35,7 @@ def test_vec3(a:auto(vec3) delete const&)
     assert("{f3_x}"=="8,1,2")
     assert(f3_x.zx==vec2(2,8))
 
-def test_vec4(a:auto(vec4) delete const&)
+def test_vec4(a:auto(vec4) -const -&)
     var f4_x  = vec4(1,2,3,4)
     let x : auto(numT) = f4_x[0]
     let y : auto(vec2) = f4_x.xy

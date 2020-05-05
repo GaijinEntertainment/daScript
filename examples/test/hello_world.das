@@ -1,16 +1,8 @@
-// options log = true
-
-struct Foo
-	a : int
-
-def take ( a& )
-	print("a = {a}\n")
+options log_infer_passes = true
 
 [export]
 def test()
-	take([[Foo a = 2]])
-	let t = 2
-	take(t)
-	take() <| $ (a,b : int) : int
-		return a + b
+	var t <- {{ "one" => @(x:int):int => x+x ; "two" => @(x:int):int => x }}
+	let z = invoke(t["two"],1)
+	print("z = {z}\n")
 	return true

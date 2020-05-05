@@ -5,7 +5,7 @@ require functional
 [private]
 def filter_any(var src:iterator<auto(TT)>; blk )
     static_if !typeinfo(is_ref_type type TT)
-        return <- generator<TT delete &> () <| $ ()
+        return <- generator<TT -&> () <| $ ()
             for w in src
                 if invoke(blk,w)
                     yield w
@@ -17,22 +17,22 @@ def filter_any(var src:iterator<auto(TT)>; blk )
                     yield w
             return false
 
-def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT delete &):bool> )
+def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT -&):bool> )
     return <- filter_any(src,blk)
 
 // filter with function
-def filter(var src:iterator<auto(TT)>; blk:function<(what:TT delete &):bool> )
+def filter(var src:iterator<auto(TT)>; blk:function<(what:TT -&):bool> )
     return <- filter_any(src,blk)
 
 [private]
 def map_any(var src:iterator<auto(TT)>; blk)
     static_if typeinfo(can_copy type QQ)
-        return <- generator<QQ delete &> () <| $ ()
+        return <- generator<QQ -&> () <| $ ()
             for w in src
                 yield invoke(blk,w)
             return false
     static_elif typeinfo(can_move type QQ)
-        return <- generator<QQ delete &> () <| $ ()
+        return <- generator<QQ -&> () <| $ ()
             for w in src
                 yield <- invoke(blk,w)
             return false
@@ -43,17 +43,17 @@ def map_any(var src:iterator<auto(TT)>; blk)
 
 
 // map with lambda
-def map(var src:iterator<auto(TT)>; blk:lambda<(what:TT delete &):auto(QQ)>)
+def map(var src:iterator<auto(TT)>; blk:lambda<(what:TT -&):auto(QQ)>)
     return <- map_any(src,blk)
 
 // map with function
-def map(var src:iterator<auto(TT)>; blk:function<(what:TT delete &):auto(QQ)>)
+def map(var src:iterator<auto(TT)>; blk:function<(what:TT -&):auto(QQ)>)
     return <- map_any(src,blk)
 
 // reduce value, any invokable
 [private]
 def reduce_any(it:iterator<auto(TT)>;functor)
-    var left : TT delete &
+    var left : TT -&
     var first = true
     for right in it
         if first
@@ -66,21 +66,21 @@ def reduce_any(it:iterator<auto(TT)>;functor)
     return left
 
 // reduce with lambda
-def reduce(it:iterator<auto(TT)>;blk:lambda<(left,right:TT delete &):TT const delete &>)
+def reduce(it:iterator<auto(TT)>;blk:lambda<(left,right:TT -&):TT const -&>)
     return reduce_any(it,blk)
 
 // reduce with function
-def reduce(it:iterator<auto(TT)>;blk:function<(left,right:TT delete &):TT const delete &>)
+def reduce(it:iterator<auto(TT)>;blk:function<(left,right:TT -&):TT const -&>)
     return reduce_any(it,blk)
 
 // reduce with block
-def reduce(it:iterator<auto(TT)>;blk:block<(left,right:TT delete &):TT const delete &>)
+def reduce(it:iterator<auto(TT)>;blk:block<(left,right:TT -&):TT const -&>)
     return reduce_any(it,blk)
 
 // summ of all elements
 //  same as reduce(it, @(a,b) => a + b)
 def sum(it:iterator<auto(TT)>)
-    var temp : TT delete &
+    var temp : TT -&
     for x in it
         temp += x
     return temp
@@ -109,8 +109,8 @@ def all ( it )
 
 def cycle(var src:iterator<auto(TT)>)
     static_if !typeinfo(is_ref_type type TT)
-        return <- generator<TT delete &> () <| $ ()
-            var arr : array<TT delete &>
+        return <- generator<TT -&> () <| $ ()
+            var arr : array<TT -&>
             for x in src
                 yield x
                 push(arr,x)
@@ -120,7 +120,7 @@ def cycle(var src:iterator<auto(TT)>)
             return false
     else
         return <- generator<TT &> () <| $ ()
-            var arr : array<TT delete &>
+            var arr : array<TT -&>
             for x in src
                 yield x
                 push_clone(arr,x)
@@ -131,7 +131,7 @@ def cycle(var src:iterator<auto(TT)>)
 
 def islice( var src : iterator<auto(TT)>; start,stop : int )
     static_if !typeinfo(is_ref_type type TT)
-        return <- generator<TT delete &> () <| $ ()
+        return <- generator<TT -&> () <| $ ()
             for x,i in src,range(0,stop)
                 if i>=start
                     yield x
