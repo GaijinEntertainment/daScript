@@ -6812,7 +6812,7 @@ yyreduce:
     {
         if ( (yyvsp[-3].pStructure) ) {
             auto pStruct = (yyvsp[-3].pStructure);
-            pStruct->at = tokAt((yylsp[-4]));
+            pStruct->at = tokAt((yylsp[-3]));
             for ( auto pDecl : *(yyvsp[-1].pVarDeclList) ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.first);

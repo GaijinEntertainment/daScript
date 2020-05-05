@@ -64,6 +64,7 @@ namespace das {
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
             DAS_ASSERT(fn->at.column && fn->at.line);
+            DAS_ASSERT(fn->atDecl.column && fn->atDecl.line);
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
@@ -243,7 +244,7 @@ namespace das {
         auto fn = make_smart<Function>();
         fn->generated = true;
         fn->name = str->name;
-        fn->at = str->at;
+        fn->at = fn->atDecl = str->at;
         fn->result = make_smart<TypeDecl>(str);
         auto block = make_smart<ExprBlock>();
         block->at = str->at;
@@ -276,7 +277,7 @@ namespace das {
         auto fn = make_smart<Function>();
         fn->name = "clone";
         fn->generated = true;
-        fn->at = str->at;
+        fn->at = fn->atDecl = str->at;
         fn->result = make_smart<TypeDecl>();
         fn->arguments.push_back(varA);
         fn->arguments.push_back(varB);
@@ -298,7 +299,7 @@ namespace das {
     FunctionPtr generatePointerFinalizer ( const TypeDeclPtr & ptrType, const LineInfo & at ) {
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
-        pFunc->at = at;
+        pFunc->at = pFunc->atDecl = at;
         pFunc->name = "finalize";
         pFunc->unsafe = true;
         auto THIS0 = make_smart<ExprVar>(at, "__this");
@@ -340,7 +341,7 @@ namespace das {
     FunctionPtr generateStructureFinalizer ( const StructurePtr & ls ) {
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
-        pFunc->at = ls->at;
+        pFunc->at = pFunc->atDecl = ls->at;
         pFunc->name = "finalize";
         pFunc->unsafe = true;
         auto fb = make_smart<ExprBlock>();
@@ -377,7 +378,7 @@ namespace das {
         auto lfn = lambdaName + "`finazlier";
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
-        pFunc->at = block->at;
+        pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
         pFunc->unsafe = isUnsafe;
         auto fb = make_smart<ExprBlock>();
@@ -424,7 +425,7 @@ namespace das {
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
         pFunc->lambda = true;
-        pFunc->at = block->at;
+        pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
         pFunc->unsafe = isUnsafe;
         auto fb = make_smart<ExprBlock>();
@@ -1016,7 +1017,7 @@ namespace das {
         auto fn = make_smart<Function>();
         fn->generated = true;
         fn->name = "clone";
-        fn->at = at;
+        fn->at = fn->atDecl = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
@@ -1053,7 +1054,7 @@ namespace das {
         auto fn = make_smart<Function>();
         fn->generated = true;
         fn->name = "finalize";
-        fn->at = at;
+        fn->at = fn->atDecl = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
@@ -1087,7 +1088,7 @@ namespace das {
         auto fn = make_smart<Function>();
         fn->generated = true;
         fn->name = "clone";
-        fn->at = at;
+        fn->at = fn->atDecl = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
@@ -1147,7 +1148,7 @@ namespace das {
         auto fn = make_smart<Function>();
         fn->generated = true;
         fn->name = "finalize";
-        fn->at = at;
+        fn->at = fn->atDecl = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
@@ -1198,7 +1199,7 @@ namespace das {
         fn->unsafe = right->smartPtr;
         fn->generated = true;
         fn->name = "clone";
-        fn->at = at;
+        fn->at = fn->atDecl = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;

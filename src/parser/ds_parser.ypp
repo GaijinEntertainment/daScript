@@ -1836,7 +1836,7 @@ structure_declaration
     : optional_annotation_list[annL] DAS_STRUCT[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
         if ( $ps ) {
             auto pStruct = $ps;
-            pStruct->at = tokAt(@loc);
+            pStruct->at = tokAt(@ps);
             for ( auto pDecl : *$list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.first);
