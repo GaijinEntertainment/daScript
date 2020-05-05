@@ -297,7 +297,8 @@ bool debug_unit_test ( const string & fn, int CURSOR_X, int CURSOR_Y, bool useAo
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
     // policies.no_unsafe = true;
-    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
+    policies.no_optimizations = true;
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, true, policies) ) {
         // CURSOR
         auto cinfo = program->cursor(LineInfo(nullptr,CURSOR_X,CURSOR_Y,CURSOR_X,CURSOR_Y));
         tout << cinfo.reportJson();
@@ -378,8 +379,8 @@ int main() {
 #if 0 // Debug this one test
     #define TEST_NAME   "examples/test/hello_world.das"
     // #define TEST_NAME   "examples/test/unit_tests/new_delete.das"
-    // debug_unit_test(TEST_PATH TEST_NAME,8,13,false);
-    unit_test(TEST_PATH TEST_NAME,false);
+    debug_unit_test(TEST_PATH TEST_NAME,10,10,false);
+    // unit_test(TEST_PATH TEST_NAME,false);
     // unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();
     getchar();
