@@ -178,6 +178,42 @@ namespace das {
                 info.function.push_back(func);
             }
         }
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn, var, lastArg);
+            if ( !var->generated && canPointAt() && cursor.inside(var->at) ) {
+                int index = -1;
+                for ( int t=0; t!=int(fn->arguments.size()); t++ ) {
+                    if ( fn->arguments[t]==var ) {
+                        index = t;
+                        break;
+                    }
+                }
+                auto expr = make_smart<ExprVar>(var->at, var->name);
+                expr->variable = var;
+                expr->argumentIndex = index;
+                expr->argument =  true;
+                expr->type = make_smart<TypeDecl>(*var->type);
+                info.variable.emplace_back(expr.get(),index,function);
+            }
+        }
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block, var, lastArg);
+            if ( !var->generated && canPointAt() && cursor.inside(var->at) ) {
+                int index = -1;
+                for ( int t=0; t!=int(block->arguments.size()); t++ ) {
+                    if ( block->arguments[t]==var ) {
+                        index = t;
+                        break;
+                    }
+                }
+                auto expr = make_smart<ExprVar>(var->at, var->name);
+                expr->variable = var;
+                expr->argumentIndex = index;
+                expr->argument =  true;
+                expr->type = make_smart<TypeDecl>(*var->type);
+                info.variable.emplace_back(expr.get(),index,function);
+            }
+        }
         virtual FunctionPtr visit ( Function * func ) override {
             function = nullptr;
             return Visitor::visit(func);
