@@ -294,6 +294,8 @@ namespace das
         ExprSafeField () = default;
         ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
             : ExprField(a,val,n) {}
+        ExprSafeField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n )
+            : ExprField(a,af,val,n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;

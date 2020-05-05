@@ -47,38 +47,44 @@ namespace das {
             } else {
                 ss << "\"category\":\"uncategorized variable\"\n";
             }
-        } else if ( variable->rtti_isField() ) {
+        } else if ( variable->rtti_isField() || variable->rtti_isSafeField() ) {
             auto fexpr = static_pointer_cast<ExprField>(variable);
             ss  << "\"name\":\"" << fexpr->name << "\",\n";
             if ( fexpr->field ) {
                 ss  << "\"type\":\"" << fexpr->field->type->describe() << "\",\n";
-                if ( !fexpr->value->type ) {
-                    ss << "\"category\":\"uninfered field lookup\",\n";
-                } else if ( fexpr->value->type->isStructure() ) {
-                    if ( fexpr->value->type->structType && fexpr->value->type->structType->generated ) {
-                        ss << "\"category\":\"lambda or generator capture\",\n";
-                    } else {
-                        ss << "\"category\":\"structure field\",\n";
-                    }
-                } else if ( fexpr->value->type->isHandle() ) {
-                    ss << "\"category\":\"annotation field or property\",\n";
-                } else if ( fexpr->value->type->isTuple() ) {
-                    ss << "\"category\":\"tuple field\",\n";
-                } else if ( fexpr->value->type->isVariant() ) {
-                    ss << "\"category\":\"variant field\",\n";
-                } else if ( fexpr->value->type->isVectorType() ) {
-                    ss << "\"category\":\"vector field lookup or swizzle\",\n";
-                } else {
-                    ss << "\"category\":\"unknown field lookup\",\n";
-                }
                 if ( fexpr->field->init) {
                     TextWriter tw;
                     tw << *(fexpr->field->init);
                     ss << "\"init\":\"" << escapeString(tw.str()) << "\",";
                 }
                 ss  << fexpr->field->at.describeJson() << ",\n";
-            } else {
+            }
+            TypeDeclPtr categoryType;
+            if ( fexpr->value->type ) {
+                if ( fexpr->value->type->isPointer() ) {
+                    categoryType = fexpr->value->type->firstType;
+                } else {
+                    categoryType = fexpr->value->type;
+                }
+            }
+            if ( !categoryType ) {
                 ss << "\"category\":\"uncategorized field or swizzle\",\n";
+            } else if ( categoryType->isStructure() ) {
+                if ( categoryType->structType && categoryType->structType->generated ) {
+                    ss << "\"category\":\"lambda or generator capture\",\n";
+                } else {
+                    ss << "\"category\":\"structure field\",\n";
+                }
+            } else if ( categoryType->isHandle() ) {
+                ss << "\"category\":\"annotation field or property\",\n";
+            } else if ( categoryType->isTuple() ) {
+                ss << "\"category\":\"tuple field\",\n";
+            } else if ( categoryType->isVariant() ) {
+                ss << "\"category\":\"variant field\",\n";
+            } else if ( categoryType->isVectorType() ) {
+                ss << "\"category\":\"vector field lookup or swizzle\",\n";
+            } else {
+                ss << "\"category\":\"unknown field lookup\",\n";
             }
             if ( func ) {
                 describeFunction(ss, func, "\"function\"");
@@ -271,6 +277,14 @@ namespace das {
             }
         }
         virtual void preVisit ( ExprField * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->generated && canPointAt() && cursor.inside(expr->atField) ) {
+                if ( !expr->field || !expr->field->generated ) {
+                    info.variable.emplace_back(expr,-1,function);
+                }
+            }
+        }
+        virtual void preVisit ( ExprSafeField * expr ) override {
             Visitor::preVisit(expr);
             if ( !expr->generated && canPointAt() && cursor.inside(expr->atField) ) {
                 if ( !expr->field || !expr->field->generated ) {
