@@ -20,16 +20,15 @@
     using namespace das;
 
     struct VariableDeclaration {
-        VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
-            : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
+        VariableDeclaration ( vector<pair<string,LineInfo>> * n, TypeDecl * t, Expression * i )
+            : pNameList(n), pTypeDecl(t), pInit(i) {}
         virtual ~VariableDeclaration () {
             if ( pNameList ) delete pNameList;
             delete pTypeDecl;
             if ( pInit ) delete pInit;
             if ( annotation ) delete annotation;
         }
-        LineInfo                at;
-        vector<string>          *pNameList;
+        vector<pair<string,LineInfo>>   *pNameList;
         TypeDecl                *pTypeDecl;
         Expression              *pInit;
         bool                    init_via_move = false;
@@ -269,7 +268,6 @@
 %token		END_STRING_EXPR         "}"
 
 %type <pNameList>       bitfield_bits
-%type <pNameList>       variable_name_list
 %type <pNameWithPosList>variable_name_with_pos_list
 %type <type>            basic_type_declaration
 %type <type>            enum_basic_type_declaration
@@ -843,11 +841,11 @@ function_declaration
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
-                    for ( const auto & name : *pDecl->pNameList ) {
-                        if ( !pFunction->findArgument(name) ) {
+                    for ( const auto & name_at : *pDecl->pNameList ) {
+                        if ( !pFunction->findArgument(name_at.first) ) {
                             VariablePtr pVar = make_smart<Variable>();
-                            pVar->name = name;
-                            pVar->at = pDecl->at;
+                            pVar->name = name_at.first;
+                            pVar->at = name_at.second;
                             pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
@@ -859,7 +857,7 @@ function_declaration
 							}
                             pFunction->arguments.push_back(pVar);
                         } else {
-                            das_yyerror("function argument is already declared " + name,pDecl->at,
+                            das_yyerror("function argument is already declared " + name_at.first,name_at.second,
                                 CompilationError::argument_already_declared);
                         }
                     }
@@ -1082,11 +1080,11 @@ expression_let
         pLet->at = tokAt(@kwd_let);
         pLet->inScope = $inScope;
         if ( $decl->pTypeDecl ) {
-            for ( const auto & name : *$decl->pNameList ) {
-                if ( !pLet->find(name) ) {
+            for ( const auto & name_at : *$decl->pNameList ) {
+                if ( !pLet->find(name_at.first) ) {
                     VariablePtr pVar = make_smart<Variable>();
-                    pVar->name = name;
-                    pVar->at = $decl->at;
+                    pVar->name = name_at.first;
+                    pVar->at = name_at.second;
                     pVar->type = make_smart<TypeDecl>(*$decl->pTypeDecl);
                     if ( $decl->pInit ) {
                         pVar->init = $decl->pInit->clone();
@@ -1100,7 +1098,7 @@ expression_let
                     }
                     pLet->variables.push_back(pVar);
                 } else {
-                    das_yyerror("local variable is already declared " + name,tokAt(@kwd_let),
+                    das_yyerror("local variable is already declared " + name_at.first,name_at.second,
                         CompilationError::local_variable_already_declared);
                 }
             }
@@ -1206,11 +1204,11 @@ expr_block
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
-                    for ( const auto & name : *pDecl->pNameList ) {
-                        if ( !closure->findArgument(name) ) {
+                    for ( const auto & name_at : *pDecl->pNameList ) {
+                        if ( !closure->findArgument(name_at.first) ) {
                             VariablePtr pVar = make_smart<Variable>();
-                            pVar->name = name;
-                            pVar->at = pDecl->at;
+                            pVar->name = name_at.first;
+                            pVar->at = name_at.second;
                             pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             if ( pDecl->pInit ) {
                                 pVar->init = ExpressionPtr(pDecl->pInit->clone());
@@ -1222,8 +1220,8 @@ expr_block
 							}
                             closure->arguments.push_back(pVar);
                         } else {
-                            das_yyerror("block argument is already declared " + name,
-                                pDecl->at,CompilationError::argument_already_declared);
+                            das_yyerror("block argument is already declared " + name_at.first,
+                                name_at.second,CompilationError::argument_already_declared);
                         }
                     }
                 }
@@ -1550,12 +1548,12 @@ function_argument_list
 
 tuple_type
     :   type_declaration [typeDecl] {
-        $$ = new VariableDeclaration(tokAt(@typeDecl),nullptr,$typeDecl,nullptr);
+        $$ = new VariableDeclaration(nullptr,$typeDecl,nullptr);
     }
     |   NAME[name] ':' type_declaration [typeDecl] {
-        auto na = new vector<string>();
-        na->push_back(*$name);
-        $$ = new VariableDeclaration(tokAt(@typeDecl),na,$typeDecl,nullptr);
+        auto na = new vector<pair<string,LineInfo>>();
+        na->push_back(make_pair(*$name,tokAt(@name)));
+        $$ = new VariableDeclaration(na,$typeDecl,nullptr);
         delete $name;
     }
     ;
@@ -1567,9 +1565,9 @@ tuple_type_list
 
 variant_type
     :   NAME[name] ':' type_declaration [typeDecl] {
-        auto na = new vector<string>();
-        na->push_back(*$name);
-        $$ = new VariableDeclaration(tokAt(@typeDecl),na,$typeDecl,nullptr);
+        auto na = new vector<pair<string,LineInfo>>();
+        na->push_back(make_pair(*$name,tokAt(@name)));
+        $$ = new VariableDeclaration(na,$typeDecl,nullptr);
         delete $name;
     }
     ;
@@ -1586,29 +1584,29 @@ copy_or_move
     ;
 
 variable_declaration        /* this one can have uninitialized variable which has no type */
-    :   variable_name_list[list] optional_ref[ref] {
+    :   variable_name_with_pos_list[list] optional_ref[ref] {
         auto autoT = new TypeDecl(Type::autoinfer);
         autoT->at = tokAt(@list);
         autoT->ref = $ref;
-        $$ = new VariableDeclaration(tokAt(@list),$list,autoT,nullptr);
+        $$ = new VariableDeclaration($list,autoT,nullptr);
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl]  {
-        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,nullptr);
+    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl]  {
+        $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] {
-        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] {
+        $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move = $com;
     }
-    |   variable_name_list[list] copy_or_move[com] expr[init] {
+    |   variable_name_with_pos_list[list] copy_or_move[com] expr[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(@list);
-        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$ = new VariableDeclaration($list,typeDecl,$init);
         $$->init_via_move = $com;
     }
-    |   variable_name_list[list] copy_or_move[com] expr_pipe[init] {
+    |   variable_name_with_pos_list[list] copy_or_move[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(@list);
-        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$ = new VariableDeclaration($list,typeDecl,$init);
         $$->init_via_move = $com;
     }
     ;
@@ -1625,32 +1623,32 @@ optional_ref
     ;
 
 let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
-    :   variable_name_list[list] ':' type_declaration[typeDecl] ';' {
-        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,nullptr);
+    :   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] ';' {
+        $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
-        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+        $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
-        $$ = new VariableDeclaration(tokAt(@list),$list,$typeDecl,$init);
+    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
+        $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(@list);
         typeDecl->ref = $ref;
-        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$ = new VariableDeclaration($list,typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr_pipe[init] {
+    |   variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(@list);
         typeDecl->ref = $ref;
-        $$ = new VariableDeclaration(tokAt(@list),$list,typeDecl,$init);
+        $$ = new VariableDeclaration($list,typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
@@ -1675,10 +1673,10 @@ global_let
     :   kwd_let optional_shared[glob_shar] '{' global_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
-                for ( const auto & name : *pDecl->pNameList ) {
+                for ( const auto & name_at : *pDecl->pNameList ) {
                     VariablePtr pVar = make_smart<Variable>();
-                    pVar->name = name;
-                    pVar->at = pDecl->at;
+                    pVar->name = name_at.first;
+                    pVar->at = name_at.second;
                     pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                     if ( pDecl->pInit ) {
                         pVar->init = pDecl->pInit->clone();
@@ -1692,7 +1690,7 @@ global_let
                     }
                     pVar->global_shared = $glob_shar;
                     if ( !g_Program->addVariable(pVar) )
-                        das_yyerror("global variable is already declared " + name,pDecl->at,
+                        das_yyerror("global variable is already declared " + name_at.first,name_at.second,
                             CompilationError::global_variable_already_declared);
                 }
             }
@@ -1832,18 +1830,18 @@ structure_declaration
             auto pStruct = $ps;
             pStruct->at = tokAt(@loc);
             for ( auto pDecl : *$list ) {
-                for ( const auto & name : *pDecl->pNameList ) {
-                    auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name);
+                for ( const auto & name_at : *pDecl->pNameList ) {
+                    auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.first);
                     if ( !oldFd ) {
                         if ( pDecl->override ) {
-                            das_yyerror("structure field is not overriding anything, "+name,pDecl->at,
+                            das_yyerror("structure field is not overriding anything, "+name_at.first,name_at.second,
                                 CompilationError::invalid_override);
                         } else {
                             auto td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                            pStruct->fields.emplace_back(name, td, init,
+                            pStruct->fields.emplace_back(name_at.first, td, init,
                                 pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
-                                pDecl->init_via_move, pDecl->at);
+                                pDecl->init_via_move, name_at.second);
                         }
                     } else {
                         if ( pDecl->override ) {
@@ -1851,8 +1849,8 @@ structure_declaration
                                 oldFd->init = init;
                                 oldFd->parentType = oldFd->type->isAuto();
                         } else {
-                            das_yyerror("structure field is already declared "+name
-                                +", use override to replace initial value instead",pDecl->at,
+                            das_yyerror("structure field is already declared "+name_at.first
+                                +", use override to replace initial value instead",name_at.second,
                                     CompilationError::invalid_override);
                         }
                     }
@@ -1892,33 +1890,17 @@ structure_declaration
     }
     ;
 
-variable_name_list
-    :   NAME[name]  {
-		das_checkName(*$name,tokAt(@name));
-        auto pSL = new vector<string>();
-        pSL->push_back(*$name);
-        $$ = pSL;
-        delete $name;
-    }
-    |   variable_name_list[list] ',' NAME[name] {
-		das_checkName(*$name,tokAt(@name));
-        $list->push_back(*$name);
-        $$ = $list;
-        delete $name;
-    }
-    ;
-
 variable_name_with_pos_list
     :   NAME[name]  {
 		das_checkName(*$name,tokAt(@name));
         auto pSL = new vector<pair<string,LineInfo>>();
-        pSL->push_back(pair<string,LineInfo>(*$name,tokAt(@name)));
+        pSL->push_back(make_pair(*$name,tokAt(@name)));
         $$ = pSL;
         delete $name;
     }
     |   variable_name_with_pos_list[list] ',' NAME[name] {
 		das_checkName(*$name,tokAt(@name));
-        $list->push_back(pair<string,LineInfo>(*$name,tokAt(@name)));
+        $list->push_back(make_pair(*$name,tokAt(@name)));
         $$ = $list;
         delete $name;
     }
@@ -2511,10 +2493,10 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, 
                 auto pVarType = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                 if ( pDecl->pInit ) {
                     das_yyerror("can't have default values in type declaration",
-                    pDecl->at,CompilationError::cant_initialize);
+                        (*pDecl->pNameList)[ai].second,CompilationError::cant_initialize);
                 }
                 pType->argTypes.push_back(pVarType);
-                if ( needNames && pDecl->pNameList && !(*pDecl->pNameList)[ai].empty() ) {
+                if ( needNames && pDecl->pNameList && !(*pDecl->pNameList)[ai].first.empty() ) {
                     anyNames = true;
                 }
             }
@@ -2525,7 +2507,7 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, 
             if ( pDecl->pTypeDecl ) {
                 if ( pDecl->pNameList ) {
                     for ( const auto & name : *pDecl->pNameList ) {
-                        pType->argNames.push_back(name);
+                        pType->argNames.push_back(name.first);
                     }
                 } else {
                     pType->argNames.push_back(string());

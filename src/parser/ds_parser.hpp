@@ -74,16 +74,15 @@ extern int das_yydebug;
     using namespace das;
 
     struct VariableDeclaration {
-        VariableDeclaration ( const LineInfo & a, vector<string> * n, TypeDecl * t, Expression * i )
-            : at(a), pNameList(n), pTypeDecl(t), pInit(i) {}
+        VariableDeclaration ( vector<pair<string,LineInfo>> * n, TypeDecl * t, Expression * i )
+            : pNameList(n), pTypeDecl(t), pInit(i) {}
         virtual ~VariableDeclaration () {
             if ( pNameList ) delete pNameList;
             delete pTypeDecl;
             if ( pInit ) delete pInit;
             if ( annotation ) delete annotation;
         }
-        LineInfo                at;
-        vector<string>          *pNameList;
+        vector<pair<string,LineInfo>>   *pNameList;
         TypeDecl                *pTypeDecl;
         Expression              *pInit;
         bool                    init_via_move = false;
@@ -106,7 +105,7 @@ extern int das_yydebug;
     extern bool das_force_oxford_comma;
     extern bool das_supress_errors;
 
-#line 110 "ds_parser.hpp"
+#line 109 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -264,7 +263,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 83 "ds_parser.ypp"
+#line 82 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -290,7 +289,7 @@ union DAS_YYSTYPE
     Enumeration *                   pEnum;
     Structure *                     pStructure;
 
-#line 294 "ds_parser.hpp"
+#line 293 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
