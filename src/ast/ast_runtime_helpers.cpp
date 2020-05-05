@@ -20,9 +20,9 @@ namespace das {
         ss  << "{\n";
         if ( variable->rtti_isVar() ) {
             auto vexpr = static_pointer_cast<ExprVar>(variable);
-            ss  << "\"name\":\"" << vexpr->name << "\"\n";
+            ss  << "\"name\":\"" << vexpr->name << "\",\n";
             if ( vexpr->variable ) {
-                ss  << ",\"type\":\"" << vexpr->variable->type->describe() << "\",\n";
+                ss  << "\"type\":\"" << vexpr->variable->type->describe() << "\",\n";
                 if ( vexpr->local ) {
                     ss  << "\"category\":\"local\",\n";
                 } else if ( vexpr->pBlock ) {
@@ -38,13 +38,20 @@ namespace das {
                      describeFunction(ss, func, "\"function\"");
                      ss << ",\n";
                 }
+                if ( vexpr->variable->init ) {
+                    TextWriter tw;
+                    tw << *(vexpr->variable->init);
+                    ss << "\"init\":\"" << escapeString(tw.str()) << "\",";
+                }
                 ss << vexpr->variable->at.describeJson();
+            } else {
+                ss << "\"category\":\"uncategorized variable\"\n";
             }
         } else if ( variable->rtti_isField() ) {
             auto fexpr = static_pointer_cast<ExprField>(variable);
-            ss  << "\"name\":\"" << fexpr->name << "\"\n";
+            ss  << "\"name\":\"" << fexpr->name << "\",\n";
             if ( fexpr->field ) {
-                ss  << ",\"type\":\"" << fexpr->field->type->describe() << "\",\n";
+                ss  << "\"type\":\"" << fexpr->field->type->describe() << "\",\n";
                 if ( !fexpr->value->type ) {
                     ss << "\"category\":\"uninfered field lookup\",\n";
                 } else if ( fexpr->value->type->isStructure() ) {
@@ -64,11 +71,19 @@ namespace das {
                 } else {
                     ss << "\"category\":\"unknown field lookup\",\n";
                 }
-                if ( func ) {
-                    describeFunction(ss, func, "\"function\"");
-                    ss << ",\n";
+                if ( fexpr->field->init) {
+                    TextWriter tw;
+                    tw << *(fexpr->field->init);
+                    ss << "\"init\":\"" << escapeString(tw.str()) << "\",";
                 }
-                ss  << fexpr->field->at.describeJson();
+                ss  << fexpr->field->at.describeJson() << ",\n";
+            } else {
+                ss << "\"category\":\"uncategorized field or swizzle\",\n";
+            }
+            if ( func ) {
+                describeFunction(ss, func, "\"function\"");
+            } else {
+                ss << "\"function:\"null";
             }
         } else if ( variable->rtti_isLet() ) {
             auto lexpr = static_pointer_cast<ExprLet>(variable);
@@ -79,6 +94,11 @@ namespace das {
             if ( func ) {
                 describeFunction(ss, func, "\"function\"");
                 ss << ",\n";
+            }
+            if ( lvar->init) {
+                TextWriter tw;
+                tw << *(lvar->init);
+                ss << "\"init\":\"" << escapeString(tw.str()) << "\",";
             }
             ss  << lvar->at.describeJson();
         } else {
