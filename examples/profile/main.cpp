@@ -26,6 +26,13 @@ void operator delete(void * p) throw()
 
 MAKE_TYPE_FACTORY(Object, Object)
 
+template <>
+struct typeName<ObjectArray> {
+    static string name() {
+        return "ObjectArray";
+    }
+};
+
 TextPrinter tout;
 
 bool unit_test ( const string & fn, bool useAOT ) {
@@ -140,7 +147,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Functional);
 #if 0
-    const char * TEST_NAME = TEST_PATH "examples/profile/tests/generators.das";
+    const char * TEST_NAME = TEST_PATH "examples/profile/tests/aos.das";
     tout << "\nINTERPRETED:\n";
     unit_test(TEST_NAME,false);
     tout << "\nAOT:\n";

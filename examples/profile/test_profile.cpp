@@ -75,6 +75,13 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 
 MAKE_TYPE_FACTORY(Object, Object)
 
+template <>
+struct typeName<ObjectArray> {
+    static string name() {
+        return "ObjectArray";
+    }
+};
+
 namespace das {
 
 	IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ, Object);
@@ -896,6 +903,7 @@ public:
         addAnnotation(make_smart<EsFunctionAnnotation>());
         // register types
         addAnnotation(make_smart<ObjectStructureTypeAnnotation>(lib));
+        addAnnotation(make_smart<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
         addFunctionBasic<Object>(*this, lib);
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
