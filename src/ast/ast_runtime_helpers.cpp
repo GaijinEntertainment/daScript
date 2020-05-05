@@ -48,7 +48,7 @@ namespace das {
                 if ( !fexpr->value->type ) {
                     ss << "\"category\":\"uninfered field lookup\",\n";
                 } else if ( fexpr->value->type->isStructure() ) {
-                    if ( fexpr->value->type->structType && fexpr->value->type->structType ) {
+                    if ( fexpr->value->type->structType && fexpr->value->type->structType->generated ) {
                         ss << "\"category\":\"lambda or generator capture\",\n";
                     } else {
                         ss << "\"category\":\"structure field\",\n";
