@@ -1142,16 +1142,16 @@ expr_type_info
             delete $subtrait;
             delete $extratrait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] DAS_TYPE type_declaration[decl] ')' {
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl));
             delete $trait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' DAS_TYPE type_declaration[decl] ')' {
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait);
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' DAS_TYPE type_declaration[decl] ')' {
+    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait,*$extratrait);
             delete $trait;
             delete $subtrait;
@@ -1407,7 +1407,7 @@ expr
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
         }
-    |   expr[subexpr] DAS_IS[loc] DAS_TYPE type_declaration[decl] {
+    |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } {
         $$ = new ExprIs(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
     |   expr[subexpr] DAS_IS[loc] NAME[vname] {

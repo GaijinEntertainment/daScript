@@ -25,7 +25,7 @@ def test_ifs
 [export,unsafe]
 def test
 
-	assert(typeinfo(sizeof type U_F)==8)
+	assert(typeinfo(sizeof type<U_F>)==8)
 
 	var t : U_F
 	assert(typeinfo(sizeof t)==8)
@@ -39,7 +39,7 @@ def test
 	assert(typeinfo(safe_variant_index<i_value> t)==0)
 	assert(typeinfo(safe_variant_index<f_value> t)==1)
 	assert(typeinfo(safe_variant_index<fg> t)==-1)
-	assert(typeinfo(safe_variant_index<g> type int)==-1)
+	assert(typeinfo(safe_variant_index<g> type<int>)==-1)
 
 	assert(t is i_value)
 	assert(t as i_value == 0x3f800000)

@@ -6,6 +6,6 @@ struct MyStruct
 
 [export]
 def test
-	assert(typeinfo(sizeof type MyStruct)==12)
-	assert(typeinfo(alignof type MyStruct)==4)
+	assert(typeinfo(sizeof type<MyStruct>)==12)
+	assert(typeinfo(alignof type<MyStruct>)==4)
     return true

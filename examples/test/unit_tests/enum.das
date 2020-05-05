@@ -19,7 +19,7 @@ struct Foo
     b : float
 
 enum QQ
-    size_of_Foo_Padded = typeinfo(sizeof type Foo) + 8
+    size_of_Foo_Padded = typeinfo(sizeof type<Foo>) + 8
 
 enum BooHoo
     boo

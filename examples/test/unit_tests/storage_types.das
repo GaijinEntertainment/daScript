@@ -7,7 +7,7 @@ struct Storage
 [export,unsafe]
 def test:bool
     var t, q : Storage
-    assert(typeinfo(sizeof type Storage)==6)
+    assert(typeinfo(sizeof type<Storage>)==6)
     t.i8 = int8(1)
     t.ui8 = uint8(2)
     t.i16 = int16(3)

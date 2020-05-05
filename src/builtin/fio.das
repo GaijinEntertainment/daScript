@@ -32,7 +32,7 @@ struct df_header
 
 def fload(f:FILE const?;buf:auto(BufType) -const)
 	var dfh:df_header
-	let r1 = _builtin_read(f,dfh,typeinfo(sizeof type df_header))
+	let r1 = _builtin_read(f,dfh,typeinfo(sizeof type<df_header>))
 	if r1<0
 		return false
 	if dfh.magic!=df_magic
@@ -49,7 +49,7 @@ def fsave(f:FILE const?;buf:auto(BufType)const)
 	binary_save(buf) <| $(data)
 		let len = length(data)
 		let dfh = [[df_header magic=df_magic, size=len]]
-		r1 = _builtin_write(f,dfh,typeinfo(sizeof type df_header))
+		r1 = _builtin_write(f,dfh,typeinfo(sizeof type<df_header>))
 		r2 = _builtin_write(f,data,len)
 	if r1<0
 		return r1

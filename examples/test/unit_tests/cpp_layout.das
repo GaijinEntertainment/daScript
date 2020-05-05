@@ -22,10 +22,10 @@ struct CppS2 : CppS1
 
 [export]
 def test()
-	assert(typeinfo(sizeof type S1)==24)
-    assert(typeinfo(sizeof type S2)==24)
-    assert(typeinfo(offsetof<d> type S2)==20)
-	verify(typeinfo(sizeof type CppS1)==CppS1Size())
-    verify(typeinfo(sizeof type CppS2)==CppS2Size())
-    verify(typeinfo(offsetof<d> type CppS2)==CppS2DOffset())
+	assert(typeinfo(sizeof type<S1>)==24)
+    assert(typeinfo(sizeof type<S2>)==24)
+    assert(typeinfo(offsetof<d> type<S2>)==20)
+	verify(typeinfo(sizeof type<CppS1>)==CppS1Size())
+    verify(typeinfo(sizeof type<CppS2>)==CppS2Size())
+    verify(typeinfo(offsetof<d> type<CppS2>)==CppS2DOffset())
     return true

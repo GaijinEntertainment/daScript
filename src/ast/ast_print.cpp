@@ -892,7 +892,7 @@ namespace das {
             Visitor::preVisit(expr);
             ss << "typeinfo(" << expr->trait << " ";
             if ( !expr->subexpr ) {
-                ss << "type " << *expr->typeexpr;
+                ss << "type<" << *expr->typeexpr << ">";
             }
         }
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
@@ -902,7 +902,7 @@ namespace das {
     // is
         virtual void preVisitType ( ExprIs * expr, TypeDecl * decl ) override {
             Visitor::preVisit(expr);
-            ss << " is type " << decl->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes);
+            ss << " is type<" << decl->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes) << ">";
         }
     // make variant
         virtual void preVisit ( ExprMakeVariant * expr ) override {

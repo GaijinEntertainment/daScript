@@ -4,7 +4,7 @@ require functional
 
 [private]
 def filter_any(var src:iterator<auto(TT)>; blk )
-    static_if !typeinfo(is_ref_type type TT)
+    static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> () <| $ ()
             for w in src
                 if invoke(blk,w)
@@ -26,12 +26,12 @@ def filter(var src:iterator<auto(TT)>; blk:function<(what:TT -&):bool> )
 
 [private]
 def map_any(var src:iterator<auto(TT)>; blk)
-    static_if typeinfo(can_copy type QQ)
+    static_if typeinfo(can_copy type<QQ>)
         return <- generator<QQ -&> () <| $ ()
             for w in src
                 yield invoke(blk,w)
             return false
-    static_elif typeinfo(can_move type QQ)
+    static_elif typeinfo(can_move type<QQ>)
         return <- generator<QQ -&> () <| $ ()
             for w in src
                 yield <- invoke(blk,w)
@@ -108,7 +108,7 @@ def all ( it )
         return true
 
 def cycle(var src:iterator<auto(TT)>)
-    static_if !typeinfo(is_ref_type type TT)
+    static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> () <| $ ()
             var arr : array<TT -&>
             for x in src
@@ -130,7 +130,7 @@ def cycle(var src:iterator<auto(TT)>)
             return false
 
 def islice( var src : iterator<auto(TT)>; start,stop : int )
-    static_if !typeinfo(is_ref_type type TT)
+    static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> () <| $ ()
             for x,i in src,range(0,stop)
                 if i>=start
