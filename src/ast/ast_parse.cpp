@@ -18,6 +18,14 @@ namespace das {
         return false;
     }
 
+    __forceinline bool isalphaE ( int ch ) {
+        return (ch>='a' && ch<='z') || (ch>='A' && ch<='Z');
+    }
+
+    __forceinline bool isalnumE ( int ch ) {
+        return (ch>='0' && ch<='9') || (ch>='a' && ch<='z') || (ch>='A' && ch<='Z');
+    }
+
     vector<string> getAllRequie ( const char * src, uint32_t length ) {
         if ( isUtf8Text(src,length) ) { // skip utf8 byte order mark
             src += 3;
@@ -68,9 +76,9 @@ namespace das {
                         if ( src >= src_end ) {
                             continue;
                         }
-                        if ( src[0]=='_' || isalpha(src[0]) || src[0] ) {
+                        if ( src[0]=='_' || isalphaE(src[0]) || src[0] ) {
                             string mod;
-                            while ( src < src_end && (isalnum(src[0]) || src[0]=='_' || src[0]=='.' || src[0]=='/') ) {
+                            while ( src < src_end && (isalnumE(src[0]) || src[0]=='_' || src[0]=='.' || src[0]=='/') ) {
                                 mod += *src ++;
                             }
                             req.push_back(mod);
@@ -88,7 +96,7 @@ namespace das {
                 }
             }
         nextChar:
-            wb = src[0]!='_' && (wb ? !isalnum(src[0]) : !isalpha(src[0]));
+            wb = src[0]!='_' && (wb ? !isalnumE(src[0]) : !isalphaE(src[0]));
             src ++;
         }
         return req;
