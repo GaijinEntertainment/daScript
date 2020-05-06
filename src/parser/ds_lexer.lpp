@@ -38,6 +38,7 @@
     bool das_in_normal = false;
     vector<int> das_line_no;
     das_set<string> das_already_include;
+    Structure * g_thisStructure = nullptr;
 
     namespace das {
         das_map<string,string>   das_module_alias;
@@ -277,6 +278,7 @@ void YYNEWLINE() {
 <normal>"var"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return DAS_VAR;
 <normal>"var"                                           return DAS_VAR;
 <normal>"struct"                                        das_need_oxford_comma = false; return DAS_STRUCT;
+<normal>"class"                                         das_need_oxford_comma = false; return DAS_CLASS;
 <normal>"enum"                                          das_need_oxford_comma = false; return DAS_ENUM;
 <normal>"try"                                           das_need_oxford_comma = false; return DAS_TRY;
 <normal>"recover"                                       das_need_oxford_comma = false; return DAS_CATCH;
@@ -350,7 +352,7 @@ void YYNEWLINE() {
 <normal>"float2"                                        return DAS_TFLOAT2;
 <normal>"float3"                                        return DAS_TFLOAT3;
 <normal>"float4"                                        return DAS_TFLOAT4;
-<normal>[_[:alpha:]][_[:alnum:]]*                       das_yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
+<normal>[_[:alpha:]][_[:alnum:]\`]*                     das_yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
 <normal>\"                                  {
         BEGIN(strb);
         return BEGIN_STRING;
@@ -615,6 +617,7 @@ void YYNEWLINE() {
 extern int das_yydebug;
 
 void das_yybegin(const char * str) {
+    g_thisStructure = nullptr;
     das_module_alias.clear();
     das_already_include.clear();
     das_yydebug = 0;

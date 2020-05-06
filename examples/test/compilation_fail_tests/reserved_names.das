@@ -1,6 +1,6 @@
 expect 30116:8
 
-enum class	// 30116: invalid name
+enum do	// 30116: invalid name
 	foo
 	bar
 
@@ -14,7 +14,7 @@ struct Foo
 struct template	// 30116: invalid name
 	foo : int
 
-def class(a:int)	// 30116: invalid name
+def do(a:int)	// 30116: invalid name
 	return a
 
 def foo(template:int)	// 30116: invalid name

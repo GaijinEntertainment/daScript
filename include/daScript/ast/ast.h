@@ -179,6 +179,7 @@ namespace das
         AnnotationList              annotations;
         union {
             struct {
+                bool    isClass : 1;
                 bool    genCtor : 1;
                 bool    cppLayout : 1;
                 bool    cppLayoutNotPod : 1;

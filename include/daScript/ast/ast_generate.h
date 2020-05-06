@@ -20,6 +20,13 @@ namespace das {
     LineInfo encloseAt ( const ExpressionPtr & expr );
 
     /*
+        def foo ( var self : Foo; ... )
+            with self
+                ...
+    */
+    void modifyToClassMember ( Function * func, Structure * baseClass );
+
+    /*
      def STRUCT_NAME
         return [[STRUCT_NAME field1=init1, field2=init2, ...]]
      */

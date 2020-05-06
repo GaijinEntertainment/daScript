@@ -46,6 +46,7 @@ namespace das
     ,   invalid_label                           =   30120       //  label not found etc
     ,   invalid_enumeration                     =   30121       //  enum foo = "blah" etc
     ,   invalid_option                          =   30122       //  option wtf = wth
+    ,   invalid_member_function                 =   30123       //  member function in struct
 
     ,   function_already_declared               =   30201       //  func x .... func x
     ,   argument_already_declared               =   30202       //  func(...,a,...,a,....)

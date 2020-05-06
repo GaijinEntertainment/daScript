@@ -51,6 +51,8 @@
     extern bool das_force_oxford_comma;
     extern bool das_supress_errors;
     extern int das_arrow_depth;
+
+    extern Structure * g_thisStructure;
 }
 
 %{
@@ -104,6 +106,7 @@
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
     Structure *                     pStructure;
+    Function *                      pFuncDecl;
 }
 
 %destructor { delete $$; } <s>
@@ -124,6 +127,7 @@
 
 /* keywords */
 %token  DAS_STRUCT          "struct"
+%token  DAS_CLASS           "class"
 %token  DAS_LET             "let"
 %token  DAS_DEF             "def"
 %token  DAS_WHILE           "while"
@@ -304,6 +308,7 @@
 %type <faList>          optional_annotation_list
 %type <pStructure>      structure_name
 
+%type <b>               class_or_struct
 %type <b>               copy_or_move
 %type <b>               let_scope
 %type <b>               optional_override
@@ -367,6 +372,8 @@
 %type <pExpression>     block_or_simple_block
 %type <pExpression>     func_addr_expr
 
+%type <pFuncDecl>       function_declaration
+
 %type <s>               character_sequence
 %type <s>               string_constant
 
@@ -400,7 +407,7 @@ program
     |   program structure_declaration
     |   program enum_declaration
     |   program global_let
-    |   program function_declaration
+    |   program global_function_declaration
     |   program expect_declaration
     |   program require_declaration
 	|	program options_declaration
@@ -824,19 +831,50 @@ function_name
     |   DAS_OPERATOR ROTREQU { $$ = new string(">>>="); }
     ;
 
+global_function_declaration
+    :   optional_annotation_list[annL] function_declaration[func] {
+        DAS_ASSERT($func && "function declaration must return function");
+        if ( $annL ) {
+            for ( auto pA : *$annL ) {
+                if ( pA->annotation ) {
+                    if ( pA->annotation->rtti_isFunctionAnnotation() ) {
+                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                        string err;
+                        if ( !ann->apply($func, *g_Program->thisModuleGroup, pA->arguments, err) ) {
+                            das_yyerror("can't apply annotation\n" + err,
+                                tokAt(@annL), CompilationError::invalid_annotation);
+                        }
+                    } else {
+                        das_yyerror("functions are only allowed function annotations",
+                            tokAt(@annL), CompilationError::invalid_annotation);
+                    }
+                }
+            }
+            swap ( $func->annotations, *$annL );
+            delete $annL;
+        }
+        if ( $func->isGeneric() ) {
+            if ( !g_Program->addGeneric($func) ) {
+                das_yyerror("generic function is already defined " +
+                    $func->getMangledName(),$func->at,
+                        CompilationError::function_already_declared);
+            }
+        } else {
+            if ( !g_Program->addFunction($func) ) {
+                das_yyerror("function is already defined " +
+                    $func->getMangledName(),$func->at,
+                        CompilationError::function_already_declared);
+            }
+        }
+    }
+    ;
+
 function_declaration
-    :   optional_annotation_list[annL] DAS_DEF[from] function_name[name]
+    :   DAS_DEF[from] function_name[name]
             optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_smart<Function>();
         pFunction->at = tokAt(@name);
         pFunction->atDecl = tokRangeAt(@from, @block);
-        /*
-        TextPrinter tp;
-        tp  << *$name << " at " << pFunction->at.describe(true) << "\n"
-            << " range: " << pFunction->atDecl.describe(true) << "\n"
-            << " from:" << tokAt(@from).describe(true) << "\n"
-            << " block: " << tokAt(@block).describe(true) << "\n";
-        */
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
@@ -867,41 +905,8 @@ function_declaration
             }
             deleteVariableDeclarationList($list);
         }
-        if ( $annL ) {
-            for ( auto pA : *$annL ) {
-                if ( pA->annotation ) {
-                    if ( pA->annotation->rtti_isFunctionAnnotation() ) {
-                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
-                        string err;
-                        if ( !ann->apply(pFunction, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror("can't apply annotation\n" + err,
-                                tokAt(@annL), CompilationError::invalid_annotation);
-                        }
-                    } else {
-                        das_yyerror("functions are only allowed function annotations",
-                            tokAt(@annL), CompilationError::invalid_annotation);
-                    }
-                }
-            }
-            swap ( pFunction->annotations, *$annL );
-            delete $annL;
-        }
-        if ( pFunction->isGeneric() ) {
-            if ( !g_Program->addGeneric(pFunction) ) {
-                das_yyerror("generic function is already defined " +
-                    pFunction->getMangledName(),tokAt(@name),
-                        CompilationError::function_already_declared);
-                pFunction.reset();
-            }
-        } else {
-            if ( !g_Program->addFunction(pFunction) ) {
-                das_yyerror("function is already defined " +
-                    pFunction->getMangledName(),tokAt(@name),
-                        CompilationError::function_already_declared);
-                pFunction.reset();
-            }
-        }
         delete $name;
+        $$ = pFunction.orphan();
     }
     ;
 
@@ -1513,7 +1518,7 @@ optional_override
     ;
 
 structure_variable_declaration
-    :   optional_field_annotation[alist] optional_override[ovr] variable_declaration[decl] {
+    :   optional_override[ovr] optional_field_annotation[alist] variable_declaration[decl] {
         $decl->override = $ovr;
         $decl->annotation = $alist;
         $$ = $decl;
@@ -1526,7 +1531,37 @@ struct_variable_declaration_list
     }
     |   struct_variable_declaration_list[list] structure_variable_declaration[decl] ';' {
         $$ = $list;
-        $list->push_back($decl);
+        if ( $decl ) $list->push_back($decl);
+    }
+    |   struct_variable_declaration_list[list] optional_override[ovr] function_declaration[func] {
+        auto varName = $func->name;
+        $func->name = g_thisStructure->name + "`" + $func->name;
+        if ( $func->isGeneric() ) {
+            das_yyerror("generic function can't be a member of a class " +
+                $func->getMangledName(),$func->at,
+                    CompilationError::invalid_member_function);
+        } else {
+            auto vars =  new vector<pair<string,LineInfo>>();
+            vars->emplace_back(make_pair(varName,$func->at));
+            Expression * finit = new ExprAddr($func->at,"_::" + $func->name);
+            if ( $ovr ) {
+                finit = new ExprCast($func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+            }
+            VariableDeclaration * decl = new VariableDeclaration(
+                vars,
+                new TypeDecl(Type::autoinfer),
+                finit
+            );
+            decl->override = $ovr;
+            $list->push_back(decl);
+            modifyToClassMember($func, g_thisStructure);
+            if ( !g_Program->addFunction($func) ) {
+                das_yyerror("function is already defined " +
+                    $func->getMangledName(),$func->at,
+                        CompilationError::function_already_declared);
+            }
+        }
+        $$ = $list;
     }
     ;
 
@@ -1824,6 +1859,7 @@ structure_name
                 $$ = nullptr;
             } else {
                 $$ = pStruct.get();
+                g_thisStructure = pStruct.get();
             }
         } else {
             $$ = nullptr;
@@ -1832,11 +1868,26 @@ structure_name
     }
     ;
 
+class_or_struct
+    :   DAS_CLASS   { $$ = true; }
+    |   DAS_STRUCT  { $$ = false; }
+    ;
+
 structure_declaration
-    : optional_annotation_list[annL] DAS_STRUCT[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
+    : optional_annotation_list[annL] class_or_struct[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
         if ( $ps ) {
             auto pStruct = $ps;
             pStruct->at = tokAt(@ps);
+            pStruct->isClass = $loc;
+            if ( pStruct->parent && pStruct->parent->isClass != pStruct->isClass ) {
+                if ( pStruct->isClass ) {
+                    das_yyerror("class can only derive from class", pStruct->at,
+                        CompilationError::invalid_override);
+                } else {
+                    das_yyerror("struct can only derive from struct", pStruct->at,
+                        CompilationError::invalid_override);
+                }
+            }
             for ( auto pDecl : *$list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.first);
@@ -1895,6 +1946,7 @@ structure_declaration
             }
         }
         deleteVariableDeclarationList($list);
+        g_thisStructure = nullptr;
     }
     ;
 

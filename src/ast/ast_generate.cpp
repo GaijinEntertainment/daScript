@@ -1274,5 +1274,27 @@ namespace das {
         expr->visit(enc);
         return enc.enclosure;
     }
+
+    void modifyToClassMember ( Function * func, Structure * baseClass ) {
+        // first argument is this
+        auto argT = make_smart<TypeDecl>(baseClass);
+        argT->constant = false;
+        auto argV = make_smart<Variable>();
+        argV->name = "self";
+        argV->type = argT;
+        argV->at = func->at;
+        argV->generated = true;
+        func->arguments.insert(func->arguments.begin(), argV);
+        // add with this block
+        auto blk = make_smart<ExprBlock>();
+        blk->at = func->at;
+        auto wth = make_smart<ExprWith>();
+        auto wvar = make_smart<ExprVar>(func->at,"self");
+        wvar->generated = true;
+        wth->with = wvar;
+        wth->body = func->body;
+        blk->list.push_back(wth);
+        func->body = blk;
+    }
 }
 
