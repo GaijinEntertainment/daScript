@@ -158,7 +158,8 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             logAnnotations(that->annotations);
-            ss << "struct " << that->name << "\n";
+            ss << (that->isClass ? "class" : "struct");
+            ss << " " << that->name << "\n";
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);

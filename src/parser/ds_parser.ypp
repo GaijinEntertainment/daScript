@@ -1534,31 +1534,37 @@ struct_variable_declaration_list
         if ( $decl ) $list->push_back($decl);
     }
     |   struct_variable_declaration_list[list] optional_override[ovr] function_declaration[func] {
-        auto varName = $func->name;
-        $func->name = g_thisStructure->name + "`" + $func->name;
         if ( $func->isGeneric() ) {
-            das_yyerror("generic function can't be a member of a class " +
-                $func->getMangledName(),$func->at,
-                    CompilationError::invalid_member_function);
+            das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
+                $func->at, CompilationError::invalid_member_function);
         } else {
-            auto vars =  new vector<pair<string,LineInfo>>();
-            vars->emplace_back(make_pair(varName,$func->at));
-            Expression * finit = new ExprAddr($func->at,"_::" + $func->name);
-            if ( $ovr ) {
-                finit = new ExprCast($func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+            if ( $func->name != g_thisStructure->name ) {
+                auto varName = $func->name;
+                $func->name = g_thisStructure->name + "`" + $func->name;
+                auto vars = new vector<pair<string,LineInfo>>();
+                vars->emplace_back(make_pair(varName,$func->at));
+                Expression * finit = new ExprAddr($func->at, "_::" + $func->name);
+                if ( $ovr ) {
+                    finit = new ExprCast($func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                }
+                VariableDeclaration * decl = new VariableDeclaration(
+                    vars,
+                    new TypeDecl(Type::autoinfer),
+                    finit
+                );
+                decl->override = $ovr;
+                $list->push_back(decl);
+                modifyToClassMember($func, g_thisStructure);
+            } else {
+                if ( $ovr ) {
+                    das_yyerror("can't override constructor " + $func->getMangledName(),
+                        $func->at, CompilationError::invalid_member_function);
+                }
+                modifyToConstructor($func, g_thisStructure);
             }
-            VariableDeclaration * decl = new VariableDeclaration(
-                vars,
-                new TypeDecl(Type::autoinfer),
-                finit
-            );
-            decl->override = $ovr;
-            $list->push_back(decl);
-            modifyToClassMember($func, g_thisStructure);
             if ( !g_Program->addFunction($func) ) {
-                das_yyerror("function is already defined " +
-                    $func->getMangledName(),$func->at,
-                        CompilationError::function_already_declared);
+                das_yyerror("function is already defined " + $func->getMangledName(),
+                    $func->at, CompilationError::function_already_declared);
             }
         }
         $$ = $list;

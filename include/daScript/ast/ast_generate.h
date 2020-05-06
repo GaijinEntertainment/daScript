@@ -27,6 +27,15 @@ namespace das {
     void modifyToClassMember ( Function * func, Structure * baseClass );
 
     /*
+        def Foo ( ... )
+            var self = [[Foo()]]
+            with self
+                ...
+            return self
+    */
+    void modifyToConstructor ( Function * func, Structure * str );
+
+    /*
      def STRUCT_NAME
         return [[STRUCT_NAME field1=init1, field2=init2, ...]]
      */

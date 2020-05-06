@@ -1300,7 +1300,7 @@ namespace das {
                     extraFunctions.push_back(ctor);
                     var->genCtor = true;
                     reportAstChanged();
-                } else {
+                } else if ( !var->isClass ) {
                     error("structure already has user defined initializer", "", "",
                           var->at, CompilationError::structure_already_has_initializer);
                 }

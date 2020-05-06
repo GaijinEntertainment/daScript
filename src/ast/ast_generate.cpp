@@ -1285,16 +1285,55 @@ namespace das {
         argV->at = func->at;
         argV->generated = true;
         func->arguments.insert(func->arguments.begin(), argV);
-        // add with this block
-        auto blk = make_smart<ExprBlock>();
-        blk->at = func->at;
+        // with self ...
+        auto block = make_smart<ExprBlock>();
+        block->at = func->at;
         auto wth = make_smart<ExprWith>();
         auto wvar = make_smart<ExprVar>(func->at,"self");
         wvar->generated = true;
         wth->with = wvar;
         wth->body = func->body;
-        blk->list.push_back(wth);
-        func->body = blk;
+        block->list.push_back(wth);
+        // and done
+        func->body = block;
+        verifyGenerated(func->body);
+    }
+
+    void modifyToConstructor ( Function * func, Structure * baseClass ) {
+        auto block = make_smart<ExprBlock>();
+        block->at = baseClass->at;
+        // lef self = [[Foo()]]
+        auto makeT = make_smart<ExprMakeStructureOrDefaultValue>(baseClass->at);
+        makeT->useInitializer = true;
+        makeT->makeType = make_smart<TypeDecl>(baseClass);
+        makeT->structs.push_back(make_smart<MakeStruct>());
+        auto letS = make_smart<ExprLet>();
+        letS->at = func->at;
+        auto argT = make_smart<TypeDecl>(baseClass);
+        argT->constant = false;
+        auto argV = make_smart<Variable>();
+        argV->name = "self";
+        argV->type = argT;
+        argV->at = func->at;
+        argV->generated = true;
+        argV->init = makeT;
+        letS->variables.push_back(argV);
+        block->list.push_back(letS);
+        // with self ...
+        auto wth = make_smart<ExprWith>();
+        auto wvar = make_smart<ExprVar>(func->at,"self");
+        wvar->generated = true;
+        wth->with = wvar;
+        wth->body = func->body;
+        block->list.push_back(wth);
+        // return self
+        auto selfV = make_smart<ExprVar>(baseClass->at,"self");
+        auto returnDecl = make_smart<ExprReturn>(baseClass->at,selfV);
+        returnDecl->moveSemantics = !baseClass->canCopy();
+        block->list.push_back(returnDecl);
+        // and done
+        func->body = block;
+        verifyGenerated(func->body);
     }
 }
 
