@@ -16,6 +16,9 @@ namespace das {
     // puts all expression's subexpressions at new location
     ExpressionPtr forceAt ( const ExpressionPtr & expr, const LineInfo & at );
 
+    // gives combined region for all subexpressions
+    LineInfo encloseAt ( const ExpressionPtr & expr );
+
     /*
      def STRUCT_NAME
         return [[STRUCT_NAME field1=init1, field2=init2, ...]]

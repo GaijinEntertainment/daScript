@@ -16,6 +16,18 @@ namespace das {
         ss << function->atDecl.describeJson() <<  "}\n";
     }
 
+    void describeConstant ( TextWriter & ss, const ExpressionPtr & expr, Function * func ) {
+        TextWriter tw;
+        tw << *expr;
+        ss << "{\n\"value\":\"" << escapeString(tw.str()) << "\",\n";
+        if ( func ) {
+            describeFunction(ss, func, "\"function\"");
+        } else {
+            ss << "\"function:\"null";
+        }
+        ss << "}\n";
+    }
+
     void describeVariable ( TextWriter & ss, const ExpressionPtr & variable, int variableIndex, Function * func, const string & sectionName ) {
         if ( !sectionName.empty() ) ss  <<  sectionName << ":";
         ss  << "{\n";
@@ -143,38 +155,48 @@ namespace das {
             <<  "},\n";
         if ( !function.empty() ) {
             describeFunction(ss, function.back(), "\"function\"");
-            ss << ",\n\"functions\" : [\n";
+            ss << ",\n\"functions\":[\n";
             for ( size_t idx=0; idx!=function.size(); ++idx) {
                 if ( idx!=0 ) ss << ",\n";
                 describeFunction(ss, function[idx], "");
             }
-            ss << "],";
+            ss << "],\n";
         } else {
-            ss  << "\"function\" : null,\n";
+            ss  << "\"function\":null,\n";
         }
         if ( !call.empty() ) {
             describeCall(ss, call.back(), "\"call\"");
-            ss << ",\n\"calls\" : [\n";
+            ss << ",\n\"calls\":[\n";
             for ( size_t idx=0; idx!=call.size(); ++idx) {
                 if ( idx!=0 ) ss << ",\n";
                 describeCall(ss, call[idx], "");
             }
-            ss << "],";
+            ss << "],\n";
         } else {
-            ss  <<  "\"call\" : null,\n";
+            ss  <<  "\"call\":null,\n";
         }
         if ( !variable.empty() ) {
             const auto & vvar = variable.back();
             describeVariable(ss, vvar.expr, vvar.index, vvar.function, "\"variable\"");
-            ss << ",\n\"variables\" : [\n";
+            ss << ",\n\"variables\":[\n";
             for ( size_t idx=0; idx!=variable.size(); ++idx) {
                 if ( idx!=0 ) ss << ",\n";
                 const auto & ivar = variable[idx];
                 describeVariable(ss, ivar.expr, ivar.index, ivar.function, "");
             }
+            ss << "],\n";
+        } else {
+            ss  <<  "\"variable\":null,\n";
+        }
+        if ( !constants.empty() ) {
+            ss << "\"constants\":[\n";
+            for ( size_t idx=0; idx!=constants.size(); ++idx) {
+                if ( idx!=0 ) ss << ",\n";
+                describeConstant(ss, constants[idx].expr, constants[idx].function);
+            }
             ss << "]";
         } else {
-            ss  <<  "\"variable\" : null\n";
+            ss  <<  "\"constants\":null\n";
         }
         ss  << "}\n";
         return ss.str();
@@ -302,6 +324,14 @@ namespace das {
                         info.variable.emplace_back(expr,vi,function);
                     }
                     vi ++;
+                }
+            }
+        }
+        virtual void preVisit ( ExprConst * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->generated && canPointAt() && expr->baseType!=Type::fakeContext ) {
+                if ( cursor.inside(expr->at) ) {
+                    info.constants.emplace_back(expr,function);
                 }
             }
         }

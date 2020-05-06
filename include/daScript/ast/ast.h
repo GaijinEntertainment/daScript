@@ -813,11 +813,20 @@ namespace das
         }
     };
 
+    struct CursorConstant {
+        ExpressionPtr   expr;
+        Function *      function;
+        CursorConstant ( Expression * e,  Function * f )
+            : expr(e), function(f) {
+        }
+    };
+
     struct CursorInfo {
-        LineInfo               at;         // cursor location
-        vector<FunctionPtr>    function;   // function, whre cursor is
-        vector<ExpressionPtr>  call;       // call, if cursor is pointing at one (ExprCall, ExprLooksLikeCall, etc)
-        vector<CursorVariable> variable;   // variables (ExprVar, ExprField, etc)
+        LineInfo                at;         // cursor location
+        vector<FunctionPtr>     function;   // function, whre cursor is
+        vector<ExpressionPtr>   call;       // call, if cursor is pointing at one (ExprCall, ExprLooksLikeCall, etc)
+        vector<CursorVariable>  variable;   // variables (ExprVar, ExprField, etc)
+        vector<CursorConstant>  constants;  // ExprConst...
         string reportJson() const;
     };
 

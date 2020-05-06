@@ -1246,5 +1246,33 @@ namespace das {
         LocationSwapVisitor swapAt(at);
         return expr->visit(swapAt);
     }
+
+    class EncloseVisitor : public Visitor {
+    public:
+        EncloseVisitor() {}
+    protected:
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            if ( first ) {
+                enclosure = expr->at;
+                first = false;
+            } else {
+                enclosure.column      = das::min(enclosure.column,      expr->at.column);
+                enclosure.line        = das::min(enclosure.line,        expr->at.line);
+                enclosure.last_column = das::max(enclosure.last_column, expr->at.last_column);
+                enclosure.last_column = das::max(enclosure.last_line,   expr->at.last_line);
+
+            }
+        }
+    public:
+        LineInfo    enclosure;
+        bool        first = true;
+    };
+
+    LineInfo encloseAt ( const ExpressionPtr & expr ) {
+        EncloseVisitor enc;
+        expr->visit(enc);
+        return enc.enclosure;
+    }
 }
 

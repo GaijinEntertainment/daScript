@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/ast/ast_generate.h"
 #include "daScript/simulate/debug_print.h"
 
 /*
@@ -298,12 +299,14 @@ namespace das {
                 auto sim = make_smart<ExprConstEnumeration>(expr->at, cef, expr->type);
                 sim->type = expr->type->enumType->makeEnumType();
                 sim->constexpression = true;
+                sim->at = encloseAt(expr);
                 reportFolding();
                 return sim;
             } else {
                 auto sim = Program::makeConst(expr->at, expr->type, value);
                 sim->type = make_smart<TypeDecl>(*expr->type);
                 sim->constexpression = true;
+                sim->at = encloseAt(expr);
                 reportFolding();
                 return sim;
             }
@@ -323,6 +326,7 @@ namespace das {
             auto sim = make_smart<ExprConstString>(expr->at, res);
             sim->type = make_smart<TypeDecl>(Type::tString);
             sim->constexpression = true;
+            sim->at = encloseAt(expr);
             reportFolding();
             return sim;
         } else {
