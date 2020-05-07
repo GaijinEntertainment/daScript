@@ -29,11 +29,10 @@ namespace das {
     /*
         def Foo ( ... )
             var self = [[Foo()]]
-            with self
-                ...
+            Foo`Foo(self,...)
             return self
     */
-    void modifyToConstructor ( Function * func, Structure * str );
+    FunctionPtr makeClassConstructor ( Structure * baseClass, Function * method );
 
     /*
         override def __finalize()

@@ -26,6 +26,8 @@ class Foo3D : Foo
     def Foo3D                           // overriding default initializer
         assert(x==0 & y==0)             // Foo initializer is NOT called by default
         assert(z==13)
+        Foo`Foo(cast<Foo> self)         // call parents initializer explicitly
+        assert(x==1 & y==1)
         z = 3
     def override set(X,Y:int)           // overriding method variable
         Foo`set(cast<Foo> self,X,Y)     // calling generated method function directly
@@ -48,7 +50,7 @@ def test_foo
     f = Foo(13)
     assert(f.x==13 & f.y==13)
     var f3d = Foo3D()
-    assert(f3d.x==0 & f3d.y==0 & f3d.z==3)
+    assert(f3d.x==1 & f3d.y==1 & f3d.z==3)
     f3d->set(1,2)
     assert(f3d.x==1 & f3d.y==2 & f3d.z==0)
     f3d.z = 13
@@ -80,6 +82,6 @@ def test_foo_ptr
 
 [export]
 def test
-    // test_foo()
+    test_foo()
     test_foo_ptr()
     return true

@@ -1543,11 +1543,15 @@ struct_variable_declaration_list
                     das_yyerror("can't override constructor " + $func->getMangledName(),
                         $func->at, CompilationError::invalid_member_function);
                 }
-                if ( $func->name=="finalize" ) {
-                    modifyToClassMember($func, g_thisStructure);
-                } else {
-                    modifyToConstructor($func, g_thisStructure);
+                if ( $func->name!="finalize" ) {
+                    auto ctr = makeClassConstructor(g_thisStructure, $func);
+                    if ( !g_Program->addFunction(ctr) ) {
+                        das_yyerror("intializer is already defined " + ctr->getMangledName(),
+                            ctr->at, CompilationError::function_already_declared);
+                    }
+                    $func->name = g_thisStructure->name + "`" + g_thisStructure->name;
                 }
+                modifyToClassMember($func, g_thisStructure);
             }
             runFunctionAnnotations($func, $annL, tokAt(@annL));
             if ( !g_Program->addFunction($func) ) {

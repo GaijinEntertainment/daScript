@@ -1315,9 +1315,20 @@ namespace das {
         verifyGenerated(func->body);
     }
 
-    void modifyToConstructor ( Function * func, Structure * baseClass ) {
+    FunctionPtr makeClassConstructor ( Structure * baseClass, Function * method ) {
+        // make a function
+        auto func = make_smart<Function>();
+        func->generated = true;
+        func->at = method->at;
+        func->atDecl = method->at;
+        func->name = baseClass->name;
+        func->result = make_smart<TypeDecl>(baseClass);
         auto block = make_smart<ExprBlock>();
-        block->at = baseClass->at;
+        block->at = func->at;
+        func->body = block;
+        for ( auto & arg : method->arguments ) {
+            func->arguments.push_back(arg->clone());
+        }
         // lef self = [[Foo()]]
         auto makeT = make_smart<ExprMakeStructureOrDefaultValue>(baseClass->at);
         makeT->useInitializer = true;
@@ -1335,13 +1346,13 @@ namespace das {
         argV->init = makeT;
         letS->variables.push_back(argV);
         block->list.push_back(letS);
-        // with self ...
-        auto wth = make_smart<ExprWith>();
-        auto wvar = make_smart<ExprVar>(func->at,"self");
-        wvar->generated = true;
-        wth->with = wvar;
-        wth->body = func->body;
-        block->list.push_back(wth);
+        // call Foo`Foo(self,args)
+        auto cll = make_smart<ExprCall>(func->at,baseClass->name+"`"+baseClass->name);
+        cll->arguments.push_back(make_smart<ExprVar>(func->at,"self"));
+        for ( auto & arg : method->arguments ) {
+            cll->arguments.push_back(make_smart<ExprVar>(func->at,arg->name));
+        }
+        block->list.push_back(cll);
         // return self
         auto selfV = make_smart<ExprVar>(baseClass->at,"self");
         auto returnDecl = make_smart<ExprReturn>(baseClass->at,selfV);
@@ -1350,6 +1361,7 @@ namespace das {
         // and done
         func->body = block;
         verifyGenerated(func->body);
+        return func;
     }
 
     FunctionPtr makeClassFinalize ( Structure * baseClass ) {
