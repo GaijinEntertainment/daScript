@@ -399,9 +399,9 @@ namespace das {
         return ss.str();
     }
 
-    string Function::describeName(bool moduleName) const {
+    string Function::describeName(DescribeModule moduleName) const {
         TextWriter ss;
-        if ( moduleName && module && !module->name.empty() ) {
+        if ( moduleName==DescribeModule::yes && module && !module->name.empty() ) {
             ss << module->name << "::";
         }
         if ( !isalpha(name[0]) && name[0]!='_' && name[0]!='`' ) {
@@ -411,9 +411,9 @@ namespace das {
         return ss.str();
     }
 
-    string Function::describe(bool moduleName) const {
+    string Function::describe(DescribeModule moduleName, DescribeExtra extra) const {
         TextWriter ss;
-        if ( moduleName && module && !module->name.empty() ) {
+        if ( moduleName==DescribeModule::yes && module && !module->name.empty() ) {
             ss << module->name << "::";
         }
         if ( !isalpha(name[0]) && name[0]!='_' && name[0]!='`' ) {
@@ -424,6 +424,9 @@ namespace das {
             ss << " ( ";
             for ( auto & arg : arguments ) {
                 ss << arg->name << " : " << *arg->type;
+                if ( extra==DescribeExtra::yes && arg->init ) {
+                    ss << " = " << *arg->init;
+                }
                 if ( arg != arguments.back() ) ss << "; ";
             }
             ss << " )";

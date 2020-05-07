@@ -7,8 +7,8 @@ namespace das {
 
     void describeFunction ( TextWriter & ss, const FunctionPtr & function, const string & sectionName ) {
         if ( !sectionName.empty() ) ss << sectionName << ":";
-        ss  << "{\n\"name\":\"" << function->describe(true) << "\",\n"
-            << "\"shortname\":\"" << function->describeName(true) << "\",\n";
+        ss  << "{\n\"name\":\"" << function->describe(Function::DescribeModule::yes,Function::DescribeExtra::yes) << "\",\n"
+            << "\"shortname\":\"" << function->describeName(Function::DescribeModule::yes) << "\",\n";
         if ( function->fromGeneric ) {
             describeFunction(ss, function->fromGeneric, "\"generic\"");
             ss << ",\n";

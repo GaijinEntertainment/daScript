@@ -254,6 +254,11 @@ namespace das
                 stream << "(" << alias << ")";
             }
         } else if ( baseType==Type::tHandle ) {
+            if ( annotation ) {
+                if (dmodule == DescribeModule::yes && annotation->module && !annotation->module->name.empty()) {
+                    stream << annotation->module->name << "::";
+                }
+            }
             stream << annotation->name;
         } else if ( baseType==Type::tArray ) {
             if ( firstType ) {
