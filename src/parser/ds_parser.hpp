@@ -95,6 +95,7 @@ extern int das_yydebug;
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = false );
+    void runFunctionAnnotations ( Function * func, AnnotationList * annL, const LineInfo & at );
 
     LineInfo tokAt ( const struct YYLTYPE & li );
     LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie );
@@ -108,7 +109,7 @@ extern int das_yydebug;
 
     extern Structure * g_thisStructure;
 
-#line 112 "ds_parser.hpp"
+#line 113 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -267,7 +268,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 85 "ds_parser.ypp"
+#line 86 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -294,7 +295,7 @@ union DAS_YYSTYPE
     Structure *                     pStructure;
     Function *                      pFuncDecl;
 
-#line 298 "ds_parser.hpp"
+#line 299 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

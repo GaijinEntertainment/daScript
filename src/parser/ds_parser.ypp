@@ -41,6 +41,7 @@
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = false );
+    void runFunctionAnnotations ( Function * func, AnnotationList * annL, const LineInfo & at );
 
     LineInfo tokAt ( const struct YYLTYPE & li );
     LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie );
@@ -832,27 +833,9 @@ function_name
     ;
 
 global_function_declaration
-    :   optional_annotation_list[annL] function_declaration[func] {
-        DAS_ASSERT($func && "function declaration must return function");
-        if ( $annL ) {
-            for ( auto pA : *$annL ) {
-                if ( pA->annotation ) {
-                    if ( pA->annotation->rtti_isFunctionAnnotation() ) {
-                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
-                        string err;
-                        if ( !ann->apply($func, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror("can't apply annotation\n" + err,
-                                tokAt(@annL), CompilationError::invalid_annotation);
-                        }
-                    } else {
-                        das_yyerror("functions are only allowed function annotations",
-                            tokAt(@annL), CompilationError::invalid_annotation);
-                    }
-                }
-            }
-            swap ( $func->annotations, *$annL );
-            delete $annL;
-        }
+    :   optional_annotation_list[annL] DAS_DEF[from] function_declaration[func] {
+        $func->atDecl = tokRangeAt(@from,@func);
+        runFunctionAnnotations($func, $annL, tokAt(@annL));
         if ( $func->isGeneric() ) {
             if ( !g_Program->addGeneric($func) ) {
                 das_yyerror("generic function is already defined " +
@@ -870,11 +853,10 @@ global_function_declaration
     ;
 
 function_declaration
-    :   DAS_DEF[from] function_name[name]
+    :  function_name[name]
             optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
         auto pFunction = make_smart<Function>();
         pFunction->at = tokAt(@name);
-        pFunction->atDecl = tokRangeAt(@from, @block);
         pFunction->name = *$name;
         pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
@@ -1508,17 +1490,17 @@ expr
     ;
 
 optional_field_annotation
-    :                                           { $$ = nullptr; }
-    |   '[' annotation_argument_list[alist] ']' { $$ = $alist; }
+    :                                                   { $$ = nullptr; }
+    |   BRABRAB annotation_argument_list[alist] ']' ']' { $$ = $alist; }
     ;
 
 optional_override
-    :               { $$ = false; }
-    |   DAS_OVERRIDE   { $$ = true; }
+    :                   { $$ = false; }
+    |   DAS_OVERRIDE    { $$ = true; }
     ;
 
 structure_variable_declaration
-    :   optional_override[ovr] optional_field_annotation[alist] variable_declaration[decl] {
+    :   optional_field_annotation[alist] optional_override[ovr] variable_declaration[decl] {
         $decl->override = $ovr;
         $decl->annotation = $alist;
         $$ = $decl;
@@ -1533,7 +1515,8 @@ struct_variable_declaration_list
         $$ = $list;
         if ( $decl ) $list->push_back($decl);
     }
-    |   struct_variable_declaration_list[list] optional_override[ovr] function_declaration[func] {
+    |   struct_variable_declaration_list[list] optional_annotation_list[annL] DAS_DEF[from] optional_override[ovr] function_declaration[func] {
+        $func->atDecl = tokRangeAt(@from,@func);
         if ( $func->isGeneric() ) {
             das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
                 $func->at, CompilationError::invalid_member_function);
@@ -1562,6 +1545,7 @@ struct_variable_declaration_list
                 }
                 modifyToConstructor($func, g_thisStructure);
             }
+            runFunctionAnnotations($func, $annL, tokAt(@annL));
             if ( !g_Program->addFunction($func) ) {
                 das_yyerror("function is already defined " + $func->getMangledName(),
                     $func->at, CompilationError::function_already_declared);
@@ -2576,4 +2560,24 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, 
     }
 }
 
-
+void runFunctionAnnotations ( Function * func, AnnotationList * annL, const LineInfo & at ) {
+    if ( annL ) {
+        for ( auto pA : *annL ) {
+            if ( pA->annotation ) {
+                if ( pA->annotation->rtti_isFunctionAnnotation() ) {
+                    auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                    string err;
+                    if ( !ann->apply(func, *g_Program->thisModuleGroup, pA->arguments, err) ) {
+                        das_yyerror("can't apply annotation\n" + err,
+                            at, CompilationError::invalid_annotation);
+                    }
+                } else {
+                    das_yyerror("functions are only allowed function annotations",
+                        at, CompilationError::invalid_annotation);
+                }
+            }
+        }
+        swap ( func->annotations, *annL );
+        delete annL;
+    }
+}

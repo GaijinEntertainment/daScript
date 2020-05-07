@@ -2,9 +2,12 @@ options log = true
 
 class Foo
     x, y : int = 0
+    [export] def Foo
+        pass
+    def Foo(T:int)
+        Foo`set(self,T,T)
     def Foo(X,Y:int)                    // custom c-tor
-        x = X
-        y = Y
+        Foo`set(self,X,Y)
     def set(X,Y:int)                    // method
         x = X
         y = Y
@@ -14,7 +17,7 @@ class Foo3D : Foo
     def Foo3D                           // overriding default c-tor
         assert(z==13)
         z = 3
-    override def set(X,Y:int)           // overriding method
+    def override set(X,Y:int)           // overriding method
         Foo`set(cast<Foo> self,X,Y)     // calling member function directly
         z = 0
 
@@ -25,6 +28,8 @@ def test
     assert(f.x==1 & f.y==2)
     f = Foo(11,12)
     assert(f.x==11 & f.y==12)
+    f = Foo(13)
+    assert(f.x==13 & f.y==13)
     var f3d = Foo3D()
     assert(f3d.x==0 & f3d.y==0 & f3d.z==3)
     f3d->set(1,2)
