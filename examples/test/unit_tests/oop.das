@@ -1,5 +1,3 @@
-// options log = true
-
 var
     delFoo = 0
     delFoo3D = 0
