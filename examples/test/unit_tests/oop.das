@@ -7,7 +7,7 @@ class Foo
     [export] def Foo                    // custom initializer
         Foo`set(self,1,1)
     def Foo(T:int)                      // custom initializer
-        Foo`set(self,T,T)
+        self->set(T,T)                  // calling 'polymorph' method
     def Foo(X,Y:int)                    // custom initializer
         Foo`set(self,X,Y)
     def set(X,Y:int)                    // inline method variable
