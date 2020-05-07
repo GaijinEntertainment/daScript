@@ -220,7 +220,7 @@ namespace das {
         return pMkGen;
     }
 
-    /* a->b(args) is short for invoke(a.b, cast<auto> a, args)  */
+    /* a->b(args) is short for invoke(a.b, cast<auto> deref(a), args)  */
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b ) {
         auto pInvoke = new ExprInvoke(at, "invoke");
         auto pAt = make_smart<ExprField>(at, a->clone(), b);
@@ -228,7 +228,8 @@ namespace das {
         auto pCast = make_smart<ExprCast>();
         pCast->at = at;
         pCast->castType = make_smart<TypeDecl>(Type::autoinfer);
-        pCast->subexpr = ExpressionPtr(a);
+        pCast->subexpr = make_smart<ExprPtr2Ref>(at,a);
+        pCast->subexpr->alwaysSafe = true;
         pInvoke->arguments.push_back(pCast);
         return pInvoke;
     }
@@ -307,10 +308,25 @@ namespace das {
         auto NEQ = make_smart<ExprOp2>(at, "!=", THIS0, NULLP0);
         auto ifb = make_smart<ExprBlock>();
         ifb->at = at;
-        auto THISA = make_smart<ExprVar>(at, "__this");    // delete * this
-        auto THISR = make_smart<ExprPtr2Ref>(at, THISA);
-        auto delit = make_smart<ExprDelete>(at, THISR);
-        ifb->list.push_back(delit);
+        if ( ptrType->firstType && ptrType->firstType->isClass() ) {
+            auto invk = new ExprInvoke(at, "invoke");
+            auto THISA = make_smart<ExprVar>(at, "__this");
+            auto pAt = make_smart<ExprField>(at, THISA, "__finalize");
+            invk->arguments.push_back(pAt);
+            auto pCast = make_smart<ExprCast>();
+            pCast->at = at;
+            pCast->castType = make_smart<TypeDecl>(Type::autoinfer);
+            auto THISAA = make_smart<ExprVar>(at, "__this");
+            pCast->subexpr = make_smart<ExprPtr2Ref>(at,THISAA);
+            pCast->subexpr->alwaysSafe = true;
+            invk->arguments.push_back(pCast);
+            ifb->list.push_back(invk);
+        } else {
+            auto THISA = make_smart<ExprVar>(at, "__this");    // delete * this
+            auto THISR = make_smart<ExprPtr2Ref>(at, THISA);
+            auto delit = make_smart<ExprDelete>(at, THISR);
+            ifb->list.push_back(delit);
+        }
         auto THISA1 = make_smart<ExprVar>(at, "__this");   // delete /*native*/ this
         auto delit1 = make_smart<ExprDelete>(at, THISA1);
         delit1->native = true;
@@ -1334,6 +1350,52 @@ namespace das {
         // and done
         func->body = block;
         verifyGenerated(func->body);
+    }
+
+    FunctionPtr makeClassFinalize ( Structure * baseClass ) {
+        // add __finalize filed
+        auto fname = baseClass->name + "'__finalize";
+        ExpressionPtr finit = make_smart<ExprAddr>(baseClass->at, "_::" + fname);
+        if ( baseClass->parent ) {
+            auto fd = (Structure::FieldDeclaration *) baseClass->findField("__finalize");
+            fd->init = make_smart<ExprCast>(baseClass->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+            fd->parentType = fd->type->isAuto();
+        } else {
+            baseClass->fields.emplace_back(
+                "__finalize",
+                make_smart<TypeDecl>(Type::autoinfer),
+                finit,
+                AnnotationArgumentList(),
+                false,
+                baseClass->at
+            );
+        }
+        // make a function
+        auto func = make_smart<Function>();
+        func->generated = true;
+        func->at = baseClass->at;
+        func->atDecl = baseClass->at;
+        func->name = fname;
+        func->result = make_smart<TypeDecl>(Type::tVoid);
+        auto block = make_smart<ExprBlock>();
+        block->at = func->at;
+        func->body = block;
+        // only one argument, and its 'self'
+        auto argT = make_smart<TypeDecl>(baseClass);
+        argT->constant = false;
+        auto argV = make_smart<Variable>();
+        argV->name = "self";
+        argV->type = argT;
+        argV->at = func->at;
+        argV->generated = true;
+        func->arguments.push_back(argV);
+        // delete
+        auto vself = make_smart<ExprVar>(func->at, "self");
+        auto edel = make_smart<ExprDelete>(func->at, vself);
+        block->list.push_back(edel);
+        // and done
+        verifyGenerated(func->body);
+        return func;
     }
 }
 

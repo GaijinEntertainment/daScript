@@ -80,6 +80,7 @@ namespace das {
         bool isEnumT() const;
         bool isHandle() const;
         bool isStructure() const;
+        bool isClass() const;
         bool isTuple() const;
         bool isVariant() const;
         int getSizeOf() const;

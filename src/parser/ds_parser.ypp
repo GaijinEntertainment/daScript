@@ -1882,6 +1882,13 @@ structure_declaration
                         CompilationError::invalid_override);
                 }
             }
+            if ( pStruct->isClass ) {
+                auto virtfin = makeClassFinalize(pStruct);
+                if ( !g_Program->addFunction(virtfin) ) {
+                    das_yyerror("built-in finalizer is already defined " + virtfin->getMangledName(),
+                        virtfin->at, CompilationError::function_already_declared);
+                }
+            }
             for ( auto pDecl : *$list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.first);

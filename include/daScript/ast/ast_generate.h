@@ -36,6 +36,12 @@ namespace das {
     void modifyToConstructor ( Function * func, Structure * str );
 
     /*
+        override def __finalize()
+            delete self
+    */
+    FunctionPtr makeClassFinalize ( Structure * baseClass );
+
+    /*
      def STRUCT_NAME
         return [[STRUCT_NAME field1=init1, field2=init2, ...]]
      */

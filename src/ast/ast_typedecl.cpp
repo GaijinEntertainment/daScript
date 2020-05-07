@@ -1249,6 +1249,10 @@ namespace das
         return (baseType==Type::tStructure) && (dim.size()==0);
     }
 
+    bool TypeDecl::isClass() const {
+        return isStructure() && structType && structType->isClass;
+    }
+
     bool TypeDecl::isTuple() const {
         return (baseType==Type::tTuple) && (dim.size()==0);
     }
