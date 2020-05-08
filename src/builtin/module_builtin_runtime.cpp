@@ -9,6 +9,7 @@
 #include "daScript/simulate/bin_serializer.h"
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_range.h"
+#include "daScript/simulate/simulate_nodes.h"
 
 namespace das
 {
@@ -511,6 +512,27 @@ namespace das
         return psrc ? psrc->use_count() : 0;
     }
 
+    struct ClassInfoMacro : TypeInfoMacro {
+        ClassInfoMacro() : TypeInfoMacro("rtti_classinfo") {}
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
+            return typeFactory<void *>::make(lib);
+        }
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) {
+            auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
+            TypeInfo * typeInfo = context->thisHelper->makeTypeInfo(nullptr, exprTypeInfo->typeexpr);
+            return context->code->makeNode<SimNode_TypeInfo>(expr->at, typeInfo);
+        }
+        virtual void aotPrefix ( TextWriter & ss, const ExpressionPtr & ) {
+            ss << "(void *)(&";
+        }
+        virtual void aotSuffix ( TextWriter & ss, const ExpressionPtr & ) {
+            ss << ")";
+        }
+        virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const override {
+            return true;
+        }
+    };
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
@@ -528,6 +550,8 @@ namespace das
         addAnnotation(make_smart<UnsafeDerefFunctionAnnotation>());
         addAnnotation(make_smart<MarkUsedFunctionAnnotation>());
         addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
+        // typeinfo macros
+        addTypeInfoMacro(make_smart<ClassInfoMacro>());
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_first");

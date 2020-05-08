@@ -198,6 +198,7 @@ namespace das {
         } else {
             vi->value = v_zero();
         }
+        vi->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         vmn2v[mangledName] = vi;
         return vi;
     }
@@ -224,6 +225,7 @@ namespace das {
         } else {
             vi->value = v_zero();
         }
+        vi->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         vmn2v[mangledName] = vi;
         return vi;
     }

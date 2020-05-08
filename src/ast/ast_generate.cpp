@@ -1364,6 +1364,26 @@ namespace das {
         return func;
     }
 
+    void makeClassRtti ( Structure * baseClass ) {
+        ExpressionPtr finit = make_smart<ExprTypeInfo>(baseClass->at, "rtti_classinfo", make_smart<TypeDecl>(baseClass));
+        if ( baseClass->parent ) {
+            auto fd = (Structure::FieldDeclaration *) baseClass->findField("__rtti");
+            fd->init = finit;
+            fd->parentType = fd->type->isAuto();
+        } else {
+            auto pvoid = make_smart<TypeDecl>(Type::tPointer);
+            pvoid->firstType = make_smart<TypeDecl>(Type::tVoid);
+            baseClass->fields.emplace_back(
+                "__rtti",
+                pvoid,
+                finit,
+                AnnotationArgumentList(),
+                false,
+                baseClass->at
+            );
+        }
+    }
+
     FunctionPtr makeClassFinalize ( Structure * baseClass ) {
         // add __finalize filed
         auto fname = baseClass->name + "'__finalize";

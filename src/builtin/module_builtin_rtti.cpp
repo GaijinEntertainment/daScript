@@ -906,7 +906,7 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_builtin_basic_struct_for_each_field");
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type",
                 SideEffects::modifyExternal, "isSameType");
-            addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "builtin_is_compatible_cast",
+            addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "is_compatible_cast",
                 SideEffects::modifyExternal, "isCompatibleCast");
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name");

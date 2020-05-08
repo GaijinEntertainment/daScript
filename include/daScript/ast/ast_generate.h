@@ -35,6 +35,11 @@ namespace das {
     FunctionPtr makeClassConstructor ( Structure * baseClass, Function * method );
 
     /*
+        __rtti : void? = typeinfo(rtti_classinfo type<Foo>)
+    */
+    void makeClassRtti ( Structure * baseClass );
+
+    /*
         override def __finalize()
             delete self
     */

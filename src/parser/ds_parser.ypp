@@ -1875,7 +1875,7 @@ class_or_struct
     ;
 
 structure_declaration
-    : optional_annotation_list[annL] class_or_struct[loc] structure_name[ps] { $ps->isClass = $loc; } '{' struct_variable_declaration_list[list] '}' {
+    : optional_annotation_list[annL] class_or_struct[loc] structure_name[ps] { if ( $ps ) $ps->isClass = $loc; } '{' struct_variable_declaration_list[list] '}' {
         if ( $ps ) {
             auto pStruct = $ps;
             pStruct->at = tokAt(@ps);
@@ -1889,6 +1889,7 @@ structure_declaration
                 }
             }
             if ( pStruct->isClass ) {
+                makeClassRtti(pStruct);
                 auto virtfin = makeClassFinalize(pStruct);
                 if ( !g_Program->addFunction(virtfin) ) {
                     das_yyerror("built-in finalizer is already defined " + virtfin->getMangledName(),

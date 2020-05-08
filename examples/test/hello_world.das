@@ -1,15 +1,6 @@
-options log = true
+// options log = true
 
 require rtti
-
-[export]
-def test
-    var i = 3
-    let t & = typeinfo(rtti_typeinfo i)
-    print("t = {t}\n")
-    return true
-
-/*
 
 var
     delFoo = 0
@@ -91,13 +82,37 @@ def test_foo_ptr
     delFoo = 0
     delFoo3D = 0
 
+class Goo
+    a : int
+
+def test_rtti
+    var g = Goo()
+    var f = Foo()
+    var f2 = Foo()
+    var f3d = Foo3D()
+    var f3d2 = Foo3D()
+    assert(f.__rtti!=g.__rtti)
+    assert(f3d.__rtti!=g.__rtti)
+    assert(f.__rtti==f2.__rtti)
+    assert(f3d.__rtti==f3d2.__rtti)
+    assert(f.__rtti!=f3d.__rtti)
+    assert(class_info(f)!=class_info(g))
+    assert(class_info(f3d)!=class_info(g))
+    assert(class_info(f)==class_info(f2))
+    assert(class_info(f3d)==class_info(f3d2))
+    assert(class_info(f)!=class_info(f3d))
+    verify(is_compatible_cast(class_info(f),class_info(f)))   // can cast from f to f
+    verify(is_compatible_cast(class_info(f),class_info(f3d)))   // can cast from f3d to f
+    verify(!is_compatible_cast(class_info(f3d),class_info(f)))  // can't cast from f to f3d
+    verify(!is_compatible_cast(class_info(g),class_info(f)))  // can't cast from f to g
+    verify(!is_compatible_cast(class_info(f),class_info(g)))  // can't cast from g to f
+    verify(!is_compatible_cast(class_info(g),class_info(f3d)))  // can't cast from f3d to g
+    verify(!is_compatible_cast(class_info(f3d),class_info(g)))  // can't cast from g to f3d
+
+
 [export]
 def test
     test_foo()
     test_foo_ptr()
-
-    var a <- [{int 1;2;3}]
-    emplace(a,1)
-
+    test_rtti()
     return true
-*/

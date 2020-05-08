@@ -15,7 +15,7 @@ def is_same_type( a,b:TypeInfo;
 
 [unsafe]
 def is_compatible_cast( a,b:StructInfo )
-    return builtin_is_compatible_cast(reinterpret<StructInfo const?>(a),reinterpret<StructInfo const?>(b))
+    return is_compatible_cast(reinterpret<StructInfo const?>(a),reinterpret<StructInfo const?>(b))
 
 def context_for_each_function( blk:block<(info:FuncInfo):void> )
 	for fni in range(0,get_total_functions())
@@ -66,4 +66,16 @@ def arg_names(info:TypeInfo)
 def arg_names(info:VarInfo)
 	return <- arg_names_any(info)
 
-
+[unsafe]
+def class_info ( cl ) : StructInfo const?
+    static_if typeinfo(is_pointer cl)
+        static_if typeinfo(is_class cl)
+            return reinterpret<StructInfo const?>((reinterpret<TypeInfo?>(cl.__rtti)).structType)
+        else
+            concept_assert(false,"not a pointer to a class")
+            return null
+    static_if typeinfo(is_class cl)
+        return reinterpret<StructInfo const?>((reinterpret<TypeInfo?>(cl.__rtti)).structType)
+    else
+        concept_assert(false,"not a class")
+        return null

@@ -238,19 +238,29 @@ namespace das {
         }
 
         // type has all of it subtypes resolved
-        bool isFullyResolvedType(const TypeDeclPtr & ptr) {
+        bool isFullyResolvedType(const TypeDeclPtr & ptr, das_set<const TypeDecl *> & all ) {
             if (!ptr) return false;
+            if ( ptr->baseType==Type::tStructure || ptr->baseType==Type::tTuple || ptr->baseType==Type::tVariant ) {
+                auto thisType = ptr.get();
+                if ( all.find(thisType)!=all.end() ) return true;
+                all.insert(thisType);
+            }
             if (ptr->baseType == Type::tStructure) {
                 for (auto & fld : ptr->structType->fields) {
-                    if (!isFullyResolvedType(fld.type) ) return false;
+                    if (!isFullyResolvedType(fld.type,all) ) return false;
                 }
             }
-            if (ptr->firstType && !isFullyResolvedType(ptr->firstType)) return false;
-            if (ptr->secondType && !isFullyResolvedType(ptr->secondType)) return false;
+            if (ptr->firstType && !isFullyResolvedType(ptr->firstType,all)) return false;
+            if (ptr->secondType && !isFullyResolvedType(ptr->secondType,all)) return false;
             for (auto & argT : ptr->argTypes) {
-                if (argT && !isFullyResolvedType(argT)) return false;
+                if (argT && !isFullyResolvedType(argT,all)) return false;
             }
             return true;
+        }
+
+        bool isFullyResolvedType(const TypeDeclPtr & ptr) {
+            das_set<const TypeDecl *> all;
+            return isFullyResolvedType(ptr, all);
         }
 
         // type chain is fully resolved, and not aliased \ auto
@@ -2321,6 +2331,9 @@ namespace das {
                 } else if ( expr->trait=="is_struct" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isStructure());
+                } else if ( expr->trait=="is_class" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isClass());
                 } else if ( expr->trait=="is_enum" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isEnum());
