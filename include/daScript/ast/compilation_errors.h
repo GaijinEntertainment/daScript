@@ -118,6 +118,7 @@ namespace das
     ,   typeinfo_auto                           =   39902       //  typeinfo(typename type auto)
     ,   typeinfo_undefined                      =   39903       //  typeinfo(??? ...)
     ,   typeinfo_dim                            =   39904       //  typeinfo(dim non_array)
+    ,   typeinfo_macro_error                    =   39905       //  typeinfo(custom ...) returns errors
 
 // logic errors
 

@@ -232,8 +232,17 @@ namespace das {
         V_BEGIN();
         V_OP(Debug);
         V_SUB(subexpr);
-        // TODO: typeinfo?
+        string dt = debug_type(typeInfo);
+        V_ARG(dt.c_str());
         V_ARG(message);
+        V_END();
+    }
+
+    SimNode * SimNode_TypeInfo::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(TypeInfo);
+        string dt = debug_type(typeInfo);
+        V_ARG(dt.c_str());
         V_END();
     }
 

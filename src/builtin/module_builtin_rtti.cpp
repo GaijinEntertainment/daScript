@@ -457,11 +457,6 @@ namespace das {
         }
     };
 
-    vec4f rtti_getTypeInfo ( Context & , SimNode_CallBase * call, vec4f * ) {
-        DAS_ASSERTF(call->types[0], "missing type info somehow");
-        return cast<TypeInfo *>::from(call->types[0]);
-    }
-
     template <typename TT>
     int32_t rtti_getDim ( const TT & ti, int32_t _index, Context * context ) {
         uint32_t index = _index;
@@ -806,6 +801,21 @@ namespace das {
         }
     };
 
+    struct RttiTypeInfoMacro : TypeInfoMacro {
+        RttiTypeInfoMacro() : TypeInfoMacro("rtti_typeinfo") {}
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
+            return typeFactory<const TypeInfo>::make(lib);
+        }
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) {
+            auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
+            TypeInfo * typeInfo = context->thisHelper->makeTypeInfo(nullptr, exprTypeInfo->typeexpr);
+            return context->code->makeNode<SimNode_TypeInfo>(expr->at, typeInfo);
+        }
+        virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const override {
+            return true;
+        }
+    };
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -845,11 +855,11 @@ namespace das {
             // func info flags
             addConstant<uint32_t>(*this, "FUNCINFO_INIT", uint32_t(FuncInfo::flag_init));
             addConstant<uint32_t>(*this, "FUNCINFO_BUILTIN", uint32_t(FuncInfo::flag_builtin));
+            // macros
+            addTypeInfoMacro(make_smart<RttiTypeInfoMacro>());
             // functions
             //      all the stuff is only resolved after debug info is built
             //      hence SideEffects::modifyExternal is essencial for it to not be optimized out
-            addInterop<rtti_getTypeInfo,const TypeInfo &,vec4f>(*this, lib, "get_type_info",
-                SideEffects::modifyExternal,"rtti_getTypeInfo");
             addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "get_dim",
                 SideEffects::modifyExternal, "rtti_getDimTypeInfo");
             addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "get_dim",

@@ -921,6 +921,19 @@ SIM_NODE_AT_VECTOR(Float, float)
         const char *    message;
     };
 
+    // "TypeInfo"
+    struct SimNode_TypeInfo : SimNode {
+        DAS_PTR_NODE
+        SimNode_TypeInfo ( const LineInfo & at, TypeInfo * ti )
+            : SimNode(at), typeInfo(ti) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & ) {
+            DAS_PROFILE_NODE
+            return (char *) typeInfo;
+        }
+        TypeInfo *      typeInfo;
+    };
+
     // CMRES "GET" + OFFSET
     struct SimNode_GetCMResOfs : SimNode_SourceBase {
         DAS_PTR_NODE;

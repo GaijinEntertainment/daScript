@@ -1046,9 +1046,19 @@ namespace das
     }
 
     SimNode * ExprTypeInfo::simulate (Context & context) const {
-        DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");
-        context.thisProgram->error("internal compilation error, generating typeinfo(...)", "", "", at);
-        return nullptr;
+        if ( !macro ) {
+            DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");
+            context.thisProgram->error("internal compilation error, generating typeinfo(...)", "", "", at);
+            return nullptr;
+        } else {
+            string errors;
+            auto node = macro->simluate(&context, (Expression*)this, errors);
+            if ( !node || !errors.empty() ) {
+                context.thisProgram->error("typeinfo(" + trait + "...) macro generated no node; " + errors,
+                    "", "", at, CompilationError::typeinfo_macro_error);
+            }
+            return node;
+        }
     }
 
     SimNode * ExprDelete::simulate (Context & context) const {

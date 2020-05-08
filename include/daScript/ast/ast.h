@@ -586,6 +586,23 @@ namespace das
         string cppName;
     };
 
+    struct TypeInfoMacro : public ptr_ref_count {
+        TypeInfoMacro ( const string & n )
+            : name(n) {
+        }
+        virtual void seal( Module * m ) { module = m; }
+        virtual ExpressionPtr getAstChange ( const ExpressionPtr &, string & ) { return nullptr; }
+        virtual TypeDeclPtr getAstType ( ModuleLibrary &, const ExpressionPtr &, string & ) { return nullptr; }
+        virtual SimNode * simluate ( Context *, const ExpressionPtr &, string & ) { return nullptr; }
+        virtual void aotPrefix ( TextWriter &, const ExpressionPtr & ) { }
+        virtual void aotSuffix ( TextWriter &, const ExpressionPtr & ) { }
+        virtual bool aotInfix ( TextWriter &, const ExpressionPtr & ) { return false; }
+        virtual bool aotNeedTypeInfo( const ExpressionPtr & ) const { return false; }
+        string name;
+        Module * module = nullptr;
+    };
+    typedef smart_ptr<TypeInfoMacro> TypeInfoMacroPtr;
+
     struct Error {
         Error ( const string & w, const string & e, const string & f, LineInfo a, CompilationError ce )
             : what(w), extra(e), fixme(f), at(a), cerr(ce)  {}
@@ -647,12 +664,14 @@ namespace das
         bool addFunction ( const FunctionPtr & fn, bool canFail = false );
         bool addGeneric ( const FunctionPtr & fn, bool canFail = false );
         bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );
+        bool addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
         StructurePtr findStructure ( const string & name ) const;
         AnnotationPtr findAnnotation ( const string & name ) const;
         EnumerationPtr findEnum ( const string & name ) const;
+        TypeInfoMacroPtr findTypeInfoMacro ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         bool isVisibleDirectly ( Module * objModule ) const;
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
@@ -696,6 +715,7 @@ namespace das
         das_safe_map<string, FunctionPtr>           generics;           // mangled name 2 generic name
         das_map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
         mutable das_map<string, ExprCallFactory>    callThis;
+        das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint32_t, uint64_t>                 annotationData;
         das_map<Module *,bool>                      requireModule;      // visibility modules
         vector<VisitorMacroPtr>                     macros;             // infer macros (hygenic)
@@ -737,6 +757,7 @@ namespace das
         void foreach ( function<bool (Module * module)> && func, const string & name ) const;
         vector<TypeDeclPtr> findAlias ( const string & name, Module * inWhichModule ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name, Module * inWhichModule ) const;
+        vector<TypeInfoMacroPtr> findTypeInfoMacro ( const string & name, Module * inWhichModule ) const;
         vector<EnumerationPtr> findEnum ( const string & name, Module * inWhichModule ) const;
         vector<StructurePtr> findStructure ( const string & name, Module * inWhichModule ) const;
         Module * findModule ( const string & name ) const;
@@ -841,6 +862,7 @@ namespace das
         friend TextWriter& operator<< (TextWriter& stream, const Program & program);
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
+        vector<TypeInfoMacroPtr> findTypeInfoMacro ( const string & name ) const;
         vector<EnumerationPtr> findEnum ( const string & name ) const;
         vector<TypeDeclPtr> findAlias ( const string & name ) const;
         bool addAlias ( const TypeDeclPtr & at );

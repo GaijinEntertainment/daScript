@@ -256,27 +256,27 @@ Grammar
 
   178 expr_cast: "reinterpret" '<' $@5 type_declaration '>' $@6 expr
 
-  179 expr_type_info: "typeinfo" '(' "name" expr ')'
-  180               | "typeinfo" '(' "name" '<' "name" '>' expr ')'
-  181               | "typeinfo" '(' "name" '<' "name" ';' "name" '>' expr ')'
+  179 expr_type_info: "typeinfo" '(' name_in_namespace expr ')'
+  180               | "typeinfo" '(' name_in_namespace '<' "name" '>' expr ')'
+  181               | "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' expr ')'
 
   182 $@7: %empty
 
   183 $@8: %empty
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" '<' $@7 type_declaration '>' $@8 ')'
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" '<' $@7 type_declaration '>' $@8 ')'
 
   185 $@9: %empty
 
   186 $@10: %empty
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
 
   188 $@11: %empty
 
   189 $@12: %empty
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
   191 expr_list: expr
   192          | expr_list ',' expr
@@ -850,7 +850,7 @@ Terminals, with rules where they appear
     "unsigned long integer constant" <ui64> (386) 203
     "floating point constant" <fd> (387) 53 61 204
     "double constant" <d> (388) 205
-    "name" <s> (389) 14 24 25 26 28 51 58 59 60 61 62 63 64 65 81 145 146 147 179 180 181 184 187 190 225 226 270 271 287 288 289 298 312 315 344 345 346 350 351 354 358 359 393 394 395 456 458 463 464
+    "name" <s> (389) 14 24 25 26 28 51 58 59 60 61 62 63 64 65 81 145 146 147 180 181 187 190 225 226 270 271 287 288 289 298 312 315 344 345 346 350 351 354 358 359 393 394 395 456 458 463 464
     "start of the string" (390) 17 21
     STRING_CHARACTER <ch> (391) 15 16
     "end of the string" (392) 17 21
@@ -992,7 +992,7 @@ Nonterminals, with rules where they appear
         on right: 123 158 159 162 163 325 333 335
     name_in_namespace <s> (216)
         on left: 145 146 147
-        on right: 68 224 227 230 233 235 273 274 298 353 391
+        on right: 68 179 180 181 184 187 190 224 227 230 233 235 273 274 298 353 391
     expression_delete <pExpression> (217)
         on left: 148
         on right: 126
@@ -4249,12 +4249,12 @@ State 286
 
 State 287
 
-  179 expr_type_info: "typeinfo" . '(' "name" expr ')'
-  180               | "typeinfo" . '(' "name" '<' "name" '>' expr ')'
-  181               | "typeinfo" . '(' "name" '<' "name" ';' "name" '>' expr ')'
-  184               | "typeinfo" . '(' "name" "type" '<' $@7 type_declaration '>' $@8 ')'
-  187               | "typeinfo" . '(' "name" '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
-  190               | "typeinfo" . '(' "name" '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  179 expr_type_info: "typeinfo" . '(' name_in_namespace expr ')'
+  180               | "typeinfo" . '(' name_in_namespace '<' "name" '>' expr ')'
+  181               | "typeinfo" . '(' name_in_namespace '<' "name" ';' "name" '>' expr ')'
+  184               | "typeinfo" . '(' name_in_namespace "type" '<' $@7 type_declaration '>' $@8 ')'
+  187               | "typeinfo" . '(' name_in_namespace '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
+  190               | "typeinfo" . '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
     '('  shift, and go to state 382
 
@@ -6652,14 +6652,17 @@ State 381
 
 State 382
 
-  179 expr_type_info: "typeinfo" '(' . "name" expr ')'
-  180               | "typeinfo" '(' . "name" '<' "name" '>' expr ')'
-  181               | "typeinfo" '(' . "name" '<' "name" ';' "name" '>' expr ')'
-  184               | "typeinfo" '(' . "name" "type" '<' $@7 type_declaration '>' $@8 ')'
-  187               | "typeinfo" '(' . "name" '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
-  190               | "typeinfo" '(' . "name" '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  179 expr_type_info: "typeinfo" '(' . name_in_namespace expr ')'
+  180               | "typeinfo" '(' . name_in_namespace '<' "name" '>' expr ')'
+  181               | "typeinfo" '(' . name_in_namespace '<' "name" ';' "name" '>' expr ')'
+  184               | "typeinfo" '(' . name_in_namespace "type" '<' $@7 type_declaration '>' $@8 ')'
+  187               | "typeinfo" '(' . name_in_namespace '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
+  190               | "typeinfo" '(' . name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
-    "name"  shift, and go to state 512
+    "name"  shift, and go to state 43
+    COLCOL  shift, and go to state 44
+
+    name_in_namespace  go to state 512
 
 
 State 383
@@ -11772,12 +11775,12 @@ State 511
 
 State 512
 
-  179 expr_type_info: "typeinfo" '(' "name" . expr ')'
-  180               | "typeinfo" '(' "name" . '<' "name" '>' expr ')'
-  181               | "typeinfo" '(' "name" . '<' "name" ';' "name" '>' expr ')'
-  184               | "typeinfo" '(' "name" . "type" '<' $@7 type_declaration '>' $@8 ')'
-  187               | "typeinfo" '(' "name" . '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
-  190               | "typeinfo" '(' "name" . '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  179 expr_type_info: "typeinfo" '(' name_in_namespace . expr ')'
+  180               | "typeinfo" '(' name_in_namespace . '<' "name" '>' expr ')'
+  181               | "typeinfo" '(' name_in_namespace . '<' "name" ';' "name" '>' expr ')'
+  184               | "typeinfo" '(' name_in_namespace . "type" '<' $@7 type_declaration '>' $@8 ')'
+  187               | "typeinfo" '(' name_in_namespace . '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
+  190               | "typeinfo" '(' name_in_namespace . '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
     "true"                            shift, and go to state 284
     "false"                           shift, and go to state 285
@@ -17458,24 +17461,24 @@ State 652
 
 State 653
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" . '<' $@7 type_declaration '>' $@8 ')'
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" . '<' $@7 type_declaration '>' $@8 ')'
 
     '<'  shift, and go to state 746
 
 
 State 654
 
-  180 expr_type_info: "typeinfo" '(' "name" '<' . "name" '>' expr ')'
-  181               | "typeinfo" '(' "name" '<' . "name" ';' "name" '>' expr ')'
-  187               | "typeinfo" '(' "name" '<' . "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
-  190               | "typeinfo" '(' "name" '<' . "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  180 expr_type_info: "typeinfo" '(' name_in_namespace '<' . "name" '>' expr ')'
+  181               | "typeinfo" '(' name_in_namespace '<' . "name" ';' "name" '>' expr ')'
+  187               | "typeinfo" '(' name_in_namespace '<' . "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')'
+  190               | "typeinfo" '(' name_in_namespace '<' . "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
     "name"  shift, and go to state 747
 
 
 State 655
 
-  179 expr_type_info: "typeinfo" '(' "name" expr . ')'
+  179 expr_type_info: "typeinfo" '(' name_in_namespace expr . ')'
   225 expr_method_call: expr . "->" "name" '(' ')'
   226                 | expr . "->" "name" '(' expr_list ')'
   245 expr: expr . "<<" expr
@@ -20622,7 +20625,7 @@ State 745
 
 State 746
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" '<' . $@7 type_declaration '>' $@8 ')'
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" '<' . $@7 type_declaration '>' $@8 ')'
 
     $default  reduce using rule 182 ($@7)
 
@@ -20631,10 +20634,10 @@ State 746
 
 State 747
 
-  180 expr_type_info: "typeinfo" '(' "name" '<' "name" . '>' expr ')'
-  181               | "typeinfo" '(' "name" '<' "name" . ';' "name" '>' expr ')'
-  187               | "typeinfo" '(' "name" '<' "name" . '>' "type" '<' $@9 type_declaration '>' $@10 ')'
-  190               | "typeinfo" '(' "name" '<' "name" . ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  180 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" . '>' expr ')'
+  181               | "typeinfo" '(' name_in_namespace '<' "name" . ';' "name" '>' expr ')'
+  187               | "typeinfo" '(' name_in_namespace '<' "name" . '>' "type" '<' $@9 type_declaration '>' $@10 ')'
+  190               | "typeinfo" '(' name_in_namespace '<' "name" . ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
     '>'  shift, and go to state 795
     ';'  shift, and go to state 796
@@ -20642,7 +20645,7 @@ State 747
 
 State 748
 
-  179 expr_type_info: "typeinfo" '(' "name" expr ')' .
+  179 expr_type_info: "typeinfo" '(' name_in_namespace expr ')' .
 
     $default  reduce using rule 179 (expr_type_info)
 
@@ -21804,7 +21807,7 @@ State 793
 
 State 794
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" '<' $@7 . type_declaration '>' $@8 ')'
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" '<' $@7 . type_declaration '>' $@8 ')'
 
     "array"      shift, and go to state 173
     "table"      shift, and go to state 174
@@ -21854,8 +21857,8 @@ State 794
 
 State 795
 
-  180 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' . expr ')'
-  187               | "typeinfo" '(' "name" '<' "name" '>' . "type" '<' $@9 type_declaration '>' $@10 ')'
+  180 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' . expr ')'
+  187               | "typeinfo" '(' name_in_namespace '<' "name" '>' . "type" '<' $@9 type_declaration '>' $@10 ')'
 
     "true"                            shift, and go to state 284
     "false"                           shift, and go to state 285
@@ -21941,8 +21944,8 @@ State 795
 
 State 796
 
-  181 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' . "name" '>' expr ')'
-  190               | "typeinfo" '(' "name" '<' "name" ';' . "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  181 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' . "name" '>' expr ')'
+  190               | "typeinfo" '(' name_in_namespace '<' "name" ';' . "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
     "name"  shift, and go to state 822
 
@@ -22873,7 +22876,7 @@ State 818
 
 State 819
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" '<' $@7 type_declaration . '>' $@8 ')'
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" '<' $@7 type_declaration . '>' $@8 ')'
   403 type_declaration: type_declaration . '[' expr ']'
   404                 | type_declaration . '[' ']'
   405                 | type_declaration . '-' '[' ']'
@@ -22902,14 +22905,14 @@ State 819
 
 State 820
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" . '<' $@9 type_declaration '>' $@10 ')'
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" . '<' $@9 type_declaration '>' $@10 ')'
 
     '<'  shift, and go to state 839
 
 
 State 821
 
-  180 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' expr . ')'
+  180 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' expr . ')'
   225 expr_method_call: expr . "->" "name" '(' ')'
   226                 | expr . "->" "name" '(' expr_list ')'
   245 expr: expr . "<<" expr
@@ -22981,8 +22984,8 @@ State 821
 
 State 822
 
-  181 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" . '>' expr ')'
-  190               | "typeinfo" '(' "name" '<' "name" ';' "name" . '>' "type" '<' $@11 type_declaration '>' $@12 ')'
+  181 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" . '>' expr ')'
+  190               | "typeinfo" '(' name_in_namespace '<' "name" ';' "name" . '>' "type" '<' $@11 type_declaration '>' $@12 ')'
 
     '>'  shift, and go to state 841
 
@@ -23546,7 +23549,7 @@ State 837
 
 State 838
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" '<' $@7 type_declaration '>' . $@8 ')'
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" '<' $@7 type_declaration '>' . $@8 ')'
 
     $default  reduce using rule 183 ($@8)
 
@@ -23555,7 +23558,7 @@ State 838
 
 State 839
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" '<' . $@9 type_declaration '>' $@10 ')'
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" '<' . $@9 type_declaration '>' $@10 ')'
 
     $default  reduce using rule 185 ($@9)
 
@@ -23564,15 +23567,15 @@ State 839
 
 State 840
 
-  180 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' expr ')' .
+  180 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' expr ')' .
 
     $default  reduce using rule 180 (expr_type_info)
 
 
 State 841
 
-  181 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' . expr ')'
-  190               | "typeinfo" '(' "name" '<' "name" ';' "name" '>' . "type" '<' $@11 type_declaration '>' $@12 ')'
+  181 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' . expr ')'
+  190               | "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' . "type" '<' $@11 type_declaration '>' $@12 ')'
 
     "true"                            shift, and go to state 284
     "false"                           shift, and go to state 285
@@ -23710,14 +23713,14 @@ State 848
 
 State 849
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" '<' $@7 type_declaration '>' $@8 . ')'
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" '<' $@7 type_declaration '>' $@8 . ')'
 
     ')'  shift, and go to state 857
 
 
 State 850
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" '<' $@9 . type_declaration '>' $@10 ')'
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" '<' $@9 . type_declaration '>' $@10 ')'
 
     "array"      shift, and go to state 173
     "table"      shift, and go to state 174
@@ -23767,14 +23770,14 @@ State 850
 
 State 851
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" . '<' $@11 type_declaration '>' $@12 ')'
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" . '<' $@11 type_declaration '>' $@12 ')'
 
     '<'  shift, and go to state 859
 
 
 State 852
 
-  181 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' expr . ')'
+  181 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' expr . ')'
   225 expr_method_call: expr . "->" "name" '(' ')'
   226                 | expr . "->" "name" '(' expr_list ')'
   245 expr: expr . "<<" expr
@@ -23952,14 +23955,14 @@ State 856
 
 State 857
 
-  184 expr_type_info: "typeinfo" '(' "name" "type" '<' $@7 type_declaration '>' $@8 ')' .
+  184 expr_type_info: "typeinfo" '(' name_in_namespace "type" '<' $@7 type_declaration '>' $@8 ')' .
 
     $default  reduce using rule 184 (expr_type_info)
 
 
 State 858
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" '<' $@9 type_declaration . '>' $@10 ')'
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" '<' $@9 type_declaration . '>' $@10 ')'
   403 type_declaration: type_declaration . '[' expr ']'
   404                 | type_declaration . '[' ']'
   405                 | type_declaration . '-' '[' ']'
@@ -23988,7 +23991,7 @@ State 858
 
 State 859
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" '<' . $@11 type_declaration '>' $@12 ')'
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' . $@11 type_declaration '>' $@12 ')'
 
     $default  reduce using rule 188 ($@11)
 
@@ -23997,7 +24000,7 @@ State 859
 
 State 860
 
-  181 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' expr ')' .
+  181 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' expr ')' .
 
     $default  reduce using rule 181 (expr_type_info)
 
@@ -24091,7 +24094,7 @@ State 863
 
 State 864
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" '<' $@9 type_declaration '>' . $@10 ')'
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" '<' $@9 type_declaration '>' . $@10 ')'
 
     $default  reduce using rule 186 ($@10)
 
@@ -24100,7 +24103,7 @@ State 864
 
 State 865
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" '<' $@11 . type_declaration '>' $@12 ')'
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 . type_declaration '>' $@12 ')'
 
     "array"      shift, and go to state 173
     "table"      shift, and go to state 174
@@ -24150,14 +24153,14 @@ State 865
 
 State 866
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 . ')'
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 . ')'
 
     ')'  shift, and go to state 868
 
 
 State 867
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration . '>' $@12 ')'
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration . '>' $@12 ')'
   403 type_declaration: type_declaration . '[' expr ']'
   404                 | type_declaration . '[' ']'
   405                 | type_declaration . '-' '[' ']'
@@ -24186,14 +24189,14 @@ State 867
 
 State 868
 
-  187 expr_type_info: "typeinfo" '(' "name" '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')' .
+  187 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" '>' "type" '<' $@9 type_declaration '>' $@10 ')' .
 
     $default  reduce using rule 187 (expr_type_info)
 
 
 State 869
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' . $@12 ')'
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' . $@12 ')'
 
     $default  reduce using rule 189 ($@12)
 
@@ -24202,13 +24205,13 @@ State 869
 
 State 870
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 . ')'
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 . ')'
 
     ')'  shift, and go to state 871
 
 
 State 871
 
-  190 expr_type_info: "typeinfo" '(' "name" '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')' .
+  190 expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@11 type_declaration '>' $@12 ')' .
 
     $default  reduce using rule 190 (expr_type_info)

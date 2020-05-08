@@ -2229,6 +2229,7 @@ namespace das {
 
     // ExprTypeInfo
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
+            expr->macro = nullptr;
             if ( expr->typeexpr && expr->typeexpr->isExprType() ) {
                 return Visitor::visit(expr);
             }
@@ -2531,8 +2532,37 @@ namespace das {
                             expr->at, CompilationError::typeinfo_undefined);
                     }
                 } else {
-                    error("typeinfo(" + expr->trait + " ...) is undefined, " + expr->typeexpr->describe(), "", "",
-                          expr->at, CompilationError::typeinfo_undefined);
+                    auto mtis = program->findTypeInfoMacro(expr->trait);
+                    if ( mtis.size()>1 ) {
+                        error("typeinfo(" + expr->trait + " ...) too many macros match the trait", "", "",
+                            expr->at, CompilationError::typeinfo_undefined);
+                    } else if ( mtis.empty() ) {
+                        error("typeinfo(" + expr->trait + " ...) is undefined, " + expr->typeexpr->describe(), "", "",
+                            expr->at, CompilationError::typeinfo_undefined);
+                    } else {
+                        expr->macro = mtis.back().get();
+                        string errors;
+                        auto cexpr = expr->macro->getAstChange(expr, errors);
+                        if ( cexpr ) {
+                            reportAstChanged();
+                            return cexpr;
+                        } else if ( !errors.empty() ) {
+                            error("typeinfo(" + expr->trait + " ...) macro reported error; " + errors, "", "",
+                                expr->at, CompilationError::typeinfo_macro_error);
+                        } else {
+                            auto ctype = expr->macro->getAstType(program->library, expr, errors);
+                            if ( ctype ) {
+                                expr->type = ctype;
+                                return Visitor::visit(expr);
+                            } else if ( !errors.empty() ) {
+                                error("typeinfo(" + expr->trait + " ...) macro reported error; " + errors, "", "",
+                                    expr->at, CompilationError::typeinfo_macro_error);
+                            } else {
+                                error("typeinfo(" + expr->trait + " ...) is macro integration error; no ast change and no type", "", "",
+                                    expr->at, CompilationError::typeinfo_macro_error);
+                            }
+                        }
+                    }
                 }
             }
             // infer

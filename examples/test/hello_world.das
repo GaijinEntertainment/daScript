@@ -1,4 +1,15 @@
-// options log = true
+options log = true
+
+require rtti
+
+[export]
+def test
+    var i = 3
+    let t & = typeinfo(rtti_typeinfo i)
+    print("t = {t}\n")
+    return true
+
+/*
 
 var
     delFoo = 0
@@ -84,4 +95,9 @@ def test_foo_ptr
 def test
     test_foo()
     test_foo_ptr()
+
+    var a <- [{int 1;2;3}]
+    emplace(a,1)
+
     return true
+*/

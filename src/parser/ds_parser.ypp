@@ -1114,31 +1114,31 @@ expr_cast
     ;
 
 expr_type_info
-    :   DAS_TYPEINFO[loc] '(' NAME[trait] expr[subexpr] ')' {
+    :   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] expr[subexpr] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr));
             delete $trait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] '>' expr[subexpr] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr),*$subtrait);
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' expr[subexpr] ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,ExpressionPtr($subexpr),*$subtrait,*$extratrait);
             delete $trait;
             delete $subtrait;
             delete $extratrait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
+    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl));
             delete $trait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] '>' DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
+    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] '>' DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait);
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] '(' NAME[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
+    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } ')' {
             $$ = new ExprTypeInfo(tokAt(@loc),*$trait,TypeDeclPtr($decl),*$subtrait,*$extratrait);
             delete $trait;
             delete $subtrait;

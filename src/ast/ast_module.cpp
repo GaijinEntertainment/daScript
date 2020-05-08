@@ -171,6 +171,19 @@ namespace das {
         }
     }
 
+        bool Module::addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail ) {
+        if ( typeInfoMacros.insert(make_pair(ptr->name, move(ptr))).second ) {
+            ptr->seal(this);
+            return true;
+        } else {
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate typeinfo macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
+            return false;
+        }
+    }
+
     bool Module::addVariable ( const VariablePtr & var, bool canFail ) {
         if ( globals.insert(make_pair(var->name, var)).second ) {
             var->module = this;
@@ -293,6 +306,11 @@ namespace das {
     AnnotationPtr Module::findAnnotation ( const string & na ) const {
         auto it = handleTypes.find(na);
         return it != handleTypes.end() ? it->second : nullptr;
+    }
+
+    TypeInfoMacroPtr Module::findTypeInfoMacro ( const string & na ) const {
+        auto it = typeInfoMacros.find(na);
+        return it != typeInfoMacros.end() ? it->second : nullptr;
     }
 
     EnumerationPtr Module::findEnum ( const string & na ) const {
@@ -523,6 +541,19 @@ namespace das {
         foreach([&](Module * pm) -> bool {
             if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
                 if ( auto pp = pm->findAnnotation(annName) )
+                    ptr.push_back(pp);
+            return true;
+        }, moduleName);
+        return ptr;
+    }
+
+    vector<TypeInfoMacroPtr> ModuleLibrary::findTypeInfoMacro ( const string & name, Module * inWhichModule ) const {
+        vector<TypeInfoMacroPtr> ptr;
+        string moduleName, annName;
+        splitTypeName(name, moduleName, annName);
+        foreach([&](Module * pm) -> bool {
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                if ( auto pp = pm->findTypeInfoMacro(annName) )
                     ptr.push_back(pp);
             return true;
         }, moduleName);

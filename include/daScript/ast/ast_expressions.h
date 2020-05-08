@@ -855,11 +855,12 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
-        string          trait;
-        ExpressionPtr   subexpr;
-        TypeDeclPtr     typeexpr;
-        string          subtrait;
-        string          extratrait;
+        string              trait;
+        ExpressionPtr       subexpr;
+        TypeDeclPtr         typeexpr;
+        string              subtrait;
+        string              extratrait;
+        TypeInfoMacro *     macro = nullptr;
     };
 
     struct ExprIs : Expression {

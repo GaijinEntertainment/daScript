@@ -1979,6 +1979,27 @@ namespace das {
             ss << "))";
             return Visitor::visit(expr);
         }
+    // type-info
+        virtual void preVisit ( ExprTypeInfo * expr ) override {
+            Visitor::preVisit(expr);
+            DAS_ASSERT(expr->macro && "internal error. we should only be here if there is a macro.");
+            ss << "(";
+            expr->macro->aotPrefix(ss, expr);
+            if ( expr->macro->aotNeedTypeInfo(expr) ) {
+                TypeInfo * info = helper.makeTypeInfo(nullptr, expr->typeexpr);
+                ss << helper.typeInfoName(info);
+            }
+        }
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) override {
+            DAS_ASSERT(expr->macro && "internal error. we should only be here if there is a macro.");
+            return expr->macro->aotInfix(ss, expr);
+        }
+        virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
+            DAS_ASSERT(expr->macro && "internal error. we should only be here if there is a macro.");
+            expr->macro->aotSuffix(ss, expr);
+            ss << ")";
+            return Visitor::visit(expr);
+        }
     // try-catch
         virtual void preVisit ( ExprTryCatch * tc ) override {
             Visitor::preVisit(tc);

@@ -885,8 +885,10 @@ namespace das {
             typeexpr = typeexpr->visit(vis);
             typeexpr = vis.visit(typeexpr.get());
         }
-        if ( subexpr ) {
-            subexpr = subexpr->visit(vis);
+        if ( vis.canVisitExpr(this,subexpr.get()) ) {
+            if ( subexpr ) {
+                subexpr = subexpr->visit(vis);
+            }
         }
         return vis.visit(this);
     }
@@ -2040,6 +2042,10 @@ namespace das {
 
     vector<AnnotationPtr> Program::findAnnotation ( const string & name ) const {
         return library.findAnnotation(name,thisModule.get());
+    }
+
+    vector<TypeInfoMacroPtr> Program::findTypeInfoMacro ( const string & name ) const {
+        return library.findTypeInfoMacro(name,thisModule.get());
     }
 
     vector<StructurePtr> Program::findStructure ( const string & name ) const {

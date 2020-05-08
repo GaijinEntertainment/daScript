@@ -161,6 +161,8 @@ namespace das {
         // ARRAY COMPREHENSION
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) {}
         virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) {}
+        // TYPE INFO
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
         // EXPRESSIONS
 #define VISIT_EXPR(ExprType) \
         virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \
