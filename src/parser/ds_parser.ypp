@@ -1517,7 +1517,10 @@ struct_variable_declaration_list
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL] DAS_DEF[from] optional_override[ovr] function_declaration[func] {
         $func->atDecl = tokRangeAt(@from,@func);
-        if ( $func->isGeneric() ) {
+        if ( !g_thisStructure->isClass ) {
+            das_yyerror("structure can't have member function",
+                $func->at, CompilationError::invalid_member_function);
+        } else if ( $func->isGeneric() ) {
             das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
                 $func->at, CompilationError::invalid_member_function);
         } else {
@@ -1872,11 +1875,10 @@ class_or_struct
     ;
 
 structure_declaration
-    : optional_annotation_list[annL] class_or_struct[loc] structure_name[ps] '{' struct_variable_declaration_list[list] '}' {
+    : optional_annotation_list[annL] class_or_struct[loc] structure_name[ps] { $ps->isClass = $loc; } '{' struct_variable_declaration_list[list] '}' {
         if ( $ps ) {
             auto pStruct = $ps;
             pStruct->at = tokAt(@ps);
-            pStruct->isClass = $loc;
             if ( pStruct->parent && pStruct->parent->isClass != pStruct->isClass ) {
                 if ( pStruct->isClass ) {
                     das_yyerror("class can only derive from class", pStruct->at,
