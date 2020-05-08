@@ -106,6 +106,9 @@ def test_rtti
     verify(!is_compatible_cast(class_info(f),class_info(g)))  // can't cast from g to f
     verify(!is_compatible_cast(class_info(g),class_info(f3d)))  // can't cast from f3d to g
     verify(!is_compatible_cast(class_info(f3d),class_info(g)))  // can't cast from g to f3d
+    assert(class_info(f).name=="Foo")
+    assert(class_info(f3d).name=="Foo3D")
+    assert(class_info(g).name=="Goo")
 
 [export]
 def test
