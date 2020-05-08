@@ -4,6 +4,37 @@
 
 require testProfile
 
+class CObject
+    position : float3
+    velocity : float3
+	def CObject(i:int)
+		position = float3(i,i+1,i+2)
+		velocity = float3(1,2,3)
+	def update()
+		position += velocity
+
+def testVirtual(var objects:array<CObject>)
+	for obj in objects
+		obj->update()
+
+def testVirtual2(var objects:array<CObject>;count:int)
+    for i in range(0,count)
+        testVirtual(objects)
+
+def testMethod(var objects:array<CObject>)
+	for obj in objects
+		CObject`update(obj)
+
+def testMethod2(var objects:array<CObject>;count:int)
+    for i in range(0,count)
+        testMethod(objects)
+
+def init(var objects:array<CObject>)
+    resize(objects, 50000)
+    var i = 0
+    for obj in objects
+		obj = CObject(i++)
+
 struct NObject
     position : float3
     velocity : float3
@@ -38,12 +69,18 @@ def init(var objects:array<NObject>)
 [export]
 def test()
     var objects:array<NObject>
+	var classes:array<CObject>
     init(objects)
+	init(classes)
     let total=20
     profile(total,"particles kinematics") <|
         testSim2(objects,100)
     profile(total,"particles kinematics, inlined") <|
         testSim2I(objects,100)
+    profile(total,"particles kinematics OOP, virtual") <|
+        testVirtual2(classes,100)
+    profile(total,"particles kinematics OOP, method") <|
+        testMethod2(classes,100)
     profile(total,"particles kinematics, C++") <|
         testProfile::testParticles(100)
     profile(total,"particles kinematics, inlined C++") <|
