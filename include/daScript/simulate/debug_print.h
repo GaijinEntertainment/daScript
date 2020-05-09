@@ -32,10 +32,20 @@ namespace das {
     struct DebugDataWalker : DataWalker {
         Writer & ss;
         PrintFlags flags;
+        vector<void *> visited;
         DebugDataWalker() = delete;
         DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
     // data structures
+        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            if ( find(visited.begin(),visited.end(),ps)==visited.end() ) {
+                return true;
+            } else {
+                ss << "~loop at 0x" << HEX << intptr_t(ps) << DEC << " " << info->name << "~";
+                return false;
+            }
+        }
         virtual void beforeStructure ( char * ps, StructInfo * info ) override {
+            visited.push_back(ps);
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << info->name;
@@ -46,6 +56,10 @@ namespace das {
         }
         virtual void afterStructure ( char *, StructInfo * ) override {
             ss << "]]";
+            visited.pop_back();
+        }
+        virtual void afterStructureCancel ( char *, StructInfo * ) override {
+            visited.pop_back();
         }
         virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             ss << " ";

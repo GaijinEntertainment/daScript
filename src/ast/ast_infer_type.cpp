@@ -2566,6 +2566,9 @@ namespace das {
                             auto ctype = expr->macro->getAstType(program->library, expr, errors);
                             if ( ctype ) {
                                 expr->type = ctype;
+                                if ( func && expr->macro->noAot(expr) ) {
+                                    func->noAot = true;
+                                }
                                 return Visitor::visit(expr);
                             } else if ( !errors.empty() ) {
                                 error("typeinfo(" + expr->trait + " ...) macro reported error; " + errors, "", "",

@@ -22,20 +22,34 @@ namespace das {
     }
 
     void DataWalker::walk_struct ( char * ps, StructInfo * si ) {
-        beforeStructure(ps, si);
-        if ( cancel ) return;
-        for ( uint32_t i=0; i!=si->count; ++i ) {
-            bool last = i==(si->count-1);
-            VarInfo * vi = si->fields[i];
-            char * pf = ps + vi->offset;
-            beforeStructureField(ps, si, pf, vi, last);
-            if ( cancel ) return;
-            walk(pf, vi);
-            if ( cancel ) return;
-            afterStructureField(ps, si, pf, vi, last);
-            if ( cancel ) return;
+        if ( canVisitStructure(ps, si) ) {
+            beforeStructure(ps, si);
+            if ( cancel ) {
+                afterStructureCancel(ps, si);
+                return;
+            }
+            for ( uint32_t i=0; i!=si->count; ++i ) {
+                bool last = i==(si->count-1);
+                VarInfo * vi = si->fields[i];
+                char * pf = ps + vi->offset;
+                beforeStructureField(ps, si, pf, vi, last);
+                if ( cancel ) {
+                    afterStructureCancel(ps, si);
+                    return;
+                }
+                walk(pf, vi);
+                if ( cancel ) {
+                    afterStructureCancel(ps, si);
+                    return;
+                }
+                afterStructureField(ps, si, pf, vi, last);
+                if ( cancel ) {
+                    afterStructureCancel(ps, si);
+                    return;
+                }
+            }
+            afterStructure(ps, si);
         }
-        afterStructure(ps, si);
     }
 
     void DataWalker::walk_tuple ( char * ps, TypeInfo * ti ) {

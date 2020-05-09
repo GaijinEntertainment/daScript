@@ -42,6 +42,13 @@ namespace das
     };
     static_assert(sizeof(Func)==sizeof(int32_t), "has to be castable");
 
+    template <typename Result, typename ...Args>
+    struct TFunc : Func {
+        TFunc()  {}
+        TFunc( const TFunc & ) = default;
+        TFunc( const Func & that ) { *(Func *)this = that; }
+    };
+
     struct Lambda {
         Lambda() = default;
         Lambda(void * ptr) : capture((char *)ptr) {}

@@ -29,8 +29,10 @@ namespace das {
     // helpers
         void error ( const char * message );
     // data structures
+        virtual bool canVisitStructure ( char * ps, StructInfo * si ) { return true; }
         virtual void beforeStructure ( char * ps, StructInfo * si ) {}
         virtual void afterStructure ( char * ps, StructInfo * si ) {}
+        virtual void afterStructureCancel ( char * ps, StructInfo * si ) {}
         virtual void beforeStructureField ( char * ps, StructInfo * si, char * pv, VarInfo * vi, bool last ) {}
         virtual void afterStructureField ( char * ps, StructInfo * si, char * pv, VarInfo * vi, bool last ) {}
         virtual void beforeTuple ( char * ps, TypeInfo * ti ) {}

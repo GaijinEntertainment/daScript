@@ -306,6 +306,15 @@ namespace das {
             return t;
         }
     };
+    template <typename ResultType, typename ...Args>
+    struct typeFactory< TFunc<ResultType,Args...> > {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_smart<TypeDecl>(Type::tFunction);
+            t->firstType = typeFactory<ResultType>::make(lib);
+            t->argTypes = { typeFactory<Args>::make(lib)... };
+            return t;
+        }
+    };
 
     template <typename TT>
     struct typeFactory<TTemporary<TT>> {

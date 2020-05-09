@@ -149,6 +149,7 @@ namespace das
             }
         };
     public:
+        Structure() = default;
         Structure ( const string & n ) : name(n) {}
         StructurePtr clone() const;
         bool isCompatibleCast ( const Structure & castS ) const;
@@ -597,7 +598,8 @@ namespace das
         virtual void aotPrefix ( TextWriter &, const ExpressionPtr & ) { }
         virtual void aotSuffix ( TextWriter &, const ExpressionPtr & ) { }
         virtual bool aotInfix ( TextWriter &, const ExpressionPtr & ) { return false; }
-        virtual bool aotNeedTypeInfo( const ExpressionPtr & ) const { return false; }
+        virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const { return false; }
+        virtual bool noAot ( const ExpressionPtr & ) const { return false; }
         string name;
         Module * module = nullptr;
     };

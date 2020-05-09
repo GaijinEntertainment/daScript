@@ -13,7 +13,10 @@
 			"xlocale": "cpp",
 			"cstddef": "cpp",
 			"vector": "cpp",
-			"utility": "cpp"
+			"utility": "cpp",
+			"xhash": "cpp",
+			"xtree": "cpp",
+			"xutility": "cpp"
 		}
 	}
 }

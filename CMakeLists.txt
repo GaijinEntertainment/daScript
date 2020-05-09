@@ -100,7 +100,9 @@ src/builtin/module_builtin_das.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_random.cpp
 src/builtin/module_builtin_string.cpp
+src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
+src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_functional.cpp
 src/builtin/module_file_access.cpp
