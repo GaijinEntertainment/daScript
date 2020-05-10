@@ -10,8 +10,24 @@ using namespace das;
 MAKE_TYPE_FACTORY(TypeDecl,TypeDecl)
 MAKE_TYPE_FACTORY(FieldDeclaration, Structure::FieldDeclaration)
 MAKE_TYPE_FACTORY(Structure,Structure)
+MAKE_TYPE_FACTORY(Enumeration,Enumeration)
 
 namespace das {
+
+    struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
+        AstEnumerationAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("Enumeration", ml) {
+        }
+        void init () {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+            // addField<DAS_BIND_MANAGED_FIELD(list)>("list");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            addField<DAS_BIND_MANAGED_FIELD(external)>("external");
+            addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
+        }
+    };
 
     TypeDeclPtr makeTypeDeclFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
@@ -29,7 +45,7 @@ namespace das {
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
             addField<DAS_BIND_MANAGED_FIELD(structType)>("structType");
-            // addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
+            addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
             addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             addField<DAS_BIND_MANAGED_FIELD(firstType)>("firstType");
             addField<DAS_BIND_MANAGED_FIELD(secondType)>("secondType");
@@ -59,7 +75,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(type)>("type");
             // addField<DAS_BIND_MANAGED_FIELD(init)>("init");
-            // addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
+            addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(offset)>("offset");
             addFieldEx ( "flags", "flags", offsetof(Structure::FieldDeclaration, flags), makeFieldDeclarationFlags() );
@@ -149,9 +165,12 @@ namespace das {
             addAnnotation(sta);
             auto fta = make_smart<AstFieldDeclarationAnnotation>(lib);
             addAnnotation(fta);
+            auto ena = make_smart<AstEnumerationAnnotation>(lib);
+            addAnnotation(ena);
             initRecAnnotation(tda, lib);
             initRecAnnotation(sta, lib);
             initRecAnnotation(fta, lib);
+            initRecAnnotation(ena, lib);
             // add builtin module
             // compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready

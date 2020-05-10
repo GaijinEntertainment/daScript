@@ -23,6 +23,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(VarInfo,VarInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FuncInfo,FuncInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgumentList,AnnotationArgumentList)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(RttiProgram,RttiProgram)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
 
@@ -67,8 +68,7 @@ namespace das {
     struct FileInfoAnnotation : ManagedStructureAnnotation<FileInfo,false> {
         FileInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            // TODO: add function
-            // addField<DAS_BIND_MANAGED_FIELD(source)>("source");
+            addProperty<DAS_BIND_MANAGED_PROP(getSource)>("source");
             addField<DAS_BIND_MANAGED_FIELD(sourceLength)>("sourceLength");
             addField<DAS_BIND_MANAGED_FIELD(tabSize)>("tabSize");
         }
@@ -657,6 +657,7 @@ namespace das {
             addEnumeration(make_smart<EnumerationType>());
             addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
             addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
+            addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArgumentList>>("AnnotationArgumentList",lib));
             addAnnotation(make_smart<AnnotationAnnotation>(lib));
             addAnnotation(make_smart<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_smart<BasicStructureAnnotationAnnotation>(lib));

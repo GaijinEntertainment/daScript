@@ -1990,7 +1990,7 @@ namespace das {
                 ss << helper.typeInfoName(info);
             }
         }
-        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) override {
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * ) override {
             DAS_ASSERT(expr->macro && "internal error. we should only be here if there is a macro.");
             return expr->macro->aotInfix(ss, expr);
         }

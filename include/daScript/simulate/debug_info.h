@@ -85,6 +85,7 @@ namespace das
         virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
         void reserveProfileData();
+        const char * getSource() const { return source; }
         string                name;
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
