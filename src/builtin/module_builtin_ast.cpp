@@ -5,6 +5,7 @@
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/simulate/aot_builtin_ast.h"
 
 using namespace das;
 
@@ -180,7 +181,74 @@ namespace das {
         }
     };
 
-    // #include "rtti.das.inc"
+    /*
+        class Function : public ptr_ref_count {
+    public:
+        AnnotationList      annotations;
+        string              name;
+        vector<VariablePtr> arguments;
+        TypeDeclPtr         result;
+        ExpressionPtr       body;
+        int                 index = -1;
+        uint32_t            totalStackSize = 0;
+        int32_t             totalGenLabel = 0;
+        LineInfo            at, atDecl;
+        Module *            module = nullptr;
+        das_set<Function *>     useFunctions;
+        das_set<Variable *>     useGlobalVariables;
+        union {
+            struct {
+                bool    builtIn : 1;
+                bool    policyBased : 1;
+                bool    callBased : 1;
+                bool    interopFn : 1;
+                bool    hasReturn: 1;
+                bool    copyOnReturn : 1;
+                bool    moveOnReturn : 1;
+                bool    exports : 1;
+                bool    init : 1;
+                bool    addr : 1;
+                bool    used : 1;
+                bool    fastCall : 1;
+                bool    knownSideEffects : 1;
+                bool    hasToRunAtCompileTime : 1;
+                bool    unsafe : 1;
+                bool    unsafeOperation : 1;
+                bool    unsafeDeref : 1;
+                bool    hasMakeBlock : 1;
+                bool    aotNeedPrologue : 1;
+                bool    noAot : 1;
+                bool    aotHybrid : 1;
+                bool    aotTemplate : 1;
+                bool    generated : 1;
+                bool    privateFunction : 1;
+                bool    generator : 1;
+                bool    lambda : 1;
+            };
+            uint32_t flags = 0;
+        };
+        uint32_t    sideEffectFlags = 0;
+        struct InferHistory {
+            LineInfo    at;
+            Function *  func = nullptr;
+            InferHistory() = default;
+            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+        };
+        vector<InferHistory> inferStack;
+        Function * fromGeneric = nullptr;
+        uint64_t hash = 0;
+        uint64_t aotHash = 0;
+    };
+    */
+
+    #include "ast.das.inc"
+
+    char * ast_describe ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
+        return context->stringHeap.allocateString(t->describe(
+            d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
+            d_contracts ? TypeDecl::DescribeContracts::yes : TypeDecl::DescribeContracts::no,
+            d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no));
+    }
 
     class Module_Ast : public Module {
     public:
@@ -220,14 +288,16 @@ namespace das {
             initRecAnnotation(fta, lib);
             initRecAnnotation(ena, lib);
             initRecAnnotation(exa, lib);
+            // helper functions
+            addExtern<DAS_BIND_FUN(ast_describe)>(*this, lib,  "ast_describe",
+                SideEffects::none, "ast_describe");
             // add builtin module
-            // compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
+            compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready
             // verifyAotReady();
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
-            tw << "#include \"daScript/ast/ast.h\"\n";
-            tw << "#include \"daScript/ast/ast_handle.h\"\n";
+            tw << "#include \"daScript/simulate/aot_builtin_ast.h\"\n";
             return ModuleAotType::hybrid;
         }
     };
