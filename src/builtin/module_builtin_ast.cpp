@@ -15,6 +15,12 @@ MAKE_TYPE_FACTORY(Structure,Structure)
 MAKE_TYPE_FACTORY(Enumeration,Enumeration)
 MAKE_TYPE_FACTORY(Expression,Expression)
 MAKE_TYPE_FACTORY(Function,Function)
+MAKE_TYPE_FACTORY(InferHistory, Function::InferHistory)
+MAKE_TYPE_FACTORY(Variable,Variable)
+
+DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
+    none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
+    modifyArgumentAndExternal, worstDefault, accessGlobal, invoke, inferedSideEffects)
 
 namespace das {
 
@@ -162,15 +168,15 @@ namespace das {
         return ft;
     }
 
-    /*
-        struct InferHistory {
-            LineInfo    at;
-            Function *  func = nullptr;
-            InferHistory() = default;
-            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
-        };
-        vector<InferHistory> inferStack;
-    */
+    struct AstInferHistoryAnnotation : ManagedStructureAnnotation<Function::InferHistory> {
+        AstInferHistoryAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("InferHistory", ml) {
+        }
+        void init () {
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+            addField<DAS_BIND_MANAGED_FIELD(func)>("func");
+        }
+    };
 
     struct AstFunctionAnnotation : ManagedStructureAnnotation<Function> {
         AstFunctionAnnotation(ModuleLibrary & ml)
@@ -188,15 +194,53 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(atDecl)>("atDecl");
             addField<DAS_BIND_MANAGED_FIELD(module)>("module");
-            // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
+            // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useFunctions");
             // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
             // use global v
             addFieldEx ( "flags", "flags", offsetof(Function, flags), makeFunctionFlags() );
             addField<DAS_BIND_MANAGED_FIELD(sideEffectFlags)>("sideEffectFlags");
-            // addField<DAS_BIND_MANAGED_FIELD(inferStack)>("inferStack");
+            addField<DAS_BIND_MANAGED_FIELD(inferStack)>("inferStack");
             addField<DAS_BIND_MANAGED_FIELD(fromGeneric)>("fromGeneric");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             addField<DAS_BIND_MANAGED_FIELD(aotHash)>("aotHash");
+        }
+    };
+
+    TypeDeclPtr makeVariableFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "VariableFlags";
+        ft->argNames = { "init_via_move", "init_via_clone", "used", "aliasCMRES",
+            "marked_used", "global_shared", "do_not_delete", "generated" };
+        return ft;
+    }
+
+    TypeDeclPtr makeVariableAccessFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "VariableAccessFlags";
+        ft->argNames = { "access_extern", "access_get", "access_ref",
+            "access_init", "access_pass" };
+        return ft;
+    }
+
+    struct AstVariableAnnotation : ManagedStructureAnnotation<Variable> {
+        AstVariableAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("Variable", ml) {
+        }
+        void init () {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("type");
+            addField<DAS_BIND_MANAGED_FIELD(init)>("init");
+            addField<DAS_BIND_MANAGED_FIELD(source)>("source");
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+            addField<DAS_BIND_MANAGED_FIELD(index)>("index");
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useFunctions");
+            // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
+            addField<DAS_BIND_MANAGED_FIELD(initStackSize)>("initStackSize");
+            addFieldEx ( "flags", "flags", offsetof(Variable, flags), makeVariableFlags() );
+            addFieldEx ( "access_flags", "access_flags", offsetof(Variable, access_flags), makeVariableAccessFlags() );
+            addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
         }
     };
 
@@ -320,6 +364,10 @@ namespace das {
             addAlias(makeExprFlagsFlags());
             addAlias(makeExprPrintFlagsFlags());
             addAlias(makeFunctionFlags());
+            addAlias(makeVariableFlags());
+            addAlias(makeVariableAccessFlags());
+            // ENUMS
+            addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
             auto exa = make_smart<AstExpressionAnnotation>(lib);
             addAnnotation(exa);
@@ -333,12 +381,18 @@ namespace das {
             addAnnotation(ena);
             auto fna = make_smart<AstFunctionAnnotation>(lib);
             addAnnotation(fna);
+            auto iha = make_smart<AstInferHistoryAnnotation>(lib);
+            addAnnotation(iha);
+            auto vaa = make_smart<AstVariableAnnotation>(lib);
+            addAnnotation(vaa);
             initRecAnnotation(tda, lib);
             initRecAnnotation(sta, lib);
             initRecAnnotation(fta, lib);
             initRecAnnotation(ena, lib);
             initRecAnnotation(exa, lib);
             initRecAnnotation(fna, lib);
+            initRecAnnotation(iha, lib);
+            initRecAnnotation(vaa, lib);
             // helper functions
             addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "ast_describe_typedecl",
                 SideEffects::none, "ast_describe_typedecl");
