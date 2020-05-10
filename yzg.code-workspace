@@ -24,7 +24,12 @@
 			"locale": "cpp",
 			"memory": "cpp",
 			"system_error": "cpp",
-			"thread": "cpp"
+			"thread": "cpp",
+			"chrono": "cpp",
+			"functional": "cpp",
+			"ratio": "cpp",
+			"tuple": "cpp",
+			"xmemory": "cpp"
 		}
 	}
 }

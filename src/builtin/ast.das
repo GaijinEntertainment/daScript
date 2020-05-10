@@ -10,3 +10,7 @@ def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = tr
 def describe ( expr : smart_ptr<Expression> )
     return ast_describe_expression(expr)
 
+[unsafe]
+def describe ( expr : smart_ptr<Function> )
+    return ast_describe_function(expr)
+

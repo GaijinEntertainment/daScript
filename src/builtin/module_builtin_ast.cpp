@@ -289,6 +289,25 @@ namespace das {
         char *        descr;
     };
 
+    struct SimNode_AstGetFunction : SimNode_CallBase {
+        DAS_PTR_NODE;
+        SimNode_AstGetFunction ( const LineInfo & at, Function * f )
+            : SimNode_CallBase(at) {
+            func = f;
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(AstGetTypeDecl);
+            V_ARG(func->getMangledName().c_str());
+            V_END();
+        }
+        __forceinline char * compute(Context &) {
+            DAS_PROFILE_NODE
+            return (char *) func;
+        }
+        Function *  func;   // requires RTTI
+    };
+
     struct AstTypeDeclMacro : TypeInfoMacro {
         AstTypeDeclMacro() : TypeInfoMacro("ast_typedecl") {}
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
@@ -325,6 +344,26 @@ namespace das {
         }
     };
 
+    struct AstFunctionMacro : TypeInfoMacro {
+        AstFunctionMacro() : TypeInfoMacro("ast_function") {}
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
+            return typeFactory<smart_ptr<Function>>::make(lib);
+        }
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & errors ) {
+            auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
+            if ( exprTypeInfo->subexpr && exprTypeInfo->subexpr->rtti_isAddr() ) {
+                auto exprAddr = static_pointer_cast<ExprAddr>(exprTypeInfo->subexpr);
+                return context->code->makeNode<SimNode_AstGetFunction>(expr->at, exprAddr->func);
+            } else {
+                errors = "ast_expression requires @@func expression";
+                return nullptr;
+            }
+        }
+        virtual bool noAot ( const ExpressionPtr & ) const override {
+            return true;
+        }
+    };
+
     #include "ast.das.inc"
 
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
@@ -335,6 +374,12 @@ namespace das {
     }
 
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context ) {
+        TextWriter ss;
+        ss << *t;
+        return context->stringHeap.allocateString(ss.str());
+    }
+
+    char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context ) {
         TextWriter ss;
         ss << *t;
         return context->stringHeap.allocateString(ss.str());
@@ -356,6 +401,7 @@ namespace das {
             // THE MAGNIFICENT TWO
             addTypeInfoMacro(make_smart<AstTypeDeclMacro>());
             addTypeInfoMacro(make_smart<AstExpressionMacro>());
+            addTypeInfoMacro(make_smart<AstFunctionMacro>());
             // FLAGS?
             addAlias(makeTypeDeclFlags());
             addAlias(makeFieldDeclarationFlags());
@@ -398,6 +444,8 @@ namespace das {
                 SideEffects::none, "ast_describe_typedecl");
             addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "ast_describe_expression",
                 SideEffects::none, "ast_describe_expression");
+            addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "ast_describe_function",
+                SideEffects::none, "ast_describe_function");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready
