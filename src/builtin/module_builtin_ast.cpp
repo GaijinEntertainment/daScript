@@ -4,6 +4,7 @@
 
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_policy_types.h"
+#include "daScript/ast/ast_expressions.h"
 
 using namespace das;
 
@@ -11,8 +12,50 @@ MAKE_TYPE_FACTORY(TypeDecl,TypeDecl)
 MAKE_TYPE_FACTORY(FieldDeclaration, Structure::FieldDeclaration)
 MAKE_TYPE_FACTORY(Structure,Structure)
 MAKE_TYPE_FACTORY(Enumeration,Enumeration)
+MAKE_TYPE_FACTORY(Expression,Expression)
 
 namespace das {
+
+    TypeDeclPtr makeExprGenFlagsFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprGenFlags";
+        ft->argNames = { "alwaysSafe", "generated" };
+        return ft;
+    }
+
+    TypeDeclPtr makeExprFlagsFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprFlags";
+        ft->argNames = { "constexpression", "noSideEffects", "noNativeSideEffects" };
+        return ft;
+    }
+
+    TypeDeclPtr makeExprPrintFlagsFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprPrintFlags";
+        ft->argNames = { "topLevel", "argLevel", "bottomLevel" };
+        return ft;
+    }
+
+    template <typename EXPR>
+    struct AstExprAnnotation : ManagedStructureAnnotation <EXPR> {
+        AstExprAnnotation(const string & en, ModuleLibrary & ml)
+            : ManagedStructureAnnotation<EXPR> (en, ml) {
+        }
+        void init() {
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("type");
+            addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
+            addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
+            addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
+        }
+    };
+
+    struct AstExpressionAnnotation : AstExprAnnotation<Expression> {
+        AstExpressionAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<Expression> ("Expression", ml) {
+        }
+    };
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
         AstEnumerationAnnotation(ModuleLibrary & ml)
@@ -22,7 +65,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            // addField<DAS_BIND_MANAGED_FIELD(list)>("list");
+            addField<DAS_BIND_MANAGED_FIELD(list)>("list");
             addField<DAS_BIND_MANAGED_FIELD(module)>("module");
             addField<DAS_BIND_MANAGED_FIELD(external)>("external");
             addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
@@ -52,7 +95,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(argTypes)>("argTypes");
             addField<DAS_BIND_MANAGED_FIELD(argNames)>("argNames");
             addField<DAS_BIND_MANAGED_FIELD(dim)>("dim");
-            // addField<DAS_BIND_MANAGED_FIELD(dimExpr)>("dimExpr");
+            addField<DAS_BIND_MANAGED_FIELD(dimExpr)>("dimExpr");
             addFieldEx ( "flags", "flags", offsetof(TypeDecl, flags), makeTypeDeclFlags() );
             addField<DAS_BIND_MANAGED_FIELD(alias)>("alias");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -74,7 +117,7 @@ namespace das {
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(type)>("type");
-            // addField<DAS_BIND_MANAGED_FIELD(init)>("init");
+            addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(offset)>("offset");
@@ -158,7 +201,12 @@ namespace das {
             addAlias(makeTypeDeclFlags());
             addAlias(makeFieldDeclarationFlags());
             addAlias(makeStructureFlags());
+            addAlias(makeExprGenFlagsFlags());
+            addAlias(makeExprFlagsFlags());
+            addAlias(makeExprPrintFlagsFlags());
             // AST TYPES
+            auto exa = make_smart<AstExpressionAnnotation>(lib);
+            addAnnotation(exa);
             auto tda = make_smart<AstTypeDeclAnnnotation>(lib);
             addAnnotation(tda);
             auto sta = make_smart<AstStructureAnnotation>(lib);
@@ -171,6 +219,7 @@ namespace das {
             initRecAnnotation(sta, lib);
             initRecAnnotation(fta, lib);
             initRecAnnotation(ena, lib);
+            initRecAnnotation(exa, lib);
             // add builtin module
             // compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready

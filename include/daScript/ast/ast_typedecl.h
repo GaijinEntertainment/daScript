@@ -411,6 +411,16 @@ namespace das {
         }
     };
 
+    template <typename FT, typename ST>
+    struct typeFactory<pair<FT,ST>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_smart<TypeDecl>(Type::tTuple);
+            t->argTypes.push_back(typeFactory<FT>::make(lib));
+            t->argTypes.push_back(typeFactory<ST>::make(lib));
+            return t;
+        }
+    };
+
     template <typename TT>
     inline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
         return typeFactory<TT>::make(ctx);

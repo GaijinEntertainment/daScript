@@ -16,7 +16,8 @@
 			"utility": "cpp",
 			"xhash": "cpp",
 			"xtree": "cpp",
-			"xutility": "cpp"
+			"xutility": "cpp",
+			"list": "cpp"
 		}
 	}
 }

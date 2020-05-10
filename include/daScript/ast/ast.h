@@ -364,10 +364,10 @@ namespace das
         Expression(const LineInfo & a) : at(a) {}
         virtual ~Expression() {}
         friend TextWriter& operator<< (TextWriter& stream, const Expression & func);
-        virtual ExpressionPtr visit(Visitor & vis) = 0;
+        virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
-        virtual SimNode * simulate (Context & context) const = 0;
+        virtual SimNode * simulate (Context & /*context*/ ) const { DAS_ASSERT(0); return nullptr; };
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const;
         virtual bool rtti_isSequence() const { return false; }
         virtual bool rtti_isConstant() const { return false; }

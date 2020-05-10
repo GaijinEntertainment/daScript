@@ -17,6 +17,12 @@ namespace das {
         }
     };
 
+    template <typename FT, typename ST> struct typeName<pair<FT,ST>> {
+        static string name() {
+            return "pair<" + typeName<FT>::name() + "," + typeName<ST>::name() + ">";
+        }
+    };
+
     template <> struct typeName<int32_t>  { static string name() { return "int"; } };
     template <> struct typeName<uint32_t> { static string name() { return "uint"; } };
     template <> struct typeName<Bitfield> { static string name() { return "bitfield"; } };
