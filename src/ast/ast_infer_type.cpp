@@ -1460,7 +1460,7 @@ namespace das {
                     var->at, CompilationError::cant_infer_generic );
             }
             if ( !var->type->ref && var->type->isPointer() && var->type->smartPtr ) {
-                if ( !fn->unsafe ) {
+                if ( !fn->unsafe && program->policies.smart_pointer_by_value_unsafe ) {
                     error("passing smart pointer by value requires [unsafe]",  "",
                         "try " + var->name + " : " + var->type->describe(TypeDecl::DescribeExtra::no) + "& instead",
                         var->at, CompilationError::unsafe);
@@ -2739,7 +2739,7 @@ namespace das {
                     error("invalid cast, expecting structure",  "", "",
                         at, CompilationError::invalid_cast);
                 }
-            } else if ( seT->isPointer() && seT->firstType->isStructure() ) {
+            } else if ( seT->isPointer() && seT->firstType && seT->firstType->isStructure() ) {
                 if ( cT->isPointer() && cT->firstType->isStructure() ) {
                     bool compatibleCast;
                     if ( upcast ) {

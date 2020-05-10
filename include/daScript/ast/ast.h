@@ -827,6 +827,7 @@ namespace das
         bool only_fast_aot = false;
         bool aot_order_side_effects = false;
         bool no_unused_function_arguments = false;
+        bool smart_pointer_by_value_unsafe = false;     // is passing smart_ptr by value unsafe?
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
     };

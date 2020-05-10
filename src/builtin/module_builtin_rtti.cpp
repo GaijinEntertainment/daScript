@@ -26,7 +26,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgumentList,AnnotationArgumentList)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationDeclaration,AnnotationDeclaration)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationList,AnnotationList)
-IMPLEMENT_EXTERNAL_TYPE_FACTORY(RttiProgram,RttiProgram)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(Program,Program)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
 
 namespace das {
@@ -86,8 +86,8 @@ namespace das {
         }
     };
 
-    struct RttiProgramAnnotation : ManagedStructureAnnotation <RttiProgram,false> {
-        RttiProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RttiProgram", ml) {
+    struct ProgramAnnotation : ManagedStructureAnnotation <Program,false> {
+        ProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Program", ml) {
         }
     };
 
@@ -347,7 +347,7 @@ namespace das {
         return cast<VarInfo *>::from(context.getVariableInfo(index));
     }
 
-    void rtti_builtin_compile ( char * modName, char * str, const TBlock<void,bool,const RttiProgram,const string> & block, Context * context ) {
+    void rtti_builtin_compile ( char * modName, char * str, const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
         TextWriter issues;
         uint32_t str_len = stringLengthSafe(*context, str);
         auto access = make_smart<FileAccess>();
@@ -368,12 +368,10 @@ namespace das {
                 };
                 context->invoke(block, args, nullptr);
             } else {
-                RttiProgram rtp;
-                rtp.program = program;
                 string istr = issues.str();
                 vec4f args[3] = {
                     cast<bool>::from(true),
-                    cast<RttiProgram *>::from(&rtp),
+                    cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
                 context->invoke(block, args, nullptr);
@@ -383,16 +381,16 @@ namespace das {
         }
     }
 
-    const Module * rtti_get_this_module ( const RttiProgram & prog ) {
-        return prog.program->thisModule.get();
+    const Module * rtti_get_this_module ( smart_ptr_raw<Program> program ) {
+        return program->thisModule.get();
     }
 
     const Module * rtti_get_builtin_module ( const char * name ) {
         return Module::require(name);
     }
 
-    void rtti_builtin_program_for_each_module ( const RttiProgram & prog, const TBlock<void,const Module *> & block, Context * context ) {
-        prog.program->library.foreach([&](Module * pm) -> bool {
+    void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,const Module *> & block, Context * context ) {
+        program->library.foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
             context->invoke(block, args, nullptr);
             return true;
@@ -574,7 +572,7 @@ namespace das {
 
 #if !DAS_NO_FILEIO
 
-    void rtti_builtin_compile_file ( char * modName, const TBlock<void,bool,const RttiProgram,const string> & block, Context * context ) {
+    void rtti_builtin_compile_file ( char * modName, const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
         TextWriter issues;
         auto access = make_smart<FsFileAccess>();
         ModuleGroup dummyLibGroup;
@@ -592,12 +590,10 @@ namespace das {
                 };
                 context->invoke(block, args, nullptr);
             } else {
-                RttiProgram rtp;
-                rtp.program = program;
                 string istr = issues.str();
                 vec4f args[3] = {
                     cast<bool>::from(true),
-                    cast<RttiProgram *>::from(&rtp),
+                    cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
                 context->invoke(block, args, nullptr);
@@ -608,7 +604,7 @@ namespace das {
     }
 
 #else
-    void rtti_builtin_compile_file ( char *, const TBlock<void,bool,const RttiProgram,const string> &, Context * context ) {
+    void rtti_builtin_compile_file ( char *, const TBlock<void,bool,smart_ptr<Program>,const string> &, Context * context ) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
 #endif
@@ -665,7 +661,7 @@ namespace das {
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
             addAnnotation(make_smart<ModuleAnnotation>(lib));
-            addAnnotation(make_smart<RttiProgramAnnotation>(lib));
+            addAnnotation(make_smart<ProgramAnnotation>(lib));
             addEnumeration(make_smart<EnumerationType>());
             addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
             addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));

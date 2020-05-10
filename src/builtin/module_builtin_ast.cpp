@@ -9,6 +9,10 @@
 
 using namespace das;
 
+namespace das {
+    class VisitorAdapter;
+};
+
 MAKE_TYPE_FACTORY(TypeDecl,TypeDecl)
 MAKE_TYPE_FACTORY(FieldDeclaration, Structure::FieldDeclaration)
 MAKE_TYPE_FACTORY(Structure,Structure)
@@ -17,6 +21,7 @@ MAKE_TYPE_FACTORY(Expression,Expression)
 MAKE_TYPE_FACTORY(Function,Function)
 MAKE_TYPE_FACTORY(InferHistory, Function::InferHistory)
 MAKE_TYPE_FACTORY(Variable,Variable)
+MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -185,7 +190,7 @@ namespace das {
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            // addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+            addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
             addField<DAS_BIND_MANAGED_FIELD(result)>("result");
             addField<DAS_BIND_MANAGED_FIELD(body)>("body");
             addField<DAS_BIND_MANAGED_FIELD(index)>("index");
@@ -364,7 +369,64 @@ namespace das {
         }
     };
 
+    // TODO: verify signature (pre-build signatures, verify)
+    Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
+        for ( uint32_t i=0; i!=info->count; ++i ) {
+            if ( strcmp(info->fields[i]->name,funcName)==0 ) {
+                return *(Func *)(pClass + info->fields[i]->offset);
+            }
+        }
+        return 0;
+    }
+
+    class VisitorAdapter : public Visitor {
+    public:
+        VisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx ) {
+            context = ctx;
+            classPtr = pClass;
+            fnPreVisitExpression = adapt("preVisitExpression",pClass,info);
+            fnVisitExpression = adapt("visitExpression",pClass,info);
+        }
+    public:
+        void *      classPtr;
+        Context *   context;
+        Func        fnPreVisitExpression;
+        Func        fnVisitExpression;
+
+    protected:
+        virtual void preVisitExpression ( Expression * expr ) override {
+            if ( fnPreVisitExpression ) {
+                das_invoke_function<void>::invoke<void *,smart_ptr<Expression>>(context,fnPreVisitExpression,classPtr,expr);
+            }
+        }
+        virtual ExpressionPtr visitExpression ( Expression * expr ) override {
+            if ( fnVisitExpression ) {
+                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,smart_ptr<Expression>>(context,fnVisitExpression,classPtr,expr);
+            } else {
+                return expr;
+            }
+        }
+    };
+
+    struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
+        AstVisitorAdapterAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("VisitorAdapter", ml) {
+        }
+    };
+
     #include "ast.das.inc"
+
+    smart_ptr<VisitorAdapter> makeVisitor ( void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<VisitorAdapter>((char *)pClass,info,context);
+    }
+
+    smart_ptr_raw<Program> thisProgram ( Context * context ) {
+        return context->thisProgram;
+    }
+
+    void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter ) {
+        program->visit(*adapter);
+    }
 
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
         return context->stringHeap.allocateString(t->describe(
@@ -439,6 +501,14 @@ namespace das {
             initRecAnnotation(fna, lib);
             initRecAnnotation(iha, lib);
             initRecAnnotation(vaa, lib);
+            // visitor
+            addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
+            addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
+                SideEffects::modifyExternal, "makeVisitor");
+            addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "ast_this_program",
+                SideEffects::accessExternal, "thisProgram");
+            addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "ast_visit",
+                SideEffects::accessExternal, "astVisit");
             // helper functions
             addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "ast_describe_typedecl",
                 SideEffects::none, "ast_describe_typedecl");

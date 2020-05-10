@@ -17,10 +17,6 @@ namespace das {
     class Module;
     struct Annotation;
 
-    struct RttiProgram {
-        ProgramPtr      program;
-    };
-
     struct RttiValue {
         int32_t         _variant;
         union {
@@ -104,13 +100,13 @@ namespace das {
     int32_t rtti_getDimTypeInfo(const TypeInfo & ti, int32_t index, Context * context);
     int32_t rtti_getDimVarInfo(const VarInfo & ti, int32_t index, Context * context);
 
-    void rtti_builtin_compile(char * modName, char * str, const TBlock<void, bool, const RttiProgram, const string> & block, Context * context);
-    void rtti_builtin_compile_file(char * modName, const TBlock<void, bool, const RttiProgram, const string> & block, Context * context);
+    void rtti_builtin_compile(char * modName, char * str, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
+    void rtti_builtin_compile_file(char * modName, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
 
-    void rtti_builtin_program_for_each_module(const RttiProgram & prog, const TBlock<void, const Module *> & block, Context * context);
+    void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, const Module *> & block, Context * context);
     void rtti_builtin_program_for_each_registered_module(const TBlock<void, const Module *> & block, Context * context);
 
-    const Module * rtti_get_this_module(const RttiProgram & prog);
+    const Module * rtti_get_this_module(smart_ptr_raw<Program> prog);
     const Module * rtti_get_builtin_module(const char * name);
 
     void rtti_builtin_module_for_each_enumeration(const Module * module, const TBlock<void, const EnumInfo> & block, Context * context);

@@ -2409,6 +2409,10 @@ namespace das
         buildMNLookup(context, logs);
         buildADLookup(context, logs);
         context.simEnd();
+        // if RTTI is enabled
+        if ( options.getBoolOption("rtti",policies.rtti) ) {
+            context.thisProgram = this;
+        }
         if (errors.size()) return false;
         fusion(context, logs);
         context.relocateCode();

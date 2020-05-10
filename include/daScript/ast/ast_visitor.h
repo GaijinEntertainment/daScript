@@ -18,7 +18,7 @@ namespace das {
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #endif
 
-    class Visitor {
+    class Visitor : public ptr_ref_count {
     protected:
       virtual ~Visitor() {}
 
