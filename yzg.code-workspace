@@ -17,7 +17,14 @@
 			"xhash": "cpp",
 			"xtree": "cpp",
 			"xutility": "cpp",
-			"list": "cpp"
+			"list": "cpp",
+			"codecvt": "cpp",
+			"map": "cpp",
+			"unordered_map": "cpp",
+			"locale": "cpp",
+			"memory": "cpp",
+			"system_error": "cpp",
+			"thread": "cpp"
 		}
 	}
 }

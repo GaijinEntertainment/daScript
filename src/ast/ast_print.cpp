@@ -83,8 +83,8 @@ namespace das {
             }
         }
         string str() const { return ss.str(); };
-        bool printRef = true;
-        bool printVarAccess = true;
+        bool printRef = false;
+        bool printVarAccess = false;
         bool printCStyle = false;
     protected:
         void newLine () {

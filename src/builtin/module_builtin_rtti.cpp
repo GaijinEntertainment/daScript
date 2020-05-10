@@ -24,6 +24,8 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(FuncInfo,FuncInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgumentList,AnnotationArgumentList)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationDeclaration,AnnotationDeclaration)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationList,AnnotationList)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(RttiProgram,RttiProgram)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
 
@@ -97,6 +99,16 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
             addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
             addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
+        }
+    };
+
+    struct AnnotationDeclarationAnnotation : ManagedStructureAnnotation <AnnotationDeclaration,false> {
+        AnnotationDeclarationAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("AnnotationDeclaration", ml) {
+                addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
+                addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+                // TODO: function?
+                // addProperty<DAS_BIND_MANAGED_PROP(getMangledName)>("getMangledName","getMangledName");
         }
     };
 
@@ -659,6 +671,8 @@ namespace das {
             addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
             addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArgumentList>>("AnnotationArgumentList",lib));
             addAnnotation(make_smart<AnnotationAnnotation>(lib));
+            addAnnotation(make_smart<AnnotationDeclarationAnnotation>(lib));
+            addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationList>>("AnnotationList",lib));
             addAnnotation(make_smart<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_smart<BasicStructureAnnotationAnnotation>(lib));
             addAnnotation(make_smart<EnumValueInfoAnnotation>(lib));

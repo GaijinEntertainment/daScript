@@ -18,6 +18,9 @@ namespace das {
         __forceinline T * operator -> () const {
             return ptr;
         }
+        __forceinline T & operator * () const {
+            return *ptr;
+        }
         __forceinline operator smart_ptr_raw<void> & () const {
             return *((smart_ptr_raw<void> *)this);
         }
@@ -25,6 +28,15 @@ namespace das {
             return *((smart_ptr<T,smart_ptr_policy<T>> *)this);
         }
         T * ptr;
+    };
+
+    template <>
+    struct smart_ptr_raw<void> {
+        smart_ptr_raw () {}
+        smart_ptr_raw ( void * p ) : ptr(p) {}
+        __forceinline void * get() const { return ptr; }
+        __forceinline void * operator -> () const { return ptr; }
+        void * ptr;
     };
 
     template <typename T>

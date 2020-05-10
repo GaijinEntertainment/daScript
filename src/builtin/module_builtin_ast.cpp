@@ -14,6 +14,7 @@ MAKE_TYPE_FACTORY(FieldDeclaration, Structure::FieldDeclaration)
 MAKE_TYPE_FACTORY(Structure,Structure)
 MAKE_TYPE_FACTORY(Enumeration,Enumeration)
 MAKE_TYPE_FACTORY(Expression,Expression)
+MAKE_TYPE_FACTORY(Function,Function)
 
 namespace das {
 
@@ -139,12 +140,63 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-             addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
+            addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(module)>("module");
             addField<DAS_BIND_MANAGED_FIELD(parent)>("parent");
-            // addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
+            addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addFieldEx ( "flags", "flags", offsetof(Structure, flags), makeStructureFlags() );
+        }
+    };
+
+    TypeDeclPtr makeFunctionFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "FunctionFlags";
+        ft->argNames = { "builtIn", "policyBased", "callBased", "interopFn",
+            "hasRetur", "copyOnReturn", "moveOnReturn", "exports", "init",
+            "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime",
+            "unsafe", "unsafeOperation", "unsafeDeref", "hasMakeBlock", "aotNeedPrologue",
+            "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction",
+            "generator", "lambda"
+        };
+        return ft;
+    }
+
+    /*
+        struct InferHistory {
+            LineInfo    at;
+            Function *  func = nullptr;
+            InferHistory() = default;
+            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+        };
+        vector<InferHistory> inferStack;
+    */
+
+    struct AstFunctionAnnotation : ManagedStructureAnnotation<Function> {
+        AstFunctionAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("Function", ml) {
+        }
+        void init () {
+            addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            // addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+            addField<DAS_BIND_MANAGED_FIELD(result)>("result");
+            addField<DAS_BIND_MANAGED_FIELD(body)>("body");
+            addField<DAS_BIND_MANAGED_FIELD(index)>("index");
+            addField<DAS_BIND_MANAGED_FIELD(totalStackSize)>("totalStackSize");
+            addField<DAS_BIND_MANAGED_FIELD(totalGenLabel)>("totalGenLabel");
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+            addField<DAS_BIND_MANAGED_FIELD(atDecl)>("atDecl");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
+            // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
+            // use global v
+            addFieldEx ( "flags", "flags", offsetof(Function, flags), makeFunctionFlags() );
+            addField<DAS_BIND_MANAGED_FIELD(sideEffectFlags)>("sideEffectFlags");
+            // addField<DAS_BIND_MANAGED_FIELD(inferStack)>("inferStack");
+            addField<DAS_BIND_MANAGED_FIELD(fromGeneric)>("fromGeneric");
+            addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+            addField<DAS_BIND_MANAGED_FIELD(aotHash)>("aotHash");
         }
     };
 
@@ -156,7 +208,7 @@ namespace das {
         }
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
-            V_OP(RttiGetTypeDecl);
+            V_OP(AstGetTypeDecl);
             V_ARG(typeExpr->getMangledName().c_str());
             V_END();
         }
@@ -167,10 +219,36 @@ namespace das {
         TypeDecl *  typeExpr;   // requires RTTI
     };
 
+    struct SimNode_AstGetExpression : SimNode_CallBase {
+        DAS_PTR_NODE;
+        SimNode_AstGetExpression ( const LineInfo & at, const ExpressionPtr & e, char * d )
+            : SimNode_CallBase(at) {
+            expr = e.get();
+            descr = d;
+        }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_AstGetExpression *) SimNode::copyNode(context, code);
+            that->descr = code->allocateName(descr);
+            return that;
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(AstGetExpression);
+            V_ARG(descr);
+            V_END();
+        }
+        __forceinline char * compute(Context &) {
+            DAS_PROFILE_NODE
+            return (char *) expr;
+        }
+        Expression *  expr;   // requires RTTI
+        char *        descr;
+    };
+
     struct AstTypeDeclMacro : TypeInfoMacro {
         AstTypeDeclMacro() : TypeInfoMacro("ast_typedecl") {}
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
-            return typeFactory<const TypeDecl *>::make(lib);
+            return typeFactory<smart_ptr<TypeDecl>>::make(lib);
         }
         virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
@@ -181,73 +259,41 @@ namespace das {
         }
     };
 
-    /*
-        class Function : public ptr_ref_count {
-    public:
-        AnnotationList      annotations;
-        string              name;
-        vector<VariablePtr> arguments;
-        TypeDeclPtr         result;
-        ExpressionPtr       body;
-        int                 index = -1;
-        uint32_t            totalStackSize = 0;
-        int32_t             totalGenLabel = 0;
-        LineInfo            at, atDecl;
-        Module *            module = nullptr;
-        das_set<Function *>     useFunctions;
-        das_set<Variable *>     useGlobalVariables;
-        union {
-            struct {
-                bool    builtIn : 1;
-                bool    policyBased : 1;
-                bool    callBased : 1;
-                bool    interopFn : 1;
-                bool    hasReturn: 1;
-                bool    copyOnReturn : 1;
-                bool    moveOnReturn : 1;
-                bool    exports : 1;
-                bool    init : 1;
-                bool    addr : 1;
-                bool    used : 1;
-                bool    fastCall : 1;
-                bool    knownSideEffects : 1;
-                bool    hasToRunAtCompileTime : 1;
-                bool    unsafe : 1;
-                bool    unsafeOperation : 1;
-                bool    unsafeDeref : 1;
-                bool    hasMakeBlock : 1;
-                bool    aotNeedPrologue : 1;
-                bool    noAot : 1;
-                bool    aotHybrid : 1;
-                bool    aotTemplate : 1;
-                bool    generated : 1;
-                bool    privateFunction : 1;
-                bool    generator : 1;
-                bool    lambda : 1;
-            };
-            uint32_t flags = 0;
-        };
-        uint32_t    sideEffectFlags = 0;
-        struct InferHistory {
-            LineInfo    at;
-            Function *  func = nullptr;
-            InferHistory() = default;
-            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
-        };
-        vector<InferHistory> inferStack;
-        Function * fromGeneric = nullptr;
-        uint64_t hash = 0;
-        uint64_t aotHash = 0;
+    struct AstExpressionMacro : TypeInfoMacro {
+        AstExpressionMacro() : TypeInfoMacro("ast_expression") {}
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
+            return typeFactory<smart_ptr<Expression>>::make(lib);
+        }
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & errors ) {
+            auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
+            if ( exprTypeInfo->subexpr ) {
+                TextWriter ss;
+                ss << *exprTypeInfo->subexpr;
+                char * descr = context->code->allocateName(ss.str());
+                return context->code->makeNode<SimNode_AstGetExpression>(expr->at, exprTypeInfo->subexpr, descr);
+            } else {
+                errors = "ast_expression requires expression, not just type";
+                return nullptr;
+            }
+        }
+        virtual bool noAot ( const ExpressionPtr & ) const override {
+            return true;
+        }
     };
-    */
 
     #include "ast.das.inc"
 
-    char * ast_describe ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
+    char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
         return context->stringHeap.allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
             d_contracts ? TypeDecl::DescribeContracts::yes : TypeDecl::DescribeContracts::no,
             d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no));
+    }
+
+    char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context ) {
+        TextWriter ss;
+        ss << *t;
+        return context->stringHeap.allocateString(ss.str());
     }
 
     class Module_Ast : public Module {
@@ -265,6 +311,7 @@ namespace das {
             lib.addModule(Module::require("rtti"));
             // THE MAGNIFICENT TWO
             addTypeInfoMacro(make_smart<AstTypeDeclMacro>());
+            addTypeInfoMacro(make_smart<AstExpressionMacro>());
             // FLAGS?
             addAlias(makeTypeDeclFlags());
             addAlias(makeFieldDeclarationFlags());
@@ -272,7 +319,8 @@ namespace das {
             addAlias(makeExprGenFlagsFlags());
             addAlias(makeExprFlagsFlags());
             addAlias(makeExprPrintFlagsFlags());
-            // AST TYPES
+            addAlias(makeFunctionFlags());
+            // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
             auto exa = make_smart<AstExpressionAnnotation>(lib);
             addAnnotation(exa);
             auto tda = make_smart<AstTypeDeclAnnnotation>(lib);
@@ -283,14 +331,19 @@ namespace das {
             addAnnotation(fta);
             auto ena = make_smart<AstEnumerationAnnotation>(lib);
             addAnnotation(ena);
+            auto fna = make_smart<AstFunctionAnnotation>(lib);
+            addAnnotation(fna);
             initRecAnnotation(tda, lib);
             initRecAnnotation(sta, lib);
             initRecAnnotation(fta, lib);
             initRecAnnotation(ena, lib);
             initRecAnnotation(exa, lib);
+            initRecAnnotation(fna, lib);
             // helper functions
-            addExtern<DAS_BIND_FUN(ast_describe)>(*this, lib,  "ast_describe",
-                SideEffects::none, "ast_describe");
+            addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "ast_describe_typedecl",
+                SideEffects::none, "ast_describe_typedecl");
+            addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "ast_describe_expression",
+                SideEffects::none, "ast_describe_expression");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready
