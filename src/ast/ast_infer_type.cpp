@@ -2337,6 +2337,9 @@ namespace das {
                 } else if ( expr->trait=="is_enum" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isEnum());
+                } else if ( expr->trait=="is_bitfield" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isBitfield());
                 } else if ( expr->trait=="is_handle" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isHandle());

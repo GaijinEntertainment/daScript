@@ -559,7 +559,17 @@ namespace das
             };
             uint32_t flags = 0;
         };
-        uint32_t    sideEffectFlags = 0;
+        union {
+            struct {
+                bool unsafe : 1;
+                bool userScenario : 1;
+                bool modifyExternal : 1;
+                bool modifyArgument : 1;
+                bool accessGlobal : 1;
+                bool invoke : 1;
+            };
+            uint32_t    sideEffectFlags = 0;
+        };
         struct InferHistory {
             LineInfo    at;
             Function *  func = nullptr;

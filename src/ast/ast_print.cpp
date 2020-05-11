@@ -195,8 +195,8 @@ namespace das {
             Visitor::visitStructureField(var, decl, last);
         }
     // alias
-        virtual void preVisitAlias ( const string & name, TypeDecl * td ) override {
-            Visitor::preVisitAlias(name,td);
+        virtual void preVisitAlias ( TypeDecl * td, const string & name ) override {
+            Visitor::preVisitAlias(td,name);
             ss  << "typedef\n" << "\t" << name << " = " << td->describe() << "\n\n";
         }
     // global
@@ -286,6 +286,7 @@ namespace das {
             ss << "\n";
             return Visitor::visit(fn);
         }
+    // Ref2Value
         virtual void preVisit ( ExprRef2Value * expr ) override {
             Visitor::preVisit(expr);
             if ( printRef ) ss << "r2v(";

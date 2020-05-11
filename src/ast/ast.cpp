@@ -685,7 +685,9 @@ namespace das {
     ExpressionPtr ExprConstBitfield::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprConstBitfield>(expr);
         ExprConstT<uint32_t,ExprConstBitfield>::clone(cexpr);
-        cexpr->bitfieldType = make_smart<TypeDecl>(*bitfieldType);
+        if ( bitfieldType ) {
+            cexpr->bitfieldType = make_smart<TypeDecl>(*bitfieldType);
+        }
         return cexpr;
     }
 
@@ -2316,11 +2318,11 @@ namespace das {
         }
         // aliases
         for ( auto & als : thisModule->aliasTypes ) {
-            vis.preVisitAlias ( als.first, als.second.get());
+            vis.preVisitAlias(als.second.get(), als.first);
             vis.preVisit(als.second.get());
             als.second = als.second->visit(vis);
             if ( als.second ) als.second = vis.visit(als.second.get());
-            if ( als.second ) als.second = vis.visitAlias(als.first, als.second.get());
+            if ( als.second ) als.second = vis.visitAlias(als.second.get(), als.first);
         }
         // real things
         vis.preVisitProgramBody(this);
