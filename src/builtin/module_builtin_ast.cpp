@@ -57,7 +57,7 @@ namespace das {
         }
         void init() {
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("type");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
             addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
             addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
             addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
@@ -113,6 +113,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(alias)>("alias");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            // properties
+            addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
         }
     };
 
@@ -129,7 +131,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("type");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -233,7 +235,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("type");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(source)>("source");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -379,33 +381,121 @@ namespace das {
         return 0;
     }
 
+#define FN_PREVISIT(WHAT)  fnPreVisit##WHAT
+#define FN_VISIT(WHAT)      fnVisit##WHAT
+
+#define IMPL_PREVISIT(WHAT) \
+    if ( FN_PREVISIT(WHAT) ) { \
+        das_invoke_function<void>::invoke<void *,smart_ptr<WHAT>> \
+            (context,FN_PREVISIT(WHAT),classPtr,expr); \
+    }
+
+#define IMPL_VISIT_VOID(WHAT) \
+    if ( FN_VISIT(WHAT) ) { \
+        das_invoke_function<void>::invoke<void *,smart_ptr<WHAT>> \
+            (context,FN_VISIT(WHAT),classPtr,expr); \
+    }
+
+#define IMPL_VISIT(WHAT) \
+    if ( FN_VISIT(WHAT) ) { \
+        return das_invoke_function<smart_ptr_raw<WHAT>>::invoke<void *,smart_ptr<WHAT>> \
+            (context,FN_VISIT(WHAT),classPtr,expr); \
+    } else { \
+        return expr; \
+    }
+
+#define DECL_VISIT(WHAT) \
+    Func        FN_PREVISIT(WHAT); \
+    Func        FN_VISIT(WHAT);
+
+#define IMPL_ADAPT(WHAT) \
+    FN_PREVISIT(WHAT) = adapt("preVisit" #WHAT,pClass,info); \
+    FN_VISIT(WHAT) = adapt("visit" #WHAT,pClass,info);
+
     class VisitorAdapter : public Visitor {
     public:
         VisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx ) {
             context = ctx;
             classPtr = pClass;
-            fnPreVisitExpression = adapt("preVisitExpression",pClass,info);
-            fnVisitExpression = adapt("visitExpression",pClass,info);
+            // adapt
+            IMPL_ADAPT(Program);
+            IMPL_ADAPT(TypeDecl);
+            IMPL_ADAPT(Expression);
+            IMPL_ADAPT(Alias);
+            IMPL_ADAPT(Enumeration);
+            IMPL_ADAPT(EnumerationValue);
+            IMPL_ADAPT(Structure);
+            IMPL_ADAPT(StructureField);
         }
-    public:
+    protected:
         void *      classPtr;
         Context *   context;
-        Func        fnPreVisitExpression;
-        Func        fnVisitExpression;
-
     protected:
-        virtual void preVisitExpression ( Expression * expr ) override {
-            if ( fnPreVisitExpression ) {
-                das_invoke_function<void>::invoke<void *,smart_ptr<Expression>>(context,fnPreVisitExpression,classPtr,expr);
+        DECL_VISIT(Program);
+        DECL_VISIT(TypeDecl);
+        DECL_VISIT(Expression);
+        DECL_VISIT(Alias);
+        DECL_VISIT(Enumeration);
+        DECL_VISIT(EnumerationValue);
+        DECL_VISIT(Structure);
+        DECL_VISIT(StructureField);
+    protected:
+    // whole program
+        virtual void preVisitProgram ( Program * expr ) override { IMPL_PREVISIT(Program); }
+        virtual void visitProgram ( Program * expr ) override { IMPL_VISIT_VOID(Program); }
+    // type
+        virtual void preVisit ( TypeDecl * expr ) override { IMPL_PREVISIT(TypeDecl); }
+        virtual TypeDeclPtr visit ( TypeDecl * expr ) override { IMPL_VISIT(TypeDecl); }
+    // alias
+        virtual void preVisitAlias ( const string & name, TypeDecl * expr ) override {
+            if ( FN_PREVISIT(Alias) ) {
+                das_invoke_function<void>::invoke<void *,const string &,smart_ptr<TypeDecl>>
+                    (context,FN_PREVISIT(Alias),classPtr,name,expr);
             }
         }
-        virtual ExpressionPtr visitExpression ( Expression * expr ) override {
-            if ( fnVisitExpression ) {
-                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,smart_ptr<Expression>>(context,fnVisitExpression,classPtr,expr);
+        virtual TypeDeclPtr visitAlias ( const string & name, TypeDecl * expr ) override {
+            if ( FN_VISIT(Alias) ) {
+                return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke<void *,const string &,smart_ptr<TypeDecl>>
+                    (context,FN_VISIT(Alias),classPtr,name,expr);
             } else {
                 return expr;
             }
         }
+    // enumeration
+        virtual void preVisit ( Enumeration * expr ) override { IMPL_PREVISIT(Enumeration); }
+        virtual void preVisitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override {
+            if ( FN_PREVISIT(EnumerationValue) ) {
+                das_invoke_function<void>::invoke<void *,smart_ptr<Enumeration>,const string &,smart_ptr<Expression>,bool>
+                    (context,FN_PREVISIT(EnumerationValue),classPtr,expr,name,value,last);
+            }
+        }
+        virtual ExpressionPtr visitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override {
+            if ( FN_VISIT(EnumerationValue) ) {
+                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,smart_ptr<Enumeration>,const string &,smart_ptr<Expression>,bool>
+                    (context,FN_VISIT(EnumerationValue),classPtr,expr,name,value,last);
+            } else {
+                return value;
+            }
+        }
+        virtual EnumerationPtr visit ( Enumeration * expr ) override { IMPL_VISIT(Enumeration); }
+    // structure
+        virtual void preVisit ( Structure * expr ) override { IMPL_PREVISIT(Structure); }
+        virtual void preVisitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last ) override {
+            if ( FN_PREVISIT(StructureField) ) {
+                das_invoke_function<void>::invoke<void *,smart_ptr<Structure>,Structure::FieldDeclaration&,bool>
+                    (context,FN_PREVISIT(StructureField),classPtr,expr,decl,last);
+            }
+        }
+        virtual void visitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last ) override {
+            if ( FN_VISIT(StructureField) ) {
+                das_invoke_function<void>::invoke<void *,smart_ptr<Structure>,Structure::FieldDeclaration&,bool>
+                    (context,FN_VISIT(StructureField),classPtr,expr,decl,last);
+            }
+        }
+        virtual StructurePtr visit ( Structure * expr ) override { IMPL_VISIT(Structure); }
+    // expression
+        virtual void preVisitExpression ( Expression * expr ) override { IMPL_PREVISIT(Expression); }
+        virtual ExpressionPtr visitExpression ( Expression * expr ) override { IMPL_VISIT(Expression); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -445,6 +535,10 @@ namespace das {
         TextWriter ss;
         ss << *t;
         return context->stringHeap.allocateString(ss.str());
+    }
+
+    char * ast_das_to_string ( Type bt, Context * context ) {
+        return context->stringHeap.allocateString(das_to_string(bt));
     }
 
     class Module_Ast : public Module {
@@ -516,6 +610,9 @@ namespace das {
                 SideEffects::none, "ast_describe_expression");
             addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "ast_describe_function",
                 SideEffects::none, "ast_describe_function");
+            // type conversion functions
+            addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "ast_das_to_string",
+                SideEffects::none, "ast_das_to_string");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready
