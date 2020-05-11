@@ -531,6 +531,9 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstEnumeration * c ) override {
+            if ( c->enumType->module && !c->enumType->module->name.empty() ) {
+                ss << c->enumType->module->name << "::";
+            }
             ss << c->enumType->name << " " << c->text;
             return Visitor::visit(c);
         }
