@@ -68,6 +68,12 @@ namespace das {
         }
         template <typename Y>
         __forceinline smart_ptr ( const smart_ptr<Y> & p ) {
+            static_assert( is_base_of<T,Y>::value, "can only cast if inherited" );
+            init(p.get());
+        }
+        template <typename Y>
+        __forceinline smart_ptr ( const smart_ptr_raw<Y> & p ) {
+            static_assert( is_base_of<T,Y>::value, "can only cast if inherited" );
             init(p.get());
         }
         __forceinline operator smart_ptr_raw<void> & () const {

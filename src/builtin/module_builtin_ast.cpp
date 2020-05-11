@@ -23,9 +23,12 @@ MAKE_TYPE_FACTORY(InferHistory, Function::InferHistory)
 MAKE_TYPE_FACTORY(Variable,Variable)
 MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 
+MAKE_TYPE_FACTORY(ExprBlock,ExprBlock)
+
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
     modifyArgumentAndExternal, worstDefault, accessGlobal, invoke, inferedSideEffects)
+
 
 namespace das {
 
@@ -67,6 +70,32 @@ namespace das {
     struct AstExpressionAnnotation : AstExprAnnotation<Expression> {
         AstExpressionAnnotation(ModuleLibrary & ml)
             :  AstExprAnnotation<Expression> ("Expression", ml) {
+        }
+    };
+
+    TypeDeclPtr makeExprBlockFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprBlockFlags";
+        ft->argNames = { "isClosure", "hasReturn", "copyOnReturn", "moveOnReturn",
+            "inTheLoop", "finallyBeforeBody", "finallyDisabled","aotSkipMakeBlock",
+            "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse" };
+        return ft;
+    }
+
+    struct AstExprBlockAnnotation : AstExprAnnotation<ExprBlock> {
+        AstExprBlockAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<ExprBlock> ("ExprBlock", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(list)>("list");
+            addField<DAS_BIND_MANAGED_FIELD(finalList)>("finalList");
+            addField<DAS_BIND_MANAGED_FIELD(returnType)>("returnType");
+            addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addField<DAS_BIND_MANAGED_FIELD(maxLabelIndex)>("maxLabelIndex");
+            addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
+            addField<DAS_BIND_MANAGED_FIELD(annotationData)>("annotationData");
+            addField<DAS_BIND_MANAGED_FIELD(annotationDataSid)>("annotationDataSid");
+            // properties
+            addFieldEx ( "blockFlags", "blockFlags", offsetof(ExprBlock, blockFlags), makeExprBlockFlags() );
         }
     };
 
@@ -385,13 +414,15 @@ namespace das {
         }
     };
 
-    // TODO: verify signature (pre-build signatures, verify)
+    // TODO:
+    //  optimize multiple-adapt-calls
     Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
         for ( uint32_t i=0; i!=info->count; ++i ) {
             if ( strcmp(info->fields[i]->name,funcName)==0 ) {
                 return *(Func *)(pClass + info->fields[i]->offset);
             }
         }
+        DAS_ASSERT(0 && "mapping not found. not fully implemented dervied class");
         return 0;
     }
 
@@ -492,6 +523,12 @@ namespace das {
             IMPL_ADAPT(FunctionArgument);
             IMPL_ADAPT(FunctionArgumentInit);
             IMPL_ADAPT(FunctionBody);
+            IMPL_ADAPT(ExprBlock);
+            IMPL_ADAPT(ExprBlockArgument);
+            IMPL_ADAPT(ExprBlockArgumentInit);
+            IMPL_ADAPT(ExprBlockExpression);
+            IMPL_ADAPT(ExprBlockFinal);
+            IMPL_ADAPT(ExprBlockFinalExpression);
         }
     protected:
         void *      classPtr;
@@ -510,6 +547,12 @@ namespace das {
         DECL_VISIT(FunctionArgument);
         DECL_VISIT(FunctionArgumentInit);
         DECL_VISIT(FunctionBody);
+        DECL_VISIT(ExprBlock);
+        DECL_VISIT(ExprBlockArgument);
+        DECL_VISIT(ExprBlockArgumentInit);
+        DECL_VISIT(ExprBlockExpression);
+        DECL_VISIT(ExprBlockFinal);
+        DECL_VISIT(ExprBlockFinalExpression);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -572,6 +615,35 @@ namespace das {
             { IMPL_PREVISIT(Expression); }
         virtual ExpressionPtr visitExpression ( Expression * expr ) override
             { IMPL_VISIT(Expression); }
+    // block
+        virtual void preVisit ( ExprBlock * expr ) override
+            { IMPL_PREVISIT(ExprBlock); }
+        virtual ExpressionPtr visit ( ExprBlock * expr ) override
+            { IMPL_VISIT(ExprBlock); }
+        virtual void preVisitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg ) override
+            { IMPL_PREVISIT3(ExprBlockArgument,ExprBlock,VariablePtr,var,bool,lastArg); }
+        virtual VariablePtr visitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg ) override
+            { IMPL_VISIT3(ExprBlockArgument,ExprBlock,Variable,var,VariablePtr,var,bool,lastArg); }
+        virtual void preVisitBlockArgumentInit ( ExprBlock * expr, const VariablePtr & var, Expression * init ) override
+            { IMPL_PREVISIT3(ExprBlockArgumentInit,ExprBlock,VariablePtr,var,ExpressionPtr,init); }
+        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * expr, const VariablePtr & var, Expression * init ) override
+            { IMPL_VISIT3(ExprBlockArgumentInit,ExprBlock,Expression,init,VariablePtr,var,ExpressionPtr,init); }
+        virtual void preVisitBlockExpression ( ExprBlock * expr, Expression * bexpr ) override
+            { IMPL_PREVISIT2(ExprBlockExpression,ExprBlock,ExpressionPtr,bexpr); }
+        virtual ExpressionPtr visitBlockExpression (  ExprBlock * expr, Expression * bexpr ) override
+            { IMPL_VISIT2(ExprBlockExpression,ExprBlock,Expression,bexpr,ExpressionPtr,bexpr); }
+        virtual void preVisitBlockFinal ( ExprBlock * expr ) override
+            { IMPL_PREVISIT1(ExprBlockFinal,ExprBlock); }
+        virtual void visitBlockFinal ( ExprBlock * expr ) {
+            if ( FN_VISIT(ExprBlockFinal) ) {
+                das_invoke_function<void>::invoke<void *,smart_ptr<ExprBlock>>
+                    (context,FN_VISIT(ExprBlockFinal),classPtr,expr);
+            }
+        }
+        virtual void preVisitBlockFinalExpression ( ExprBlock * expr, Expression * bexpr )
+            { IMPL_PREVISIT2(ExprBlockFinalExpression,ExprBlock,ExpressionPtr,bexpr); }
+        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * expr, Expression * bexpr )
+            { IMPL_VISIT2(ExprBlockFinalExpression,ExprBlock,Expression,expr,ExpressionPtr,bexpr); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -645,6 +717,7 @@ namespace das {
             addAlias(makeFunctionSideEffectFlags());
             addAlias(makeVariableFlags());
             addAlias(makeVariableAccessFlags());
+            addAlias(makeExprBlockFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
@@ -672,6 +745,8 @@ namespace das {
             initRecAnnotation(fna, lib);
             initRecAnnotation(iha, lib);
             initRecAnnotation(vaa, lib);
+            // expressions
+            addAnnotation(make_smart<AstExprBlockAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
