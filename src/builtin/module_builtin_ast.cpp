@@ -464,9 +464,9 @@ namespace das {
 
 #define IMPL_PREVISIT(WHAT) IMPL_PREVISIT1(WHAT,WHAT)
 
-#define IMPL_VISIT_VOID(WHAT) \
+#define IMPL_VISIT_VOID1(WHAT,WHATTYPE) \
     if ( FN_VISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHAT>> \
+        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>> \
             (context,FN_VISIT(WHAT),classPtr,expr); \
     }
 
@@ -505,6 +505,8 @@ namespace das {
 
 #define IMPL_VISIT(WHAT) IMPL_VISIT1(WHAT,WHAT,WHAT,expr)
 
+#define IMPL_VISIT_VOID(WHAT) IMPL_VISIT_VOID1(WHAT,WHAT)
+
 #define DECL_VISIT(WHAT) \
     Func        FN_PREVISIT(WHAT); \
     Func        FN_VISIT(WHAT);
@@ -541,6 +543,9 @@ namespace das {
             IMPL_ADAPT(ExprLet);
             IMPL_ADAPT(ExprLetVariable);
             IMPL_ADAPT(ExprLetVariableInit);
+            IMPL_ADAPT(GlobalLet);
+            IMPL_ADAPT(GlobalLetVariable);
+            IMPL_ADAPT(GlobalLetVariableInit);
         }
     protected:
         void *      classPtr;
@@ -568,6 +573,10 @@ namespace das {
         DECL_VISIT(ExprLet);
         DECL_VISIT(ExprLetVariable);
         DECL_VISIT(ExprLetVariableInit);
+        DECL_VISIT(GlobalLet);
+        DECL_VISIT(GlobalLetVariable);
+        DECL_VISIT(GlobalLetVariableInit);
+
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -672,6 +681,19 @@ namespace das {
             { IMPL_PREVISIT3(ExprLetVariableInit,ExprLet,VariablePtr,var,ExpressionPtr,init); }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override
             { IMPL_VISIT3(ExprLetVariableInit,ExprLet,Expression,init,VariablePtr,var,ExpressionPtr,init); }
+    // global let
+        virtual void preVisitGlobalLetBody ( Program * expr ) override
+            { IMPL_PREVISIT1(GlobalLet,Program); }
+        virtual void visitGlobalLetBody ( Program * expr ) override
+            { IMPL_VISIT_VOID1(GlobalLet,Program); }
+        virtual void preVisitGlobalLet ( const VariablePtr & expr ) override
+            { IMPL_PREVISIT1(GlobalLetVariable,Variable); }
+        virtual VariablePtr visitGlobalLet ( const VariablePtr & expr ) override
+            { IMPL_VISIT1(GlobalLetVariable,Variable,Variable,expr); }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & expr, Expression * init ) override
+            { IMPL_PREVISIT2(GlobalLetVariableInit,Variable,ExpressionPtr,init); }
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & expr, Expression * init ) override
+            { IMPL_VISIT2(GlobalLetVariableInit,Variable,Expression,init,ExpressionPtr,init); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {

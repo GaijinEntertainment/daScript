@@ -150,6 +150,19 @@ class AstVisitor
         pass
     def visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
         return expr
+// global let
+    def preVisitGlobalLet(prog:ProgramPtr) : void
+        pass
+    def visitGlobalLet(prog:ProgramPtr) : void
+        pass
+    def preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : void
+        pass
+    def visitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : VariablePtr
+        return arg
+    def preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr)
+        pass
+    def visitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
+        return expr
 
 //////////
 // example
@@ -327,7 +340,22 @@ class PrintVisitor : AstVisitor
             print(" := ")
         else
             print(" = ")
-
+// global let
+    def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : void
+        print("{arg.typeDecl.flags.constant ? "let" : "var"}{arg.flags.global_shared ? " shared" : ""}\n\t")
+        if arg.isAccessUnused
+            print(" /*unused*/ ")
+        print("{arg.name} : {describe([decl=arg.typeDecl,extra=extraTypeInfo])}")
+    def override visitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : VariablePtr
+        print("\n\n")
+        return arg
+    def override preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr)
+        if arg.flags.init_via_move
+            print(" <- ")
+        elif arg.flags.init_via_clone
+            print(" := ")
+        else
+            print(" = ")
 
 typedef
     Integer = int
@@ -341,8 +369,11 @@ struct Foo
     [[do_not_delete,temp=13]] a : int
     b : array<Foo?>
 
+var
+    add_extra = 13
+
 def add(a,b:int)
-    return a + b
+    return a + b + add_extra
 
 [export]
 def test
@@ -350,8 +381,9 @@ def test
     var astVisitorAdapter <- make_visitor(astVisitor)
     ast_visit(ast_this_program(), astVisitorAdapter)
 
-    /*
+
     // ast_typedecl
+    add_extra = 14
     let td <- typeinfo(ast_typedecl type<Foo>)
     print("td = {describe(td)}\n")
     // ast_expression
@@ -364,6 +396,5 @@ def test
     // ast_function
     let fd <- typeinfo(ast_function @@add)
     print("fd = {describe(fd)}\n")
-    */
 
     return true
