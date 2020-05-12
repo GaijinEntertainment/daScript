@@ -13,7 +13,7 @@ typedef
     VariablePtr = smart_ptr<Variable>
 
 [unsafe]
-def expression ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
+def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
     static_if typeinfo(is_handle type<TT>)
         if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
             return reinterpret<smart_ptr<Expression>>(expr)
@@ -95,9 +95,9 @@ class AstVisitor
         pass
     def visitFunction(fun:FunctionPtr) : FunctionPtr
         return fun
-    def preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;last:bool) : void
+    def preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : void
         pass
-    def visitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;last:bool) : VariablePtr
+    def visitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : VariablePtr
         return arg
     def preVisitFunctionArgumentInit(fun:FunctionPtr;arg:VariablePtr;value:ExpressionPtr) : void
         pass
@@ -116,7 +116,7 @@ class AstVisitor
     def preVisitExprBlock(blk:smart_ptr<ExprBlock>)
         pass
     def visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
-        return expression(blk)
+        return ExpressionPtr(blk)
     def preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool)
         pass
     def visitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool) : VariablePtr
@@ -136,6 +136,19 @@ class AstVisitor
     def preVisitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
         pass
     def visitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr) : ExpressionPtr
+        return expr
+// let
+    def preVisitExprLet(expr:smart_ptr<ExprLet>) : void
+        pass
+    def visitExprLet(expr:smart_ptr<ExprLet>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
+        pass
+    def visitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : VariablePtr
+        return arg
+    def preVisitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr)
+        pass
+    def visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
         return expr
 
 //////////
@@ -271,7 +284,7 @@ class PrintVisitor : AstVisitor
         tab --
         if printCStyle | blk.blockFlags.isClosure
             print("{repeat("\t",tab)}\}\n")
-        return expression(blk)
+        return ExpressionPtr(blk)
     def override preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
         print("{repeat("\t",tab)}")
     def override visitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr) : ExpressionPtr
@@ -291,6 +304,30 @@ class PrintVisitor : AstVisitor
             print(";")
         self->newLine()
         return expr
+// let
+    def override preVisitExprLet(expr:smart_ptr<ExprLet>) : void
+        var isLet = true
+        for pv in expr.variables
+            if pv.typeDecl!=null & pv.typeDecl.flags.constant
+                isLet = false
+                break
+        print("{isLet ? "let" : "var"} {expr.inScope ? "in_scope " : ""}")
+    def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
+        if arg.isAccessUnused
+            print(" /*unused*/ ")
+        print("{arg.name} : {describe([decl=arg.typeDecl,extra=extraTypeInfo])}")
+    def override visitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : VariablePtr
+        if !lastArg
+            print(";")
+        return arg
+    def override preVisitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr)
+        if arg.flags.init_via_move
+            print(" <- ")
+        elif arg.flags.init_via_clone
+            print(" := ")
+        else
+            print(" = ")
+
 
 typedef
     Integer = int
