@@ -561,7 +561,7 @@ namespace das
         };
         union {
             struct {
-                bool unsafe : 1;
+                bool unsafeFunction : 1;
                 bool userScenario : 1;
                 bool modifyExternal : 1;
                 bool modifyArgument : 1;

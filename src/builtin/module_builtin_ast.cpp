@@ -61,11 +61,12 @@ namespace das {
             : ManagedStructureAnnotation<EXPR> (en, ml) {
         }
         void init() {
-            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
-            addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
-            addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
-            addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
+			using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+			this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
+			this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
+			this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
+			this->addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
         }
     };
 
@@ -381,7 +382,7 @@ namespace das {
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
             return typeFactory<smart_ptr<TypeDecl>>::make(lib);
         }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) {
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) override {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
             return context->code->makeNode<SimNode_AstGetTypeDecl>(expr->at, exprTypeInfo->typeexpr);
         }
@@ -395,7 +396,7 @@ namespace das {
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
             return typeFactory<smart_ptr<Expression>>::make(lib);
         }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & errors ) {
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & errors ) override {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
             if ( exprTypeInfo->subexpr ) {
                 TextWriter ss;
@@ -417,7 +418,7 @@ namespace das {
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
             return typeFactory<smart_ptr<Function>>::make(lib);
         }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & errors ) {
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & errors ) override {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
             if ( exprTypeInfo->subexpr && exprTypeInfo->subexpr->rtti_isAddr() ) {
                 auto exprAddr = static_pointer_cast<ExprAddr>(exprTypeInfo->subexpr);
@@ -670,15 +671,15 @@ namespace das {
             { IMPL_VISIT2(ExprBlockExpression,ExprBlock,Expression,bexpr,ExpressionPtr,bexpr); }
         virtual void preVisitBlockFinal ( ExprBlock * expr ) override
             { IMPL_PREVISIT1(ExprBlockFinal,ExprBlock); }
-        virtual void visitBlockFinal ( ExprBlock * expr ) {
+        virtual void visitBlockFinal ( ExprBlock * expr ) override {
             if ( FN_VISIT(ExprBlockFinal) ) {
                 das_invoke_function<void>::invoke<void *,smart_ptr<ExprBlock>>
                     (context,FN_VISIT(ExprBlockFinal),classPtr,expr);
             }
         }
-        virtual void preVisitBlockFinalExpression ( ExprBlock * expr, Expression * bexpr )
+        virtual void preVisitBlockFinalExpression ( ExprBlock * expr, Expression * bexpr ) override
             { IMPL_PREVISIT2(ExprBlockFinalExpression,ExprBlock,ExpressionPtr,bexpr); }
-        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * expr, Expression * bexpr )
+        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * expr, Expression * bexpr ) override
             { IMPL_VISIT2(ExprBlockFinalExpression,ExprBlock,Expression,expr,ExpressionPtr,bexpr); }
     // let
         virtual void preVisit ( ExprLet * expr ) override

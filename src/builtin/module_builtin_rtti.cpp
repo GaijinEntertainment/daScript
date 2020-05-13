@@ -633,7 +633,7 @@ namespace das {
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
             return typeFactory<const TypeInfo>::make(lib);
         }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) {
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) override {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
             TypeInfo * typeInfo = context->thisHelper->makeTypeInfo(nullptr, exprTypeInfo->typeexpr);
             return context->code->makeNode<SimNode_TypeInfo>(expr->at, typeInfo);

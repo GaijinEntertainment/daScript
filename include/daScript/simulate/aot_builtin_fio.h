@@ -10,6 +10,7 @@ namespace das {
     void builtin_fclose ( const FILE * f );
     void builtin_fprint ( const FILE * f, const char * text );
     char * builtin_fread ( const FILE * _f, Context * context );
+    void builtin_fwrite(const FILE * _f, char * str, Context * context);
     vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_write ( Context &, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args );

@@ -174,6 +174,13 @@ namespace das {
         return res;
     }
 
+    void builtin_fwrite ( const FILE * _f, char * str, Context * context ) {
+        if (!str) return;
+        FILE * f = (FILE *) _f;
+        uint32_t len = stringLength(*context, str);
+        if (len) fwrite(str, 1, len, f);
+    }
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4100)
@@ -349,6 +356,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose", SideEffects::modifyExternal, "builtin_fclose");
             addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint", SideEffects::modifyExternal, "builtin_fprint");
             addExtern<DAS_BIND_FUN(builtin_fread)>(*this, lib, "fread", SideEffects::modifyExternal, "builtin_fread");
+            addExtern<DAS_BIND_FUN(builtin_fwrite)>(*this, lib, "fwrite", SideEffects::modifyExternal, "builtin_fwrite");
             // builtin file functions
             addInterop<builtin_read,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_read",SideEffects::modifyExternal, "builtin_read");
             addInterop<builtin_write,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_write",SideEffects::modifyExternal, "builtin_write");

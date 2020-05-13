@@ -252,7 +252,7 @@ namespace das
         char * dstr = strdup(str);
         char * ch = dstr;
         vector<char *> tokens;
-        if ( strchr(delim,*ch) ) tokens.push_back("");
+        // if ( strchr(delim,*ch) ) tokens.push_back("");
         while ( *ch ) {
             while ( *ch && strchr(delim,*ch) ) ch++;
             if ( *ch ) {
@@ -351,5 +351,7 @@ namespace das
         addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format", SideEffects::none, "format<uint64_t>");
         addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format", SideEffects::none, "format<float>");
         addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format", SideEffects::none, "format<double>");
+        // queries
+        addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha", SideEffects::none, "is_alpha");
     }
 }

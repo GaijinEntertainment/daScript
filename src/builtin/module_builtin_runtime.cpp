@@ -517,15 +517,15 @@ namespace das
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
             return typeFactory<void *>::make(lib);
         }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) {
+        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & )  override {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
             TypeInfo * typeInfo = context->thisHelper->makeTypeInfo(nullptr, exprTypeInfo->typeexpr);
             return context->code->makeNode<SimNode_TypeInfo>(expr->at, typeInfo);
         }
-        virtual void aotPrefix ( TextWriter & ss, const ExpressionPtr & ) {
+        virtual void aotPrefix ( TextWriter & ss, const ExpressionPtr & ) override {
             ss << "(void *)(&";
         }
-        virtual void aotSuffix ( TextWriter & ss, const ExpressionPtr & ) {
+        virtual void aotSuffix ( TextWriter & ss, const ExpressionPtr & ) override {
             ss << ")";
         }
         virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const override {

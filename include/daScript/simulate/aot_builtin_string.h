@@ -65,4 +65,6 @@ namespace das {
         block(writer);
         return writer.c_str();
     }
+
+    __forceinline bool is_alpha ( int32_t ch ) { return (ch>='a' && ch<='z') || (ch>='A' && ch<='Z'); }
 }
