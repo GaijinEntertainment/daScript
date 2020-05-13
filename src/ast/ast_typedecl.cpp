@@ -258,8 +258,10 @@ namespace das
                 if (dmodule == DescribeModule::yes && annotation->module && !annotation->module->name.empty()) {
                     stream << annotation->module->name << "::";
                 }
+                stream << annotation->name;
+            } else {
+                stream << "unspecified annotation";
             }
-            stream << annotation->name;
         } else if ( baseType==Type::tArray ) {
             if ( firstType ) {
                 stream << "array<" << firstType->describe(extra) << ">";
