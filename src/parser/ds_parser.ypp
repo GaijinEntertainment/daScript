@@ -849,6 +849,7 @@ global_function_declaration
                         CompilationError::function_already_declared);
             }
         }
+		$func->delRef();
     }
     ;
 
@@ -1561,6 +1562,7 @@ struct_variable_declaration_list
                 das_yyerror("function is already defined " + $func->getMangledName(),
                     $func->at, CompilationError::function_already_declared);
             }
+			$func->delRef();
         }
         $$ = $list;
     }
