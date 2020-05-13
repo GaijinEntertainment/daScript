@@ -1219,7 +1219,9 @@ namespace das {
         auto cexpr = clonePtr<ExprField>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
-        cexpr->value = value->clone();
+        if ( value) {
+            cexpr->value = value->clone();
+        }
         cexpr->field = field;
         cexpr->fieldIndex = fieldIndex;
         cexpr->unsafeDeref = unsafeDeref;
