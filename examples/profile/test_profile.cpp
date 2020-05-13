@@ -75,11 +75,13 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 
 MAKE_TYPE_FACTORY(Object, Object)
 
-template <>
-struct typeName<ObjectArray> {
-    static string name() {
-        return "ObjectArray";
-    }
+namespace das {
+    template <>
+    struct typeName<ObjectArray> {
+        static string name() {
+            return "ObjectArray";
+        }
+    };
 };
 
 namespace das {
