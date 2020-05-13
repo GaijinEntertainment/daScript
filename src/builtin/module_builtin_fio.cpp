@@ -198,7 +198,8 @@ namespace das {
 		fstat(fd, &st);
         char * res = context->stringHeap.allocateString(nullptr, st.st_size);
 		fseek(f, 0, SEEK_SET);
-		fread(res, 1, st.st_size, f);
+		uint32_t bytes = uint32_t(fread(res, 1, st.st_size, f));
+        ((StringHeader *)res)[-1].length = bytes;
         return res;
     }
 
