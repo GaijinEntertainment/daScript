@@ -252,6 +252,7 @@ namespace das
         char * dstr = strdup(str);
         char * ch = dstr;
         vector<char *> tokens;
+        if ( strchr(delim,*ch) ) tokens.push_back("");
         while ( *ch ) {
             while ( *ch && strchr(delim,*ch) ) ch++;
             if ( *ch ) {

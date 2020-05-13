@@ -25,6 +25,7 @@ MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 
 MAKE_TYPE_FACTORY(ExprBlock,ExprBlock)
 MAKE_TYPE_FACTORY(ExprLet,ExprLet)
+MAKE_TYPE_FACTORY(ExprStringBuilder,ExprStringBuilder)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -107,6 +108,14 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(inScope)>("inScope");
         }
     };
+
+    struct AstExprStringBuilderAnnotation : AstExprAnnotation<ExprStringBuilder> {
+        AstExprStringBuilderAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<ExprStringBuilder> ("ExprStringBuilder", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(elements)>("elements");
+        }
+    };
+
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
         AstEnumerationAnnotation(ModuleLibrary & ml)
@@ -546,6 +555,8 @@ namespace das {
             IMPL_ADAPT(GlobalLet);
             IMPL_ADAPT(GlobalLetVariable);
             IMPL_ADAPT(GlobalLetVariableInit);
+            IMPL_ADAPT(ExprStringBuilder);
+            IMPL_ADAPT(ExprStringBuilderElement);
         }
     protected:
         void *      classPtr;
@@ -576,7 +587,8 @@ namespace das {
         DECL_VISIT(GlobalLet);
         DECL_VISIT(GlobalLetVariable);
         DECL_VISIT(GlobalLetVariableInit);
-
+        DECL_VISIT(ExprStringBuilder);
+        DECL_VISIT(ExprStringBuilderElement);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -598,12 +610,12 @@ namespace das {
     // enumeration
         virtual void preVisit ( Enumeration * expr ) override
             { IMPL_PREVISIT(Enumeration); }
+        virtual EnumerationPtr visit ( Enumeration * expr ) override
+            { IMPL_VISIT(Enumeration); }
         virtual void preVisitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override
             { IMPL_PREVISIT4(EnumerationValue,Enumeration,const string &,name,ExpressionPtr,value,bool,last); }
         virtual ExpressionPtr visitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override
             { IMPL_VISIT4(EnumerationValue,Enumeration,Expression,value,const string &,name,ExpressionPtr,value,bool,last); }
-        virtual EnumerationPtr visit ( Enumeration * expr ) override
-            { IMPL_VISIT(Enumeration); }
     // structure
         virtual void preVisit ( Structure * expr ) override
             { IMPL_PREVISIT(Structure); }
@@ -694,6 +706,15 @@ namespace das {
             { IMPL_PREVISIT2(GlobalLetVariableInit,Variable,ExpressionPtr,init); }
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & expr, Expression * init ) override
             { IMPL_VISIT2(GlobalLetVariableInit,Variable,Expression,init,ExpressionPtr,init); }
+    // string builder
+        virtual void preVisit ( ExprStringBuilder * expr ) override
+            { IMPL_PREVISIT(ExprStringBuilder); }
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override
+            { IMPL_VISIT(ExprStringBuilder); }
+        virtual void preVisitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last ) override
+            { IMPL_PREVISIT3(ExprStringBuilderElement,ExprStringBuilder,ExpressionPtr,element,bool,last); }
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last ) override
+            { IMPL_VISIT3(ExprStringBuilderElement,ExprStringBuilder,Expression,element,ExpressionPtr,element,bool,last); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -798,6 +819,7 @@ namespace das {
             // expressions
             addAnnotation(make_smart<AstExprBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprLetAnnotation>(lib));
+            addAnnotation(make_smart<AstExprStringBuilderAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
