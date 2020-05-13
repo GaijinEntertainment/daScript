@@ -149,7 +149,7 @@ namespace das
         return ret;
     }
 
-	char* builtin_string_tolower_in_place(char* str, Context* context) {
+	char* builtin_string_tolower_in_place(char* str) {
 		if (!str) return nullptr;
 		char* pch = str;
 		for (;;) {
@@ -175,7 +175,7 @@ namespace das
         return ret;
     }
 
-	char* builtin_string_toupper_in_place(char* str, Context* context) {
+	char* builtin_string_toupper_in_place ( char* str ) {
 		if (!str) return nullptr;
 		char* pch = str;
 		for (;;) {
