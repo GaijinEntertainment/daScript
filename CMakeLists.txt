@@ -114,12 +114,15 @@ src/builtin/rtti.das.inc
 src/builtin/rtti.das
 src/builtin/functional.das.inc
 src/builtin/functional.das
+src/builtin/ast.das.inc
+src/builtin/ast.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 XXD(src/builtin/builtin.das)
 XXD(src/builtin/fio.das)
 XXD(src/builtin/rtti.das)
+XXD(src/builtin/ast.das)
 XXD(src/builtin/functional.das)
 
 SET(MISC_SRC
@@ -235,6 +238,7 @@ include/daScript/simulate/aot_builtin_time.h
 include/daScript/simulate/aot_builtin_string.h
 include/daScript/simulate/aot_builtin_fio.h
 include/daScript/simulate/aot_builtin_rtti.h
+include/daScript/simulate/aot_builtin_ast.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
 )

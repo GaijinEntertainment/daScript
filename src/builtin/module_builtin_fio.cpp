@@ -12,6 +12,18 @@
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
+#if _WIN32
+	/* macro definitions extracted from git/git-compat-util.h */
+	#define PROT_READ  1
+	#define PROT_WRITE 2
+	#define MAP_FAILED ((void*)-1)
+	/* macro definitions extracted from /usr/include/bits/mman.h */
+	#define MAP_SHARED	0x01		/* Share changes.  */
+	#define MAP_PRIVATE	0x02		/* Changes are private.  */
+	void* mmap(void* start, size_t length, int prot, int flags, int fd, off_t offset);
+	int munmap(void* start, size_t length);
+#endif
+
 namespace das {
 
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,Time);
@@ -137,7 +149,9 @@ namespace das {
 
     const FILE * builtin_fopen  ( const char * name, const char * mode ) {
         if ( name && mode ) {
-            return fopen(name, mode);
+            FILE * f = fopen(name, mode);
+			// setvbuf(f, NULL, _IOFBF, 65536);
+			return f;
         } else {
             return nullptr;
         }
@@ -159,20 +173,42 @@ namespace das {
         return stderr;
     }
 
+	bool builtin_feof(const FILE* _f) {
+		FILE* f = (FILE*)_f;
+		return feof(f);
+	}
+
+	void builtin_map_file(const FILE* _f, const TBlock<void, TTemporary<const char*>>& blk, Context* context) {
+		FILE* f = (FILE*)_f;
+		struct stat st;
+		int fd = fileno(f);
+		fstat(fd, &st);
+		void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+		vec4f args[1];
+		args[0] = cast<void*>::from(data);
+		context->invoke(blk, args, nullptr);
+		munmap(data, 0);
+	}
+
     char * builtin_fread ( const FILE * _f, Context * context ) {
         FILE * f = (FILE *) _f;
-        auto pos = ftell(f);
-        fseek(f, 0, SEEK_END);
-        auto tail = ftell(f);
-        uint32_t len = uint32_t(tail - pos);
-        auto buf = new char[len];
-        fseek(f, pos, SEEK_SET);
-        char * res = nullptr;
-        if (fread(buf, 1, len, f) == len)
-          res = context->stringHeap.allocateString(buf, len);
-        delete [] buf;
+		struct stat st;
+		int fd = fileno(f);
+		fstat(fd, &st);
+        char * res = context->stringHeap.allocateString(nullptr, st.st_size);
+		fseek(f, 0, SEEK_SET);
+		fread(res, 1, st.st_size, f);
         return res;
     }
+
+	char * builtin_fgets(const FILE* _f, Context* context) {
+		FILE* f = (FILE*)_f;
+		char buffer[1024];
+		if (char* buf = fgets(buffer, sizeof(buffer), f)) {
+			return context->stringHeap.allocateString(buf, strlen(buf));
+		}
+		return nullptr;
+	}
 
     void builtin_fwrite ( const FILE * _f, char * str, Context * context ) {
         if (!str) return;
@@ -356,7 +392,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose", SideEffects::modifyExternal, "builtin_fclose");
             addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint", SideEffects::modifyExternal, "builtin_fprint");
             addExtern<DAS_BIND_FUN(builtin_fread)>(*this, lib, "fread", SideEffects::modifyExternal, "builtin_fread");
+			addExtern<DAS_BIND_FUN(builtin_map_file)>(*this, lib, "fmap", SideEffects::modifyExternal, "builtin_map_file");
+			addExtern<DAS_BIND_FUN(builtin_fgets)>(*this, lib, "fgets", SideEffects::modifyExternal, "builtin_fgets");
             addExtern<DAS_BIND_FUN(builtin_fwrite)>(*this, lib, "fwrite", SideEffects::modifyExternal, "builtin_fwrite");
+			addExtern<DAS_BIND_FUN(builtin_feof)>(*this, lib, "feof", SideEffects::modifyExternal, "builtin_feof");
             // builtin file functions
             addInterop<builtin_read,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_read",SideEffects::modifyExternal, "builtin_read");
             addInterop<builtin_write,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_write",SideEffects::modifyExternal, "builtin_write");
@@ -388,5 +427,36 @@ namespace das {
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_FIO,das);
+
+#if _WIN32
+
+#include <windows.h>
+
+void * mmap (void* start, size_t length, int prot, int flags, int fd, off_t offset) {
+	HANDLE hmap;
+	void* temp;
+	size_t len;
+	struct stat st;
+	uint64_t o = offset;
+	uint32_t l = o & 0xFFFFFFFF;
+	uint32_t h = (o >> 32) & 0xFFFFFFFF;
+	fstat(fd, &st);
+	len = (size_t)st.st_size;
+	if ((length + offset) > len)
+		length = len - offset;
+	hmap = CreateFileMapping((HANDLE)_get_osfhandle(fd), 0, PAGE_WRITECOPY, 0, 0, 0);
+	if (!hmap)
+		return MAP_FAILED;
+	temp = MapViewOfFileEx(hmap, FILE_MAP_COPY, h, l, length, start);
+	if (!CloseHandle(hmap))
+		fprintf(stderr, "unable to close file mapping handle\n");
+	return temp ? temp : MAP_FAILED;
+}
+
+int munmap ( void* start, size_t ) {
+	return !UnmapViewOfFile(start);
+}
+
+#endif
 
 #endif

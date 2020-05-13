@@ -23,7 +23,10 @@ namespace das {
     char* builtin_string_slice2 ( const char *str, int start, Context * context );
     char* builtin_string_reverse ( const char *str, Context * context );
     char* builtin_string_tolower ( const char *str, Context * context );
+	char* builtin_string_tolower_in_place ( char* str, Context* context );
     char* builtin_string_toupper ( const char *str, Context * context );
+	char* builtin_string_toupper_in_place ( char* str, Context* context );
+	char* builtin_string_chop( const char * str, int start, int length, Context * context );
     unsigned string_to_uint ( const char *str, Context * context );
     int string_to_int ( const char *str, Context * context );
     float string_to_float ( const char *str, Context * context );

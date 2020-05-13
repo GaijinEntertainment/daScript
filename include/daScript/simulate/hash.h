@@ -10,7 +10,7 @@ namespace das {
 
     __forceinline uint32_t stringLength ( Context & ctx, const char * str ) { // str!=nullptr
         char * hptr = (char *) ( str - sizeof(StringHeader) );
-        if ( ctx.stringHeap.isOwnPtr(hptr) || ctx.constStringHeap->isOwnPtr(hptr) ) {
+        if ( ctx.stringHeap.isOwnPtrQnD(hptr) || ctx.constStringHeap->isOwnPtrQnD(hptr) ) {
             auto header = (StringHeader *) hptr;
             return header->length;
         } else {
@@ -31,7 +31,7 @@ namespace das {
     __forceinline uint32_t hash_function ( Context & ctx, char * str ) {
         if ( !str ) return 16777619;
         char * hptr = (char *) ( str - sizeof(StringHeader) );
-        if ( ctx.stringHeap.isOwnPtr(hptr) || ctx.constStringHeap->isOwnPtr(hptr) ) {
+        if ( ctx.stringHeap.isOwnPtrQnD(hptr) || ctx.constStringHeap->isOwnPtrQnD(hptr) ) {
             auto header = (StringHeader *) hptr;
             auto hh = header->hash;
             if ( !hh ) {

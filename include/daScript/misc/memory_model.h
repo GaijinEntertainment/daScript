@@ -114,6 +114,9 @@ namespace das {
             }
             return bigStuff.find(ptr) != bigStuff.end();
         }
+		__forceinline bool isOwnPtrQnD(char* ptr) const {
+			return !shelf.empty() ? shelf.front().isOwnPtr(ptr) : false;
+		}
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }
         uint32_t pagesAllocated() const;
