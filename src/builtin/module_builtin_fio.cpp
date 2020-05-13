@@ -80,6 +80,7 @@ namespace das {
 #include <libgen.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <sys/mman.h>
 #endif
 
 namespace das {
