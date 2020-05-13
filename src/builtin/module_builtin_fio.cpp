@@ -206,7 +206,7 @@ namespace das {
 		FILE* f = (FILE*)_f;
 		char buffer[1024];
 		if (char* buf = fgets(buffer, sizeof(buffer), f)) {
-			return context->stringHeap.allocateString(buf, strlen(buf));
+			return context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
 		}
 		return nullptr;
 	}
@@ -433,7 +433,7 @@ REGISTER_MODULE_IN_NAMESPACE(Module_FIO,das);
 
 #include <windows.h>
 
-void * mmap (void* start, size_t length, int prot, int flags, int fd, off_t offset) {
+void * mmap (void* start, size_t length, int /*prot*/, int /*flags*/, int fd, off_t offset) {
 	HANDLE hmap;
 	void* temp;
 	size_t len;
