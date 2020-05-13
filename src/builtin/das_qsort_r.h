@@ -35,10 +35,7 @@ namespace das
 /* Minor changes by Rich Felker for integration in musl, 2011-04-27. */
 //modified by Anton Yudintsev, to make inline comparator
 
-/*
-//while we can make it work for 64 bit size_t our arrays size are limited to even 31 bit.
-//so instead just use uint32_t instead of size_t everywhere
-static inline int ntz_64(uint64_t x)
+static inline int ntz(unsigned long x)
 {
 	static const char debruijn64[64] = {
 		0, 1, 2, 53, 3, 7, 54, 27, 4, 38, 41, 8, 34, 55, 48, 28,
@@ -47,15 +44,6 @@ static inline int ntz_64(uint64_t x)
 		51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12
 	};
 	return debruijn64[(x&-x)*0x022fdd63cc95386dull >> 58];
-}*/
-
-static inline int ntz(unsigned long x)
-{
-	static const char debruijn32[32] = {
-		0, 1, 23, 2, 29, 24, 19, 3, 30, 27, 25, 11, 20, 8, 4, 13,
-		31, 22, 28, 18, 26, 10, 7, 12, 21, 17, 9, 6, 16, 5, 15, 14
-	};
-	return debruijn32[(x&-x)*0x076be629 >> 27];
 }
 
 static inline int pntz(uint32_t p[2]) {
