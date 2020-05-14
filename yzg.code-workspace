@@ -29,7 +29,8 @@
 			"functional": "cpp",
 			"ratio": "cpp",
 			"tuple": "cpp",
-			"xmemory": "cpp"
+			"xmemory": "cpp",
+			"xlocmon": "cpp"
 		}
 	}
 }

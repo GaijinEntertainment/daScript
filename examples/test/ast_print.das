@@ -11,6 +11,7 @@ typedef
     StructurePtr = smart_ptr<Structure>
     FunctionPtr = smart_ptr<Function>
     VariablePtr = smart_ptr<Variable>
+    MakeFieldDeclPtr = smart_ptr<MakeFieldDecl>
 
 [unsafe]
 def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
@@ -172,6 +173,15 @@ class AstVisitor
         pass
     def visitExprStringBuilderElement(expr:smart_ptr<ExprStringBuilder>;elem:ExpressionPtr;last:bool) : ExpressionPtr
         return elem
+// named call
+    def preVisitExprNamedCall(expr:smart_ptr<ExprNamedCall>)
+        pass
+    def visitExprNamedCall(expr:smart_ptr<ExprNamedCall>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool)
+        pass
+    def visitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
+        return arg
 
 //////////
 // example
@@ -375,6 +385,18 @@ class PrintVisitor : AstVisitor
         if !last
             print(",")
         return elem
+// named call
+    def override preVisitExprNamedCall(expr:smart_ptr<ExprNamedCall>)
+        print("{expr.name}([")
+    def override visitExprNamedCall(expr:smart_ptr<ExprNamedCall>)
+        print("])")
+        return ExpressionPtr(expr)
+    def override preVisitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool)
+        print("{arg.name}{arg.moveSemantic ? "<-" : "="}")
+    def override visitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool)
+        if !last
+            print(",")
+        return arg
 
 typedef
     Integer = int
@@ -391,8 +413,15 @@ struct Foo
 var
     add_extra = 13
 
+[sideeffects]
 def add(a,b:int)
+    print("a={a} b={b}")
     return a + b + add_extra
+
+[sideeffects,export]
+def allExpr()
+    // ExprNamedCall
+    add([a=1,b=2])
 
 [export]
 def test
@@ -400,6 +429,7 @@ def test
     var astVisitorAdapter <- make_visitor(astVisitor)
     ast_visit(ast_this_program(), astVisitorAdapter)
 
+/*
     // ast_typedecl
     add_extra = 14
     let td <- typeinfo(ast_typedecl type<Foo>)
@@ -414,5 +444,6 @@ def test
     // ast_function
     let fd <- typeinfo(ast_function @@add)
     print("fd = {describe(fd)}\n")
+*/
 
     return true
