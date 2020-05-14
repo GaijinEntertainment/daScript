@@ -30,6 +30,8 @@ MAKE_TYPE_FACTORY(ExprNew,ExprNew)
 MAKE_TYPE_FACTORY(ExprNamedCall,ExprNamedCall)
 MAKE_TYPE_FACTORY(MakeFieldDecl,MakeFieldDecl)
 MAKE_TYPE_FACTORY(MakeStruct,MakeStruct)
+MAKE_TYPE_FACTORY(ExprCall,ExprCall)
+MAKE_TYPE_FACTORY(ExprLooksLikeCall,ExprLooksLikeCall)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -121,14 +123,6 @@ namespace das {
         }
     };
 
-    struct AstExprNewAnnotation : AstExprAnnotation<ExprNew> {
-        AstExprNewAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprNew> ("ExprNew", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
-            addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
-        }
-    };
-
     struct AstMakeFieldDeclAnnotation : ManagedStructureAnnotation<MakeFieldDecl> {
         AstMakeFieldDeclAnnotation(ModuleLibrary & ml)
             :  ManagedStructureAnnotation<MakeFieldDecl> ("MakeFieldDecl", ml) {
@@ -145,6 +139,25 @@ namespace das {
         };
     };
 
+    template <typename TT>
+    struct AstExprLooksLikeCallAnnotation : AstExprAnnotation<TT> {
+        AstExprLooksLikeCallAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprAnnotation<TT> (na, ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+            addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
+        }
+    };
+
+    template <typename TT>
+    struct AstExprCallFuncAnnotation : AstExprLooksLikeCallAnnotation<TT> {
+        AstExprCallFuncAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprLooksLikeCallAnnotation<TT> (na, ml) {
+            addField<DAS_BIND_MANAGED_FIELD(func)>("func");
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+        }
+    };
+
     struct AstExprNamedCallAnnotation : AstExprAnnotation<ExprNamedCall> {
         AstExprNamedCallAnnotation(ModuleLibrary & ml)
             :  AstExprAnnotation<ExprNamedCall> ("ExprNamedCall", ml) {
@@ -154,6 +167,21 @@ namespace das {
         }
     };
 
+    struct AstExprNewAnnotation : AstExprCallFuncAnnotation<ExprNew> {
+        AstExprNewAnnotation(ModuleLibrary & ml)
+            :  AstExprCallFuncAnnotation<ExprNew> ("ExprNew", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
+            addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
+        }
+    };
+
+
+    struct AstExprCallAnnotation : AstExprCallFuncAnnotation<ExprNew> {
+        AstExprCallAnnotation(ModuleLibrary & ml)
+            :  AstExprCallFuncAnnotation<ExprNew> ("ExprCall", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("doesNotNeedSp");
+        }
+    };
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
         AstEnumerationAnnotation(ModuleLibrary & ml)
@@ -599,6 +627,10 @@ namespace das {
             IMPL_ADAPT(ExprNewArgument);
             IMPL_ADAPT(ExprNamedCall);
             IMPL_ADAPT(ExprNamedCallArgument);
+            IMPL_ADAPT(ExprCall);
+            IMPL_ADAPT(ExprCallArgument);
+            IMPL_ADAPT(ExprLooksLikeCall);
+            IMPL_ADAPT(ExprLooksLikeCallArgument);
         }
     protected:
         void *      classPtr;
@@ -635,6 +667,10 @@ namespace das {
         DECL_VISIT(ExprNewArgument);
         DECL_VISIT(ExprNamedCall);
         DECL_VISIT(ExprNamedCallArgument);
+        DECL_VISIT(ExprCall);
+        DECL_VISIT(ExprCallArgument);
+        DECL_VISIT(ExprLooksLikeCall);
+        DECL_VISIT(ExprLooksLikeCallArgument);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -779,6 +815,24 @@ namespace das {
             { IMPL_PREVISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDeclPtr,arg,bool,last); }
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg , bool last ) override
             { IMPL_VISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDecl,arg,MakeFieldDeclPtr,arg,bool,last); }
+    // call
+        virtual void preVisit ( ExprCall * expr ) override
+            { IMPL_PREVISIT(ExprCall); }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override
+            { IMPL_VISIT(ExprCall); }
+        virtual void preVisitCallArg ( ExprCall * expr, Expression * arg, bool last ) override
+            { IMPL_PREVISIT3(ExprCallArgument,ExprCall,ExpressionPtr,arg,bool,last); }
+        virtual ExpressionPtr visitCallArg ( ExprCall * expr, Expression * arg , bool last ) override
+            { IMPL_VISIT3(ExprCallArgument,ExprCall,Expression,arg,ExpressionPtr,arg,bool,last); }
+    // looks like call
+        virtual void preVisit ( ExprLooksLikeCall * expr ) override
+            { IMPL_PREVISIT(ExprLooksLikeCall); }
+        virtual ExpressionPtr visit ( ExprLooksLikeCall * expr ) override
+            { IMPL_VISIT(ExprLooksLikeCall); }
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg, bool last ) override
+            { IMPL_PREVISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,ExpressionPtr,arg,bool,last); }
+        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg , bool last ) override
+            { IMPL_VISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,Expression,arg,ExpressionPtr,arg,bool,last); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -888,6 +942,8 @@ namespace das {
             addAnnotation(make_smart<AstMakeFieldDeclAnnotation>(lib));
             addAnnotation(make_smart<AstMakeStructAnnotation>(lib));
             addAnnotation(make_smart<AstExprNamedCallAnnotation>(lib));
+            addAnnotation(make_smart<AstExprLooksLikeCallAnnotation<ExprLooksLikeCall>>("ExprLooksLikeCall",lib));
+            addAnnotation(make_smart<AstExprCallAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",

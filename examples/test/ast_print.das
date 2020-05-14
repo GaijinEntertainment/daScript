@@ -191,6 +191,24 @@ class AstVisitor
         pass
     def visitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
         return arg
+// looks like call (debug,assert,verify,erase,find,key_exists,keys,values,invoke,memzero etc)
+    def preVisitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>)
+        pass
+    def visitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool)
+        pass
+    def visitExprLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool) : ExpressionPtr
+        return arg
+// call
+    def preVisitExprCall(expr:smart_ptr<ExprCall>)
+        pass
+    def visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool)
+        pass
+    def visitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool) : ExpressionPtr
+        return arg
 
 //////////
 // example
@@ -419,6 +437,26 @@ class PrintVisitor : AstVisitor
         if !last
             print(",")
         return arg
+// looks like call (debug,assert,verify,erase,find,key_exists,keys,values,invoke,memzero etc)
+    def override preVisitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>)
+        print("{expr.name}(")
+    def override visitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>)
+        print(")")
+        return ExpressionPtr(expr)
+    def override visitExprLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool)
+        if !last
+            print(",")
+        return arg
+// call
+    def override preVisitExprCall(expr:smart_ptr<ExprCall>)
+        print("{expr.name}(")
+    def override visitExprCall(expr:smart_ptr<ExprCall>)
+        print(")")
+        return ExpressionPtr(expr)
+    def override visitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool)
+        if !last
+            print(",")
+        return arg
 
 typedef
     Integer = int
@@ -459,6 +497,8 @@ def allExpr(arg:int)
     let pFoo1 = new Foo
     let pFoo2 = new Foo(1)
     let pFoo3 = new Foo(1,2)
+    // ExprCall
+    add(1,2)
 
 [export]
 def test
