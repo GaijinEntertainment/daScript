@@ -7,7 +7,6 @@
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_matrix.h"
 #include "daScript/simulate/aot_builtin_time.h"
-#include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/bin_serializer.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/interop.h"
@@ -771,11 +770,11 @@ namespace das {
         __forceinline das_iterator(const char * st) : str(st) {}
         __forceinline bool first ( Context *, int32_t & i ) {
             if ( !str || *str==0 ) return false;
-            i = *str++;
+            i = uint8_t(*str++);
             return true;
         }
         __forceinline bool next  ( Context *, int32_t & i ) {
-            i = *str++;
+            i = uint8_t(*str++);
             return i!=0;
         }
         __forceinline void close ( Context *, int32_t &   ) {}
@@ -1785,6 +1784,8 @@ namespace das {
         return thh.erase(tab, key, hfn) != -1;
     }
 }
+
+#include "daScript/simulate/aot_builtin_string.h"
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop

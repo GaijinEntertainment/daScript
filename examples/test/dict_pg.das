@@ -16,8 +16,8 @@ def test
 								offset = index
 							length ++
 						elif length != 0
-							var token = to_lower_in_place(chop(data,offset,length))	// unsafe
-							if (dict[token]++)!=0
+							var token = chop(data,offset,length) |> to_lower_in_place()	// unsafe
+							if dict[token]++ != 0
 								delete token		// gc hint
 							length = 0
 				var arr : array<tuple<string;int>>

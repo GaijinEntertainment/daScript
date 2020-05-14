@@ -299,13 +299,13 @@ namespace das
     bool StringIterator::first ( Context &, char * _value )  {
         if ( str==nullptr || *str==0 ) return false;
         int32_t * value = (int32_t *) _value;
-        *value = *str++;
+        *value = uint8_t(*str++);
         return true;
     }
 
     bool StringIterator::next  ( Context &, char * _value )  {
         int32_t * value = (int32_t *) _value;
-        *value = *str++;
+        *value = uint8_t(*str++);
         return *value != 0;
     }
 

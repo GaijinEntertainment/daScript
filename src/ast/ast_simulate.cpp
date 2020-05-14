@@ -902,8 +902,12 @@ namespace das
     }
 
     SimNode * ExprConstString::simulate (Context & context) const {
-        char * str = context.constStringHeap->allocateString(text);
-        return context.code->makeNode<SimNode_ConstString>(at,str);
+		if ( !text.empty() ) {
+			char* str = context.constStringHeap->allocateString(text);
+			return context.code->makeNode<SimNode_ConstString>(at, str);
+		} else {
+			return context.code->makeNode<SimNode_ConstString>(at, nullptr);
+		}
     }
 
     SimNode * ExprStaticAssert::simulate (Context &) const {

@@ -27,6 +27,8 @@ namespace das {
     char* builtin_string_toupper ( const char *str, Context * context );
 	char* builtin_string_toupper_in_place ( char* str );
 	char* builtin_string_chop( const char * str, int start, int length, Context * context );
+	char* builtin_as_string(const TArray<uint8_t>& arr, Context* context);
+	char* builtin_append_char(char* str, int32_t Ch, Context* context);
     unsigned string_to_uint ( const char *str, Context * context );
     int string_to_int ( const char *str, Context * context );
     float string_to_float ( const char *str, Context * context );
@@ -40,6 +42,8 @@ namespace das {
     void write_string_char(StringBuilderWriter & writer, int32_t ch);
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context );
     char * builtin_string_clone ( const char *str, Context * context );
+	__forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
+
 
     __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
 
