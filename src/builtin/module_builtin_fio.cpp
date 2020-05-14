@@ -150,7 +150,7 @@ namespace das {
     const FILE * builtin_fopen  ( const char * name, const char * mode ) {
         if ( name && mode ) {
             FILE * f = fopen(name, mode);
-			// setvbuf(f, NULL, _IOFBF, 65536);
+			setvbuf(f, NULL, _IOFBF, 65536);
 			return f;
         } else {
             return nullptr;
