@@ -143,9 +143,10 @@ namespace das {
     struct AstExprLooksLikeCallAnnotation : AstExprAnnotation<TT> {
         AstExprLooksLikeCallAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExprAnnotation<TT> (na, ml) {
-            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
-            addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
+			using ManagedType = TT;
+            this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+			this->template addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+			this->template addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
         }
     };
 
@@ -153,17 +154,18 @@ namespace das {
     struct AstExprCallFuncAnnotation : AstExprLooksLikeCallAnnotation<TT> {
         AstExprCallFuncAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExprLooksLikeCallAnnotation<TT> (na, ml) {
-            addField<DAS_BIND_MANAGED_FIELD(func)>("func");
-            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+			using ManagedType = TT;
+			this->template addField<DAS_BIND_MANAGED_FIELD(func)>("func");
+			this->template addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
         }
     };
 
     struct AstExprNamedCallAnnotation : AstExprAnnotation<ExprNamedCall> {
         AstExprNamedCallAnnotation(ModuleLibrary & ml)
             :  AstExprAnnotation<ExprNamedCall> ("ExprNamedCall", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
-            addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
+			addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+			addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+			addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
         }
     };
 
@@ -174,7 +176,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
         }
     };
-
 
     struct AstExprCallAnnotation : AstExprCallFuncAnnotation<ExprNew> {
         AstExprCallAnnotation(ModuleLibrary & ml)
