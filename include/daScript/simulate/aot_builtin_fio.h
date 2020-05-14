@@ -7,8 +7,8 @@ namespace das {
     struct SimNode_CallBase;
 
     const FILE * builtin_fopen  ( const char * name, const char * mode );
-    void builtin_fclose ( const FILE * f );
-    void builtin_fprint ( const FILE * f, const char * text );
+    void builtin_fclose ( const FILE * f, Context * context );
+    void builtin_fprint ( const FILE * f, const char * text, Context * context );
     char * builtin_fread ( const FILE * _f, Context * context );
 	char* builtin_fgets(const FILE* _f, Context* context);
     void builtin_fwrite(const FILE * _f, char * str, Context * context);

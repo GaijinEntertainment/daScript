@@ -142,10 +142,9 @@ namespace das {
     };
 
 
-    void builtin_fprint ( const FILE * f, const char * text ) {
-        if ( text ) {
-            fprintf((FILE *)f,"%s",text);
-        }
+    void builtin_fprint ( const FILE * f, const char * text, Context * context ) {
+        if ( !f ) context->throw_error("can't fprint NULL");
+        if ( text ) fputs(text,(FILE *)f);
     }
 
     const FILE * builtin_fopen  ( const char * name, const char * mode ) {
@@ -158,7 +157,8 @@ namespace das {
         }
     }
 
-    void builtin_fclose ( const FILE * f ) {
+    void builtin_fclose ( const FILE * f, Context * context ) {
+        if ( !f ) context->throw_error("can't fclose NULL");
         fclose((FILE *)f);
     }
 
@@ -179,10 +179,10 @@ namespace das {
 		return feof(f);
 	}
 
-	void builtin_map_file(const FILE* _f, const TBlock<void, TTemporary<const char*>>& blk, Context* context) {
-		FILE* f = (FILE*)_f;
+	void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<const char*>>& blk, Context* context) {
+        if ( !f ) context->throw_error("can't map NULL file");
 		struct stat st;
-		int fd = fileno(f);
+		int fd = fileno((FILE *)f);
 		fstat(fd, &st);
 		void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
 		vec4f args[1];
@@ -191,32 +191,33 @@ namespace das {
 		munmap(data, 0);
 	}
 
-    char * builtin_fread ( const FILE * _f, Context * context ) {
-        FILE * f = (FILE *) _f;
+    char * builtin_fread ( const FILE * f, Context * context ) {
+        if ( !f ) context->throw_error("can't fread NULL");
 		struct stat st;
-		int fd = fileno(f);
+		int fd = fileno((FILE*)f);
 		fstat(fd, &st);
         char * res = context->stringHeap.allocateString(nullptr, st.st_size);
-		fseek(f, 0, SEEK_SET);
-		uint32_t bytes = uint32_t(fread(res, 1, st.st_size, f));
+		fseek((FILE*)f, 0, SEEK_SET);
+		uint32_t bytes = uint32_t(fread(res, 1, st.st_size, (FILE *)f));
         ((StringHeader *)res)[-1].length = bytes;
         return res;
     }
 
-	char * builtin_fgets(const FILE* _f, Context* context) {
-		FILE* f = (FILE*)_f;
+	char * builtin_fgets(const FILE* f, Context* context) {
+		if ( !f ) context->throw_error("can't fgets NULL");
 		char buffer[1024];
-		if (char* buf = fgets(buffer, sizeof(buffer), f)) {
+		if (char* buf = fgets(buffer, sizeof(buffer), (FILE *)f)) {
 			return context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
-		}
-		return nullptr;
+		} else {
+		    return nullptr;
+        }
 	}
 
-    void builtin_fwrite ( const FILE * _f, char * str, Context * context ) {
+    void builtin_fwrite ( const FILE * f, char * str, Context * context ) {
+        if ( !f ) context->throw_error("can't fprint NULL");
         if (!str) return;
-        FILE * f = (FILE *) _f;
         uint32_t len = stringLength(*context, str);
-        if (len) fwrite(str, 1, len, f);
+        if (len) fwrite(str, 1, len, (FILE*)f);
     }
 
 #ifdef _MSC_VER
@@ -224,20 +225,22 @@ namespace das {
 #pragma warning(disable:4100)
 #endif
 
-    vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args )
+    vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args )
     {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
         auto fp = cast<FILE *>::to(args[0]);
+        if ( !fp ) context.throw_error("can't read NULL");
         auto buf = cast<void *>::to(args[1]);
         auto len = cast<int32_t>::to(args[2]);
         int32_t res = (int32_t) fread(buf,1,len,fp);
         return cast<int32_t>::from(res);
     }
 
-    vec4f builtin_write ( Context &, SimNode_CallBase * call, vec4f * args )
+    vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args )
     {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
         auto fp = cast<FILE *>::to(args[0]);
+        if ( !fp ) context.throw_error("can't write NULL");
         auto buf = cast<void *>::to(args[1]);
         auto len = cast<int32_t>::to(args[2]);
         int32_t res = (int32_t) fwrite(buf,1,len,fp);
@@ -249,15 +252,11 @@ namespace das {
 #endif
 
     // loads(file,block<data>)
-    vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args )
-    {
+    vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args ) {
         auto fp = cast<FILE *>::to(args[0]);
+        if ( !fp ) context.throw_error("can't load NULL");
         int32_t len = cast<int32_t>::to(args[1]);
-        if (len < 0)
-        {
-            context.throw_error_ex("can't read negative number from binary save, %d", len);
-            return v_zero();
-        }
+        if (len < 0) context.throw_error_ex("can't read negative number from binary save, %d", len);
         Block * block = cast<Block *>::to(args[2]);
         char * buf = (char *) malloc(len + 1);
         vec4f bargs[1];
