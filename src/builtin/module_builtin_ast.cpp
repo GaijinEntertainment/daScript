@@ -26,6 +26,7 @@ MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 MAKE_TYPE_FACTORY(ExprBlock,ExprBlock)
 MAKE_TYPE_FACTORY(ExprLet,ExprLet)
 MAKE_TYPE_FACTORY(ExprStringBuilder,ExprStringBuilder)
+MAKE_TYPE_FACTORY(ExprNew,ExprNew)
 MAKE_TYPE_FACTORY(ExprNamedCall,ExprNamedCall)
 MAKE_TYPE_FACTORY(MakeFieldDecl,MakeFieldDecl)
 MAKE_TYPE_FACTORY(MakeStruct,MakeStruct)
@@ -120,6 +121,13 @@ namespace das {
         }
     };
 
+    struct AstExprNewAnnotation : AstExprAnnotation<ExprNew> {
+        AstExprNewAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<ExprNew> ("ExprNew", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
+            addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
+        }
+    };
 
     struct AstMakeFieldDeclAnnotation : ManagedStructureAnnotation<MakeFieldDecl> {
         AstMakeFieldDeclAnnotation(ModuleLibrary & ml)
@@ -587,6 +595,8 @@ namespace das {
             IMPL_ADAPT(GlobalLetVariableInit);
             IMPL_ADAPT(ExprStringBuilder);
             IMPL_ADAPT(ExprStringBuilderElement);
+            IMPL_ADAPT(ExprNew);
+            IMPL_ADAPT(ExprNewArgument);
             IMPL_ADAPT(ExprNamedCall);
             IMPL_ADAPT(ExprNamedCallArgument);
         }
@@ -621,6 +631,8 @@ namespace das {
         DECL_VISIT(GlobalLetVariableInit);
         DECL_VISIT(ExprStringBuilder);
         DECL_VISIT(ExprStringBuilderElement);
+        DECL_VISIT(ExprNew);
+        DECL_VISIT(ExprNewArgument);
         DECL_VISIT(ExprNamedCall);
         DECL_VISIT(ExprNamedCallArgument);
     protected:
@@ -749,6 +761,15 @@ namespace das {
             { IMPL_PREVISIT3(ExprStringBuilderElement,ExprStringBuilder,ExpressionPtr,element,bool,last); }
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last ) override
             { IMPL_VISIT3(ExprStringBuilderElement,ExprStringBuilder,Expression,element,ExpressionPtr,element,bool,last); }
+    // new
+        virtual void preVisit ( ExprNew * expr ) override
+            { IMPL_PREVISIT(ExprNew); }
+        virtual ExpressionPtr visit ( ExprNew * expr ) override
+            { IMPL_VISIT(ExprNew); }
+        virtual void preVisitNewArg ( ExprNew * expr, Expression * arg, bool last ) override
+            { IMPL_PREVISIT3(ExprNewArgument,ExprNew,ExpressionPtr,arg,bool,last); }
+        virtual ExpressionPtr visitNewArg ( ExprNew * expr, Expression * arg , bool last ) override
+            { IMPL_VISIT3(ExprNewArgument,ExprNew,Expression,arg,ExpressionPtr,arg,bool,last); }
     // named call
         virtual void preVisit ( ExprNamedCall * expr ) override
             { IMPL_PREVISIT(ExprNamedCall); }
@@ -863,6 +884,7 @@ namespace das {
             addAnnotation(make_smart<AstExprBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprLetAnnotation>(lib));
             addAnnotation(make_smart<AstExprStringBuilderAnnotation>(lib));
+            addAnnotation(make_smart<AstExprNewAnnotation>(lib));
             addAnnotation(make_smart<AstMakeFieldDeclAnnotation>(lib));
             addAnnotation(make_smart<AstMakeStructAnnotation>(lib));
             addAnnotation(make_smart<AstExprNamedCallAnnotation>(lib));

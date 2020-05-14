@@ -173,7 +173,16 @@ class AstVisitor
         pass
     def visitExprStringBuilderElement(expr:smart_ptr<ExprStringBuilder>;elem:ExpressionPtr;last:bool) : ExpressionPtr
         return elem
-// named call
+// new
+    def preVisitExprNew(expr:smart_ptr<ExprNew>)
+        pass
+    def visitExprNew(expr:smart_ptr<ExprNew>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool)
+        pass
+    def visitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool) : ExpressionPtr
+        return arg
+// named call (this one only exists before or during the infer)
     def preVisitExprNamedCall(expr:smart_ptr<ExprNamedCall>)
         pass
     def visitExprNamedCall(expr:smart_ptr<ExprNamedCall>) : ExpressionPtr
@@ -385,6 +394,19 @@ class PrintVisitor : AstVisitor
         if !last
             print(",")
         return elem
+// new
+    def override preVisitExprNew(expr:smart_ptr<ExprNew>)
+        print("new {describe(expr.typeexpr)}")
+        if expr.initializer
+            print("(")
+    def override visitExprNew(expr:smart_ptr<ExprNew>)
+        if expr.initializer
+            print(")")
+        return ExpressionPtr(expr)
+    def override visitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool)
+        if !last
+            print(",")
+        return arg
 // named call
     def override preVisitExprNamedCall(expr:smart_ptr<ExprNamedCall>)
         print("{expr.name}([")
@@ -405,10 +427,18 @@ enum FooBar
     Foo
     Bar = 13
 
+
 [comment(x=5,msg="haha")]
 struct Foo
     [[do_not_delete,temp=13]] a : int
     b : array<Foo?>
+
+def Foo(x:int)
+    return <- [[Foo a=x]]
+
+def Foo(x,y:int)
+    return <- [[Foo a=x+y]]
+
 
 var
     add_extra = 13
@@ -419,9 +449,16 @@ def add(a,b:int)
     return a + b + add_extra
 
 [sideeffects,export]
-def allExpr()
+def allExpr(arg:int)
+    // ExprStringBuilder
+    var sb = "arg = {arg}\n"
+    sb = ""
     // ExprNamedCall
     add([a=1,b=2])
+    // ExprNew
+    let pFoo1 = new Foo
+    let pFoo2 = new Foo(1)
+    let pFoo3 = new Foo(1,2)
 
 [export]
 def test
