@@ -45,10 +45,10 @@ def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
 
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
-	if val != null
-		__builtin_table_lock(Tab)
-		invoke(blk,val)
-		__builtin_table_unlock(Tab)
+    if val != null
+        __builtin_table_lock(Tab)
+        invoke(blk,val)
+        __builtin_table_unlock(Tab)
 
 [unsafe_operation,unsafe]
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT const?
@@ -66,10 +66,10 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:
 
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
-	if val != null
-		__builtin_table_lock(Tab)
-		invoke(blk,val)
-		__builtin_table_unlock(Tab)
+    if val != null
+        __builtin_table_lock(Tab)
+        invoke(blk,val)
+        __builtin_table_unlock(Tab)
 
 [unsafe_operation]
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT):valT?
@@ -96,11 +96,11 @@ def clone_to_move(clone_src:auto(TT)) : TT -const
     return <- clone_dest
 
 def clone_dim(var a;b:auto)
-	static_if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
-		for aV,bV in a,b
-			aV := bV
-	else
-		concept_assert(false,"can't clone this array")
+    static_if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
+        for aV,bV in a,b
+            aV := bV
+    else
+        concept_assert(false,"can't clone this array")
 
 def clone_dim(var a;b:auto#)
     static_if typeinfo(is_dim a) & typeinfo(is_dim b) & typeinfo(dim a)==typeinfo(dim b)
@@ -133,12 +133,12 @@ def clone(var a:das_string;b:string)
     set(a,b)
 
 def make_clone(res:auto(TT)) : TT -const
-	static_if typeinfo(can_copy type<TT>)
-		return res
-	else
-		var temp : TT
-		temp := res
-		return <- temp
+    static_if typeinfo(can_copy type<TT>)
+        return res
+    else
+        var temp : TT
+        temp := res
+        return <- temp
 
 def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
     var it : iterator<keyT & const>
@@ -191,8 +191,8 @@ def lock ( Tab : table<auto(keyT);auto(valT)>#; blk : block<(t : table<keyT;valT
 
 [unsafe]
 def lock_forever ( var Tab : table<auto(keyT);auto(valT)> ) : table<keyT;valT> #
-	__builtin_table_lock(Tab)
-	return <- reinterpret<table<keyT;valT> #>(Tab)
+    __builtin_table_lock(Tab)
+    return <- reinterpret<table<keyT;valT> #>(Tab)
 
 // functional
 
@@ -216,7 +216,7 @@ def each ( a : array<auto(TT)> ) : iterator<TT&>
     return <- it
 
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
-	concept_assert(typeinfo(is_ref type<argT>),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
+    concept_assert(typeinfo(is_ref type<argT>),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     var it : iterator<argT -&>
     _builtin_make_lambda_iterator(it,lam)
     return <- it
@@ -233,8 +233,8 @@ def each_enum(tt:auto(TT)) : iterator<TT -const -&>
     return <- iter
 
 def nothing( var it : iterator<auto(TT)> ) : iterator<TT>
-	_builtin_make_nil_iterator(it)
-	return <- it
+    _builtin_make_nil_iterator(it)
+    return <- it
 
 [unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT -const -&>
@@ -291,11 +291,11 @@ def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
 def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
     var tab : table<keyT -const;valT>
     static_if typeinfo(can_copy type<valT>)
-		for x in a
-			tab[x._0] = x._1
-	static_elif typeinfo(can_move type<valT>)
-		for x in a
-			tab[x._0] <- x._1
+        for x in a
+            tab[x._0] = x._1
+    static_elif typeinfo(can_move type<valT>)
+        for x in a
+            tab[x._0] <- x._1
     else
         concept_assert(false,"this array can't be copied or moved")
     return <- tab
@@ -351,22 +351,22 @@ def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
     __builtin_array_unlock(a)
 
 def join(it; separator:string)
-	static_if !typeinfo(is_iterable it)
-		concept_assert(false,"can't join non-iterable type")
-		return ""
-	else
-		let st = build_string() <| $ (var writer)
-			var skip_first = true
-			for elem in it
-				if skip_first
-					skip_first = false
-				else
-					write(writer, separator)
-				if typeinfo(is_string it)
-					write_char(writer, elem)
-				else
-					write(writer, elem)
-		return st
+    static_if !typeinfo(is_iterable it)
+        concept_assert(false,"can't join non-iterable type")
+        return ""
+    else
+        let st = build_string() <| $ (var writer)
+            var skip_first = true
+            for elem in it
+                if skip_first
+                    skip_first = false
+                else
+                    write(writer, separator)
+                if typeinfo(is_string it)
+                    write_char(writer, elem)
+                else
+                    write(writer, elem)
+        return st
 
 def split ( text, delim : string; blk : block< (arg:array<string>#) > )
     builtin_string_split ( text, delim, blk )
@@ -413,5 +413,5 @@ def has_value ( a; key )
 
 [unsafe]
 def get_ptr ( src : smart_ptr<auto(TT)> ) : TT?
-	return reinterpret<TT?>(src)
+    return reinterpret<TT?>(src)
 

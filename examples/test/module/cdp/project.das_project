@@ -1,5 +1,5 @@
 typedef
-	module_info = tuple<string;string;string> const
+    module_info = tuple<string;string;string> const
 
 var
     DAS_PAK_ROOT = "./"
@@ -14,8 +14,8 @@ def module_default(req,from:string) : module_info
     if length(fr)==0
         return [[auto mod_name, req + ".das", ""]]
     else
-		if mod_name == "profile"
-			return [[auto mod_name, DAS_PAK_ROOT + "/profile.das", ""]]
+        if mod_name == "profile"
+            return [[auto mod_name, DAS_PAK_ROOT + "/profile.das", ""]]
         pop(fr)
         for se in rs
             push(fr,se)

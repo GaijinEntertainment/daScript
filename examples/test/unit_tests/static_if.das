@@ -10,7 +10,7 @@ struct Bar
 def setA(var obj;val:auto(valT))
     if typeinfo(has_field<a> obj)
         if typeinfo(typename obj.a) == typeinfo(typename type<valT -const>)
-			obj.a = val
+            obj.a = val
 
 let
     canQQ : bool const = false

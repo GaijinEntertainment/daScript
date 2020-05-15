@@ -30,20 +30,20 @@ struct Sphere
     radius : float
     radius2 : float
     iRadius : float
-	pad1,pad2 : float
+    pad1,pad2 : float
 
 struct Ray
     orig : float3
-	pad1 : float
+    pad1 : float
     dir  : float3
-	pad2 : float
+    pad2 : float
 
 def pointAt(ray:Ray const;t:float)
     return ray.orig + ray.dir*t
 
 struct Hit
     pos    : float3
-	pad    : float
+    pad    : float
     normal : float3
     t      : float
 
@@ -226,7 +226,7 @@ def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array
     var rayCount = 0
     var backbufferIdx = ymin * screenWidth
     for y in range(ymin,ymax)
-		RAND_SEED = random_seed(y*117 + frameCount*13)
+        RAND_SEED = random_seed(y*117 + frameCount*13)
         for x in range(0,screenWidth)
             var col = float3(0)
             for s in range(0,DO_SAMPLES_PER_PIXEL)
@@ -257,8 +257,8 @@ def job(var backbuffer:array<float3>;frameCount,width,height,ymin,ymax:int)
     prepare()
     var totalRayCount = 0
     draw(frameCount, width, height, ymin, ymax, backbuffer, totalRayCount)
-	return totalRayCount
-	
+    return totalRayCount
+    
 
 [export]
 def test
@@ -269,11 +269,11 @@ def test
     var backbuffer : array<float3>
     resize(backbuffer,width*height)
     print("\ntracing...\n")
-	var i = 0
-	profile(kFrameCount,"ray-trace frame") <|
+    var i = 0
+    profile(kFrameCount,"ray-trace frame") <|
         var rayCount = 0
-		draw(i, width, height, 0, height, backbuffer, rayCount)
-		i ++
+        draw(i, width, height, 0, height, backbuffer, rayCount)
+        i ++
     saveTga("path_tracer.tga",backbuffer,width,height)
     return true
 

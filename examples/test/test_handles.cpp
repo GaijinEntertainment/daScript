@@ -11,15 +11,15 @@
 template<> struct das::cast <Point3>  : cast_fVec<Point3> {};
 
 namespace das {
-	template <>
-	struct typeFactory<Point3> {
-	    static TypeDeclPtr make(const ModuleLibrary &) {
-	        auto t = make_smart<TypeDecl>(Type::tFloat3);
-	        t->alias = "Point3";
-	        t->aotAlias = true;
-	        return t;
-	    }
-	};
+    template <>
+    struct typeFactory<Point3> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            auto t = make_smart<TypeDecl>(Type::tFloat3);
+            t->alias = "Point3";
+            t->aotAlias = true;
+            return t;
+        }
+    };
 
     template <> struct typeName<Point3>   { static string name() { return "Point3"; } };
 }

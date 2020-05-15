@@ -6,6 +6,6 @@ def test
     identity(a)
     identity(b)
     a = a*b
-	a := b
+    a := b
     return true
 

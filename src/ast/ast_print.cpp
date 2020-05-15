@@ -1009,8 +1009,8 @@ namespace das {
             return Visitor::visit(expr);
         }
     protected:
-        TextWriter			ss;
-        int					lastNewLine = -1;
+        TextWriter          ss;
+        int                 lastNewLine = -1;
         int                 tab = 0;
     };
 

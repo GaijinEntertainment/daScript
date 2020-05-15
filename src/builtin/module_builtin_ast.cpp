@@ -71,12 +71,12 @@ namespace das {
             : ManagedStructureAnnotation<EXPR> (en, ml) {
         }
         void init() {
-			using ManagedType = EXPR;
+            using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-			this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
-			this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
-			this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
-			this->addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
+            this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
+            this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
+            this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
+            this->addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
         }
     };
 
@@ -147,10 +147,10 @@ namespace das {
     struct AstExprLooksLikeCallAnnotation : AstExprAnnotation<EXPR> {
         AstExprLooksLikeCallAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExprAnnotation<EXPR> (na, ml) {
-			using ManagedType = EXPR;
+            using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-			this->template addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
-			this->template addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
+            this->template addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+            this->template addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
         }
     };
 
@@ -158,18 +158,18 @@ namespace das {
     struct AstExprCallFuncAnnotation : AstExprLooksLikeCallAnnotation<EXPR> {
         AstExprCallFuncAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExprLooksLikeCallAnnotation<EXPR> (na, ml) {
-			using ManagedType = EXPR;
-			this->template addField<DAS_BIND_MANAGED_FIELD(func)>("func");
-			this->template addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(func)>("func");
+            this->template addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
         }
     };
 
     struct AstExprNamedCallAnnotation : AstExprAnnotation<ExprNamedCall> {
         AstExprNamedCallAnnotation(ModuleLibrary & ml)
             :  AstExprAnnotation<ExprNamedCall> ("ExprNamedCall", ml) {
-			addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-			addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
-			addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+            addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
         }
     };
 
@@ -192,8 +192,8 @@ namespace das {
     struct AstExprPtr2RefAnnotation : AstExprAnnotation<EXPR> {
         AstExprPtr2RefAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExprAnnotation<EXPR> (na, ml) {
-			using ManagedType = EXPR;
-			this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
         }
     };
 
@@ -215,8 +215,8 @@ namespace das {
     struct AstExprAtAnnotation : AstExprAnnotation<EXPR> {
         AstExprAtAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExprAnnotation<EXPR> (na, ml) {
-			using ManagedType = EXPR;
-			this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
             this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("index");
             this->addFieldEx ( "atFlags", "atFlags", offsetof(ExprAt, atFlags), makeExprAtFlags() );
         }

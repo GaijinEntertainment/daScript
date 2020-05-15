@@ -9,4 +9,4 @@ require sub/event as sub_event  // testing duplicate here
 def test
     verify(event::fn_event())
     verify(!sub_event::fn_event())
-	return true
+    return true

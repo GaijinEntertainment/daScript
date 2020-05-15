@@ -17,6 +17,6 @@ def test:bool
     if true
         let a1,a2:int[20]
         for v1,v2 in a1,a2
-            assert(true)			// nothing. note, assumed to have no side-effects and will be optimized out
+            assert(true)            // nothing. note, assumed to have no side-effects and will be optimized out
     return true
 

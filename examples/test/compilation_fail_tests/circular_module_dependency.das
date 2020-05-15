@@ -4,4 +4,4 @@ require _mod_a
 
 [export]
 def test
-	return true
+    return true

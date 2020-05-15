@@ -54,8 +54,8 @@ extern int das_yydebug;
 /* "%code requires" blocks.  */
 #line 2 "ds_parser.ypp"
 
-	#include "daScript/misc/platform.h"
-	#include "daScript/ast/ast.h"
+    #include "daScript/misc/platform.h"
+    #include "daScript/ast/ast.h"
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
@@ -66,9 +66,9 @@ extern int das_yydebug;
     };
 
     namespace das {
-        extern ProgramPtr			    g_Program;
+        extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
-        extern vector<FileInfo *>	    g_FileAccessStack;
+        extern vector<FileInfo *>       g_FileAccessStack;
         extern das_map<string,string>   das_module_alias;
     }
     using namespace das;
@@ -277,7 +277,7 @@ union DAS_YYSTYPE
     int64_t                         i64;
     uint64_t                        ui64;
     double                          d;
-	double                          fd;
+    double                          fd;
     string *                        s;
     vector<string> *                pNameList;
     vector<pair<string,LineInfo>> * pNameWithPosList;

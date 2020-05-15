@@ -1,7 +1,7 @@
 %define api.prefix {das_yy}
 %code requires {
-	#include "daScript/misc/platform.h"
-	#include "daScript/ast/ast.h"
+    #include "daScript/misc/platform.h"
+    #include "daScript/ast/ast.h"
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
@@ -12,9 +12,9 @@
     };
 
     namespace das {
-        extern ProgramPtr			    g_Program;
+        extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
-        extern vector<FileInfo *>	    g_FileAccessStack;
+        extern vector<FileInfo *>       g_FileAccessStack;
         extern das_map<string,string>   das_module_alias;
     }
     using namespace das;
@@ -57,22 +57,22 @@
 }
 
 %{
-	#include "daScript/misc/platform.h"
-	#include "daScript/simulate/debug_info.h"
-	#include "daScript/ast/compilation_errors.h"
+    #include "daScript/misc/platform.h"
+    #include "daScript/simulate/debug_info.h"
+    #include "daScript/ast/compilation_errors.h"
 
-	#ifdef _MSC_VER
-	#pragma warning(disable:4262)
-	#pragma warning(disable:4127)
-	#pragma warning(disable:4702)
-	#endif
+    #ifdef _MSC_VER
+    #pragma warning(disable:4262)
+    #pragma warning(disable:4127)
+    #pragma warning(disable:4702)
+    #endif
 
     using namespace das;
 
     void das_yyerror (const string & error);
     void das_yyfatalerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
-	void das_checkName(const string & name, const LineInfo &at);
+    void das_checkName(const string & name, const LineInfo &at);
     int yylex();
     void yybegin(const char * str);
 %}
@@ -91,7 +91,7 @@
     int64_t                         i64;
     uint64_t                        ui64;
     double                          d;
-	double                          fd;
+    double                          fd;
     string *                        s;
     vector<string> *                pNameList;
     vector<pair<string,LineInfo>> * pNameWithPosList;
@@ -253,9 +253,9 @@
 %token  ROTREQU             ">>>="
 %token  MAPTO               "=>"
 
-%token	BRABRAB		        "[["    /* [[ */
-%token	BRACBRB		        "[{"    /* [{ */
-%token	CBRCBRB		        "{{"    /* {{ */
+%token  BRABRAB             "[["    /* [[ */
+%token  BRACBRB             "[{"    /* [{ */
+%token  CBRCBRB             "{{"    /* {{ */
 
 %token<i>       INTEGER                 "integer constant"
 %token<i64>     LONG_INTEGER            "long integer constant"
@@ -270,8 +270,8 @@
 %token      BEGIN_STRING            "start of the string"
 %token<ch>  STRING_CHARACTER
 %token      END_STRING              "end of the string"
-%token		BEGIN_STRING_EXPR       "{"
-%token		END_STRING_EXPR         "}"
+%token      BEGIN_STRING_EXPR       "{"
+%token      END_STRING_EXPR         "}"
 
 %type <pNameList>       bitfield_bits
 %type <pNameWithPosList>variable_name_with_pos_list
@@ -300,7 +300,7 @@
 %type <s>               optional_structure_parent
 %type <s>               require_module_name
 %type <aa>              annotation_argument
-%type <aa>				annotation_argument_value
+%type <aa>              annotation_argument_value
 %type <aaList>          annotation_argument_list
 %type <aaList>          annotation_argument_value_list
 %type <aaList>          optional_field_annotation
@@ -397,7 +397,7 @@
 %left       LPIPE RPIPE LBPIPE LAPIPE
 %left       POST_INC POST_DEC '.' RARROW DEREF
 %nonassoc  '[' ']' '(' ')' QDOT QBRA BRABRAB BRACBRB CBRCBRB
-%nonassoc	'$' '@'
+%nonassoc   '$' '@'
 %nonassoc   COLCOL
 
 %%
@@ -411,7 +411,7 @@ program
     |   program global_function_declaration
     |   program expect_declaration
     |   program require_declaration
-	|	program options_declaration
+    |   program options_declaration
     |   program alias_declaration
     |   program variant_alias_declaration
     |   program bitfield_alias_declaration
@@ -442,7 +442,7 @@ string_constant
 string_builder_body
     :   {
         $$ = new ExprStringBuilder();
-		$$->at = LineInfo(g_FileAccessStack.back(),
+        $$->at = LineInfo(g_FileAccessStack.back(),
             yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
     |   string_builder_body[sb] character_sequence[sconst] {
@@ -478,26 +478,26 @@ string_builder
     ;
 
 options_declaration
-	:	DAS_OPTIONS	annotation_argument_list[list] {
-		if ( g_Program->options.size() ) {
-			g_Program->options.insert ( g_Program->options.begin(),
+    :   DAS_OPTIONS annotation_argument_list[list] {
+        if ( g_Program->options.size() ) {
+            g_Program->options.insert ( g_Program->options.begin(),
                 $list->begin(), $list->end() );
-		} else {
-			swap ( g_Program->options, *$list );
-		}
-		auto opt = g_Program->options.find("indenting", tInt);
-		extern int das_tab_size, das_def_tab_size;
-		if (opt)
-		{
-			if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
-				das_tab_size = das_def_tab_size;
-			else
-				das_tab_size = opt->iValue ? opt->iValue : das_def_tab_size;//0 is default
+        } else {
+            swap ( g_Program->options, *$list );
+        }
+        auto opt = g_Program->options.find("indenting", tInt);
+        extern int das_tab_size, das_def_tab_size;
+        if (opt)
+        {
+            if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
+                das_tab_size = das_def_tab_size;
+            else
+                das_tab_size = opt->iValue ? opt->iValue : das_def_tab_size;//0 is default
             g_FileAccessStack.back()->tabSize = das_tab_size;
-		}
-		delete $list;
-	}
-	;
+        }
+        delete $list;
+    }
+    ;
 
 require_declaration
     :   DAS_REQUIRE require_module
@@ -674,20 +674,20 @@ annotation_argument_value
     |   FLOAT[value]             { $$ = new AnnotationArgument("",float($value)); }
     |   DAS_TRUE                 { $$ = new AnnotationArgument("",true); }
     |   DAS_FALSE                { $$ = new AnnotationArgument("",false); }
-	;
+    ;
 
 annotation_argument_value_list
-	:	annotation_argument_value[arg] {
+    :   annotation_argument_value[arg] {
         $$ = new AnnotationArgumentList();
         $$->push_back(*$arg);
         delete $arg;
-	}
-	|	annotation_argument_value_list[argL] ',' annotation_argument_value[arg] {
+    }
+    |   annotation_argument_value_list[argL] ',' annotation_argument_value[arg] {
             $$ = $argL;
             $$->push_back(*$arg);
             delete $arg;
     }
-	;
+    ;
 
 annotation_argument
     :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value); delete $value; delete $name; }
@@ -697,36 +697,36 @@ annotation_argument
     |   NAME[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true); delete $name; }
     |   NAME[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false); delete $name; }
     |   NAME[name]                              { $$ = new AnnotationArgument(*$name,true); delete $name; }
-	|	NAME[name] '=' '(' annotation_argument_value_list[values] ')' {
-		{ $$ = new AnnotationArgument(*$name,$values); delete $name; }
-	}
+    |   NAME[name] '=' '(' annotation_argument_value_list[values] ')' {
+        { $$ = new AnnotationArgument(*$name,$values); delete $name; }
+    }
     ;
 
 annotation_argument_list
     :   annotation_argument[arg]  {
         $$ = new AnnotationArgumentList();
-		if ( $arg->type==Type::none ) {
-			for ( auto & sarg : *($arg->aList) ) {
-				sarg.name = $arg->name;
-				$$->push_back(sarg);
-			}
-			delete $arg->aList;
-		} else {
-			$$->push_back(*$arg);
-		}
+        if ( $arg->type==Type::none ) {
+            for ( auto & sarg : *($arg->aList) ) {
+                sarg.name = $arg->name;
+                $$->push_back(sarg);
+            }
+            delete $arg->aList;
+        } else {
+            $$->push_back(*$arg);
+        }
         delete $arg;
     }
     |   annotation_argument_list[argL] ',' annotation_argument[arg] {
             $$ = $argL;
-			if ( $arg->type==Type::none ) {
-				for ( auto & sarg : *($arg->aList) ) {
-					sarg.name = $arg->name;
-					$$->push_back(sarg);
-				}
-				delete $arg->aList;
-			} else {
-				$$->push_back(*$arg);
-			}
+            if ( $arg->type==Type::none ) {
+                for ( auto & sarg : *($arg->aList) ) {
+                    sarg.name = $arg->name;
+                    $$->push_back(sarg);
+                }
+                delete $arg->aList;
+            } else {
+                $$->push_back(*$arg);
+            }
             delete $arg;
     }
     ;
@@ -791,9 +791,9 @@ optional_function_type
 
 function_name
     :   NAME[name]        {
-		das_checkName(*$name,tokAt(@name));
-		$$ = $name;
-	}
+        das_checkName(*$name,tokAt(@name));
+        $$ = $name;
+    }
     |   DAS_OPERATOR '!'     { $$ = new string("!"); }
     |   DAS_OPERATOR '~'     { $$ = new string("~"); }
     |   DAS_OPERATOR ADDEQU  { $$ = new string("+="); }
@@ -849,7 +849,7 @@ global_function_declaration
                         CompilationError::function_already_declared);
             }
         }
-		$func->delRef();
+        $func->delRef();
     }
     ;
 
@@ -875,9 +875,9 @@ function_declaration
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
-							if ( pDecl->annotation ) {
-								pVar->annotation = *pDecl->annotation;
-							}
+                            if ( pDecl->annotation ) {
+                                pVar->annotation = *pDecl->annotation;
+                            }
                             pFunction->arguments.push_back(pVar);
                         } else {
                             das_yyerror("function argument is already declared " + name_at.first,name_at.second,
@@ -930,7 +930,7 @@ expression_any
 expressions
     :   {
         $$ = new ExprBlock();
-		$$->at = LineInfo(g_FileAccessStack.back(),
+        $$->at = LineInfo(g_FileAccessStack.back(),
             yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
     |   expressions[block] expression_any[subexpr]      {
@@ -1167,7 +1167,7 @@ block_or_simple_block
     }
     |   MAPTO[loc] LARROW expr[subexpr]        {
             auto retE = make_smart<ExprReturn>(tokAt(@loc), ExpressionPtr($subexpr));
-			retE->moveSemantics = true;
+            retE->moveSemantics = true;
             auto blkE = new ExprBlock();
             blkE->at = tokAt(@loc);
             blkE->list.push_back(retE);
@@ -1205,9 +1205,9 @@ expr_block
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
-							if ( pDecl->annotation ) {
-								pVar->annotation = *pDecl->annotation;
-							}
+                            if ( pDecl->annotation ) {
+                                pVar->annotation = *pDecl->annotation;
+                            }
                             closure->arguments.push_back(pVar);
                         } else {
                             das_yyerror("block argument is already declared " + name_at.first,
@@ -1246,7 +1246,7 @@ expr_numeric_const
     |   LONG_INTEGER[const]                   { $$ = new ExprConstInt64(tokAt(@const),(int64_t)$const); }
     |   UNSIGNED_LONG_INTEGER[const]          { $$ = new ExprConstUInt64(tokAt(@const),(uint64_t)$const); }
     |   FLOAT[const]                          { $$ = new ExprConstFloat(tokAt(@const),(float)$const); }
-	|   DOUBLE[const]                         { $$ = new ExprConstDouble(tokAt(@const),(double)$const); }
+    |   DOUBLE[const]                         { $$ = new ExprConstDouble(tokAt(@const),(double)$const); }
     ;
 
 expr_assign
@@ -1301,28 +1301,28 @@ expr_method_call
 
 func_addr_expr
     :   '@' '@'[loc] name_in_namespace[name]     {
-		$$ = new ExprAddr(tokAt(@loc),*$name);
-		delete $name;
-	}
+        $$ = new ExprAddr(tokAt(@loc),*$name);
+        delete $name;
+    }
     |   '@' '@'[loc] '<' { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } name_in_namespace[name] {
-		auto expr = new ExprAddr(tokAt(@loc),*$name);
-		delete $name;
+        auto expr = new ExprAddr(tokAt(@loc),*$name);
+        delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($blockType);
-		$$ = expr;
+        $$ = expr;
     }
     |   '@' '@'[loc] '<' { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } name_in_namespace[name] {
-		auto expr = new ExprAddr(tokAt(@loc),*$name);
-		delete $name;
+        auto expr = new ExprAddr(tokAt(@loc),*$name);
+        delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($result);
         if ( $list ) {
             varDeclToTypeDecl(expr->funcType.get(), $list);
             deleteVariableDeclarationList($list);
         }
-		$$ = expr;
+        $$ = expr;
     }
-	;
+    ;
 
 expr
     :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
@@ -1360,10 +1360,10 @@ expr
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),"---", ExpressionPtr($subexpr)); }
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
-	|   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
+    |   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name); delete $name; }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name); delete $name; }
-	|	func_addr_expr[subexpr]					 { $$ = $subexpr; }
+    |   func_addr_expr[subexpr]                  { $$ = $subexpr; }
     |   name_in_namespace[name] '(' ')' {
             $$ = g_Program->makeCall(tokAt(@name),*$name);
             delete $name;
@@ -1380,7 +1380,7 @@ expr
     }
     |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
-	|   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
+    |   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' '(' ')' {
         auto gen = new ExprMakeGenerator(tokAt(@loc));
         gen->iterType = TypeDeclPtr($typeDecl);
@@ -1400,11 +1400,11 @@ expr
     }
     |   expr[subexpr] DAS_IS[loc] NAME[vname] {
         $$ = new ExprIsVariant(tokAt(@loc),ExpressionPtr($subexpr),*$vname);
-		delete $vname;
+        delete $vname;
     }
     |   expr[subexpr] DAS_AS[loc] NAME[vname] {
         $$ = new ExprAsVariant(tokAt(@loc),ExpressionPtr($subexpr),*$vname);
-		delete $vname;
+        delete $vname;
     }
     |   expr[subexpr] '?' DAS_AS[loc] NAME[vname] {
         $$ = new ExprSafeAsVariant(tokAt(@loc),ExpressionPtr($subexpr),*$vname);
@@ -1438,7 +1438,7 @@ expr
     }
     | name_in_namespace[ena] NAME[eni] {
         Enumeration * pEnum = nullptr;
-		Expression * resConst = nullptr;
+        Expression * resConst = nullptr;
         auto enums = g_Program->findEnum(*$ena);
         auto aliases = g_Program->findAlias(*$ena);
         if ( enums.size()+aliases.size() > 1 ) {
@@ -1473,18 +1473,18 @@ expr
         if ( pEnum ) {
             auto ff = pEnum->find(*$eni);
             if ( ff.second ) {
-				auto td = make_smart<TypeDecl>(pEnum);
+                auto td = make_smart<TypeDecl>(pEnum);
                 resConst = new ExprConstEnumeration(tokAt(@eni), *$eni, td);
             } else {
                 das_yyerror("enumeraiton value not found " + *$ena + " " + *$eni, tokAt(@eni),
                     CompilationError::enumeration_not_found);
             }
         }
-		if ( resConst ) {
-			$$ = resConst;
-		} else {
-			$$ = new ExprConstInt(0);	// dummy
-		}
+        if ( resConst ) {
+            $$ = resConst;
+        } else {
+            $$ = new ExprConstInt(0);   // dummy
+        }
         delete $ena;
         delete $eni;
     }
@@ -1562,7 +1562,7 @@ struct_variable_declaration_list
                 das_yyerror("function is already defined " + $func->getMangledName(),
                     $func->at, CompilationError::function_already_declared);
             }
-			$func->delRef();
+            $func->delRef();
         }
         $$ = $list;
     }
@@ -1570,15 +1570,15 @@ struct_variable_declaration_list
 
 function_argument_declaration
     :   optional_field_annotation[ann] variable_declaration[decl]          {
-			$$ = $decl;
-			$decl->pTypeDecl->constant = true;
-			$decl->annotation = $ann;
-		}
+            $$ = $decl;
+            $decl->pTypeDecl->constant = true;
+            $decl->annotation = $ann;
+        }
     |   optional_field_annotation[ann] DAS_VAR variable_declaration[decl]  {
-			$$ = $decl;
-			$decl->pTypeDecl->removeConstant = true;
-			$decl->annotation = $ann;
-		}
+            $$ = $decl;
+            $decl->pTypeDecl->removeConstant = true;
+            $decl->annotation = $ann;
+        }
     ;
 
 function_argument_list
@@ -1759,7 +1759,7 @@ enum_list
         $$ = new Enumeration();
     }
     |   enum_list[pE] NAME[name] ';' {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         if ( !$pE->add(*$name) ) {
             das_yyerror("enumeration alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
@@ -1768,7 +1768,7 @@ enum_list
         $$ = $pE;
     }
     |   enum_list[pE] NAME[name] '=' expr[value] ';' {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         if ( !$pE->add(*$name,ExpressionPtr($value)) ) {
             das_yyerror("enumeration value alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
@@ -1781,7 +1781,7 @@ enum_list
 
 single_alias
     :   NAME[name] '=' type_declaration[tdecl] ';' {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         $tdecl->alias = *$name;
         if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
             das_yyerror("type alias is already defined "+*$name,tokAt(@name),
@@ -1792,9 +1792,9 @@ single_alias
     ;
 
 alias_list
-	:	single_alias
-	|	alias_list single_alias
-	;
+    :   single_alias
+    |   alias_list single_alias
+    ;
 
 alias_declaration
     :   DAS_TYPEDEF '{' alias_list '}'
@@ -1802,7 +1802,7 @@ alias_declaration
 
 enum_declaration
     :   DAS_ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@loc);
         pEnum->name = *$name;
@@ -1810,19 +1810,19 @@ enum_declaration
             das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);
         }
-		delete $name;
+        delete $name;
     }
     |   DAS_ENUM[loc] NAME[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@loc);
         pEnum->name = *$name;
-		pEnum->baseType = $ebt;
+        pEnum->baseType = $ebt;
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);
         }
-		delete $name;
+        delete $name;
     }
     ;
 
@@ -1833,7 +1833,7 @@ optional_structure_parent
 
 structure_name
     : NAME[name] optional_structure_parent[parent] {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         StructurePtr pStruct;
         if ( $parent ) {
             auto structs = g_Program->findStructure(*$parent);
@@ -1951,7 +1951,7 @@ structure_declaration
                         }
                     }
                 }
-				swap ( pStruct->annotations, *$annL );
+                swap ( pStruct->annotations, *$annL );
                 delete $annL;
             }
         }
@@ -1962,14 +1962,14 @@ structure_declaration
 
 variable_name_with_pos_list
     :   NAME[name]  {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         auto pSL = new vector<pair<string,LineInfo>>();
         pSL->push_back(make_pair(*$name,tokAt(@name)));
         $$ = pSL;
         delete $name;
     }
     |   variable_name_with_pos_list[list] ',' NAME[name] {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         $list->push_back(make_pair(*$name,tokAt(@name)));
         $$ = $list;
         delete $name;
@@ -2030,7 +2030,7 @@ auto_type_declaration
         $$->at = tokAt(@loc);
     }
     |   DAS_TAUTO[loc] '(' NAME[alias] ')'  {
-		das_checkName(*$alias,tokAt(@alias));
+        das_checkName(*$alias,tokAt(@alias));
         $$ = new TypeDecl(Type::autoinfer);
         $$->at = tokAt(@loc);
         $$->alias = *$alias;
@@ -2040,14 +2040,14 @@ auto_type_declaration
 
 bitfield_bits
     :   NAME[name]  {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         auto pSL = new vector<string>();
         pSL->push_back(*$name);
         $$ = pSL;
         delete $name;
     }
     |   bitfield_bits[list] ';' NAME[name] {
-		das_checkName(*$name,tokAt(@name));
+        das_checkName(*$name,tokAt(@name));
         $list->push_back(*$name);
         $$ = $list;
         delete $name;
@@ -2148,8 +2148,8 @@ type_declaration
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(@typeDecl);
         $$->firstType = make_smart<TypeDecl>(Type::tPointer);
-		$$->firstType->at = tokAt(@typeDecl);
-		$$->firstType->firstType = TypeDeclPtr($typeDecl);
+        $$->firstType->at = tokAt(@typeDecl);
+        $$->firstType->firstType = TypeDeclPtr($typeDecl);
     }
     |   DAS_ARRAY[loc] '<' { das_arrow_depth ++; } type_declaration[typeDecl] '>' { das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tArray);
@@ -2468,9 +2468,9 @@ array_comprehension
 %%
 
 void das_checkName(const string & name, const LineInfo &at) {
-	if ( name.length()>=2 && name[0]=='_' && name[1]=='_' ) {
-		g_Program->error("names starting with __ are reserved, " + name,"","",at,CompilationError::invalid_name);
-	}
+    if ( name.length()>=2 && name[0]=='_' && name[1]=='_' ) {
+        g_Program->error("names starting with __ are reserved, " + name,"","",at,CompilationError::invalid_name);
+    }
 }
 
 void das_yyerror(const string & error, const LineInfo & at, CompilationError cerr) {

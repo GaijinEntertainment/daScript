@@ -34,14 +34,14 @@ double get_time_sec(uint64_t t) {
 }
 
 bool unit_test ( const string & fn ) {
-	tout << fn << " ";
+    tout << fn << " ";
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     if ( auto program = compileDaScript(fn, access, tout, dummyGroup) ) {
         if ( program->failed() ) {
-			tout << "failed to compile\n";
+            tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-				tout <<  reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+                tout <<  reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             return false;
         } else {
@@ -130,17 +130,17 @@ bool unit_test ( const string & fn ) {
                 ctx.restart();
                 bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
                 if ( auto ex = ctx.getException() ) {
-					tout << "exception: " << ex << "\n";
+                    tout << "exception: " << ex << "\n";
                     return false;
                 }
                 if ( !result ) {
-					tout << "failed\n";
+                    tout << "failed\n";
                     return false;
                 }
-				tout << "ok\n";
+                tout << "ok\n";
                 return true;
             } else {
-				tout << "function 'test' not found\n";
+                tout << "function 'test' not found\n";
                 return false;
             }
 #endif

@@ -1,10 +1,10 @@
 def charg(var t:int):int
-	t++
-	return t
+    t++
+    return t
 
 [export]
 def test:bool
-	let x = 1
+    let x = 1
     var y:int
     y=charg(x)
     assert(x==1 & y==2)

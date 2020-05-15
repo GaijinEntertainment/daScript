@@ -42,4 +42,4 @@ def test
     verify(from_b_get_fun_5()=="local")
     verify(from_b_get_own_fun_5()=="from_b")
 
-	return true
+    return true

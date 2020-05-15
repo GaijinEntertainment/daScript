@@ -14,10 +14,10 @@ struct Bar
 
 
 struct L
-	i : int
+    i : int
 
 struct A
-	l : array<L>
+    l : array<L>
 
 struct C
     b : table<string; A>
@@ -28,7 +28,7 @@ def test:bool
     let a : Foo
     let b : Node
     let c : Bar
-	// test 2
-	let l : C
+    // test 2
+    let l : C
     return true
 

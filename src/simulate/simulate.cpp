@@ -821,17 +821,17 @@ namespace das
     }
 
     void Context::to_out ( const char * message ) {
-		if (message) {
-			fprintf(stdout, "%s", message);
-			fflush(stdout);
-		}
+        if (message) {
+            fprintf(stdout, "%s", message);
+            fflush(stdout);
+        }
     }
 
     void Context::to_err ( const char * message ) {
-		if (message) {
-			fprintf(stderr, "%s", message);
-			fflush(stderr);
-		}
+        if (message) {
+            fprintf(stderr, "%s", message);
+            fflush(stderr);
+        }
     }
 
     void Context::throw_error_at ( const LineInfo & at, const char * message, ... ) {

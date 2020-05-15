@@ -7,7 +7,7 @@ struct Foo
     a : array<int>
 
 var
-    g : Foo = new Foo()	// 30113: global variable initialization type mismatch, Foo = Foo?
+    g : Foo = new Foo() // 30113: global variable initialization type mismatch, Foo = Foo?
 
 [export]
 def test

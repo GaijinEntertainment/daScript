@@ -12,5 +12,5 @@ def test
     assert(length(a)==3 & length(b)==3)
     for x,y in a,b
         assert(x==y)
-	return true
+    return true
 

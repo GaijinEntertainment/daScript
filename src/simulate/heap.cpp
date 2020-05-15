@@ -158,7 +158,7 @@ namespace das {
                 auto header = (StringHeader *) ch;
                 ch += sizeof(StringHeader);
                 strncpy(buf,ch,32);
-				buf[32] = 0;
+                buf[32] = 0;
                 tout << "\t" << header->length << "\t" << HEX << header->hash << DEC
                     << "\t" << presentStr(buf,ch,32) << "\n";
             }

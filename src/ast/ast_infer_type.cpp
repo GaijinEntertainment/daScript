@@ -1284,10 +1284,10 @@ namespace das {
                     }
                 }
             }
-			// TODO: verify. correct test is in fact the one bellow
-            //	if ( isFullySealedType(decl.type) ) {
-			// but the auto \ alias test may be sufficient
-			if ( !decl.type->isAuto() && !decl.type->isAlias() ) {
+            // TODO: verify. correct test is in fact the one bellow
+            //  if ( isFullySealedType(decl.type) ) {
+            // but the auto \ alias test may be sufficient
+            if ( !decl.type->isAuto() && !decl.type->isAlias() ) {
                 int fieldAlignemnt = decl.type->getAlignOf();
                 int fa = fieldAlignemnt - 1;
                 if ( cppLayout ) {
