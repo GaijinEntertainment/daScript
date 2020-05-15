@@ -36,6 +36,9 @@ MAKE_TYPE_FACTORY(ExprNullCoalescing,ExprNullCoalescing)
 MAKE_TYPE_FACTORY(ExprAt,ExprAt)
 MAKE_TYPE_FACTORY(ExprSafeAt,ExprSafeAt)
 MAKE_TYPE_FACTORY(ExprPtr2Ref,ExprPtr2Ref)
+MAKE_TYPE_FACTORY(ExprIs,ExprIs)
+MAKE_TYPE_FACTORY(ExprOp2,ExprOp2)
+MAKE_TYPE_FACTORY(ExprOp3,ExprOp3)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -219,6 +222,42 @@ namespace das {
 			this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
             this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("index");
             this->addFieldEx ( "atFlags", "atFlags", offsetof(ExprAt, atFlags), makeExprAtFlags() );
+        }
+    };
+
+    struct AstExprIsAnnotation : AstExprAnnotation<ExprIs> {
+        AstExprIsAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<ExprIs> ("ExprIs", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprOpAnnotation : AstExprAnnotation<EXPR> {
+        AstExprOpAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprAnnotation<EXPR> (na, ml) {
+			using ManagedType = EXPR;
+			this->template addField<DAS_BIND_MANAGED_FIELD(op)>("op");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprOp2Annotation : AstExprOpAnnotation<EXPR> {
+        AstExprOp2Annotation(const string & na, ModuleLibrary & ml)
+            :  AstExprOpAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(left)>("left");
+            this->template addField<DAS_BIND_MANAGED_FIELD(right)>("right");
+        }
+    };
+
+    struct AstExprOp3Annotation : AstExprOpAnnotation<ExprOp3> {
+        AstExprOp3Annotation(ModuleLibrary & ml)
+            :  AstExprOpAnnotation<ExprOp3> ("ExprOp3", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(left)>("left");
+            addField<DAS_BIND_MANAGED_FIELD(right)>("right");
         }
     };
 
@@ -682,6 +721,13 @@ namespace das {
             FN_PREVISIT(ExprAtIndex) = adapt("preVisitExprAtIndex",pClass,info);
             IMPL_ADAPT(ExprSafeAt);
             FN_PREVISIT(ExprSafeAtIndex) = adapt("preVisitExprSafeAtIndex",pClass,info);
+            IMPL_ADAPT(ExprIs);
+            FN_PREVISIT(ExprIsType) = adapt("preVisitExprIsType",pClass,info);
+            IMPL_ADAPT(ExprOp2);
+            FN_PREVISIT(ExprOp2Right) = adapt("preVisitExprOp2Right",pClass,info);
+            IMPL_ADAPT(ExprOp3);
+            FN_PREVISIT(ExprOp3Left) = adapt("preVisitExprOp3Left",pClass,info);
+            FN_PREVISIT(ExprOp3Right) = adapt("preVisitExprOp3Right",pClass,info);
         }
     protected:
         void *      classPtr;
@@ -728,6 +774,13 @@ namespace das {
         Func FN_PREVISIT(ExprAtIndex);
         DECL_VISIT(ExprSafeAt);
         Func FN_PREVISIT(ExprSafeAtIndex);
+        DECL_VISIT(ExprIs);
+        Func FN_PREVISIT(ExprIsType);
+        DECL_VISIT(ExprOp2);
+        Func FN_PREVISIT(ExprOp2Right);
+        DECL_VISIT(ExprOp3);
+        Func FN_PREVISIT(ExprOp3Left);
+        Func FN_PREVISIT(ExprOp3Right);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -881,6 +934,20 @@ namespace das {
         IMPL_BIND_EXPR(ExprSafeAt);
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override
             { IMPL_PREVISIT2(ExprSafeAtIndex,ExprSafeAt,ExpressionPtr,index); }
+    // is
+        IMPL_BIND_EXPR(ExprIs);
+        virtual void preVisitType ( ExprIs * expr, TypeDecl * typeDecl ) override
+            { IMPL_PREVISIT2(ExprIsType,ExprIs,TypeDeclPtr,typeDecl); }
+    // op2
+        IMPL_BIND_EXPR(ExprOp2);
+        virtual void preVisitRight ( ExprOp2 * expr, Expression * right ) override
+            { IMPL_PREVISIT2(ExprOp2Right,ExprOp2,ExpressionPtr,right); }
+    // op3
+        IMPL_BIND_EXPR(ExprOp3);
+        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) override
+            { IMPL_PREVISIT2(ExprOp3Left,ExprOp3,ExpressionPtr,left); }
+        virtual void preVisitRight ( ExprOp3 * expr, Expression * right ) override
+            { IMPL_PREVISIT2(ExprOp3Right,ExprOp3,ExpressionPtr,right); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -997,6 +1064,9 @@ namespace das {
             addAnnotation(make_smart<AstExprNullCoalescingAnnotation>(lib));
             addAnnotation(make_smart<AstExprAtAnnotation<ExprAt>>("ExprAt",lib));
             addAnnotation(make_smart<AstExprAtAnnotation<ExprSafeAt>>("ExprSafeAt",lib));
+            addAnnotation(make_smart<AstExprIsAnnotation>(lib));
+            addAnnotation(make_smart<AstExprOp2Annotation<ExprOp2>>("ExprOp2",lib));
+            addAnnotation(make_smart<AstExprOp3Annotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",

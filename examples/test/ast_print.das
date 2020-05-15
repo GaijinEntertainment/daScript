@@ -230,6 +230,29 @@ class AstVisitor
         return ExpressionPtr(expr)
     def preVisitExprSafeAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
         pass
+// is
+    def preVisitExprIs(expr:smart_ptr<ExprIs>)
+        pass
+    def visitExprIs(expr:smart_ptr<ExprIs>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprIsType(expr:smart_ptr<ExprAt>;typeDecl:TypeDeclPtr)
+        pass
+// op2
+    def preVisitExprOp2(expr:smart_ptr<ExprOp2>)
+        pass
+    def visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr)
+        pass
+// op3
+    def preVisitExprOp3(expr:smart_ptr<ExprOp3>)
+        pass
+    def visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr)
+        pass
+    def preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr)
+        pass
 
 
 //////////
@@ -245,15 +268,17 @@ let
         (FunctionFlags unsafeOperation) |
         (FunctionFlags generatorFunction) )
 
+// TODO: fixme
+def noBracket(expr)
+    return false
+
 class PrintVisitor : AstVisitor
     extraTypeInfo : bool = true
     printCStyle : bool = true
     tab : int = 0
-
     // TODO: fixme
     def newLine()
         print("\n")
-
 // program
     def override preVisitProgram(prog:ProgramPtr)
         print("// program\n")
@@ -494,6 +519,31 @@ class PrintVisitor : AstVisitor
         return ExpressionPtr(expr)
     def override preVisitExprSafeAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
         print("?[")
+// is
+    def override preVisitExprIsType(expr:smart_ptr<ExprAt>;typeDecl:TypeDeclPtr)
+        print("is type<{describe([decl=typeDecl,extra=false,contracts=true])}>")
+// op2
+    def override preVisitExprOp2(expr:smart_ptr<ExprOp2>)
+        if !noBracket(expr)
+            print("(")
+    def override visitExprOp2(expr:smart_ptr<ExprOp2>)
+        if !noBracket(expr)
+            print(")")
+        return ExpressionPtr(expr)
+    def override preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr)
+        print(" {expr.op} ")
+// op3
+    def override preVisitExprOp3(expr:smart_ptr<ExprOp3>)
+        if !noBracket(expr)
+            print("(")
+    def override visitExprOp3(expr:smart_ptr<ExprOp3>)
+        if !noBracket(expr)
+            print(")")
+        return ExpressionPtr(expr)
+    def override preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr)
+        print(" ? ")
+    def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr)
+        print(" : ")
 
 typedef
     Integer = int
@@ -544,6 +594,17 @@ def allExpr(arg:int)
     // ExprSafeAt
     var exprSafeAt = pFoo1.b?[0] ?? pFoo2
     exprSafeAt = pFoo2
+    // ExprIs
+    if exprAt is type<int>
+        print("nada\n")
+    // ExprOp2
+    var a = 1
+    a = 3
+    var b = 2
+    b = 4
+    var c = a + b
+    // ExprOp3
+    c = a==b ? a : b
 
 [export]
 def test
