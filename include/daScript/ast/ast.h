@@ -413,6 +413,7 @@ namespace das
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
         TypeDeclPtr type;
+        char * __rtti = nullptr;
         union{
             struct {
                 bool    alwaysSafe : 1;
@@ -451,8 +452,8 @@ namespace das
 #pragma warning(disable:4324)
 #endif
     struct ExprConst : Expression {
-        ExprConst ( Type t ) : baseType(t) {}
-        ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) {}
+        ExprConst ( Type t ) : baseType(t) { __rtti = "ExprConst"; }
+        ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) { __rtti = "ExprConst"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
         Type    baseType;
@@ -464,8 +465,12 @@ namespace das
 
     template <typename TT, typename ExprConstExt>
     struct ExprConstT : ExprConst {
-        ExprConstT ( TT val, Type bt ) : ExprConst(bt) { value = cast<TT>::from(val); }
+        ExprConstT ( TT val, Type bt ) : ExprConst(bt) {
+            __rtti = "ExprConstT";
+            value = cast<TT>::from(val);
+        }
         ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) {
+            __rtti = "ExprConstT";
             value = v_zero();
             memcpy(&value, &val, sizeof(TT));
         }

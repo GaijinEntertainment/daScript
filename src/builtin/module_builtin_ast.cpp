@@ -84,6 +84,7 @@ namespace das {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
+            this->template addField<DAS_BIND_MANAGED_FIELD(__rtti)>("__typeName","__rtti");
             this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
             this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
             this->addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );

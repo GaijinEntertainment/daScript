@@ -626,7 +626,10 @@ class PrintVisitor : AstVisitor
         print("\n")
     def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr)
         print("{repeat("\t",tab)}")
-        print("else\n")
+        if elseBlock.__rtti=="ExprIfThenElse"
+            print("else ")
+        else
+            print("else\n")
 
 typedef
     Integer = int
@@ -690,10 +693,28 @@ def allExpr(arg:int)
     cc = aa==bb ? aa : bb
     // ExprWith
     with exprAt
-        a = 3
+        aa = 3
     // ExprWhile
     while aa!=100
         aa++
+    // ExprTryRecover
+    try
+        aa = 2
+    recover
+        aa = 3
+    // ExprIfThenElse
+    if aa==2
+        aa = 2
+    if aa==2
+        aa = 2
+    else
+        aa = 3
+    if aa==2
+        aa = 2
+    elif aa==3
+        aa = 3
+    else
+        aa = 4
 
 [export]
 def test

@@ -5,9 +5,9 @@
 namespace das
 {
     struct ExprLabel : Expression {
-        ExprLabel () = default;
+        ExprLabel () { __rtti = "ExprLabel"; };
         ExprLabel ( const LineInfo & a, int32_t s, const string & cm = string() )
-            : Expression(a), label(s), comment(cm) {}
+            : Expression(a), label(s), comment(cm) { __rtti = "ExprLabel"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -17,9 +17,11 @@ namespace das
     };
 
     struct ExprGoto : Expression {
-        ExprGoto () = default;
-        ExprGoto ( const LineInfo & a, int32_t s ) : Expression(a), label(s) {}
-        ExprGoto ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
+        ExprGoto () { __rtti = "ExprGoto"; };
+        ExprGoto ( const LineInfo & a, int32_t s )
+            : Expression(a), label(s) { __rtti = "ExprGoto"; }
+        ExprGoto ( const LineInfo & a, const ExpressionPtr & s )
+            : Expression(a), subexpr(s) { __rtti = "ExprGoto"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -30,6 +32,7 @@ namespace das
     };
 
     struct ExprRef2Value : Expression {
+        ExprRef2Value() { __rtti = "ExprRef2Value"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -39,8 +42,9 @@ namespace das
     };
 
     struct ExprRef2Ptr : Expression {
-        ExprRef2Ptr () = default;
-        ExprRef2Ptr ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
+        ExprRef2Ptr () { __rtti = "ExprRef2Ptr"; };
+        ExprRef2Ptr ( const LineInfo & a, const ExpressionPtr & s )
+            : Expression(a), subexpr(s) { __rtti = "ExprRef2Ptr"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -49,8 +53,9 @@ namespace das
     };
 
     struct ExprPtr2Ref : Expression {
-        ExprPtr2Ref () = default;
-        ExprPtr2Ref ( const LineInfo & a, const ExpressionPtr & s ) : Expression(a), subexpr(s) {}
+        ExprPtr2Ref () { __rtti = "ExprPtr2Ref"; };
+        ExprPtr2Ref ( const LineInfo & a, const ExpressionPtr & s )
+            : Expression(a), subexpr(s) { __rtti = "ExprPtr2Ref"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -59,8 +64,9 @@ namespace das
     };
 
     struct ExprAddr : Expression {
-        ExprAddr () = default;
-        ExprAddr ( const LineInfo & a, const string & n ) : Expression(a), target(n) {}
+        ExprAddr ()  { __rtti = "ExprAddr"; };
+        ExprAddr ( const LineInfo & a, const string & n )
+            : Expression(a), target(n) { __rtti = "ExprAddr"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -71,9 +77,9 @@ namespace das
     };
 
     struct ExprNullCoalescing : ExprPtr2Ref {
-        ExprNullCoalescing () = default;
+        ExprNullCoalescing () { __rtti = "ExprNullCoalescing"; };
         ExprNullCoalescing ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & defVal )
-            : ExprPtr2Ref(a,s), defaultValue(defVal) {}
+            : ExprPtr2Ref(a,s), defaultValue(defVal) { __rtti = "ExprNullCoalescing"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -82,9 +88,9 @@ namespace das
     };
 
     struct ExprDelete : Expression {
-        ExprDelete() = default;
+        ExprDelete() { __rtti = "ExprDelete"; }
         ExprDelete ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) {}
+            : Expression(a), subexpr(s) { __rtti = "ExprDelete"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -93,9 +99,9 @@ namespace das
     };
 
     struct ExprAt : Expression {
-        ExprAt() = default;
+        ExprAt() { __rtti = "ExprAt"; };
         ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
-            : Expression(a), subexpr(s), index(i) {}
+            : Expression(a), subexpr(s), index(i) { __rtti = "ExprAt"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -113,9 +119,9 @@ namespace das
     };
 
     struct ExprSafeAt : ExprAt {
-        ExprSafeAt() = default;
+        ExprSafeAt() { __rtti = "ExprSafeAt"; };
         ExprSafeAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
-            : ExprAt(a,s,i) {}
+            : ExprAt(a,s,i) { __rtti = "ExprSafeAt"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -126,6 +132,7 @@ namespace das
 
 
     struct ExprBlock : Expression {
+        ExprBlock() { __rtti = "ExprBlock"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
@@ -171,8 +178,9 @@ namespace das
     };
 
     struct ExprVar : Expression {
-        ExprVar () = default;
-        ExprVar ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
+        ExprVar () { __rtti = "ExprVar"; };
+        ExprVar ( const LineInfo & a, const string & n )
+            : Expression(a), name(n) { __rtti = "ExprVar"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
@@ -198,11 +206,11 @@ namespace das
     };
 
     struct ExprField : Expression {
-        ExprField () = default;
+        ExprField () { __rtti = "ExprField"; };
         ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : Expression(a), value(val), name(n), atField(a) {}
+            : Expression(a), value(val), name(n), atField(a) { __rtti = "ExprField"; }
         ExprField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n )
-            : Expression(a), value(val), name(n), atField(af) {}
+            : Expression(a), value(val), name(n), atField(af) { __rtti = "ExprField"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
@@ -235,9 +243,9 @@ namespace das
     };
 
     struct ExprIsVariant : ExprField {
-        ExprIsVariant () = default;
+        ExprIsVariant () { __rtti = "ExprIsVariant"; };
         ExprIsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) {}
+            : ExprField(a,val,n) { __rtti = "ExprIsVariant"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -246,9 +254,9 @@ namespace das
     };
 
     struct ExprAsVariant : ExprField {
-        ExprAsVariant () = default;
+        ExprAsVariant () { __rtti = "ExprAsVariant"; };
         ExprAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) {}
+            : ExprField(a,val,n) { __rtti = "ExprAsVariant"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -257,9 +265,9 @@ namespace das
     };
 
     struct ExprSafeAsVariant : ExprField {
-        ExprSafeAsVariant () = default;
+        ExprSafeAsVariant () { __rtti = "ExprSafeAsVariant"; };
         ExprSafeAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) {}
+            : ExprField(a,val,n) { __rtti = "ExprSafeAsVariant"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -269,9 +277,9 @@ namespace das
     };
 
     struct ExprSwizzle : Expression {
-        ExprSwizzle () = default;
+        ExprSwizzle () { __rtti = "ExprSwizzle"; };
         ExprSwizzle ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : Expression(a), value(val), mask(n) {}
+            : Expression(a), value(val), mask(n) { __rtti = "ExprSwizzle"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
@@ -291,11 +299,11 @@ namespace das
     };
 
     struct ExprSafeField : ExprField {
-        ExprSafeField () = default;
+        ExprSafeField () { __rtti = "ExprField"; };
         ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) {}
+            : ExprField(a,val,n) { __rtti = "ExprField"; }
         ExprSafeField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n )
-            : ExprField(a,af,val,n) {}
+            : ExprField(a,af,val,n) { __rtti = "ExprField"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
@@ -306,8 +314,9 @@ namespace das
     };
 
     struct ExprLooksLikeCall : Expression {
-        ExprLooksLikeCall () = default;
-        ExprLooksLikeCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
+        ExprLooksLikeCall () { __rtti = "ExprLooksLikeCall"; };
+        ExprLooksLikeCall ( const LineInfo & a, const string & n )
+            : Expression(a), name(n) { __rtti = "ExprLooksLikeCall"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         void autoDereference();
         virtual SimNode * simulate (Context &) const override { return nullptr; }
@@ -320,24 +329,26 @@ namespace das
     };
 
     struct ExprCallFunc : ExprLooksLikeCall {
-        ExprCallFunc () = default;
-        ExprCallFunc ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) { }
+        ExprCallFunc () { __rtti = "ExprCallFunc"; };
+        ExprCallFunc ( const LineInfo & a, const string & n )
+            : ExprLooksLikeCall(a,n) { __rtti = "ExprCallFunc"; }
         Function *      func = nullptr;
         uint32_t        stackTop = 0;
     };
 
     struct ExprOp : ExprCallFunc {
-        ExprOp () = default;
-        ExprOp ( const LineInfo & a, const string & o ) : ExprCallFunc(a,o), op(o) {}
+        ExprOp () { __rtti = "ExprOp"; };
+        ExprOp ( const LineInfo & a, const string & o )
+            : ExprCallFunc(a,o), op(o) { __rtti = "ExprOp"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         string  op;
     };
 
     // unary    !subexpr
     struct ExprOp1 : ExprOp {
-        ExprOp1 () = default;
+        ExprOp1 () { __rtti = "ExprOp1"; };
         ExprOp1 ( const LineInfo & a, const string & o, const ExpressionPtr & s )
-            : ExprOp(a,o), subexpr(s) {}
+            : ExprOp(a,o), subexpr(s) { __rtti = "ExprOp1"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -349,9 +360,9 @@ namespace das
 
     // binary   left < right
     struct ExprOp2 : ExprOp {
-        ExprOp2 () = default;
+        ExprOp2 () { __rtti = "ExprOp2"; };
         ExprOp2 ( const LineInfo & a, const string & o, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp(a,o), left(l), right(r) {}
+            : ExprOp(a,o), left(l), right(r) { __rtti = "ExprOp2"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -363,9 +374,9 @@ namespace das
 
     // this copies one object to the other
     struct ExprCopy : ExprOp2 {
-        ExprCopy () = default;
+        ExprCopy () { __rtti = "ExprCopy"; };
         ExprCopy ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, "=", l, r) {};
+            : ExprOp2(a, "=", l, r) { __rtti = "ExprCopy"; };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -374,9 +385,9 @@ namespace das
 
     // this moves one object to the other
     struct ExprMove : ExprOp2 {
-        ExprMove () = default;
+        ExprMove () { __rtti = "ExprMove"; };
         ExprMove ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, "<-", l, r) {};
+            : ExprOp2(a, "<-", l, r) { __rtti = "ExprMove"; };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -384,9 +395,9 @@ namespace das
 
     // this clones one object to the other
     struct ExprClone : ExprOp2 {
-        ExprClone () = default;
+        ExprClone () { __rtti = "ExprClone"; };
         ExprClone ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-        : ExprOp2(a, ":=", l, r) {};
+            : ExprOp2(a, ":=", l, r) { __rtti = "ExprClone"; };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -396,16 +407,16 @@ namespace das
     // and this is why it does not have CLONE
     struct ExprSequence : ExprOp2 {
         ExprSequence ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, ",", l, r) {}
+            : ExprOp2(a, ",", l, r) { __rtti = "ExprSequence"; }
         virtual bool rtti_isSequence() const override { return true; }
     };
 
     // trinary  subexpr ? left : right
     struct ExprOp3 : ExprOp {
-        ExprOp3 () = default;
+        ExprOp3 () { __rtti = "ExprOp3"; };
         ExprOp3 ( const LineInfo & a, const string & o, const ExpressionPtr & s,
                  const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp(a,o), subexpr(s), left(l), right(r) {}
+            : ExprOp(a,o), subexpr(s), left(l), right(r) { __rtti = "ExprOp3"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual Expression * tail() override { return right->tail(); }
@@ -416,9 +427,9 @@ namespace das
     };
 
     struct ExprTryCatch : Expression {
-        ExprTryCatch() = default;
+        ExprTryCatch() { __rtti = "ExprTryCatch"; };
         ExprTryCatch ( const LineInfo & a, const ExpressionPtr & t, const ExpressionPtr & c )
-            : Expression(a), try_block(t), catch_block(c) {}
+            : Expression(a), try_block(t), catch_block(c) { __rtti = "ExprTryCatch"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -427,9 +438,9 @@ namespace das
     };
 
     struct ExprReturn : Expression {
-        ExprReturn() = default;
+        ExprReturn() { __rtti = "ExprReturn"; };
         ExprReturn ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) {}
+            : Expression(a), subexpr(s) { __rtti = "ExprReturn"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -459,8 +470,9 @@ namespace das
     };
 
     struct ExprBreak : Expression {
-        ExprBreak() = default;
-        ExprBreak ( const LineInfo & a ) : Expression(a) {}
+        ExprBreak() { __rtti = "ExprBreak";} ;
+        ExprBreak ( const LineInfo & a )
+            : Expression(a) { __rtti = "ExprBreak"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -469,8 +481,9 @@ namespace das
     };
 
     struct ExprContinue : Expression {
-        ExprContinue() = default;
-        ExprContinue ( const LineInfo & a ) : Expression(a) {}
+        ExprContinue() { __rtti = "ExprContinue"; };
+        ExprContinue ( const LineInfo & a )
+            : Expression(a) { __rtti = "ExprContinue"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -479,28 +492,34 @@ namespace das
     };
 
     struct ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
-        ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) {}
-        ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) {}
+        ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
+        ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
         virtual bool rtti_isFakeContext() const override { return true; }
     };
 
     struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
-        ExprConstPtr(void * ptr = nullptr) : ExprConstT(ptr,Type::tPointer) {}
-        ExprConstPtr(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a,ptr,Type::tPointer) {}
+        ExprConstPtr(void * ptr = nullptr)
+            : ExprConstT(ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
+        ExprConstPtr(const LineInfo & a, void * ptr = nullptr)
+            : ExprConstT(a,ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
     };
 
     struct ExprConstInt : ExprConstT<int32_t,ExprConstInt> {
-        ExprConstInt(int32_t i = 0)  : ExprConstT(i,Type::tInt) {}
-        ExprConstInt(const LineInfo & a, int32_t i = 0)  : ExprConstT(a,i,Type::tInt) {}
+        ExprConstInt(int32_t i = 0)
+            : ExprConstT(i,Type::tInt) { __rtti = "ExprConstInt";}
+        ExprConstInt(const LineInfo & a, int32_t i = 0)
+            : ExprConstT(a,i,Type::tInt) { __rtti = "ExprConstInt"; }
     };
 
     struct ExprConstEnumeration : ExprConst {
         ExprConstEnumeration(const string & name = string(), const TypeDeclPtr & td = nullptr)
             : ExprConst(Type::tEnumeration), text(name) {
+            __rtti = "ExprConstEnumeration";
             if ( td ) enumType = td->enumType;
         }
         ExprConstEnumeration(const LineInfo & a, const string & name, const TypeDeclPtr & td)
             : ExprConst(a,Type::tEnumeration), text(name) {
+            __rtti = "ExprConstEnumeration";
             enumType = td->enumType;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -511,124 +530,168 @@ namespace das
     };
 
     struct ExprConstInt8 : ExprConstT<int8_t,ExprConstInt8> {
-        ExprConstInt8(int8_t i = 0)  : ExprConstT(i,Type::tInt8) {}
-        ExprConstInt8(const LineInfo & a, int8_t i = 0)  : ExprConstT(a,i,Type::tInt8) {}
+        ExprConstInt8(int8_t i = 0)
+            : ExprConstT(i,Type::tInt8) { __rtti = "ExprConstInt8"; }
+        ExprConstInt8(const LineInfo & a, int8_t i = 0)
+            : ExprConstT(a,i,Type::tInt8) { __rtti = "ExprConstInt8"; }
     };
 
     struct ExprConstInt16 : ExprConstT<int16_t,ExprConstInt16> {
-        ExprConstInt16(int16_t i = 0)  : ExprConstT(i,Type::tInt16) {}
-        ExprConstInt16(const LineInfo & a, int16_t i = 0)  : ExprConstT(a,i,Type::tInt16) {}
+        ExprConstInt16(int16_t i = 0)
+            : ExprConstT(i,Type::tInt16) { __rtti = "ExprConstInt16"; }
+        ExprConstInt16(const LineInfo & a, int16_t i = 0)
+            : ExprConstT(a,i,Type::tInt16) { __rtti = "ExprConstInt16"; }
     };
 
     struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
-        ExprConstInt64(int64_t i = 0)  : ExprConstT(i,Type::tInt64) {}
-        ExprConstInt64(const LineInfo & a, int64_t i = 0)  : ExprConstT(a,i,Type::tInt64) {}
+        ExprConstInt64(int64_t i = 0)
+            : ExprConstT(i,Type::tInt64) { __rtti = "ExprConstInt64"; }
+        ExprConstInt64(const LineInfo & a, int64_t i = 0)
+            : ExprConstT(a,i,Type::tInt64) { __rtti = "ExprConstInt64"; }
     };
 
     struct ExprConstBitfield : ExprConstT<uint32_t,ExprConstBitfield> {
-        ExprConstBitfield(uint32_t i = 0)  : ExprConstT(i,Type::tBitfield) {}
-        ExprConstBitfield(const LineInfo & a, uint32_t i = 0)  : ExprConstT(a,i,Type::tBitfield) {}
+        ExprConstBitfield(uint32_t i = 0)
+            : ExprConstT(i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
+        ExprConstBitfield(const LineInfo & a, uint32_t i = 0)
+            : ExprConstT(a,i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         TypeDeclPtr bitfieldType;
     };
 
     struct ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {
-        ExprConstInt2(int2 i = int2())  : ExprConstT(i,Type::tInt2) {}
-        ExprConstInt2(const LineInfo & a, int2 i)  : ExprConstT(a,i,Type::tInt2) {}
+        ExprConstInt2(int2 i = int2())
+            : ExprConstT(i,Type::tInt2) { __rtti = "ExprConstInt2"; }
+        ExprConstInt2(const LineInfo & a, int2 i)
+            : ExprConstT(a,i,Type::tInt2) { __rtti = "ExprConstInt2"; }
     };
 
     struct ExprConstRange : ExprConstT<range,ExprConstRange> {
-        ExprConstRange(range i = range())  : ExprConstT(i,Type::tRange) {}
-        ExprConstRange(const LineInfo & a, range i)  : ExprConstT(a,i,Type::tRange) {}
+        ExprConstRange(range i = range())
+            : ExprConstT(i,Type::tRange) { __rtti = "ExprConstRange"; }
+        ExprConstRange(const LineInfo & a, range i)
+            : ExprConstT(a,i,Type::tRange) { __rtti = "ExprConstRange"; }
     };
 
     struct ExprConstInt3 : ExprConstT<int3,ExprConstInt3> {
-        ExprConstInt3(int3 i = int3())  : ExprConstT(i,Type::tInt3) {}
-        ExprConstInt3(const LineInfo & a, int3 i)  : ExprConstT(a,i,Type::tInt3) {}
+        ExprConstInt3(int3 i = int3())
+            : ExprConstT(i,Type::tInt3) { __rtti = "ExprConstInt3"; }
+        ExprConstInt3(const LineInfo & a, int3 i)
+            : ExprConstT(a,i,Type::tInt3) { __rtti = "ExprConstInt3"; }
     };
 
     struct ExprConstInt4 : ExprConstT<int4,ExprConstInt4> {
-        ExprConstInt4(int4 i = int4())  : ExprConstT(i,Type::tInt4) {}
-        ExprConstInt4(const LineInfo & a, int4 i)  : ExprConstT(a,i,Type::tInt4) {}
+        ExprConstInt4(int4 i = int4())
+            : ExprConstT(i,Type::tInt4) { __rtti = "ExprConstInt4"; }
+        ExprConstInt4(const LineInfo & a, int4 i)
+            : ExprConstT(a,i,Type::tInt4) { __rtti = "ExprConstInt4"; }
     };
 
     struct ExprConstUInt8 : ExprConstT<uint8_t,ExprConstUInt8> {
-        ExprConstUInt8(uint8_t i = 0) : ExprConstT(i,Type::tUInt8) {}
-        ExprConstUInt8(const LineInfo & a, uint8_t i = 0) : ExprConstT(a,i,Type::tUInt8) {}
+        ExprConstUInt8(uint8_t i = 0)
+            : ExprConstT(i,Type::tUInt8) { __rtti = "ExprConstUInt8"; }
+        ExprConstUInt8(const LineInfo & a, uint8_t i = 0)
+            : ExprConstT(a,i,Type::tUInt8) { __rtti = "ExprConstUInt8"; }
     };
 
     struct ExprConstUInt16 : ExprConstT<uint16_t,ExprConstUInt16> {
-        ExprConstUInt16(uint16_t i = 0) : ExprConstT(i,Type::tUInt16) {}
-        ExprConstUInt16(const LineInfo & a, uint16_t i = 0) : ExprConstT(a,i,Type::tUInt16) {}
+        ExprConstUInt16(uint16_t i = 0)
+            : ExprConstT(i,Type::tUInt16) { __rtti = "ExprConstUInt16"; }
+        ExprConstUInt16(const LineInfo & a, uint16_t i = 0)
+            : ExprConstT(a,i,Type::tUInt16) { __rtti = "ExprConstUInt16"; }
     };
 
     struct ExprConstUInt64 : ExprConstT<uint64_t,ExprConstUInt64> {
-        ExprConstUInt64(uint64_t i = 0) : ExprConstT(i,Type::tUInt64) {}
-        ExprConstUInt64(const LineInfo & a, uint64_t i = 0) : ExprConstT(a,i,Type::tUInt64) {}
+        ExprConstUInt64(uint64_t i = 0)
+            : ExprConstT(i,Type::tUInt64) { __rtti = "ExprConstUInt64"; }
+        ExprConstUInt64(const LineInfo & a, uint64_t i = 0)
+            : ExprConstT(a,i,Type::tUInt64) { __rtti = "ExprConstUInt64"; }
     };
 
     struct ExprConstUInt : ExprConstT<uint32_t,ExprConstUInt> {
-        ExprConstUInt(uint32_t i = 0) : ExprConstT(i,Type::tUInt) {}
-        ExprConstUInt(const LineInfo & a, uint32_t i = 0) : ExprConstT(a,i,Type::tUInt) {}
+        ExprConstUInt(uint32_t i = 0)
+            : ExprConstT(i,Type::tUInt) { __rtti = "ExprConstUInt"; }
+        ExprConstUInt(const LineInfo & a, uint32_t i = 0)
+            : ExprConstT(a,i,Type::tUInt) { __rtti = "ExprConstUInt"; }
     };
 
     int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
 
     struct ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
-        ExprConstUInt2(uint2 i = uint2())  : ExprConstT(i,Type::tUInt2) {}
-        ExprConstUInt2(const LineInfo & a, uint2 i)  : ExprConstT(a,i,Type::tUInt2) {}
+        ExprConstUInt2(uint2 i = uint2())
+            : ExprConstT(i,Type::tUInt2) { __rtti = "ExprConstUInt2"; }
+        ExprConstUInt2(const LineInfo & a, uint2 i)
+            : ExprConstT(a,i,Type::tUInt2) { __rtti = "ExprConstUInt2"; }
     };
 
     struct ExprConstURange : ExprConstT<urange,ExprConstURange> {
-        ExprConstURange(urange i = urange())  : ExprConstT(i,Type::tURange) {}
-        ExprConstURange(const LineInfo & a, urange i)  : ExprConstT(a,i,Type::tURange) {}
+        ExprConstURange(urange i = urange())
+            : ExprConstT(i,Type::tURange) { __rtti = "ExprConstURange"; }
+        ExprConstURange(const LineInfo & a, urange i)
+            : ExprConstT(a,i,Type::tURange) { __rtti = "ExprConstURange"; }
     };
 
     struct ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {
-        ExprConstUInt3(uint3 i = uint3())  : ExprConstT(i,Type::tUInt3) {}
-        ExprConstUInt3(const LineInfo & a, uint3 i)  : ExprConstT(a,i,Type::tUInt3) {}
+        ExprConstUInt3(uint3 i = uint3())
+            : ExprConstT(i,Type::tUInt3) { __rtti = "ExprConstUInt3"; }
+        ExprConstUInt3(const LineInfo & a, uint3 i)
+            : ExprConstT(a,i,Type::tUInt3) { __rtti = "ExprConstUInt3"; }
     };
 
     struct ExprConstUInt4 : ExprConstT<uint4,ExprConstUInt4> {
-        ExprConstUInt4(uint4 i = uint4())  : ExprConstT(i,Type::tUInt4) {}
-        ExprConstUInt4(const LineInfo & a, uint4 i)  : ExprConstT(a,i,Type::tUInt4) {}
+        ExprConstUInt4(uint4 i = uint4())
+            : ExprConstT(i,Type::tUInt4) { __rtti = "ExprConstUInt4"; }
+        ExprConstUInt4(const LineInfo & a, uint4 i)
+            : ExprConstT(a,i,Type::tUInt4) { __rtti = "ExprConstUInt4"; }
     };
 
     struct ExprConstBool : ExprConstT<bool,ExprConstBool> {
-        ExprConstBool(bool i = false) : ExprConstT(i,Type::tBool) {}
-        ExprConstBool(const LineInfo & a, bool i = false) : ExprConstT(a,i,Type::tBool) {}
+        ExprConstBool(bool i = false)
+            : ExprConstT(i,Type::tBool) { __rtti = "ExprConstBool"; }
+        ExprConstBool(const LineInfo & a, bool i = false)
+            : ExprConstT(a,i,Type::tBool) { __rtti = "ExprConstBool"; }
     };
 
     struct ExprConstFloat : ExprConstT<float,ExprConstFloat> {
-        ExprConstFloat(float i = 0.0f) : ExprConstT(i,Type::tFloat) {}
-        ExprConstFloat(const LineInfo & a, float i = 0.0f) : ExprConstT(a,i,Type::tFloat) {}
+        ExprConstFloat(float i = 0.0f)
+            : ExprConstT(i,Type::tFloat) { __rtti = "ExprConstFloat"; }
+        ExprConstFloat(const LineInfo & a, float i = 0.0f)
+            : ExprConstT(a,i,Type::tFloat) { __rtti = "ExprConstFloat"; }
     };
 
     struct ExprConstDouble : ExprConstT<double,ExprConstDouble> {
-        ExprConstDouble(double i = 0.0) : ExprConstT(i,Type::tDouble) {}
-        ExprConstDouble(const LineInfo & a, double i = 0.0) : ExprConstT(a,i,Type::tDouble) {}
+        ExprConstDouble(double i = 0.0)
+            : ExprConstT(i,Type::tDouble) { __rtti = "ExprConstDouble"; }
+        ExprConstDouble(const LineInfo & a, double i = 0.0)
+            : ExprConstT(a,i,Type::tDouble) { __rtti = "ExprConstDouble"; }
     };
 
     struct ExprConstFloat2 : ExprConstT<float2,ExprConstFloat2> {
-        ExprConstFloat2(float2 i = float2())  : ExprConstT(i,Type::tFloat2) {}
-        ExprConstFloat2(const LineInfo & a, float2 i)  : ExprConstT(a,i,Type::tFloat2) {}
+        ExprConstFloat2(float2 i = float2())
+            : ExprConstT(i,Type::tFloat2) { __rtti = "ExprConstFloat2"; }
+        ExprConstFloat2(const LineInfo & a, float2 i)
+            : ExprConstT(a,i,Type::tFloat2) { __rtti = "ExprConstFloat2"; }
     };
 
     struct ExprConstFloat3 : ExprConstT<float3,ExprConstFloat3> {
-        ExprConstFloat3(float3 i = float3())  : ExprConstT(i,Type::tFloat3) {}
-        ExprConstFloat3(const LineInfo & a, float3 i)  : ExprConstT(a,i,Type::tFloat3) {}
+        ExprConstFloat3(float3 i = float3())
+            : ExprConstT(i,Type::tFloat3) { __rtti = "ExprConstFloat3"; }
+        ExprConstFloat3(const LineInfo & a, float3 i)
+            : ExprConstT(a,i,Type::tFloat3) { __rtti = "ExprConstFloat3"; }
     };
 
     struct ExprConstFloat4 : ExprConstT<float4,ExprConstFloat4> {
-        ExprConstFloat4(float4 i = float4())  : ExprConstT(i,Type::tFloat4) {}
-        ExprConstFloat4(const LineInfo & a, float4 i)  : ExprConstT(a,i,Type::tFloat4) {}
+        ExprConstFloat4(float4 i = float4())
+            : ExprConstT(i,Type::tFloat4) { __rtti = "ExprConstFloat4"; }
+        ExprConstFloat4(const LineInfo & a, float4 i)
+            : ExprConstT(a,i,Type::tFloat4) { __rtti = "ExprConstFloat4"; }
     };
 
     struct ExprConstString : ExprConst {
         ExprConstString(const string & str = string())
-            : ExprConst(Type::tString), text(str) {}
+            : ExprConst(Type::tString), text(str) { __rtti = "ExprConstString"; }
         ExprConstString(const LineInfo & a, const string & str = string())
-            : ExprConst(a,Type::tString), text(str) {}
+            : ExprConst(a,Type::tString), text(str) { __rtti = "ExprConstString"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -638,8 +701,9 @@ namespace das
     };
 
     struct ExprStringBuilder : Expression {
-        ExprStringBuilder() = default;
-        ExprStringBuilder(const LineInfo & a) : Expression(a) {}
+        ExprStringBuilder() { __rtti = "ExprStringBuilder";  };
+        ExprStringBuilder(const LineInfo & a)
+            : Expression(a) { __rtti = "ExprStringBuilder"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -647,6 +711,7 @@ namespace das
     };
 
     struct ExprLet : Expression {
+        ExprLet() { __rtti = "ExprLet"; }
         Variable * find ( const string & name ) const;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -660,8 +725,9 @@ namespace das
 
     // for a,b in foo,bar where a>b ...
     struct ExprFor : Expression {
-        ExprFor () = default;
-        ExprFor ( const LineInfo & a ) : Expression(a) {}
+        ExprFor () { __rtti = "ExprFor"; };
+        ExprFor ( const LineInfo & a )
+            : Expression(a) { __rtti = "ExprFor"; }
         Variable * findIterator ( const string & name ) const;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -676,8 +742,9 @@ namespace das
     };
 
     struct ExprWhile : Expression {
-        ExprWhile() = default;
-        ExprWhile(const LineInfo & a) : Expression(a) {}
+        ExprWhile() { __rtti = "ExprWhile"; };
+        ExprWhile(const LineInfo & a)
+            : Expression(a) { __rtti = "ExprWhile"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
@@ -688,8 +755,9 @@ namespace das
     };
 
     struct ExprWith : Expression {
-        ExprWith() = default;
-        ExprWith(const LineInfo & a) : Expression(a) {}
+        ExprWith() { __rtti = "ExprWith"; };
+        ExprWith(const LineInfo & a)
+            : Expression(a) { __rtti = "ExprWith"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -699,15 +767,17 @@ namespace das
 
     template <typename TT>
     struct ExprLikeCall : ExprLooksLikeCall {
-        ExprLikeCall () = default;
-        ExprLikeCall ( const LineInfo & a, const string & n ) : ExprLooksLikeCall(a,n) {}
+        ExprLikeCall () { __rtti = "ExprLikeCall"; };
+        ExprLikeCall ( const LineInfo & a, const string & n )
+            : ExprLooksLikeCall(a,n) { __rtti = "ExprLikeCall"; }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
 
     struct ExprMakeBlock : Expression {
-        ExprMakeBlock () = default;
+        ExprMakeBlock () { __rtti = "ExprMakeBlock"; };
         ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b, bool isl = false )
-        : Expression(a), block(b), isLambda(isl) {
+            : Expression(a), block(b), isLambda(isl) {
+            __rtti = "ExprMakeBlock";
             b->at = a;
             static_pointer_cast<ExprBlock>(b)->isClosure = true;
         }
@@ -721,7 +791,7 @@ namespace das
     };
 
     struct ExprMakeGenerator : ExprLooksLikeCall {
-        ExprMakeGenerator () = default;
+        ExprMakeGenerator () { __rtti = "ExprMakeGenerator"; };
         ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b = nullptr );
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -730,7 +800,7 @@ namespace das
     };
 
     struct ExprYield : Expression {
-        ExprYield () = default;
+        ExprYield () { __rtti = "ExprYield"; };
         ExprYield ( const LineInfo & a, const ExpressionPtr & val );
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -746,8 +816,9 @@ namespace das
     };
 
     struct ExprInvoke : ExprLikeCall<ExprInvoke> {
-        ExprInvoke () = default;
-        ExprInvoke ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprInvoke>(a,name) {}
+        ExprInvoke () { __rtti = "ExprInvoke"; };
+        ExprInvoke ( const LineInfo & a, const string & name )
+            : ExprLikeCall<ExprInvoke>(a,name) { __rtti = "ExprInvoke"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isInvoke() const override { return true; }
@@ -757,39 +828,43 @@ namespace das
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {
-        ExprAssert ( ) = default;
+        ExprAssert ( ) { __rtti = "ExprAssert"; };
         ExprAssert ( const LineInfo & a, const string & name, bool isV )
-            : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; }
+            : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; __rtti = "ExprAssert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         bool isVerify = false;
     };
 
     struct ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
-        ExprStaticAssert () = default;
-        ExprStaticAssert ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprStaticAssert>(a,name) {}
+        ExprStaticAssert () { __rtti = "ExprStaticAssert"; };
+        ExprStaticAssert ( const LineInfo & a, const string & name )
+            : ExprLikeCall<ExprStaticAssert>(a,name) { __rtti = "ExprStaticAssert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprDebug : ExprLikeCall<ExprDebug> {
-        ExprDebug () = default;
-        ExprDebug ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprDebug>(a, name) {}
+        ExprDebug () { __rtti = "ExprDebug"; };
+        ExprDebug ( const LineInfo & a, const string & name )
+            : ExprLikeCall<ExprDebug>(a, name) { __rtti = "ExprDebug"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprMemZero : ExprLikeCall<ExprMemZero> {
-        ExprMemZero () = default;
-        ExprMemZero ( const LineInfo & a, const string & name ) : ExprLikeCall<ExprMemZero>(a, name) {}
+        ExprMemZero () { __rtti = "ExprMemZero"; };
+        ExprMemZero ( const LineInfo & a, const string & name )
+            : ExprLikeCall<ExprMemZero>(a, name) { __rtti = "ExprMemZero"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     template <typename It, typename SimNodeT, bool first>
     struct ExprTableKeysOrValues : ExprLooksLikeCall {
-        ExprTableKeysOrValues() = default;
-        ExprTableKeysOrValues ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        ExprTableKeysOrValues() { __rtti = "ExprTableKeysOrValues"; };
+        ExprTableKeysOrValues ( const LineInfo & a, const string & name )
+            : ExprLooksLikeCall(a, name) { __rtti = "ExprTableKeysOrValues"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprTableKeysOrValues<It,SimNodeT,first>>(expr);
             ExprLooksLikeCall::clone(cexpr);
@@ -807,8 +882,9 @@ namespace das
 
     template <typename It, typename SimNodeT>
     struct ExprArrayCallWithSizeOrIndex : ExprLooksLikeCall {
-        ExprArrayCallWithSizeOrIndex() = default;
-        ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name ) : ExprLooksLikeCall(a, name) {}
+        ExprArrayCallWithSizeOrIndex() { __rtti = "ExprArrayCallWithSizeOrIndex"; };
+        ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name )
+            : ExprLooksLikeCall(a, name) { __rtti = "ExprArrayCallWithSizeOrIndex"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<It,SimNodeT>>(expr);
             ExprLooksLikeCall::clone(cexpr);
@@ -824,34 +900,37 @@ namespace das
     };
 
     struct ExprErase : ExprLikeCall<ExprErase> {
-        ExprErase() = default;
-        ExprErase ( const LineInfo & a, const string & ) : ExprLikeCall<ExprErase>(a, "erase") {}
+        ExprErase() { __rtti = "ExprErase"; };
+        ExprErase ( const LineInfo & a, const string & )
+            : ExprLikeCall<ExprErase>(a, "erase") { __rtti = "ExprErase"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprFind : ExprLikeCall<ExprFind> {
-        ExprFind() = default;
-        ExprFind ( const LineInfo & a, const string & ) : ExprLikeCall<ExprFind>(a, "find") {}
+        ExprFind() { __rtti = "ExprFind"; };
+        ExprFind ( const LineInfo & a, const string & )
+            : ExprLikeCall<ExprFind>(a, "find") { __rtti = "ExprFind"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprKeyExists : ExprLikeCall<ExprKeyExists> {
-        ExprKeyExists() = default;
-        ExprKeyExists ( const LineInfo & a, const string & ) : ExprLikeCall<ExprKeyExists>(a, "key_exists") {}
+        ExprKeyExists() { __rtti = "ExprKeyExists"; };
+        ExprKeyExists ( const LineInfo & a, const string & )
+            : ExprLikeCall<ExprKeyExists>(a, "key_exists") { __rtti = "ExprKeyExists"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprTypeInfo : Expression {
-        ExprTypeInfo () = default;
+        ExprTypeInfo () { __rtti = "ExprTypeInfo"; }
         ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s,
                       const string & stt="", const string & ett="" )
-            : Expression(a), trait(tr), subexpr(s), subtrait(stt), extratrait(ett) {}
+            : Expression(a), trait(tr), subexpr(s), subtrait(stt), extratrait(ett) { __rtti = "ExprTypeInfo"; }
         ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d,
                       const string & stt="", const string & ett="" )
-            : Expression(a), trait(tr), typeexpr(d), subtrait(stt), extratrait(ett) {}
+            : Expression(a), trait(tr), typeexpr(d), subtrait(stt), extratrait(ett) { __rtti = "ExprTypeInfo"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
@@ -864,9 +943,9 @@ namespace das
     };
 
     struct ExprIs : Expression {
-        ExprIs () = default;
+        ExprIs () { __rtti = "ExprIs"; };
         ExprIs ( const LineInfo & a, const ExpressionPtr & s, const TypeDeclPtr & t )
-            : Expression(a), subexpr(s), typeexpr(t) {}
+            : Expression(a), subexpr(s), typeexpr(t) { __rtti = "ExprIs"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
@@ -875,9 +954,9 @@ namespace das
     };
 
     struct ExprAscend : Expression {
-        ExprAscend() = default;
+        ExprAscend() { __rtti = "ExprAscend";};
         ExprAscend( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & as = nullptr )
-            : Expression(a), subexpr(se), ascType(as) {}
+            : Expression(a), subexpr(se), ascType(as) { __rtti = "ExprAscend"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -894,9 +973,9 @@ namespace das
     };
 
     struct ExprCast : Expression {
-        ExprCast() = default;
+        ExprCast() { __rtti = "ExprCast"; };
         ExprCast( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & ct )
-            : Expression(a), subexpr(se), castType(ct) {}
+            : Expression(a), subexpr(se), castType(ct) { __rtti = "ExprCast"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -914,9 +993,9 @@ namespace das
     };
 
     struct ExprNew : ExprCallFunc {
-        ExprNew() = default;
+        ExprNew() { __rtti = "ExprNew"; };
         ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
-            : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) {}
+            : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { __rtti = "ExprNew"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -925,8 +1004,9 @@ namespace das
     };
 
     struct ExprCall : ExprCallFunc {
-        ExprCall () = default;
-        ExprCall ( const LineInfo & a, const string & n ) : ExprCallFunc(a,n) { }
+        ExprCall () { __rtti = "ExprCall"; };
+        ExprCall ( const LineInfo & a, const string & n )
+            : ExprCallFunc(a,n) { __rtti = "ExprCall"; }
         virtual bool rtti_isCall() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -937,10 +1017,10 @@ namespace das
     };
 
     struct ExprIfThenElse : Expression {
-        ExprIfThenElse () = default;
+        ExprIfThenElse () { __rtti = "ExprIfThenElse"; };
         ExprIfThenElse ( const LineInfo & a, const ExpressionPtr & c,
                         const ExpressionPtr & ift, const ExpressionPtr & iff )
-            : Expression(a), cond(c), if_true(ift), if_false(iff) {}
+            : Expression(a), cond(c), if_true(ift), if_false(iff) { __rtti = "ExprIfThenElse"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -969,8 +1049,9 @@ namespace das
     typedef smart_ptr<MakeStruct>      MakeStructPtr;
 
     struct ExprNamedCall : Expression {
-        ExprNamedCall () = default;
-        ExprNamedCall ( const LineInfo & a, const string & n ) : Expression(a), name(n) {}
+        ExprNamedCall () { __rtti = "ExprNamedCall"; };
+        ExprNamedCall ( const LineInfo & a, const string & n )
+            : Expression(a), name(n) { __rtti = "ExprNamedCall";}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -980,8 +1061,9 @@ namespace das
     };
 
     struct ExprMakeLocal : Expression {
-        ExprMakeLocal() = default;
-        ExprMakeLocal ( const LineInfo & at ) : Expression(at) {}
+        ExprMakeLocal() { __rtti = "ExprMakeLocal"; };
+        ExprMakeLocal ( const LineInfo & at )
+            : Expression(at) { __rtti = "ExprMakeLocal"; }
         virtual bool rtti_isMakeLocal() const override { return true; }
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off );
         virtual vector<SimNode *> simulateLocal ( Context & /*context*/ ) const;
@@ -1001,20 +1083,22 @@ namespace das
     };
 
     struct ExprMakeStructureOrDefaultValue : ExprMakeLocal {
-        ExprMakeStructureOrDefaultValue() = default;
-        ExprMakeStructureOrDefaultValue ( const LineInfo & at ) : ExprMakeLocal(at) {}
+        ExprMakeStructureOrDefaultValue() { __rtti = "ExprMakeStructureOrDefaultValue"; };
+        ExprMakeStructureOrDefaultValue ( const LineInfo & at )
+            : ExprMakeLocal(at) { __rtti = "ExprMakeStructureOrDefaultValue"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         vector<MakeStructPtr>       structs;
-        bool                        useInitializer;
+        bool                        useInitializer = false;
     };
 
     struct ExprMakeVariant : ExprMakeLocal {
-        ExprMakeVariant() = default;
-        ExprMakeVariant ( const LineInfo & at ) : ExprMakeLocal(at) {}
+        ExprMakeVariant() { __rtti = "ExprMakeVariant"; };
+        ExprMakeVariant ( const LineInfo & at )
+            : ExprMakeLocal(at) { __rtti = "ExprMakeVariant"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
@@ -1024,8 +1108,9 @@ namespace das
     };
 
     struct ExprMakeArray : ExprMakeLocal {
-        ExprMakeArray() = default;
-        ExprMakeArray ( const LineInfo & at ) : ExprMakeLocal(at) {}
+        ExprMakeArray() { __rtti = "ExprMakeArray"; };
+        ExprMakeArray ( const LineInfo & at )
+            : ExprMakeLocal(at) { __rtti = "ExprMakeArray"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
@@ -1036,8 +1121,9 @@ namespace das
     };
 
     struct ExprMakeTuple : ExprMakeArray {
-        ExprMakeTuple() = default;
-        ExprMakeTuple ( const LineInfo & at ) : ExprMakeArray(at) {}
+        ExprMakeTuple() { __rtti = "ExprMakeTuple"; };
+        ExprMakeTuple ( const LineInfo & at )
+            : ExprMakeArray(at) { __rtti = "ExprMakeTuple"; }
         virtual bool rtti_isMakeTuple() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1048,8 +1134,9 @@ namespace das
     };
 
     struct ExprArrayComprehension : Expression {
-        ExprArrayComprehension() = default;
-        ExprArrayComprehension ( const LineInfo & at ) : Expression(at) {}
+        ExprArrayComprehension() { __rtti = "ExprArrayComprehension"; };
+        ExprArrayComprehension ( const LineInfo & at )
+            : Expression(at) { __rtti = "ExprArrayComprehension"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
