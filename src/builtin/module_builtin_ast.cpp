@@ -629,6 +629,12 @@ namespace das {
     FN_PREVISIT(WHAT) = adapt("preVisit" #WHAT,pClass,info); \
     FN_VISIT(WHAT) = adapt("visit" #WHAT,pClass,info);
 
+#define IMPL_BIND_EXPR(WHAT) \
+    virtual void preVisit ( WHAT * expr ) override \
+        { IMPL_PREVISIT(WHAT); } \
+    virtual ExpressionPtr visit ( WHAT * expr ) override \
+        { IMPL_VISIT(WHAT); }
+
     class VisitorAdapter : public Visitor {
     public:
         VisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx ) {
@@ -785,10 +791,7 @@ namespace das {
         virtual ExpressionPtr visitExpression ( Expression * expr ) override
             { IMPL_VISIT(Expression); }
     // block
-        virtual void preVisit ( ExprBlock * expr ) override
-            { IMPL_PREVISIT(ExprBlock); }
-        virtual ExpressionPtr visit ( ExprBlock * expr ) override
-            { IMPL_VISIT(ExprBlock); }
+        IMPL_BIND_EXPR(ExprBlock);
         virtual void preVisitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg ) override
             { IMPL_PREVISIT3(ExprBlockArgument,ExprBlock,VariablePtr,var,bool,lastArg); }
         virtual VariablePtr visitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg ) override
@@ -814,10 +817,7 @@ namespace das {
         virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * expr, Expression * bexpr ) override
             { IMPL_VISIT2(ExprBlockFinalExpression,ExprBlock,Expression,expr,ExpressionPtr,bexpr); }
     // let
-        virtual void preVisit ( ExprLet * expr ) override
-            { IMPL_PREVISIT(ExprLet); }
-        virtual ExpressionPtr visit ( ExprLet * expr ) override
-            { IMPL_VISIT(ExprLet); }
+        IMPL_BIND_EXPR(ExprLet);
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override
             { IMPL_PREVISIT3(ExprLetVariable,ExprLet,VariablePtr,var,bool,last); }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override
@@ -840,69 +840,45 @@ namespace das {
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & expr, Expression * init ) override
             { IMPL_VISIT2(GlobalLetVariableInit,Variable,Expression,init,ExpressionPtr,init); }
     // string builder
-        virtual void preVisit ( ExprStringBuilder * expr ) override
-            { IMPL_PREVISIT(ExprStringBuilder); }
-        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override
-            { IMPL_VISIT(ExprStringBuilder); }
+        IMPL_BIND_EXPR(ExprStringBuilder);
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last ) override
             { IMPL_PREVISIT3(ExprStringBuilderElement,ExprStringBuilder,ExpressionPtr,element,bool,last); }
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last ) override
             { IMPL_VISIT3(ExprStringBuilderElement,ExprStringBuilder,Expression,element,ExpressionPtr,element,bool,last); }
     // new
-        virtual void preVisit ( ExprNew * expr ) override
-            { IMPL_PREVISIT(ExprNew); }
-        virtual ExpressionPtr visit ( ExprNew * expr ) override
-            { IMPL_VISIT(ExprNew); }
+        IMPL_BIND_EXPR(ExprNew);
         virtual void preVisitNewArg ( ExprNew * expr, Expression * arg, bool last ) override
             { IMPL_PREVISIT3(ExprNewArgument,ExprNew,ExpressionPtr,arg,bool,last); }
         virtual ExpressionPtr visitNewArg ( ExprNew * expr, Expression * arg , bool last ) override
             { IMPL_VISIT3(ExprNewArgument,ExprNew,Expression,arg,ExpressionPtr,arg,bool,last); }
     // named call
-        virtual void preVisit ( ExprNamedCall * expr ) override
-            { IMPL_PREVISIT(ExprNamedCall); }
-        virtual ExpressionPtr visit ( ExprNamedCall * expr ) override
-            { IMPL_VISIT(ExprNamedCall); }
+        IMPL_BIND_EXPR(ExprNamedCall);
         virtual void preVisitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg, bool last ) override
             { IMPL_PREVISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDeclPtr,arg,bool,last); }
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg , bool last ) override
             { IMPL_VISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDecl,arg,MakeFieldDeclPtr,arg,bool,last); }
     // call
-        virtual void preVisit ( ExprCall * expr ) override
-            { IMPL_PREVISIT(ExprCall); }
-        virtual ExpressionPtr visit ( ExprCall * expr ) override
-            { IMPL_VISIT(ExprCall); }
+        IMPL_BIND_EXPR(ExprCall);
         virtual void preVisitCallArg ( ExprCall * expr, Expression * arg, bool last ) override
             { IMPL_PREVISIT3(ExprCallArgument,ExprCall,ExpressionPtr,arg,bool,last); }
         virtual ExpressionPtr visitCallArg ( ExprCall * expr, Expression * arg , bool last ) override
             { IMPL_VISIT3(ExprCallArgument,ExprCall,Expression,arg,ExpressionPtr,arg,bool,last); }
     // looks like call
-        virtual void preVisit ( ExprLooksLikeCall * expr ) override
-            { IMPL_PREVISIT(ExprLooksLikeCall); }
-        virtual ExpressionPtr visit ( ExprLooksLikeCall * expr ) override
-            { IMPL_VISIT(ExprLooksLikeCall); }
+        IMPL_BIND_EXPR(ExprLooksLikeCall);
         virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg, bool last ) override
             { IMPL_PREVISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,ExpressionPtr,arg,bool,last); }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg , bool last ) override
             { IMPL_VISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,Expression,arg,ExpressionPtr,arg,bool,last); }
     // null coaelescing
-        virtual void preVisit ( ExprNullCoalescing * expr ) override
-            { IMPL_PREVISIT(ExprNullCoalescing); }
-        virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override
-            { IMPL_VISIT(ExprNullCoalescing); }
+        IMPL_BIND_EXPR(ExprNullCoalescing);
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * expr, Expression * defval ) override
             { IMPL_PREVISIT2(ExprNullCoalescingDefault,ExprNullCoalescing,ExpressionPtr, defval); }
     // at
-        virtual void preVisit ( ExprAt * expr ) override
-            { IMPL_PREVISIT(ExprAt); }
-        virtual ExpressionPtr visit ( ExprAt * expr ) override
-            { IMPL_VISIT(ExprAt); }
+        IMPL_BIND_EXPR(ExprAt);
         virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override
             { IMPL_PREVISIT2(ExprAtIndex,ExprAt,ExpressionPtr,index); }
     // safe at
-        virtual void preVisit ( ExprSafeAt * expr ) override
-            { IMPL_PREVISIT(ExprSafeAt); }
-        virtual ExpressionPtr visit ( ExprSafeAt * expr ) override
-            { IMPL_VISIT(ExprSafeAt); }
+        IMPL_BIND_EXPR(ExprSafeAt);
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override
             { IMPL_PREVISIT2(ExprSafeAtIndex,ExprSafeAt,ExpressionPtr,index); }
     };
