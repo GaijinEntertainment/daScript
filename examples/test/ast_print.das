@@ -274,6 +274,20 @@ class AstVisitor
         return ExpressionPtr(expr)
     def preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr)
         pass
+// with
+    def preVisitExprWith(expr:smart_ptr<ExprWith>)
+        pass
+    def visitExprWith(expr:smart_ptr<ExprWith>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprWithBody(expr:smart_ptr<ExprWith>;right:ExpressionPtr)
+        pass
+// while
+    def preVisitExprWhile(expr:smart_ptr<ExprWhile>)
+        pass
+    def visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr)
+        pass
 
 
 //////////
@@ -574,6 +588,16 @@ class PrintVisitor : AstVisitor
 // clone
     def override preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr)
         print(" := ")
+// with
+    def override preVisitExprWith(expr:smart_ptr<ExprWith>)
+        print("with ")
+    def override preVisitExprWithBody(expr:smart_ptr<ExprWith>;right:ExpressionPtr)
+        print("\n")
+// while
+    def override preVisitExprWhile(expr:smart_ptr<ExprWhile>)
+        print("while ")
+    def override preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr)
+        print("\n")
 
 typedef
     Integer = int
@@ -628,13 +652,19 @@ def allExpr(arg:int)
     if exprAt is type<int>
         print("nada\n")
     // ExprOp2
-    var a = 1
-    a = 3
-    var b = 2
-    b = 4
-    var c = a + b
+    var aa = 1
+    aa = 3
+    var bb = 2
+    bb = 4
+    var cc = aa + bb
     // ExprOp3
-    c = a==b ? a : b
+    cc = aa==bb ? aa : bb
+    // ExprWith
+    with exprAt
+        a = 3
+    // ExprWhile
+    while aa!=100
+        aa++
 
 [export]
 def test
