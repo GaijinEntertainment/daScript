@@ -288,6 +288,22 @@ class AstVisitor
         return ExpressionPtr(expr)
     def preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr)
         pass
+// try-catch
+    def preVisitExprTryCatch(expr:smart_ptr<ExprTryCatch>)
+        pass
+    def visitExprTryCatch(expr:smart_ptr<ExprTryCatch>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprTryCatchCatch(expr:smart_ptr<ExprTryCatch>;right:ExpressionPtr)
+        pass
+// if-then-else
+    def preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>)
+        pass
+    def visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr)
+        pass
+    def preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr)
+        pass
 
 
 //////////
@@ -598,6 +614,19 @@ class PrintVisitor : AstVisitor
         print("while ")
     def override preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr)
         print("\n")
+// try-catch
+    def override preVisitExprTryCatch(expr:smart_ptr<ExprTryCatch>)
+        print("try\n")
+    def override preVisitExprTryCatchCatch(expr:smart_ptr<ExprTryCatch>;right:ExpressionPtr)
+        print("{repeat("\t",tab)}recover\n")
+// if-then-else
+    def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>)
+        print("if ")
+    def override preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr)
+        print("\n")
+    def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr)
+        print("{repeat("\t",tab)}")
+        print("else\n")
 
 typedef
     Integer = int

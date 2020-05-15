@@ -44,6 +44,8 @@ MAKE_TYPE_FACTORY(ExprMove,ExprMove)
 MAKE_TYPE_FACTORY(ExprClone,ExprClone)
 MAKE_TYPE_FACTORY(ExprWith,ExprWith)
 MAKE_TYPE_FACTORY(ExprWhile,ExprWhile)
+MAKE_TYPE_FACTORY(ExprTryCatch,ExprTryCatch)
+MAKE_TYPE_FACTORY(ExprIfThenElse,ExprIfThenElse)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -286,6 +288,24 @@ namespace das {
             :  AstExprAnnotation<ExprWhile> ("ExprWhile", ml) {
             addField<DAS_BIND_MANAGED_FIELD(cond)>("cond");
             addField<DAS_BIND_MANAGED_FIELD(body)>("body");
+        }
+    };
+
+    struct AstExprTryCatchAnnotation : AstExprAnnotation<ExprTryCatch> {
+        AstExprTryCatchAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<ExprTryCatch> ("ExprTryCatch", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(try_block)>("try_block");
+            addField<DAS_BIND_MANAGED_FIELD(catch_block)>("catch_block");
+        }
+    };
+
+    struct AstExprIfThenElseAnnotation : AstExprAnnotation<ExprIfThenElse> {
+        AstExprIfThenElseAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<ExprIfThenElse> ("ExprIfThenElse", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(cond)>("cond");
+            addField<DAS_BIND_MANAGED_FIELD(if_true)>("if_true");
+            addField<DAS_BIND_MANAGED_FIELD(if_false)>("if_false");
+            addField<DAS_BIND_MANAGED_FIELD(isStatic)>("isStatic");
         }
     };
 
@@ -766,6 +786,11 @@ namespace das {
             FN_PREVISIT(ExprWithBody) = adapt("preVisitExprWithBody",pClass,info);
             IMPL_ADAPT(ExprWhile);
             FN_PREVISIT(ExprWhileBody) = adapt("preVisitExprWhileBody",pClass,info);
+            IMPL_ADAPT(ExprTryCatch);
+            FN_PREVISIT(ExprTryCatchCatch) = adapt("preVisitExprTryCatchCatch",pClass,info);
+            IMPL_ADAPT(ExprIfThenElse);
+            FN_PREVISIT(ExprIfThenElseIfBlock) = adapt("preVisitExprIfThenElseIfBlock",pClass,info);
+            FN_PREVISIT(ExprIfThenElseElseBlock) = adapt("preVisitExprIfThenElseElseBlock",pClass,info);
         }
     protected:
         void *      classPtr;
@@ -829,6 +854,11 @@ namespace das {
         Func FN_PREVISIT(ExprWithBody);
         DECL_VISIT(ExprWhile);
         Func FN_PREVISIT(ExprWhileBody);
+        DECL_VISIT(ExprTryCatch);
+        Func FN_PREVISIT(ExprTryCatchCatch);
+        DECL_VISIT(ExprIfThenElse);
+        Func FN_PREVISIT(ExprIfThenElseIfBlock);
+        Func FN_PREVISIT(ExprIfThenElseElseBlock);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -1016,6 +1046,16 @@ namespace das {
         IMPL_BIND_EXPR(ExprWhile);
         virtual void preVisitWhileBody ( ExprWhile * expr, Expression * body ) override
             { IMPL_PREVISIT2(ExprWhileBody,ExprWhile,ExpressionPtr,body); }
+    // try-catch
+        IMPL_BIND_EXPR(ExprTryCatch);
+        virtual void preVisitCatch ( ExprTryCatch * expr, Expression * body )
+            { IMPL_PREVISIT2(ExprTryCatchCatch,ExprTryCatch,ExpressionPtr,body); }
+    // if-then-else
+        IMPL_BIND_EXPR(ExprIfThenElse);
+        virtual void preVisitIfBlock ( ExprIfThenElse * expr, Expression * ifBlock )
+            { IMPL_PREVISIT2(ExprIfThenElseIfBlock,ExprIfThenElse,ExpressionPtr,ifBlock); }
+        virtual void preVisitElseBlock ( ExprIfThenElse * expr, Expression * elseBlock )
+            { IMPL_PREVISIT2(ExprIfThenElseElseBlock,ExprIfThenElse,ExpressionPtr,elseBlock); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -1140,6 +1180,8 @@ namespace das {
             addAnnotation(make_smart<AstExprOp2Annotation<ExprClone>>("ExprClone",lib));
             addAnnotation(make_smart<AstExprWithAnnotation>(lib));
             addAnnotation(make_smart<AstExprWhileAnnotation>(lib));
+            addAnnotation(make_smart<AstExprTryCatchAnnotation>(lib));
+            addAnnotation(make_smart<AstExprIfThenElseAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
