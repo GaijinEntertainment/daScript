@@ -39,6 +39,9 @@ MAKE_TYPE_FACTORY(ExprPtr2Ref,ExprPtr2Ref)
 MAKE_TYPE_FACTORY(ExprIs,ExprIs)
 MAKE_TYPE_FACTORY(ExprOp2,ExprOp2)
 MAKE_TYPE_FACTORY(ExprOp3,ExprOp3)
+MAKE_TYPE_FACTORY(ExprCopy,ExprCopy)
+MAKE_TYPE_FACTORY(ExprMove,ExprMove)
+MAKE_TYPE_FACTORY(ExprClone,ExprClone)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -258,6 +261,13 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
             addField<DAS_BIND_MANAGED_FIELD(left)>("left");
             addField<DAS_BIND_MANAGED_FIELD(right)>("right");
+        }
+    };
+
+    struct AstExprCopyAnnotation : AstExprOp2Annotation<ExprCopy> {
+        AstExprCopyAnnotation(ModuleLibrary & ml)
+            :  AstExprOp2Annotation<ExprCopy> ("ExprCopy", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(takeOverRightStack)>("takeOverRightStack");
         }
     };
 
@@ -728,6 +738,12 @@ namespace das {
             IMPL_ADAPT(ExprOp3);
             FN_PREVISIT(ExprOp3Left) = adapt("preVisitExprOp3Left",pClass,info);
             FN_PREVISIT(ExprOp3Right) = adapt("preVisitExprOp3Right",pClass,info);
+            IMPL_ADAPT(ExprCopy);
+            FN_PREVISIT(ExprCopyRight) = adapt("preVisitExprCopyRight",pClass,info);
+            IMPL_ADAPT(ExprMove);
+            FN_PREVISIT(ExprMoveRight) = adapt("preVisitExprMoveRight",pClass,info);
+            IMPL_ADAPT(ExprClone);
+            FN_PREVISIT(ExprCloneRight) = adapt("preVisitExprCloneRight",pClass,info);
         }
     protected:
         void *      classPtr;
@@ -781,6 +797,12 @@ namespace das {
         DECL_VISIT(ExprOp3);
         Func FN_PREVISIT(ExprOp3Left);
         Func FN_PREVISIT(ExprOp3Right);
+        DECL_VISIT(ExprCopy);
+        Func FN_PREVISIT(ExprCopyRight);
+        DECL_VISIT(ExprMove);
+        Func FN_PREVISIT(ExprMoveRight);
+        DECL_VISIT(ExprClone);
+        Func FN_PREVISIT(ExprCloneRight);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -948,6 +970,18 @@ namespace das {
             { IMPL_PREVISIT2(ExprOp3Left,ExprOp3,ExpressionPtr,left); }
         virtual void preVisitRight ( ExprOp3 * expr, Expression * right ) override
             { IMPL_PREVISIT2(ExprOp3Right,ExprOp3,ExpressionPtr,right); }
+    // copy
+        IMPL_BIND_EXPR(ExprCopy);
+        virtual void preVisitRight ( ExprCopy * expr, Expression * right ) override
+            { IMPL_PREVISIT2(ExprCopyRight,ExprCopy,ExpressionPtr,right); }
+    // move
+        IMPL_BIND_EXPR(ExprMove);
+        virtual void preVisitRight ( ExprMove * expr, Expression * right ) override
+            { IMPL_PREVISIT2(ExprMoveRight,ExprMove,ExpressionPtr,right); }
+    // clone
+        IMPL_BIND_EXPR(ExprClone);
+        virtual void preVisitRight ( ExprClone * expr, Expression * right ) override
+            { IMPL_PREVISIT2(ExprCloneRight,ExprClone,ExpressionPtr,right); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -1067,6 +1101,9 @@ namespace das {
             addAnnotation(make_smart<AstExprIsAnnotation>(lib));
             addAnnotation(make_smart<AstExprOp2Annotation<ExprOp2>>("ExprOp2",lib));
             addAnnotation(make_smart<AstExprOp3Annotation>(lib));
+            addAnnotation(make_smart<AstExprCopyAnnotation>(lib));
+            addAnnotation(make_smart<AstExprOp2Annotation<ExprMove>>("ExprMove",lib));
+            addAnnotation(make_smart<AstExprOp2Annotation<ExprClone>>("ExprClone",lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",

@@ -253,6 +253,27 @@ class AstVisitor
         pass
     def preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr)
         pass
+// copy
+    def preVisitExprCopy(expr:smart_ptr<ExprCopy>)
+        pass
+    def visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr)
+        pass
+// move
+    def preVisitExprMove(expr:smart_ptr<ExprMove>)
+        pass
+    def visitExprMove(expr:smart_ptr<ExprMove>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprMoveRight(expr:smart_ptr<ExprMove>;right:ExpressionPtr)
+        pass
+// clone
+    def preVisitExprClone(expr:smart_ptr<ExprClone>)
+        pass
+    def visitExprClone(expr:smart_ptr<ExprClone>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr)
+        pass
 
 
 //////////
@@ -544,6 +565,15 @@ class PrintVisitor : AstVisitor
         print(" ? ")
     def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr)
         print(" : ")
+// copy
+    def override preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr)
+        print(" = ")
+// move
+    def override preVisitExprMoveRight(expr:smart_ptr<ExprMove>;right:ExpressionPtr)
+        print(" <- ")
+// clone
+    def override preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr)
+        print(" := ")
 
 typedef
     Integer = int
