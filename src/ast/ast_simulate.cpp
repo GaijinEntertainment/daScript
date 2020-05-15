@@ -857,7 +857,7 @@ namespace das
     }
 
     SimNode * ExprNullCoalescing::simulate (Context & context) const {
-        if ( type->ref ) {
+        if ( type->isRef() ) {
             return context.code->makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
         } else {
             return context.code->makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));

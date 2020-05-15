@@ -209,6 +209,28 @@ class AstVisitor
         pass
     def visitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool) : ExpressionPtr
         return arg
+// null coaelescing
+    def preVisitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>)
+        pass
+    def visitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprNullCoalescingDefault(expr:smart_ptr<ExprNullCoalescing>;defval:ExpressionPtr)
+        pass
+// at
+    def preVisitExprAt(expr:smart_ptr<ExprAt>)
+        pass
+    def visitExprAt(expr:smart_ptr<ExprAt>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
+        pass
+// safe at
+    def preVisitExprSafeAt(expr:smart_ptr<ExprSafeAt>)
+        pass
+    def visitExprSafeAt(expr:smart_ptr<ExprSafeAt>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprSafeAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
+        pass
+
 
 //////////
 // example
@@ -457,6 +479,21 @@ class PrintVisitor : AstVisitor
         if !last
             print(",")
         return arg
+// null coaelescing
+    def override preVisitExprNullCoalescingDefault(expr:smart_ptr<ExprNullCoalescing>;defval:ExpressionPtr)
+        print(" ?? ")
+// at
+    def override visitExprAt(expr:smart_ptr<ExprAt>)
+        print("]")
+        return ExpressionPtr(expr)
+    def override preVisitExprAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
+        print("[")
+// safe at
+    def override visitExprSafeAt(expr:smart_ptr<ExprSafeAt>)
+        print("]")
+        return ExpressionPtr(expr)
+    def override preVisitExprSafeAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
+        print("?[")
 
 typedef
     Integer = int
@@ -486,7 +523,7 @@ def add(a,b:int)
     print("a={a} b={b}")
     return a + b + add_extra
 
-[sideeffects,export]
+[sideeffects,export,unsafe]
 def allExpr(arg:int)
     // ExprStringBuilder
     var sb = "arg = {arg}\n"
@@ -494,11 +531,19 @@ def allExpr(arg:int)
     // ExprNamedCall
     add([a=1,b=2])
     // ExprNew
-    let pFoo1 = new Foo
-    let pFoo2 = new Foo(1)
-    let pFoo3 = new Foo(1,2)
+    var pFoo1 = new Foo
+    var pFoo2 = new Foo(1)
+    var pFoo3 = new Foo(1,2)
     // ExprCall
     add(1,2)
+    // ExprNullCoalescing
+    var exprAt <- pFoo1 ?? [[Foo a=1]]
+    exprAt <- [[Foo a=2]]
+    // ExprAt
+    pFoo1.b[0] = pFoo2
+    // ExprSafeAt
+    var exprSafeAt = pFoo1.b?[0] ?? pFoo2
+    exprSafeAt = pFoo2
 
 [export]
 def test
