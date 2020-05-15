@@ -889,8 +889,8 @@ namespace das {
             { IMPL_PREVISIT(ExprNullCoalescing); }
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override
             { IMPL_VISIT(ExprNullCoalescing); }
-        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * expr, Expression * default ) override
-            { IMPL_PREVISIT2(ExprNullCoalescingDefault,ExprNullCoalescing,ExpressionPtr,default); }
+        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * expr, Expression * defval ) override
+            { IMPL_PREVISIT2(ExprNullCoalescingDefault,ExprNullCoalescing,ExpressionPtr, defval); }
     // at
         virtual void preVisit ( ExprAt * expr ) override
             { IMPL_PREVISIT(ExprAt); }
