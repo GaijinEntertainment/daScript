@@ -27,7 +27,7 @@
     int das_tab_size = das_def_tab_size;   // only 2,4 or 8
     int das_nested_parentheses = 0;
     int das_nested_curly_braces = 0;
-	int das_nested_square_braces = 0;
+    int das_nested_square_braces = 0;
     int das_nested_sb = 0;
     int das_yycolumn = 0;
     int das_c_style_depth = 0;
@@ -114,8 +114,8 @@ void YYNEWLINE() {
 <indent>"\/\/"                      BEGIN(cpp_comment);
 <normal>"\/\/"                      BEGIN(cpp_comment);
 <cpp_comment>.
-<cpp_comment>\n						BEGIN(normal); unput('\n');
-<cpp_comment><<EOF>>				BEGIN(normal);
+<cpp_comment>\n                     BEGIN(normal); unput('\n');
+<cpp_comment><<EOF>>                BEGIN(normal);
 <c_comment>"/*"                     das_c_style_depth ++;
 <c_comment>"*/" {
     das_c_style_depth --;
@@ -142,7 +142,7 @@ void YYNEWLINE() {
     DAS_ASSERT(das_nested_sb==0);
     das_nested_sb ++;
     BEGIN(normal);
-	return BEGIN_STRING_EXPR;
+    return BEGIN_STRING_EXPR;
 }
 <strb><<EOF>>             {
     das_yyfatalerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
@@ -168,30 +168,30 @@ void YYNEWLINE() {
     das_yylval.ch = *yytext;
     return STRING_CHARACTER;
 }
-<indent>[ \t\r]*\n		/* skip empty line */ {
+<indent>[ \t\r]*\n      /* skip empty line */ {
     das_current_line_indent = 0;
     YYNEWLINE();
 }
 <indent>" "             {
-	das_current_line_indent++;
-	#ifdef FLEX_DEBUG
-		printf("[ ], indent=%i\n", das_current_line_indent);
-	#endif
+    das_current_line_indent++;
+    #ifdef FLEX_DEBUG
+        printf("[ ], indent=%i\n", das_current_line_indent);
+    #endif
 }
 <indent>\t            {
-	das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
-	#ifdef FLEX_DEBUG
-		printf("\\t, cli=%i\n", das_current_line_indent);
-	#endif
+    das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
+    #ifdef FLEX_DEBUG
+        printf("\\t, cli=%i\n", das_current_line_indent);
+    #endif
     YYTAB();
 }
 <indent>(\/\/.*)*\n     {
-	das_current_line_indent = 0;
-	das_need_oxford_comma = true;
-	YYNEWLINE();
-	#ifdef FLEX_DEBUG
-		printf("new line\n");
-	#endif
+    das_current_line_indent = 0;
+    das_need_oxford_comma = true;
+    YYNEWLINE();
+    #ifdef FLEX_DEBUG
+        printf("new line\n");
+    #endif
 }
 <indent>.               {
     unput(*yytext);
@@ -364,54 +364,54 @@ void YYNEWLINE() {
 <normal>[0-9]+(l|L)                     return sscanf(yytext, "%" SCNi64, &das_yylval.i64)!=1 ? LEXER_ERROR : LONG_INTEGER;
 <normal>[0-9]+(u|U)                     return sscanf(yytext, "%u",  &das_yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
 <normal>[0-9]+                          {
-		int64_t int_const;
-		if ( sscanf(yytext, "%" SCNi64,  &int_const)!=1 ) {
-			return LEXER_ERROR;
-		} else {
-			if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-				das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
-			}
-			das_yylval.i = int32_t(int_const);
-			return INTEGER;
-		}
-	}
+        int64_t int_const;
+        if ( sscanf(yytext, "%" SCNi64,  &int_const)!=1 ) {
+            return LEXER_ERROR;
+        } else {
+            if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
+                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+            }
+            das_yylval.i = int32_t(int_const);
+            return INTEGER;
+        }
+    }
 
 <normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
 <normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
 
 <normal>0[xX][0-9a-fA-F]+(u|U)          {
-		uint64_t int_const;
-		if ( sscanf(yytext, "%" SCNx64,  &int_const)!=1 ) {
-			return LEXER_ERROR;
-		} else {
-			if ( int_const>UINT32_MAX ) {
-				das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
-			}
-			das_yylval.ui = uint32_t(int_const);
-			return UNSIGNED_INTEGER;
-		}
-	}
+        uint64_t int_const;
+        if ( sscanf(yytext, "%" SCNx64,  &int_const)!=1 ) {
+            return LEXER_ERROR;
+        } else {
+            if ( int_const>UINT32_MAX ) {
+                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+            }
+            das_yylval.ui = uint32_t(int_const);
+            return UNSIGNED_INTEGER;
+        }
+    }
 
 <normal>0[xX][0-9a-fA-F]+               {
-		uint64_t int_const;
-		if ( sscanf(yytext, "%" SCNx64,  &int_const)!=1 ) {
-			return LEXER_ERROR;
-		} else {
-			if ( int_const>UINT32_MAX ) {
-				das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
-			}
-			das_yylval.ui = uint32_t(int_const);
-			return UNSIGNED_INTEGER;
-		}
-	}
+        uint64_t int_const;
+        if ( sscanf(yytext, "%" SCNx64,  &int_const)!=1 ) {
+            return LEXER_ERROR;
+        } else {
+            if ( int_const>UINT32_MAX ) {
+                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+            }
+            das_yylval.ui = uint32_t(int_const);
+            return UNSIGNED_INTEGER;
+        }
+    }
 
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
 <normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
 <normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
 
-<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf			return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf		return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf          return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf       return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>\)                                  {
@@ -443,7 +443,7 @@ void YYNEWLINE() {
         das_nested_sb --;
         if ( !das_nested_sb ) {
             BEGIN(strb);
-			return END_STRING_EXPR;
+            return END_STRING_EXPR;
         } else {
             return '}';
         }
@@ -501,8 +501,8 @@ void YYNEWLINE() {
 <normal>"\<\|"                              return LPIPE;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\["                              {
-	das_nested_square_braces ++;
-	return QBRA;
+    das_nested_square_braces ++;
+    return QBRA;
 }
 <normal>"\?\."                              return QDOT;
 <normal>"\:\="                              return CLONEEQU;
@@ -549,20 +549,20 @@ void YYNEWLINE() {
 <normal>"\<\<\<\="                          return ROTLEQU;
 <normal>"\=\>"                              return MAPTO;
 <normal>"\[\["                              {
-		das_nested_square_braces ++;
-		das_nested_square_braces ++;
-		return BRABRAB;
-	}
+        das_nested_square_braces ++;
+        das_nested_square_braces ++;
+        return BRABRAB;
+    }
 <normal>"\[\{"                              {
-		das_nested_square_braces ++;
-		das_nested_curly_braces ++;
-		return BRACBRB;
-	}
+        das_nested_square_braces ++;
+        das_nested_curly_braces ++;
+        return BRACBRB;
+    }
 <normal>"\{\{"                              {
-		das_nested_curly_braces ++;
-		das_nested_curly_braces ++;
-		return CBRCBRB;
-	}
+        das_nested_curly_braces ++;
+        das_nested_curly_braces ++;
+        return CBRCBRB;
+    }
 <normal>[ \r]                             /* skip white space */
 <normal>\t {
     YYTAB();
@@ -622,14 +622,14 @@ void das_yybegin(const char * str) {
     das_already_include.clear();
     das_yydebug = 0;
     yylineno = 1;
-	das_tab_size = das_def_tab_size;
+    das_tab_size = das_def_tab_size;
     das_line_no.clear();
     YYCOLUMN(das_yycolumn = 0,"YYBEGIN");
     das_current_line_indent = 0;
     das_indent_level = 0;
     das_nested_parentheses = 0;
     das_nested_curly_braces = 0;
-	das_nested_square_braces = 0;
+    das_nested_square_braces = 0;
     das_nested_sb = 0;
     das_need_oxford_comma = true;
     das_force_oxford_comma = false;

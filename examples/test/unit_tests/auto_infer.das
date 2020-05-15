@@ -12,8 +12,8 @@ let
     stringval = "hello, world"
 
 let 
-	some_a = "test"
-	some_b <- [{ auto[] some_a }]
+    some_a = "test"
+    some_b <- [{ auto[] some_a }]
 
 def foo(b:block<(a:int):int>)
     return invoke(b, 3)
@@ -51,8 +51,8 @@ def qq ( a : auto(T1); b : block<(a1:T1;a2:T2):bool>; c : auto(T2) )
 
 [export]
 def test
-	// global infer
-	assert(length(some_b)==1)
+    // global infer
+    assert(length(some_b)==1)
     // regular array
     let a:int[10]
     let b = a
@@ -102,11 +102,11 @@ def test
     assert(y==5.0)
     // and pick
     test_pick()
-	// and array
-	let ZZT = [[auto "two"=>2]]
-	assert(!typeinfo(is_dim ZZT))
-	let ZZA = [[auto[] "two"=>2]]
-	assert(typeinfo(is_dim ZZA) & typeinfo(dim ZZA)==1)
+    // and array
+    let ZZT = [[auto "two"=>2]]
+    assert(!typeinfo(is_dim ZZT))
+    let ZZA = [[auto[] "two"=>2]]
+    assert(typeinfo(is_dim ZZA) & typeinfo(dim ZZA)==1)
     // infering block goo
     qq(1,$(XX,YY) => true,2.0)
     return true

@@ -9,7 +9,7 @@ namespace das
     template <typename TT>
     struct das_alias;
 
-	template <typename TT, typename PT>
+    template <typename TT, typename PT>
     struct prune {
         static __forceinline TT from(const PT & v) {
             static_assert(sizeof(TT) <= sizeof(PT), "type too big to be pruned");

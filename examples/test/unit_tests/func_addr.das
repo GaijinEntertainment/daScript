@@ -12,12 +12,12 @@ def test
     assert(!(fn!=@@add))
     let qq : function
     assert(qq==null)
-	var failed = false
-	try
-		let fn2 : function<(a,b:int):int>
-		let t2 = invoke(fn2, 1, 2)
-	recover
-		failed = true
-	assert(failed,"has to fail, invoking null function")
+    var failed = false
+    try
+        let fn2 : function<(a,b:int):int>
+        let t2 = invoke(fn2, 1, 2)
+    recover
+        failed = true
+    assert(failed,"has to fail, invoking null function")
     return true
 

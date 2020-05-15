@@ -584,7 +584,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     }};
     template <> struct EvalBlock<0> { static __forceinline void eval(Context &, SimNode **, vec4f *) {} };
     template <> struct EvalBlock<1> { static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
-    		argValues[0] = arguments[0]->eval(context);
+            argValues[0] = arguments[0]->eval(context);
     }};
     template <> struct EvalBlock<2> {    static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
             argValues[0] = arguments[0]->eval(context);
@@ -792,7 +792,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[argCount];                                                          \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                       		\
+            int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                             \
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
             SimFunction * simFunc = context.getFunction(*funIndex-1);                           \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \

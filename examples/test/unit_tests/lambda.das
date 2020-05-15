@@ -18,12 +18,12 @@ def recv
 
 [sideeffects]
 def onlyNull ( bar : lambda<(a:int):int> )
-	if bar != null
-		assert(false,"has to be null")
+    if bar != null
+        assert(false,"has to be null")
 
 def addX(a:int)
-	return @ <| (b:int)
-		return a + b
+    return @ <| (b:int)
+        return a + b
 
 [export]
 def test
@@ -33,17 +33,17 @@ def test
     var x = invoke(counter,13)
     CNT = 100500
     let y = invoke(counter,13)
-	assert(x==13 & y==14)
+    assert(x==13 & y==14)
     send(counter)
     let net_counter = recv()
     let z = invoke(net_counter,13)
     assert(z==15)
     x = invoke(counter,13)
     assert(x==15)
-	let l : lambda<(a:int):int>
-	onlyNull(l)
-	let t = addX(1)
-	let q = invoke(t,2)
-	assert(q==3)
+    let l : lambda<(a:int):int>
+    onlyNull(l)
+    let t = addX(1)
+    let q = invoke(t,2)
+    assert(q==3)
     return true
 

@@ -10,13 +10,13 @@ namespace das {
     void builtin_fclose ( const FILE * f, Context * context );
     void builtin_fprint ( const FILE * f, const char * text, Context * context );
     char * builtin_fread ( const FILE * _f, Context * context );
-	char* builtin_fgets(const FILE* _f, Context* context);
+    char* builtin_fgets(const FILE* _f, Context* context);
     void builtin_fwrite(const FILE * _f, char * str, Context * context);
-	bool builtin_feof(const FILE* _f);
+    bool builtin_feof(const FILE* _f);
     vec4f builtin_read ( Context &, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_write ( Context &, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args );
-	void builtin_map_file(const FILE* _f, const TBlock<void, TTemporary<const char*>>& blk, Context* context);
+    void builtin_map_file(const FILE* _f, const TBlock<void, TTemporary<const char*>>& blk, Context* context);
     char * builtin_dirname ( const char * name, Context * context );
     char * builtin_basename ( const char * name, Context * context );
     bool builtin_fstat ( const FILE * f, FStat & fs );

@@ -1681,7 +1681,7 @@ namespace das {
                 ss << "das_index<" << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
                     << ">::safe_at(";
             }
-			if (isPtr) ss << "("; else ss << "&(";
+            if (isPtr) ss << "("; else ss << "&(";
         }
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
             Visitor::preVisitSafeAtIndex(expr, index);

@@ -844,7 +844,7 @@ namespace das
         assert(func->index>=0 && "how, we specified in the unused");
         Func fn; fn.index = func->index + 1;
         vec4f cval = v_zero();
-		memcpy (&cval, &fn, sizeof(Func));
+        memcpy (&cval, &fn, sizeof(Func));
         return context.code->makeNode<SimNode_ConstValue>(at,cval);
     }
 
@@ -902,12 +902,12 @@ namespace das
     }
 
     SimNode * ExprConstString::simulate (Context & context) const {
-		if ( !text.empty() ) {
-			char* str = context.constStringHeap->allocateString(text);
-			return context.code->makeNode<SimNode_ConstString>(at, str);
-		} else {
-			return context.code->makeNode<SimNode_ConstString>(at, nullptr);
-		}
+        if ( !text.empty() ) {
+            char* str = context.constStringHeap->allocateString(text);
+            return context.code->makeNode<SimNode_ConstString>(at, str);
+        } else {
+            return context.code->makeNode<SimNode_ConstString>(at, nullptr);
+        }
     }
 
     SimNode * ExprStaticAssert::simulate (Context &) const {

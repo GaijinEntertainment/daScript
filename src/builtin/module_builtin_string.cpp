@@ -102,10 +102,10 @@ namespace das
         return stringLengthSafe ( *context, str );
     }
 
-	char* builtin_string_chop(const char* str, int start, int length, Context* context) {
-		if ( !str ) return nullptr;
-		return context->stringHeap.allocateString(str + start, length);
-	}
+    char* builtin_string_chop(const char* str, int start, int length, Context* context) {
+        if ( !str ) return nullptr;
+        return context->stringHeap.allocateString(str + start, length);
+    }
 
     char* builtin_string_slice1 ( const char *str, int start, int end, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
@@ -135,9 +135,9 @@ namespace das
         return ret;
     }
 
-	__forceinline char to_lower(char ch) {
-		return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
-	}
+    __forceinline char to_lower(char ch) {
+        return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
+    }
 
     char* builtin_string_tolower ( const char *str, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
@@ -149,21 +149,21 @@ namespace das
         return ret;
     }
 
-	char* builtin_string_tolower_in_place(char* str) {
-		if (!str) return nullptr;
-		char* pch = str;
-		for (;;) {
-			char ch = *pch;
-			if (ch == 0) break;
-			else if (ch >= 'A' && ch <= 'Z') *pch = ch - 'A' + 'a';
-			pch++;
-		}
-		return str;
-	}
+    char* builtin_string_tolower_in_place(char* str) {
+        if (!str) return nullptr;
+        char* pch = str;
+        for (;;) {
+            char ch = *pch;
+            if (ch == 0) break;
+            else if (ch >= 'A' && ch <= 'Z') *pch = ch - 'A' + 'a';
+            pch++;
+        }
+        return str;
+    }
 
-	__forceinline char to_upper(char ch) {
-		return (ch >= 'a' && ch <= 'z') ? (ch - 'a' + 'A') : ch;
-	}
+    __forceinline char to_upper(char ch) {
+        return (ch >= 'a' && ch <= 'z') ? (ch - 'a' + 'A') : ch;
+    }
 
     char* builtin_string_toupper ( const char *str, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
@@ -175,17 +175,17 @@ namespace das
         return ret;
     }
 
-	char* builtin_string_toupper_in_place ( char* str ) {
-		if (!str) return nullptr;
-		char* pch = str;
-		for (;;) {
-			char ch = *pch;
-			if (ch == 0) break;
-			else if (ch >= 'a' && ch <= 'z') *pch = ch - 'a' + 'A';
-			pch++;
-		}
-		return str;
-	}
+    char* builtin_string_toupper_in_place ( char* str ) {
+        if (!str) return nullptr;
+        char* pch = str;
+        for (;;) {
+            char ch = *pch;
+            if (ch == 0) break;
+            else if (ch >= 'a' && ch <= 'z') *pch = ch - 'a' + 'A';
+            pch++;
+        }
+        return str;
+    }
 
 
     unsigned string_to_uint ( const char *str, Context * context ) {
@@ -334,42 +334,42 @@ namespace das
         return v_zero();
     }
 
-	char* builtin_as_string(const TArray<uint8_t>& arr, Context* context) {
-		return arr.size ? context->stringHeap.allocateString(arr.data, arr.size) : nullptr;
-	}
+    char* builtin_as_string(const TArray<uint8_t>& arr, Context* context) {
+        return arr.size ? context->stringHeap.allocateString(arr.data, arr.size) : nullptr;
+    }
 
-	char* builtin_append_char(char* str, int32_t Ch, Context* context) {
-		if ( !str ) {
-			StringHeader* header = (StringHeader *) context->stringHeap.allocate(sizeof(StringHeader) + 2);
-			header->length = 1;
-			header->hash = 0;
-			str = (char*)(header + 1);
-			str[0] = (char) Ch;
-			str[1] = 0;
-			return str;
-		} else if ( context->stringHeap.isOwnPtrQnD(str) ) {
-			char* hstr = str - sizeof(StringHeader);
-			StringHeader* header = (StringHeader*)hstr;
-			uint32_t length = header->length;
-			uint32_t size = sizeof(StringHeader) + length + 1;
-			char* nstr = context->stringHeap.reallocate(hstr, size, size + 1);
-			if (nstr != hstr) {
-				header = (StringHeader*)hstr;
-			}
-			header->length = length + 1;
-			nstr += sizeof(StringHeader);
-			nstr[length] = (char) Ch;
-			nstr[length + 1] = 0;
-			return nstr;
-		} else {
-			uint32_t length = uint32_t(strlen(str));
-			char* nstr = context->stringHeap.allocateString(nullptr, length + 1);
-			memcpy(nstr, str, length);
-			nstr[length] = (char) Ch;
-			nstr[length + 1] = 0;
-			return nstr;
-		}
-	}
+    char* builtin_append_char(char* str, int32_t Ch, Context* context) {
+        if ( !str ) {
+            StringHeader* header = (StringHeader *) context->stringHeap.allocate(sizeof(StringHeader) + 2);
+            header->length = 1;
+            header->hash = 0;
+            str = (char*)(header + 1);
+            str[0] = (char) Ch;
+            str[1] = 0;
+            return str;
+        } else if ( context->stringHeap.isOwnPtrQnD(str) ) {
+            char* hstr = str - sizeof(StringHeader);
+            StringHeader* header = (StringHeader*)hstr;
+            uint32_t length = header->length;
+            uint32_t size = sizeof(StringHeader) + length + 1;
+            char* nstr = context->stringHeap.reallocate(hstr, size, size + 1);
+            if (nstr != hstr) {
+                header = (StringHeader*)hstr;
+            }
+            header->length = length + 1;
+            nstr += sizeof(StringHeader);
+            nstr[length] = (char) Ch;
+            nstr[length + 1] = 0;
+            return nstr;
+        } else {
+            uint32_t length = uint32_t(strlen(str));
+            char* nstr = context->stringHeap.allocateString(nullptr, length + 1);
+            memcpy(nstr, str, length);
+            nstr[length] = (char) Ch;
+            nstr[length + 1] = 0;
+            return nstr;
+        }
+    }
 
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
@@ -404,24 +404,24 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");
         addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", SideEffects::none, "builtin_string_strip_right");
         addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", SideEffects::none, "builtin_string_strip_left");
-		addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop", 
-			SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
-		addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string", SideEffects::none, "builtin_as_string");
+        addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop", 
+            SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string", SideEffects::none, "builtin_as_string");
         addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice1");
         addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice2");
         addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", SideEffects::none, "builtin_string_find1");
         addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", SideEffects::none, "builtin_string_find2");
         addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
         addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
-		addExtern<DAS_BIND_FUN(builtin_append_char)>(*this, lib, "append", SideEffects::modifyArgumentAndExternal, "builtin_append_char");
+        addExtern<DAS_BIND_FUN(builtin_append_char)>(*this, lib, "append", SideEffects::modifyArgumentAndExternal, "builtin_append_char");
         addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
         addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
-		addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");
-		addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place", 
-			SideEffects::none, "builtin_string_tolower_in_place")->unsafeOperation = true;
-		addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
-			SideEffects::none, "builtin_string_toupper_in_place")->unsafeOperation = true;
-		addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split", SideEffects::modifyExternal, "builtin_string_split");
+        addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");
+        addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place", 
+            SideEffects::none, "builtin_string_tolower_in_place")->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
+            SideEffects::none, "builtin_string_toupper_in_place")->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split", SideEffects::modifyExternal, "builtin_string_split");
         addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string", SideEffects::none, "builtin_string_clone");
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");

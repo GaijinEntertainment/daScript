@@ -4,7 +4,7 @@ var
     global_3 = "from_a"
 
 typedef
-	aliasInA = int
+    aliasInA = int
 
 enum enumInA
     one = 1

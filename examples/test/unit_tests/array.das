@@ -83,10 +83,10 @@ def testIntArray
     verifyIntArray(arr,2,3,0)
 
 def testInterop
-	let res = temp_array_example([{ string[] "one" }]) <| $ ( arr )
-		assert(length(arr)==1)
-		assert(arr[0]=="one")
-	assert(res)
+    let res = temp_array_example([{ string[] "one" }]) <| $ ( arr )
+        assert(length(arr)==1)
+        assert(arr[0]=="one")
+    assert(res)
 
 [export]
 def test:bool
@@ -135,7 +135,7 @@ def test:bool
             verify_test_array(b,i++)
     testIntArray()
     testConstInArray()
-	testInterop()
+    testInterop()
     return true
 
 // this test bellow is only here to make sure AOT compiles and runs for array<blah const>

@@ -63,8 +63,8 @@ def test_handled
     assert(deref(b.getFooPtr).fooData==7)
     assert(deref(a)==deref(b.fooPtr))
     assert(!(deref(a)!=deref(b.fooPtr)))
-	delete a
-	delete b
+    delete a
+    delete b
 
 [export]
 def test:bool

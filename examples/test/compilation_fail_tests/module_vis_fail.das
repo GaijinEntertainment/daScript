@@ -50,4 +50,4 @@ def test
     assert(typeinfo(sizeof type<structInA>)==4)      // 30301: udefined type structInA
     assert(typeinfo(sizeof type<aliasInA>)==4)       // 30301: udefined type aliasInA
 
-	return true
+    return true

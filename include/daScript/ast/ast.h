@@ -466,9 +466,9 @@ namespace das
     struct ExprConstT : ExprConst {
         ExprConstT ( TT val, Type bt ) : ExprConst(bt) { value = cast<TT>::from(val); }
         ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) {
-			value = v_zero();
-			memcpy(&value, &val, sizeof(TT));
-		}
+            value = v_zero();
+            memcpy(&value, &val, sizeof(TT));
+        }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
             auto cexpr = clonePtr<ExprConstExt>(expr);
             Expression::clone(cexpr);
@@ -776,7 +776,7 @@ namespace das
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;
-		Module* front() const { return modules.front(); }
+        Module* front() const { return modules.front(); }
     protected:
         vector<Module *>                modules;
     };

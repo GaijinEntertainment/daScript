@@ -21,16 +21,16 @@ struct Foo
     s : string = "hello"
 
 let
-	testFoo = Foo()
+    testFoo = Foo()
 
 let
-	jestFoo = [[Foo i=3, f=4., s="blah"]]
+    jestFoo = [[Foo i=3, f=4., s="blah"]]
 
 [export]
 def test
     test_bar()
-	assert(testFoo.i==5 & testFoo.f==6. & testFoo.s=="hello")
-	assert(jestFoo.i==3 & jestFoo.f==4. & jestFoo.s=="blah")
+    assert(testFoo.i==5 & testFoo.f==6. & testFoo.s=="hello")
+    assert(jestFoo.i==3 & jestFoo.f==4. & jestFoo.s=="blah")
     let t = Foo()
     assert(t.i==5)
     assert(t.f==6.0)

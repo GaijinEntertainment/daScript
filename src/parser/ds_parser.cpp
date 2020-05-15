@@ -79,22 +79,22 @@
 /* First part of user prologue.  */
 #line 59 "ds_parser.ypp"
 
-	#include "daScript/misc/platform.h"
-	#include "daScript/simulate/debug_info.h"
-	#include "daScript/ast/compilation_errors.h"
+    #include "daScript/misc/platform.h"
+    #include "daScript/simulate/debug_info.h"
+    #include "daScript/ast/compilation_errors.h"
 
-	#ifdef _MSC_VER
-	#pragma warning(disable:4262)
-	#pragma warning(disable:4127)
-	#pragma warning(disable:4702)
-	#endif
+    #ifdef _MSC_VER
+    #pragma warning(disable:4262)
+    #pragma warning(disable:4127)
+    #pragma warning(disable:4702)
+    #endif
 
     using namespace das;
 
     void das_yyerror (const string & error);
     void das_yyfatalerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
     void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
-	void das_checkName(const string & name, const LineInfo &at);
+    void das_checkName(const string & name, const LineInfo &at);
     int yylex();
     void yybegin(const char * str);
 
@@ -142,8 +142,8 @@ extern int das_yydebug;
 /* "%code requires" blocks.  */
 #line 2 "ds_parser.ypp"
 
-	#include "daScript/misc/platform.h"
-	#include "daScript/ast/ast.h"
+    #include "daScript/misc/platform.h"
+    #include "daScript/ast/ast.h"
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
@@ -154,9 +154,9 @@ extern int das_yydebug;
     };
 
     namespace das {
-        extern ProgramPtr			    g_Program;
+        extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
-        extern vector<FileInfo *>	    g_FileAccessStack;
+        extern vector<FileInfo *>       g_FileAccessStack;
         extern das_map<string,string>   das_module_alias;
     }
     using namespace das;
@@ -365,7 +365,7 @@ union DAS_YYSTYPE
     int64_t                         i64;
     uint64_t                        ui64;
     double                          d;
-	double                          fd;
+    double                          fd;
     string *                        s;
     vector<string> *                pNameList;
     vector<pair<string,LineInfo>> * pNameWithPosList;
@@ -4018,7 +4018,7 @@ yyreduce:
 #line 443 "ds_parser.ypp"
     {
         (yyval.pExpression) = new ExprStringBuilder();
-		(yyval.pExpression)->at = LineInfo(g_FileAccessStack.back(),
+        (yyval.pExpression)->at = LineInfo(g_FileAccessStack.back(),
             yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
 #line 4025 "ds_parser.cpp"
@@ -4069,24 +4069,24 @@ yyreduce:
   case 23:
 #line 481 "ds_parser.ypp"
     {
-		if ( g_Program->options.size() ) {
-			g_Program->options.insert ( g_Program->options.begin(),
+        if ( g_Program->options.size() ) {
+            g_Program->options.insert ( g_Program->options.begin(),
                 (yyvsp[0].aaList)->begin(), (yyvsp[0].aaList)->end() );
-		} else {
-			swap ( g_Program->options, *(yyvsp[0].aaList) );
-		}
-		auto opt = g_Program->options.find("indenting", tInt);
-		extern int das_tab_size, das_def_tab_size;
-		if (opt)
-		{
-			if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
-				das_tab_size = das_def_tab_size;
-			else
-				das_tab_size = opt->iValue ? opt->iValue : das_def_tab_size;//0 is default
+        } else {
+            swap ( g_Program->options, *(yyvsp[0].aaList) );
+        }
+        auto opt = g_Program->options.find("indenting", tInt);
+        extern int das_tab_size, das_def_tab_size;
+        if (opt)
+        {
+            if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
+                das_tab_size = das_def_tab_size;
+            else
+                das_tab_size = opt->iValue ? opt->iValue : das_def_tab_size;//0 is default
             g_FileAccessStack.back()->tabSize = das_tab_size;
-		}
-		delete (yyvsp[0].aaList);
-	}
+        }
+        delete (yyvsp[0].aaList);
+    }
 #line 4091 "ds_parser.cpp"
     break;
 
@@ -4363,7 +4363,7 @@ yyreduce:
         (yyval.aaList) = new AnnotationArgumentList();
         (yyval.aaList)->push_back(*(yyvsp[0].aa));
         delete (yyvsp[0].aa);
-	}
+    }
 #line 4368 "ds_parser.cpp"
     break;
 
@@ -4422,8 +4422,8 @@ yyreduce:
   case 66:
 #line 700 "ds_parser.ypp"
     {
-		{ (yyval.aa) = new AnnotationArgument(*(yyvsp[-4].s),(yyvsp[-1].aaList)); delete (yyvsp[-4].s); }
-	}
+        { (yyval.aa) = new AnnotationArgument(*(yyvsp[-4].s),(yyvsp[-1].aaList)); delete (yyvsp[-4].s); }
+    }
 #line 4428 "ds_parser.cpp"
     break;
 
@@ -4431,15 +4431,15 @@ yyreduce:
 #line 706 "ds_parser.ypp"
     {
         (yyval.aaList) = new AnnotationArgumentList();
-		if ( (yyvsp[0].aa)->type==Type::none ) {
-			for ( auto & sarg : *((yyvsp[0].aa)->aList) ) {
-				sarg.name = (yyvsp[0].aa)->name;
-				(yyval.aaList)->push_back(sarg);
-			}
-			delete (yyvsp[0].aa)->aList;
-		} else {
-			(yyval.aaList)->push_back(*(yyvsp[0].aa));
-		}
+        if ( (yyvsp[0].aa)->type==Type::none ) {
+            for ( auto & sarg : *((yyvsp[0].aa)->aList) ) {
+                sarg.name = (yyvsp[0].aa)->name;
+                (yyval.aaList)->push_back(sarg);
+            }
+            delete (yyvsp[0].aa)->aList;
+        } else {
+            (yyval.aaList)->push_back(*(yyvsp[0].aa));
+        }
         delete (yyvsp[0].aa);
     }
 #line 4446 "ds_parser.cpp"
@@ -4449,15 +4449,15 @@ yyreduce:
 #line 719 "ds_parser.ypp"
     {
             (yyval.aaList) = (yyvsp[-2].aaList);
-			if ( (yyvsp[0].aa)->type==Type::none ) {
-				for ( auto & sarg : *((yyvsp[0].aa)->aList) ) {
-					sarg.name = (yyvsp[0].aa)->name;
-					(yyval.aaList)->push_back(sarg);
-				}
-				delete (yyvsp[0].aa)->aList;
-			} else {
-				(yyval.aaList)->push_back(*(yyvsp[0].aa));
-			}
+            if ( (yyvsp[0].aa)->type==Type::none ) {
+                for ( auto & sarg : *((yyvsp[0].aa)->aList) ) {
+                    sarg.name = (yyvsp[0].aa)->name;
+                    (yyval.aaList)->push_back(sarg);
+                }
+                delete (yyvsp[0].aa)->aList;
+            } else {
+                (yyval.aaList)->push_back(*(yyvsp[0].aa));
+            }
             delete (yyvsp[0].aa);
     }
 #line 4464 "ds_parser.cpp"
@@ -4571,9 +4571,9 @@ yyreduce:
   case 82:
 #line 793 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
-		(yyval.s) = (yyvsp[0].s);
-	}
+        das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
+        (yyval.s) = (yyvsp[0].s);
+    }
 #line 4578 "ds_parser.cpp"
     break;
 
@@ -4811,7 +4811,7 @@ yyreduce:
                         CompilationError::function_already_declared);
             }
         }
-		(yyvsp[0].pFuncDecl)->delRef();
+        (yyvsp[0].pFuncDecl)->delRef();
     }
 #line 4817 "ds_parser.cpp"
     break;
@@ -4838,9 +4838,9 @@ yyreduce:
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
-							if ( pDecl->annotation ) {
-								pVar->annotation = *pDecl->annotation;
-							}
+                            if ( pDecl->annotation ) {
+                                pVar->annotation = *pDecl->annotation;
+                            }
                             pFunction->arguments.push_back(pVar);
                         } else {
                             das_yyerror("function argument is already declared " + name_at.first,name_at.second,
@@ -4989,7 +4989,7 @@ yyreduce:
 #line 931 "ds_parser.ypp"
     {
         (yyval.pExpression) = new ExprBlock();
-		(yyval.pExpression)->at = LineInfo(g_FileAccessStack.back(),
+        (yyval.pExpression)->at = LineInfo(g_FileAccessStack.back(),
             yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
 #line 4996 "ds_parser.cpp"
@@ -5465,7 +5465,7 @@ yyreduce:
 #line 1168 "ds_parser.ypp"
     {
             auto retE = make_smart<ExprReturn>(tokAt((yylsp[-2])), ExpressionPtr((yyvsp[0].pExpression)));
-			retE->moveSemantics = true;
+            retE->moveSemantics = true;
             auto blkE = new ExprBlock();
             blkE->at = tokAt((yylsp[-2]));
             blkE->list.push_back(retE);
@@ -5516,9 +5516,9 @@ yyreduce:
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
-							if ( pDecl->annotation ) {
-								pVar->annotation = *pDecl->annotation;
-							}
+                            if ( pDecl->annotation ) {
+                                pVar->annotation = *pDecl->annotation;
+                            }
                             closure->arguments.push_back(pVar);
                         } else {
                             das_yyerror("block argument is already declared " + name_at.first,
@@ -5733,9 +5733,9 @@ yyreduce:
   case 228:
 #line 1303 "ds_parser.ypp"
     {
-		(yyval.pExpression) = new ExprAddr(tokAt((yylsp[-1])),*(yyvsp[0].s));
-		delete (yyvsp[0].s);
-	}
+        (yyval.pExpression) = new ExprAddr(tokAt((yylsp[-1])),*(yyvsp[0].s));
+        delete (yyvsp[0].s);
+    }
 #line 5740 "ds_parser.cpp"
     break;
 
@@ -5754,11 +5754,11 @@ yyreduce:
   case 231:
 #line 1307 "ds_parser.ypp"
     {
-		auto expr = new ExprAddr(tokAt((yylsp[-6])),*(yyvsp[0].s));
-		delete (yyvsp[0].s);
+        auto expr = new ExprAddr(tokAt((yylsp[-6])),*(yyvsp[0].s));
+        delete (yyvsp[0].s);
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
-		(yyval.pExpression) = expr;
+        (yyval.pExpression) = expr;
     }
 #line 5764 "ds_parser.cpp"
     break;
@@ -5778,15 +5778,15 @@ yyreduce:
   case 234:
 #line 1314 "ds_parser.ypp"
     {
-		auto expr = new ExprAddr(tokAt((yylsp[-7])),*(yyvsp[0].s));
-		delete (yyvsp[0].s);
+        auto expr = new ExprAddr(tokAt((yylsp[-7])),*(yyvsp[0].s));
+        delete (yyvsp[0].s);
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
         if ( (yyvsp[-4].pVarDeclList) ) {
             varDeclToTypeDecl(expr->funcType.get(), (yyvsp[-4].pVarDeclList));
             deleteVariableDeclarationList((yyvsp[-4].pVarDeclList));
         }
-		(yyval.pExpression) = expr;
+        (yyval.pExpression) = expr;
     }
 #line 5792 "ds_parser.cpp"
     break;
@@ -6135,7 +6135,7 @@ yyreduce:
 #line 1401 "ds_parser.ypp"
     {
         (yyval.pExpression) = new ExprIsVariant(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),*(yyvsp[0].s));
-		delete (yyvsp[0].s);
+        delete (yyvsp[0].s);
     }
 #line 6141 "ds_parser.cpp"
     break;
@@ -6144,7 +6144,7 @@ yyreduce:
 #line 1405 "ds_parser.ypp"
     {
         (yyval.pExpression) = new ExprAsVariant(tokAt((yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),*(yyvsp[0].s));
-		delete (yyvsp[0].s);
+        delete (yyvsp[0].s);
     }
 #line 6150 "ds_parser.cpp"
     break;
@@ -6228,7 +6228,7 @@ yyreduce:
 #line 1439 "ds_parser.ypp"
     {
         Enumeration * pEnum = nullptr;
-		Expression * resConst = nullptr;
+        Expression * resConst = nullptr;
         auto enums = g_Program->findEnum(*(yyvsp[-1].s));
         auto aliases = g_Program->findAlias(*(yyvsp[-1].s));
         if ( enums.size()+aliases.size() > 1 ) {
@@ -6263,18 +6263,18 @@ yyreduce:
         if ( pEnum ) {
             auto ff = pEnum->find(*(yyvsp[0].s));
             if ( ff.second ) {
-				auto td = make_smart<TypeDecl>(pEnum);
+                auto td = make_smart<TypeDecl>(pEnum);
                 resConst = new ExprConstEnumeration(tokAt((yylsp[0])), *(yyvsp[0].s), td);
             } else {
                 das_yyerror("enumeraiton value not found " + *(yyvsp[-1].s) + " " + *(yyvsp[0].s), tokAt((yylsp[0])),
                     CompilationError::enumeration_not_found);
             }
         }
-		if ( resConst ) {
-			(yyval.pExpression) = resConst;
-		} else {
-			(yyval.pExpression) = new ExprConstInt(0);	// dummy
-		}
+        if ( resConst ) {
+            (yyval.pExpression) = resConst;
+        } else {
+            (yyval.pExpression) = new ExprConstInt(0);  // dummy
+        }
         delete (yyvsp[-1].s);
         delete (yyvsp[0].s);
     }
@@ -6380,7 +6380,7 @@ yyreduce:
                 das_yyerror("function is already defined " + (yyvsp[0].pFuncDecl)->getMangledName(),
                     (yyvsp[0].pFuncDecl)->at, CompilationError::function_already_declared);
             }
-			(yyvsp[0].pFuncDecl)->delRef();
+            (yyvsp[0].pFuncDecl)->delRef();
         }
         (yyval.pVarDeclList) = (yyvsp[-4].pVarDeclList);
     }
@@ -6390,20 +6390,20 @@ yyreduce:
   case 308:
 #line 1572 "ds_parser.ypp"
     {
-			(yyval.pVarDecl) = (yyvsp[0].pVarDecl);
-			(yyvsp[0].pVarDecl)->pTypeDecl->constant = true;
-			(yyvsp[0].pVarDecl)->annotation = (yyvsp[-1].aaList);
-		}
+            (yyval.pVarDecl) = (yyvsp[0].pVarDecl);
+            (yyvsp[0].pVarDecl)->pTypeDecl->constant = true;
+            (yyvsp[0].pVarDecl)->annotation = (yyvsp[-1].aaList);
+        }
 #line 6398 "ds_parser.cpp"
     break;
 
   case 309:
 #line 1577 "ds_parser.ypp"
     {
-			(yyval.pVarDecl) = (yyvsp[0].pVarDecl);
-			(yyvsp[0].pVarDecl)->pTypeDecl->removeConstant = true;
-			(yyvsp[0].pVarDecl)->annotation = (yyvsp[-2].aaList);
-		}
+            (yyval.pVarDecl) = (yyvsp[0].pVarDecl);
+            (yyvsp[0].pVarDecl)->pTypeDecl->removeConstant = true;
+            (yyvsp[0].pVarDecl)->annotation = (yyvsp[-2].aaList);
+        }
 #line 6408 "ds_parser.cpp"
     break;
 
@@ -6722,7 +6722,7 @@ yyreduce:
   case 345:
 #line 1761 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
+        das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
         if ( !(yyvsp[-2].pEnum)->add(*(yyvsp[-1].s)) ) {
             das_yyerror("enumeration alread declared " + *(yyvsp[-1].s), tokAt((yylsp[-1])),
                 CompilationError::enumeration_value_already_declared);
@@ -6736,7 +6736,7 @@ yyreduce:
   case 346:
 #line 1770 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
+        das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
         if ( !(yyvsp[-4].pEnum)->add(*(yyvsp[-3].s),ExpressionPtr((yyvsp[-1].pExpression))) ) {
             das_yyerror("enumeration value alread declared " + *(yyvsp[-3].s), tokAt((yylsp[-3])),
                 CompilationError::enumeration_value_already_declared);
@@ -6750,7 +6750,7 @@ yyreduce:
   case 347:
 #line 1783 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
+        das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
         (yyvsp[-1].pTypeDecl)->alias = *(yyvsp[-3].s);
         if ( !g_Program->addAlias(TypeDeclPtr((yyvsp[-1].pTypeDecl))) ) {
             das_yyerror("type alias is already defined "+*(yyvsp[-3].s),tokAt((yylsp[-3])),
@@ -6764,7 +6764,7 @@ yyreduce:
   case 351:
 #line 1804 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
+        das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
         auto pEnum = EnumerationPtr((yyvsp[-1].pEnum));
         pEnum->at = tokAt((yylsp[-4]));
         pEnum->name = *(yyvsp[-3].s);
@@ -6772,7 +6772,7 @@ yyreduce:
             das_yyerror("enumeration is already defined "+*(yyvsp[-3].s),tokAt((yylsp[-1])),
                 CompilationError::enumeration_already_declared);
         }
-		delete (yyvsp[-3].s);
+        delete (yyvsp[-3].s);
     }
 #line 6778 "ds_parser.cpp"
     break;
@@ -6780,16 +6780,16 @@ yyreduce:
   case 352:
 #line 1815 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[-5].s),tokAt((yylsp[-5])));
+        das_checkName(*(yyvsp[-5].s),tokAt((yylsp[-5])));
         auto pEnum = EnumerationPtr((yyvsp[-1].pEnum));
         pEnum->at = tokAt((yylsp[-6]));
         pEnum->name = *(yyvsp[-5].s);
-		pEnum->baseType = (yyvsp[-3].type);
+        pEnum->baseType = (yyvsp[-3].type);
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*(yyvsp[-5].s),tokAt((yylsp[-1])),
                 CompilationError::enumeration_already_declared);
         }
-		delete (yyvsp[-5].s);
+        delete (yyvsp[-5].s);
     }
 #line 6795 "ds_parser.cpp"
     break;
@@ -6809,7 +6809,7 @@ yyreduce:
   case 355:
 #line 1835 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
+        das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
         StructurePtr pStruct;
         if ( (yyvsp[0].s) ) {
             auto structs = g_Program->findStructure(*(yyvsp[0].s));
@@ -6942,7 +6942,7 @@ yyreduce:
                         }
                     }
                 }
-				swap ( pStruct->annotations, *(yyvsp[-6].faList) );
+                swap ( pStruct->annotations, *(yyvsp[-6].faList) );
                 delete (yyvsp[-6].faList);
             }
         }
@@ -6955,7 +6955,7 @@ yyreduce:
   case 360:
 #line 1964 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
+        das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
         auto pSL = new vector<pair<string,LineInfo>>();
         pSL->push_back(make_pair(*(yyvsp[0].s),tokAt((yylsp[0]))));
         (yyval.pNameWithPosList) = pSL;
@@ -6967,7 +6967,7 @@ yyreduce:
   case 361:
 #line 1971 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
+        das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
         (yyvsp[-2].pNameWithPosList)->push_back(make_pair(*(yyvsp[0].s),tokAt((yylsp[0]))));
         (yyval.pNameWithPosList) = (yyvsp[-2].pNameWithPosList);
         delete (yyvsp[0].s);
@@ -7186,7 +7186,7 @@ yyreduce:
   case 395:
 #line 2032 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
+        das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
         (yyval.pTypeDecl) = new TypeDecl(Type::autoinfer);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-3]));
         (yyval.pTypeDecl)->alias = *(yyvsp[-1].s);
@@ -7198,7 +7198,7 @@ yyreduce:
   case 396:
 #line 2042 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
+        das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
         auto pSL = new vector<string>();
         pSL->push_back(*(yyvsp[0].s));
         (yyval.pNameList) = pSL;
@@ -7210,7 +7210,7 @@ yyreduce:
   case 397:
 #line 2049 "ds_parser.ypp"
     {
-		das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
+        das_checkName(*(yyvsp[0].s),tokAt((yylsp[0])));
         (yyvsp[-2].pNameList)->push_back(*(yyvsp[0].s));
         (yyval.pNameList) = (yyvsp[-2].pNameList);
         delete (yyvsp[0].s);
@@ -7424,8 +7424,8 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer);
         (yyval.pTypeDecl)->at = tokAt((yylsp[-1]));
         (yyval.pTypeDecl)->firstType = make_smart<TypeDecl>(Type::tPointer);
-		(yyval.pTypeDecl)->firstType->at = tokAt((yylsp[-1]));
-		(yyval.pTypeDecl)->firstType->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
+        (yyval.pTypeDecl)->firstType->at = tokAt((yylsp[-1]));
+        (yyval.pTypeDecl)->firstType->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
     }
 #line 7431 "ds_parser.cpp"
     break;
@@ -8308,9 +8308,9 @@ yyreturn:
 
 
 void das_checkName(const string & name, const LineInfo &at) {
-	if ( name.length()>=2 && name[0]=='_' && name[1]=='_' ) {
-		g_Program->error("names starting with __ are reserved, " + name,"","",at,CompilationError::invalid_name);
-	}
+    if ( name.length()>=2 && name[0]=='_' && name[1]=='_' ) {
+        g_Program->error("names starting with __ are reserved, " + name,"","",at,CompilationError::invalid_name);
+    }
 }
 
 void das_yyerror(const string & error, const LineInfo & at, CompilationError cerr) {

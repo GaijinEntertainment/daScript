@@ -48,7 +48,7 @@ def test
     // custom type
     test_sort ( [[Foo x=1,y=2; x=1,y=1; x=2,y=2; x=0,y=1]] )    // Foo[]
     test_sort ( [{Foo x=1,y=2; x=1,y=1; x=2,y=2; x=0,y=1}] )    // array<Foo>
-	// vector
-	test_vector_sort()
+    // vector
+    test_vector_sort()
     return true
 
