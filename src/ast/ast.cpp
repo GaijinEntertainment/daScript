@@ -706,6 +706,7 @@ namespace das {
         auto cexpr = clonePtr<ExprConstEnumeration>(expr);
         cexpr->enumType = enumType;
         cexpr->text = text;
+        cexpr->value = value;
         return cexpr;
     }
 

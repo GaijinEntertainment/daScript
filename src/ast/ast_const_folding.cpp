@@ -300,6 +300,7 @@ namespace das {
                 sim->type = expr->type->enumType->makeEnumType();
                 sim->constexpression = true;
                 sim->at = encloseAt(expr);
+                sim->value = value;
                 reportFolding();
                 return sim;
             } else {
@@ -358,6 +359,11 @@ namespace das {
     protected:
         bool runMe = false;
     protected:
+        ExpressionPtr cloneWithType ( const ExpressionPtr & expr ) {
+            auto rexpr = expr->clone();
+            rexpr->type = make_smart<TypeDecl>(*expr->type);
+            return rexpr;
+        }
         // function which is fully a nop
         bool isNop ( const FunctionPtr & func ) {
             if ( func->builtIn ) return false;
@@ -378,7 +384,7 @@ namespace das {
                     if ( block->list.back()->rtti_isReturn() ) {
                         auto ret = static_pointer_cast<ExprReturn>(block->list.back());
                         if ( ret->subexpr && ret->subexpr->rtti_isConstant() ) {
-                            return ret->subexpr->clone();
+                            return cloneWithType(ret->subexpr);
                         }
                     }
                 }
@@ -485,7 +491,7 @@ namespace das {
                 if ( failed ) return Visitor::visit(expr);
                 if ( isSameFoldValue(expr->type, left, right) ) {
                     reportFolding();
-                    return expr->left->clone();
+                    return cloneWithType(expr->left);
                 }
             } else if ( expr->subexpr->constexpression ) {
                 bool failed;
@@ -580,8 +586,9 @@ namespace das {
                 pCall->func = funcC;
                 uint32_t numArgs = uint32_t(expr->arguments.size());
                 pCall->arguments.reserve(numArgs-1);
-                for ( uint32_t i=1; i!=numArgs; ++i )
-                    pCall->arguments.push_back( expr->arguments[i]->clone() );
+                for ( uint32_t i=1; i!=numArgs; ++i ) {
+                    pCall->arguments.push_back( cloneWithType(expr->arguments[i]) );
+                }
                 pCall->type = make_smart<TypeDecl>(*funcC->result);
                 reportFolding();
                 return pCall;
@@ -640,7 +647,7 @@ namespace das {
                         it = expr->elements.erase(it);
                         reportFolding();
                     } else {
-                        str = static_pointer_cast<ExprConstString>(selem->clone(nullptr));
+                        str = static_pointer_cast<ExprConstString>(cloneWithType(selem));
                         elem = str;
                         ++ it;
                     }

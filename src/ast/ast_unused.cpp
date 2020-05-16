@@ -522,6 +522,7 @@ namespace das {
                                     auto exprV = make_smart<ExprConstEnumeration>(expr->at, cfv, make_smart<TypeDecl>(*expr->type));
                                     exprV->type = expr->type->enumType->makeEnumType();
                                     exprV->type->constant = true;
+                                    exprV->value = v_zero();
                                     return exprV;
                                 }
                             } else if ( expr->type->baseType==Type::tString ) {

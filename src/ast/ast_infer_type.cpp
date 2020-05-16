@@ -1538,12 +1538,47 @@ namespace das {
             expr->type.reset();
         }
     // const
+        vec4f getEnumerationValue( ExprConstEnumeration * expr, bool & infered ) const {
+            infered = false;
+            auto cfa = expr->enumType->find(expr->text);
+            if ( !cfa.second ) {
+                return v_zero();
+            }
+            if ( !cfa.first || !cfa.first->rtti_isConstant() ) {
+                return v_zero();
+            }
+            vec4f envalue = v_zero();
+            int64_t iou = getConstExprIntOrUInt(cfa.first);
+            switch ( expr->enumType->baseType) {
+            case Type::tInt8:
+            case Type::tUInt8:      { int8_t tv = int8_t(iou); memcpy(&envalue, &tv, sizeof(int8_t)); break; }
+            case Type::tInt16:
+            case Type::tUInt16:     { int16_t tv = int16_t(iou); memcpy(&envalue, &tv, sizeof(int16_t)); break; }
+            case Type::tInt:
+            case Type::tUInt:
+            case Type::tBitfield:   { int32_t tv = int32_t(iou); memcpy(&envalue, &tv, sizeof(int32_t)); break; }
+            case Type::tInt64:
+            case Type::tUInt64:     { memcpy(&envalue, &iou, sizeof(int64_t)); break; }
+            default:
+                DAS_ASSERTF( 0, "we should not even be here. unsupported enumeration type." );
+            }
+            infered = true;
+            return envalue;
+        }
         virtual ExpressionPtr visit ( ExprConst * c ) override {
             if ( c->baseType==Type::tEnumeration || c->baseType==Type::tEnumeration8 ||
                 c->baseType==Type::tEnumeration16 ) {
                 auto cE = static_cast<ExprConstEnumeration *>(c);
-                c->type = cE->enumType->makeEnumType();
-                c->type->constant = true;
+                bool infE = false;
+                c->value = getEnumerationValue(cE, infE);
+                if ( infE ) {
+                    c->type = cE->enumType->makeEnumType();
+                    c->type->constant = true;
+                } else {
+                    error("enumeration value not infered yet",  "", "",
+                        c->at, CompilationError::invalid_enumeration);
+                    c->type.reset();
+                }
             } else if ( c->baseType==Type::tBitfield ) {
                 auto cB = static_cast<ExprConstBitfield *>(c);
                 if ( cB->bitfieldType ) {
