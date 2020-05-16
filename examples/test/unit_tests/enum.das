@@ -36,6 +36,10 @@ enum BooHoo16 : int16
     hoo = 5
     boo_hoo = 6
 
+[sideeffects]
+def getZenOne
+    return Zen not_zero
+
 [export]
 def test
     assert ( int(QQ size_of_Foo_Padded)==16 )
@@ -59,6 +63,7 @@ def test
     assert ( Zen zero == Zen zero )
     assert ( int(t)==0 )
     assert ( int(Zen not_zero)==1 )
+    verify ( getZenOne()==Zen not_zero )
     assert ( free_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
     assert ( free_takeOne_giveTwo(SomeEnum two)==SomeEnum zero )
     verify ( efn_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
