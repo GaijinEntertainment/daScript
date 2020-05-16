@@ -413,7 +413,7 @@ namespace das
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
         TypeDeclPtr type;
-        char * __rtti = nullptr;
+        const char * __rtti = nullptr;
         union{
             struct {
                 bool    alwaysSafe : 1;

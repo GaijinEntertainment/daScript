@@ -1071,13 +1071,13 @@ namespace das {
             { IMPL_PREVISIT2(ExprWhileBody,ExprWhile,ExpressionPtr,body); }
     // try-catch
         IMPL_BIND_EXPR(ExprTryCatch);
-        virtual void preVisitCatch ( ExprTryCatch * expr, Expression * body )
+        virtual void preVisitCatch ( ExprTryCatch * expr, Expression * body ) override
             { IMPL_PREVISIT2(ExprTryCatchCatch,ExprTryCatch,ExpressionPtr,body); }
     // if-then-else
         IMPL_BIND_EXPR(ExprIfThenElse);
-        virtual void preVisitIfBlock ( ExprIfThenElse * expr, Expression * ifBlock )
+        virtual void preVisitIfBlock ( ExprIfThenElse * expr, Expression * ifBlock ) override
             { IMPL_PREVISIT2(ExprIfThenElseIfBlock,ExprIfThenElse,ExpressionPtr,ifBlock); }
-        virtual void preVisitElseBlock ( ExprIfThenElse * expr, Expression * elseBlock )
+        virtual void preVisitElseBlock ( ExprIfThenElse * expr, Expression * elseBlock ) override
             { IMPL_PREVISIT2(ExprIfThenElseElseBlock,ExprIfThenElse,ExpressionPtr,elseBlock); }
     // for
         IMPL_BIND_EXPR(ExprFor);

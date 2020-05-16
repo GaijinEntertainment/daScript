@@ -30,7 +30,9 @@
 			"ratio": "cpp",
 			"tuple": "cpp",
 			"xmemory": "cpp",
-			"xlocmon": "cpp"
+			"xlocmon": "cpp",
+			"ios": "cpp",
+			"xiosbase": "cpp"
 		}
 	}
 }
