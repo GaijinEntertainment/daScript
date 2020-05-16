@@ -46,6 +46,7 @@ MAKE_TYPE_FACTORY(ExprWith,ExprWith)
 MAKE_TYPE_FACTORY(ExprWhile,ExprWhile)
 MAKE_TYPE_FACTORY(ExprTryCatch,ExprTryCatch)
 MAKE_TYPE_FACTORY(ExprIfThenElse,ExprIfThenElse)
+MAKE_TYPE_FACTORY(ExprFor,ExprFor)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -84,7 +85,7 @@ namespace das {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
-            this->template addField<DAS_BIND_MANAGED_FIELD(__rtti)>("__typeName","__rtti");
+            this->template addField<DAS_BIND_MANAGED_FIELD(__rtti)>("__rtti");
             this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
             this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
             this->addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
@@ -297,6 +298,17 @@ namespace das {
             :  AstExprAnnotation<ExprTryCatch> ("ExprTryCatch", ml) {
             addField<DAS_BIND_MANAGED_FIELD(try_block)>("try_block");
             addField<DAS_BIND_MANAGED_FIELD(catch_block)>("catch_block");
+        }
+    };
+
+    struct AstExprForAnnotation : AstExprAnnotation<ExprFor> {
+        AstExprForAnnotation(ModuleLibrary & ml)
+            :  AstExprAnnotation<ExprFor> ("ExprFor", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(iterators)>("iterators");
+            addField<DAS_BIND_MANAGED_FIELD(iteratorsAt)>("iteratorsAt");
+            addField<DAS_BIND_MANAGED_FIELD(iteratorVariables)>("iteratorVariables");
+            addField<DAS_BIND_MANAGED_FIELD(sources)>("sources");
+            addField<DAS_BIND_MANAGED_FIELD(body)>("body");
         }
     };
 
@@ -792,6 +804,11 @@ namespace das {
             IMPL_ADAPT(ExprIfThenElse);
             FN_PREVISIT(ExprIfThenElseIfBlock) = adapt("preVisitExprIfThenElseIfBlock",pClass,info);
             FN_PREVISIT(ExprIfThenElseElseBlock) = adapt("preVisitExprIfThenElseElseBlock",pClass,info);
+            IMPL_ADAPT(ExprFor);
+            IMPL_ADAPT(ExprForVariable);
+            IMPL_ADAPT(ExprForSource);
+            FN_PREVISIT(ExprForStack) = adapt("preVisitExprForStack",pClass,info);
+            FN_PREVISIT(ExprForBody) = adapt("preVisitExprForBody",pClass,info);
         }
     protected:
         void *      classPtr;
@@ -860,6 +877,11 @@ namespace das {
         DECL_VISIT(ExprIfThenElse);
         Func FN_PREVISIT(ExprIfThenElseIfBlock);
         Func FN_PREVISIT(ExprIfThenElseElseBlock);
+        DECL_VISIT(ExprFor);
+        DECL_VISIT(ExprForVariable);
+        DECL_VISIT(ExprForSource);
+        Func FN_PREVISIT(ExprForStack);
+        Func FN_PREVISIT(ExprForBody);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -1057,6 +1079,20 @@ namespace das {
             { IMPL_PREVISIT2(ExprIfThenElseIfBlock,ExprIfThenElse,ExpressionPtr,ifBlock); }
         virtual void preVisitElseBlock ( ExprIfThenElse * expr, Expression * elseBlock )
             { IMPL_PREVISIT2(ExprIfThenElseElseBlock,ExprIfThenElse,ExpressionPtr,elseBlock); }
+    // for
+        IMPL_BIND_EXPR(ExprFor);
+        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override
+            { IMPL_PREVISIT3(ExprForVariable,ExprFor,VariablePtr,var,bool,last); }
+        virtual VariablePtr visitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override
+            { IMPL_VISIT3(ExprForVariable,ExprFor,Variable,var,VariablePtr,var,bool,last); }
+        virtual void preVisitForStack ( ExprFor * expr ) override
+            { IMPL_PREVISIT1(ExprForStack,ExprFor); }
+        virtual void preVisitForBody ( ExprFor * expr, Expression * body ) override
+            { IMPL_PREVISIT2(ExprForBody,ExprFor,ExpressionPtr,body); }
+        virtual void preVisitForSource ( ExprFor * expr, Expression * source, bool last ) override
+            { IMPL_PREVISIT3(ExprForSource,ExprFor,ExpressionPtr,source,bool,last); }
+        virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * source , bool last ) override
+            { IMPL_VISIT3(ExprForSource,ExprFor,Expression,source,ExpressionPtr,source,bool,last); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -1183,6 +1219,7 @@ namespace das {
             addAnnotation(make_smart<AstExprWhileAnnotation>(lib));
             addAnnotation(make_smart<AstExprTryCatchAnnotation>(lib));
             addAnnotation(make_smart<AstExprIfThenElseAnnotation>(lib));
+            addAnnotation(make_smart<AstExprForAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",

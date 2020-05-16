@@ -304,7 +304,23 @@ class AstVisitor
         pass
     def preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr)
         pass
-
+// for
+    def preVisitExprFor(expr:smart_ptr<ExprFor>)
+        pass
+    def visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool)
+        pass
+    def visitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : VariablePtr
+        return svar
+    def preVisitExprForSource(expr:smart_ptr<ExprFor>;source:ExpressionPtr;last:bool)
+        pass
+    def visitExprForSource(expr:smart_ptr<ExprFor>;source:ExpressionPtr;last:bool) : ExpressionPtr
+        return ExpressionPtr(source)
+    def preVisitExprForStack(expr:smart_ptr<ExprFor>)
+        pass
+    def preVisitExprForBody(expr:smart_ptr<ExprFor>)
+        pass
 
 //////////
 // example
@@ -630,6 +646,17 @@ class PrintVisitor : AstVisitor
             print("else ")
         else
             print("else\n")
+// for
+    def override preVisitExprFor(expr:smart_ptr<ExprFor>)
+        print("for ")
+    def override preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool)
+        print("{svar.name}{last ? " in " : ","}")
+    def override visitExprForSource(expr:smart_ptr<ExprFor>;source:ExpressionPtr;last:bool) : ExpressionPtr
+        if !last
+            print(",")
+        return ExpressionPtr(source)
+    def override preVisitExprForBody(expr:smart_ptr<ExprFor>)
+        print("\n")
 
 typedef
     Integer = int
