@@ -150,7 +150,7 @@ namespace das {
     const FILE * builtin_fopen  ( const char * name, const char * mode ) {
         if ( name && mode ) {
             FILE * f = fopen(name, mode);
-            setvbuf(f, NULL, _IOFBF, 65536);
+            if ( f ) setvbuf(f, NULL, _IOFBF, 65536);
             return f;
         } else {
             return nullptr;
@@ -259,6 +259,7 @@ namespace das {
         if (len < 0) context.throw_error_ex("can't read negative number from binary save, %d", len);
         Block * block = cast<Block *>::to(args[2]);
         char * buf = (char *) malloc(len + 1);
+        if (!buf) context.throw_error_ex("can't read. out of memory, %d", len);
         vec4f bargs[1];
         int32_t rlen = int32_t(fread(buf, 1, len, fp));
         if ( rlen != len ) {

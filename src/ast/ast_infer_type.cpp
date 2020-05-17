@@ -3302,8 +3302,6 @@ namespace das {
             scopes.pop_back();
             if ( block->isClosure ) {
                 blocks.pop_back();
-            }
-            if ( block->isClosure ) {
                 if ( block->list.size() ) {
                     uint32_t flags = block->getEvalFlags();
                     if ( flags & EvalFlags::stopForBreak ) {
