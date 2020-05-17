@@ -44,6 +44,7 @@ namespace das {
         vector<size_t>          varStack;
         das_map<int32_t,int32_t>    labels;
         size_t                  fieldOffset = 0;
+        int32_t                 fieldIndex = 0;
         bool                    cppLayout = false;
         bool                    cppLayoutPod = false;
         const Structure *       cppLayoutParent = nullptr;
@@ -272,11 +273,6 @@ namespace das {
                 all.insert(thisType);
             }
             if (ptr->baseType==Type::autoinfer || ptr->baseType==Type::alias) return false;
-            if (ptr->baseType == Type::tStructure) {
-                for (auto & fld : ptr->structType->fields) {
-                    if (!isFullySealedType(fld.type,all) ) return false;
-                }
-            }
             if (ptr->firstType && !isFullySealedType(ptr->firstType,all)) return false;
             if (ptr->secondType && !isFullySealedType(ptr->secondType,all)) return false;
             for (auto & argT : ptr->argTypes) {
@@ -1060,10 +1056,8 @@ namespace das {
                         pSt = eWT->firstType->structType;
                     }
                     if ( pSt ) {
-                        for ( auto fi : pSt->fields ) {
-                            if ( fi.name==fieldName ) {
-                                return eW;
-                            }
+                        if ( pSt->filedLookup.find(fieldName) != pSt->filedLookup.end() ) {
+                            return eW;
                         }
                     }
                 }
@@ -1203,9 +1197,12 @@ namespace das {
             cppLayout = that->cppLayout;
             cppLayoutPod = !that->cppLayoutNotPod;
             cppLayoutParent = nullptr;
+            that->filedLookup.clear();
+            fieldIndex = 0;
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
+            that->filedLookup[decl.name] = fieldIndex++;
             if ( decl.type->isAuto() && !decl.init) {
                 error("structure field type can't be infered, it needs an initializer", "", "",
                       decl.at, CompilationError::cant_infer_missing_initializer );

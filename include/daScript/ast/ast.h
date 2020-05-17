@@ -172,12 +172,13 @@ namespace das
         string getMangledName() const;
         bool hasAnyInitializers() const;
     public:
-        string                      name;
-        vector<FieldDeclaration>    fields;
-        LineInfo                    at;
-        Module *                    module = nullptr;
-        Structure *                 parent = nullptr;
-        AnnotationList              annotations;
+        string                          name;
+        vector<FieldDeclaration>        fields;
+        das_hash_map<string,int32_t>    filedLookup;
+        LineInfo                        at;
+        Module *                        module = nullptr;
+        Structure *                     parent = nullptr;
+        AnnotationList                  annotations;
         union {
             struct {
                 bool    isClass : 1;

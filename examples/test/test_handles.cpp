@@ -121,6 +121,7 @@ struct CheckRange : StructureAnnotation {
         if (args.getBoolOption("dummy",false) && !st->findField("dummy")) {
             st->fields.emplace_back("dummy", make_smart<TypeDecl>(Type::tInt),
                 nullptr /*init*/, AnnotationArgumentList(), false /*move_to_init*/, LineInfo());
+            st->filedLookup.clear();
         }
         return true;
     }
