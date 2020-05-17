@@ -930,26 +930,30 @@ namespace das {
             return Visitor::visit(expr);
         }
     // make structure
-        virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
+        virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
             ss << "[[";
             if ( expr->type ) {
-                ss << expr->type->describe() << " ";
+                ss << expr->type->describe();
+                if ( expr->useInitializer ) {
+                    ss << "()";
+                }
+                ss << " ";
             }
         }
-        virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
             ss << decl->name << (decl->moveSemantic ? " <- " : " = ");
         }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !last ) ss << ", ";
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
-        virtual void visitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastField ) override {
+        virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool lastField ) override {
             if ( !lastField ) ss << "; ";
             Visitor::visitMakeStructureIndex(expr, index, lastField);
         }
-        virtual ExpressionPtr visit ( ExprMakeStructureOrDefaultValue * expr ) override {
+        virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
             ss << "]]";
             return Visitor::visit(expr);
         }

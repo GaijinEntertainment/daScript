@@ -2295,44 +2295,44 @@ make_struct_fields
 
 make_struct_dim
     :   make_struct_fields[msf] {
-        auto msd = new ExprMakeStructureOrDefaultValue();
+        auto msd = new ExprMakeStruct();
         msd->structs.push_back(MakeStructPtr($msf));
         $$ = msd;
     }
     |   make_struct_dim[msd] ';' make_struct_fields[msf] {
-        ((ExprMakeStructureOrDefaultValue *) $msd)->structs.push_back(MakeStructPtr($msf));
+        ((ExprMakeStruct *) $msd)->structs.push_back(MakeStructPtr($msf));
         $$ = $msd;
     }
     ;
 
 make_struct_decl
     :   BRABRAB [loc] type_declaration[mkt] make_struct_dim[msd] ']' ']' {
-        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
     |   BRABRAB [loc] type_declaration[mkt] ']' ']' {
-        auto msd = new ExprMakeStructureOrDefaultValue();
+        auto msd = new ExprMakeStruct();
         msd->makeType = TypeDeclPtr($mkt);
         msd->at = tokAt(@loc);
         $$ = msd;
     }
     |   BRABRAB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] ']' ']' {
-        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStructureOrDefaultValue *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
     |   BRACBRB [loc] type_declaration[mkt] make_struct_dim[msd] '}' ']' {
-        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         $msd->at = tokAt(@loc);
         auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
     }
     |   BRACBRB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] '}' ']' {
-        ((ExprMakeStructureOrDefaultValue *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStructureOrDefaultValue *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
         $msd->at = tokAt(@loc);
         auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
         tam->arguments.push_back(ExpressionPtr($msd));

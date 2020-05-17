@@ -321,6 +321,46 @@ class AstVisitor
         pass
     def preVisitExprForBody(expr:smart_ptr<ExprFor>)
         pass
+// make variant
+    def preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>)
+        pass
+    def visitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool)
+        pass
+    def visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
+        return decl
+// make structure
+    def preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>)
+        pass
+    def visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool)
+        pass
+    def visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool)
+        pass
+    def preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool)
+        pass
+    def visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
+        return decl
+// make array
+    def preVisitExprMakeArray(expr:smart_ptr<ExprMakeArray>)
+        pass
+    def visitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool)
+        pass
+    def visitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
+        return ExpressionPtr(expr)
+// make tuple
+    def preVisitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>)
+        pass
+    def visitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool)
+        pass
+    def visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
+        return ExpressionPtr(expr)
 
 //////////
 // example
@@ -657,9 +697,65 @@ class PrintVisitor : AstVisitor
         return ExpressionPtr(source)
     def override preVisitExprForBody(expr:smart_ptr<ExprFor>)
         print("\n")
+// make variant
+    def override preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>)
+        print("[[")
+        if expr.typeDecl != null
+            print("{describe(expr.typeDecl)} ")
+    def override visitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>)
+        print("]]")
+        return ExpressionPtr(expr)
+    def override preVisitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool)
+        print("{decl.name} {decl.moveSemantic ? "<-" : "=" } ")
+    def override visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool)
+        if !last
+            print("; ")
+        return decl
+// make structure
+    def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>)
+        print("[[")
+        if expr.typeDecl != null
+            print("{describe(expr.typeDecl)}{expr.useInitializer ? "()" : ""} ")
+    def override visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>)
+        print("]]")
+        return ExpressionPtr(expr)
+    def override visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool)
+        if !last
+            print("; ")
+    def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool)
+        print("{decl.name} {decl.moveSemantic ? "<-" : "=" } ")
+    def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool)
+        if !last
+            print(", ")
+        return decl
+// make array
+    def override preVisitExprMakeArray(expr:smart_ptr<ExprMakeArray>)
+        print("[[")
+        if expr.typeDecl != null
+            print("{describe(expr.typeDecl)} ")
+    def override visitExprMakeArray(expr:smart_ptr<ExprMakeArray>)
+        print("]]")
+        return ExpressionPtr(expr)
+    def override visitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool)
+        if !last
+            print("; ")
+        return ExpressionPtr(expr)
+// make tuple
+    def override preVisitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>)
+        print("[[")
+        if expr.typeDecl != null
+            print("{describe(expr.typeDecl)} ")
+    def override visitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>)
+        print("]]")
+        return ExpressionPtr(expr)
+    def override visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool)
+        if !last
+            print(", ")
+        return ExpressionPtr(expr)
 
 typedef
     Integer = int
+    IorF = variant<i:int;f:float>
 
 enum FooBar
     Foo
@@ -668,7 +764,7 @@ enum FooBar
 
 [comment(x=5,msg="haha")]
 struct Foo
-    [[do_not_delete,temp=13]] a : int
+    [[do_not_delete,temp=13]] a : int = 11
     b : array<Foo?>
 
 def Foo(x:int)
@@ -676,7 +772,6 @@ def Foo(x:int)
 
 def Foo(x,y:int)
     return <- [[Foo a=x+y]]
-
 
 var
     add_extra = 13
@@ -742,6 +837,18 @@ def allExpr(arg:int)
         aa = 3
     else
         aa = 4
+    // ExprMakeVariant
+    var mkv = [[IorF i=5]]
+    mkv = [[IorF f=1.0]]
+    // ExprMakeStruct
+    var mks <- [[Foo() a=5, b<-[{Foo? [1] null}]; a=6]]
+    mks[1] <- [[Foo a=5]]
+    // ExprMakeArray
+    var mka = [[int 1;2;3;4]]
+    mka = [[int 5;6;7;8]]
+    // ExprMakeTuple
+    var mkt = [[auto 1,2.0,"three"]]
+    mkt = [[auto 2,3.0,"four"]]
 
 [export]
 def test

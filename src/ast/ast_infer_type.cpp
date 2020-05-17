@@ -5106,7 +5106,7 @@ namespace das {
             return Visitor::visit(expr);
         }
     // make structure
-        virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
+        virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return;
@@ -5130,7 +5130,7 @@ namespace das {
                     expr->at, CompilationError::invalid_type);
             }
         }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool last ) override {
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !decl->value->type ) {
                 return Visitor::visitMakeStructureField(expr,index,decl,last);
             }
@@ -5155,7 +5155,7 @@ namespace das {
             }
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
-        virtual ExpressionPtr visit ( ExprMakeStructureOrDefaultValue * expr ) override {
+        virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visit(expr);
             }

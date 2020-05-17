@@ -496,7 +496,7 @@ namespace das
 
     // structure
 
-    void ExprMakeStructureOrDefaultValue::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
+    void ExprMakeStruct::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
         ExprMakeLocal::setRefSp(ref, cmres, sp, off);
         int total = int(structs.size());
         int stride = makeType->getStride();
@@ -526,7 +526,7 @@ namespace das
         }
     }
 
-    vector<SimNode *> ExprMakeStructureOrDefaultValue::simulateLocal (Context & context) const {
+    vector<SimNode *> ExprMakeStruct::simulateLocal (Context & context) const {
         vector<SimNode *> simlist;
         // init with 0
         int total = int(structs.size());
@@ -588,7 +588,7 @@ namespace das
         return simlist;
     }
 
-    SimNode * ExprMakeStructureOrDefaultValue::simulate (Context & context) const {
+    SimNode * ExprMakeStruct::simulate (Context & context) const {
         SimNode_Block * block;
         if ( useCMRES ) {
             block = context.code->makeNode<SimNode_MakeLocalCMRes>(at);

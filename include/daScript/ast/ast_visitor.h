@@ -143,10 +143,10 @@ namespace das {
             return decl;
         }
             // MAKE STRUCTURE
-        virtual void preVisitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastIndex ) {}
-        virtual void visitMakeStructureIndex ( ExprMakeStructureOrDefaultValue * expr, int index, bool lastField ) {}
-        virtual void preVisitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStructureOrDefaultValue * expr, int index, MakeFieldDecl * decl, bool lastField ) {
+        virtual void preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool lastIndex ) {}
+        virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool lastField ) {}
+        virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool lastField ) {
             return decl; }
         // MAKE ARRAY
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) {}
@@ -247,7 +247,7 @@ namespace das {
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWith)
         VISIT_EXPR(ExprWhile)
-        VISIT_EXPR(ExprMakeStructureOrDefaultValue)
+        VISIT_EXPR(ExprMakeStruct)
         VISIT_EXPR(ExprMakeVariant)
         VISIT_EXPR(ExprMakeArray)
         VISIT_EXPR(ExprMakeTuple)

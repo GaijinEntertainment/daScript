@@ -249,7 +249,7 @@ namespace das {
         fn->result = make_smart<TypeDecl>(str);
         auto block = make_smart<ExprBlock>();
         block->at = str->at;
-        auto makeT = make_smart<ExprMakeStructureOrDefaultValue>(str->at);
+        auto makeT = make_smart<ExprMakeStruct>(str->at);
         makeT->useInitializer = true;
         makeT->makeType = make_smart<TypeDecl>(str);
         makeT->structs.push_back(make_smart<MakeStruct>());
@@ -523,7 +523,7 @@ namespace das {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
-        auto makeS = make_smart<ExprMakeStructureOrDefaultValue>();
+        auto makeS = make_smart<ExprMakeStruct>();
         // makeS->useInitializer = true;
         makeS->at = at;
         makeS->makeType = make_smart<TypeDecl>(ls);
@@ -1330,7 +1330,7 @@ namespace das {
             func->arguments.push_back(arg->clone());
         }
         // lef self = [[Foo()]]
-        auto makeT = make_smart<ExprMakeStructureOrDefaultValue>(baseClass->at);
+        auto makeT = make_smart<ExprMakeStruct>(baseClass->at);
         makeT->useInitializer = true;
         makeT->makeType = make_smart<TypeDecl>(baseClass);
         makeT->structs.push_back(make_smart<MakeStruct>());

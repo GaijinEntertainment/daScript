@@ -1082,10 +1082,10 @@ namespace das
         };
     };
 
-    struct ExprMakeStructureOrDefaultValue : ExprMakeLocal {
-        ExprMakeStructureOrDefaultValue() { __rtti = "ExprMakeStructureOrDefaultValue"; };
-        ExprMakeStructureOrDefaultValue ( const LineInfo & at )
-            : ExprMakeLocal(at) { __rtti = "ExprMakeStructureOrDefaultValue"; }
+    struct ExprMakeStruct : ExprMakeLocal {
+        ExprMakeStruct() { __rtti = "ExprMakeStruct"; };
+        ExprMakeStruct ( const LineInfo & at )
+            : ExprMakeLocal(at) { __rtti = "ExprMakeStruct"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;

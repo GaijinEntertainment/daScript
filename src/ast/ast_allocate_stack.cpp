@@ -399,7 +399,7 @@ namespace das {
             }
         }
     // ExprMakeStructure
-        virtual void preVisit ( ExprMakeStructureOrDefaultValue * expr ) override {
+        virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
             if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {

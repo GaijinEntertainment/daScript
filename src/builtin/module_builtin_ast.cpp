@@ -47,6 +47,11 @@ MAKE_TYPE_FACTORY(ExprWhile,ExprWhile)
 MAKE_TYPE_FACTORY(ExprTryCatch,ExprTryCatch)
 MAKE_TYPE_FACTORY(ExprIfThenElse,ExprIfThenElse)
 MAKE_TYPE_FACTORY(ExprFor,ExprFor)
+MAKE_TYPE_FACTORY(ExprMakeLocal,ExprMakeLocal)
+MAKE_TYPE_FACTORY(ExprMakeVariant,ExprMakeVariant)
+MAKE_TYPE_FACTORY(ExprMakeStruct,ExprMakeStruct)
+MAKE_TYPE_FACTORY(ExprMakeArray,ExprMakeArray)
+MAKE_TYPE_FACTORY(ExprMakeTuple,ExprMakeTuple)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -92,9 +97,11 @@ namespace das {
         }
     };
 
-    struct AstExpressionAnnotation : AstExprAnnotation<Expression> {
-        AstExpressionAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<Expression> ("Expression", ml) {
+    template <typename EXPR>
+    struct AstExpressionAnnotation : AstExprAnnotation<EXPR> {
+        AstExpressionAnnotation(const string & en, ModuleLibrary & ml)
+            :  AstExprAnnotation<EXPR> (en, ml) {
+            init();
         }
     };
 
@@ -107,9 +114,9 @@ namespace das {
         return ft;
     }
 
-    struct AstExprBlockAnnotation : AstExprAnnotation<ExprBlock> {
+    struct AstExprBlockAnnotation : AstExpressionAnnotation<ExprBlock> {
         AstExprBlockAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprBlock> ("ExprBlock", ml) {
+            :  AstExpressionAnnotation<ExprBlock> ("ExprBlock", ml) {
             addField<DAS_BIND_MANAGED_FIELD(list)>("list");
             addField<DAS_BIND_MANAGED_FIELD(finalList)>("finalList");
             addField<DAS_BIND_MANAGED_FIELD(returnType)>("returnType");
@@ -124,17 +131,17 @@ namespace das {
         }
     };
 
-    struct AstExprLetAnnotation : AstExprAnnotation<ExprLet> {
+    struct AstExprLetAnnotation : AstExpressionAnnotation<ExprLet> {
         AstExprLetAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprLet> ("ExprLet", ml) {
+            :  AstExpressionAnnotation<ExprLet> ("ExprLet", ml) {
             addField<DAS_BIND_MANAGED_FIELD(variables)>("variables");
             addField<DAS_BIND_MANAGED_FIELD(inScope)>("inScope");
         }
     };
 
-    struct AstExprStringBuilderAnnotation : AstExprAnnotation<ExprStringBuilder> {
+    struct AstExprStringBuilderAnnotation : AstExpressionAnnotation<ExprStringBuilder> {
         AstExprStringBuilderAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprStringBuilder> ("ExprStringBuilder", ml) {
+            :  AstExpressionAnnotation<ExprStringBuilder> ("ExprStringBuilder", ml) {
             addField<DAS_BIND_MANAGED_FIELD(elements)>("elements");
         }
     };
@@ -156,9 +163,9 @@ namespace das {
     };
 
     template <typename EXPR>
-    struct AstExprLooksLikeCallAnnotation : AstExprAnnotation<EXPR> {
+    struct AstExprLooksLikeCallAnnotation : AstExpressionAnnotation<EXPR> {
         AstExprLooksLikeCallAnnotation(const string & na, ModuleLibrary & ml)
-            :  AstExprAnnotation<EXPR> (na, ml) {
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             this->template addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
@@ -176,9 +183,9 @@ namespace das {
         }
     };
 
-    struct AstExprNamedCallAnnotation : AstExprAnnotation<ExprNamedCall> {
+    struct AstExprNamedCallAnnotation : AstExpressionAnnotation<ExprNamedCall> {
         AstExprNamedCallAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprNamedCall> ("ExprNamedCall", ml) {
+            :  AstExpressionAnnotation<ExprNamedCall> ("ExprNamedCall", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
             addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
@@ -201,9 +208,9 @@ namespace das {
     };
 
     template <typename EXPR>
-    struct AstExprPtr2RefAnnotation : AstExprAnnotation<EXPR> {
+    struct AstExprPtr2RefAnnotation : AstExpressionAnnotation<EXPR> {
         AstExprPtr2RefAnnotation(const string & na, ModuleLibrary & ml)
-            :  AstExprAnnotation<EXPR> (na, ml) {
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
         }
@@ -224,9 +231,9 @@ namespace das {
     }
 
     template <typename EXPR>
-    struct AstExprAtAnnotation : AstExprAnnotation<EXPR> {
+    struct AstExprAtAnnotation : AstExpressionAnnotation<EXPR> {
         AstExprAtAnnotation(const string & na, ModuleLibrary & ml)
-            :  AstExprAnnotation<EXPR> (na, ml) {
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
             this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("index");
@@ -234,18 +241,18 @@ namespace das {
         }
     };
 
-    struct AstExprIsAnnotation : AstExprAnnotation<ExprIs> {
+    struct AstExprIsAnnotation : AstExpressionAnnotation<ExprIs> {
         AstExprIsAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprIs> ("ExprIs", ml) {
+            :  AstExpressionAnnotation<ExprIs> ("ExprIs", ml) {
             addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
             addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
         }
     };
 
     template <typename EXPR>
-    struct AstExprOpAnnotation : AstExprAnnotation<EXPR> {
+    struct AstExprOpAnnotation : AstExpressionAnnotation<EXPR> {
         AstExprOpAnnotation(const string & na, ModuleLibrary & ml)
-            :  AstExprAnnotation<EXPR> (na, ml) {
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
 			using ManagedType = EXPR;
 			this->template addField<DAS_BIND_MANAGED_FIELD(op)>("op");
         }
@@ -277,33 +284,33 @@ namespace das {
         }
     };
 
-    struct AstExprWithAnnotation : AstExprAnnotation<ExprWith> {
+    struct AstExprWithAnnotation : AstExpressionAnnotation<ExprWith> {
         AstExprWithAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprWith> ("ExprWith", ml) {
+            :  AstExpressionAnnotation<ExprWith> ("ExprWith", ml) {
             addField<DAS_BIND_MANAGED_FIELD(with)>("with");
             addField<DAS_BIND_MANAGED_FIELD(body)>("body");
         }
     };
 
-    struct AstExprWhileAnnotation : AstExprAnnotation<ExprWhile> {
+    struct AstExprWhileAnnotation : AstExpressionAnnotation<ExprWhile> {
         AstExprWhileAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprWhile> ("ExprWhile", ml) {
+            :  AstExpressionAnnotation<ExprWhile> ("ExprWhile", ml) {
             addField<DAS_BIND_MANAGED_FIELD(cond)>("cond");
             addField<DAS_BIND_MANAGED_FIELD(body)>("body");
         }
     };
 
-    struct AstExprTryCatchAnnotation : AstExprAnnotation<ExprTryCatch> {
+    struct AstExprTryCatchAnnotation : AstExpressionAnnotation<ExprTryCatch> {
         AstExprTryCatchAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprTryCatch> ("ExprTryCatch", ml) {
+            :  AstExpressionAnnotation<ExprTryCatch> ("ExprTryCatch", ml) {
             addField<DAS_BIND_MANAGED_FIELD(try_block)>("try_block");
             addField<DAS_BIND_MANAGED_FIELD(catch_block)>("catch_block");
         }
     };
 
-    struct AstExprForAnnotation : AstExprAnnotation<ExprFor> {
+    struct AstExprForAnnotation : AstExpressionAnnotation<ExprFor> {
         AstExprForAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprFor> ("ExprFor", ml) {
+            :  AstExpressionAnnotation<ExprFor> ("ExprFor", ml) {
             addField<DAS_BIND_MANAGED_FIELD(iterators)>("iterators");
             addField<DAS_BIND_MANAGED_FIELD(iteratorsAt)>("iteratorsAt");
             addField<DAS_BIND_MANAGED_FIELD(iteratorVariables)>("iteratorVariables");
@@ -312,15 +319,69 @@ namespace das {
         }
     };
 
-    struct AstExprIfThenElseAnnotation : AstExprAnnotation<ExprIfThenElse> {
+    struct AstExprIfThenElseAnnotation : AstExpressionAnnotation<ExprIfThenElse> {
         AstExprIfThenElseAnnotation(ModuleLibrary & ml)
-            :  AstExprAnnotation<ExprIfThenElse> ("ExprIfThenElse", ml) {
+            :  AstExpressionAnnotation<ExprIfThenElse> ("ExprIfThenElse", ml) {
             addField<DAS_BIND_MANAGED_FIELD(cond)>("cond");
             addField<DAS_BIND_MANAGED_FIELD(if_true)>("if_true");
             addField<DAS_BIND_MANAGED_FIELD(if_false)>("if_false");
             addField<DAS_BIND_MANAGED_FIELD(isStatic)>("isStatic");
         }
     };
+
+    TypeDeclPtr makeExprMakeLocalFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprMakeLocalFlags";
+        ft->argNames = { "useStackRef", "useCMRES", "doesNotNeedSp",
+            "doesNotNeedInit", "initAllFields" };
+        return ft;
+    }
+
+    template <typename EXPR>
+    struct AstExprMakeLocalAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprMakeLocalAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(makeType)>("makeType");
+            this->template addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            this->template addField<DAS_BIND_MANAGED_FIELD(extraOffset)>("extraOffset");
+            this->addFieldEx ( "makeFlags", "makeFlags", offsetof(ExprMakeLocal, makeFlags), makeExprMakeLocalFlags() );
+        }
+    };
+
+    struct AstExprMakeStructAnnotation : AstExprMakeLocalAnnotation<ExprMakeStruct> {
+        AstExprMakeStructAnnotation(ModuleLibrary & ml)
+            :  AstExprMakeLocalAnnotation<ExprMakeStruct> ("ExprMakeStruct", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(structs)>("structs");
+            addField<DAS_BIND_MANAGED_FIELD(useInitializer)>("useInitializer");
+        }
+    };
+
+    struct AstExprMakeVariantAnnotation : AstExprMakeLocalAnnotation<ExprMakeVariant> {
+        AstExprMakeVariantAnnotation(ModuleLibrary & ml)
+            :  AstExprMakeLocalAnnotation<ExprMakeVariant> ("ExprMakeVariant", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(variants)>("variants");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprMakeArrayAnnotation : AstExprMakeLocalAnnotation<EXPR> {
+        AstExprMakeArrayAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprMakeLocalAnnotation<EXPR> (na, ml) {
+                using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(recordType)>("recordType");
+            this->template addField<DAS_BIND_MANAGED_FIELD(values)>("values");
+        }
+    };
+
+    struct AstExprMakeTupleAnnotation : AstExprMakeArrayAnnotation<ExprMakeTuple> {
+        AstExprMakeTupleAnnotation(ModuleLibrary & ml)
+            :  AstExprMakeArrayAnnotation<ExprMakeTuple> ("ExprMakeTuple", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(isKeyValue)>("isKeyValue");
+        }
+    };
+
+    // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
         AstEnumerationAnnotation(ModuleLibrary & ml)
@@ -684,6 +745,24 @@ namespace das {
             (context,FN_VISIT(WHAT),classPtr,expr); \
     }
 
+#define IMPL_VISIT_VOID2(WHAT,WHATTYPE,ARG1T,ARG1) \
+    if ( FN_VISIT(WHAT) ) { \
+        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T> \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1); \
+    }
+
+#define IMPL_VISIT_VOID3(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2) \
+    if ( FN_VISIT(WHAT) ) { \
+        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T> \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2); \
+    }
+
+#define IMPL_VISIT_VOID4(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
+    if ( FN_VISIT(WHAT) ) { \
+        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
+    }
+
 #define IMPL_VISIT1(WHAT,WHATTYPE,RETTYPE,RETVALUE) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr<WHATTYPE>> \
@@ -809,6 +888,16 @@ namespace das {
             IMPL_ADAPT(ExprForSource);
             FN_PREVISIT(ExprForStack) = adapt("preVisitExprForStack",pClass,info);
             FN_PREVISIT(ExprForBody) = adapt("preVisitExprForBody",pClass,info);
+            IMPL_ADAPT(ExprMakeVariant);
+            IMPL_ADAPT(ExprMakeVariantField);
+            IMPL_ADAPT(ExprMakeStruct);
+            IMPL_ADAPT(ExprMakeStructIndex);
+            IMPL_ADAPT(ExprMakeStructField);
+            IMPL_ADAPT(ExprMakeArray);
+            IMPL_ADAPT(ExprMakeArrayIndex);
+            IMPL_ADAPT(ExprMakeTuple);
+            IMPL_ADAPT(ExprMakeTupleIndex);
+
         }
     protected:
         void *      classPtr;
@@ -882,6 +971,15 @@ namespace das {
         DECL_VISIT(ExprForSource);
         Func FN_PREVISIT(ExprForStack);
         Func FN_PREVISIT(ExprForBody);
+        DECL_VISIT(ExprMakeVariant);
+        DECL_VISIT(ExprMakeVariantField);
+        DECL_VISIT(ExprMakeStruct);
+        DECL_VISIT(ExprMakeStructIndex);
+        DECL_VISIT(ExprMakeStructField);
+        DECL_VISIT(ExprMakeArray);
+        DECL_VISIT(ExprMakeArrayIndex);
+        DECL_VISIT(ExprMakeTuple);
+        DECL_VISIT(ExprMakeTupleIndex);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -1093,6 +1191,34 @@ namespace das {
             { IMPL_PREVISIT3(ExprForSource,ExprFor,ExpressionPtr,source,bool,last); }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * source , bool last ) override
             { IMPL_VISIT3(ExprForSource,ExprFor,Expression,source,ExpressionPtr,source,bool,last); }
+    // make variant
+        IMPL_BIND_EXPR(ExprMakeVariant);
+        virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override
+            { IMPL_PREVISIT4(ExprMakeVariantField,ExprMakeVariant,int,index,MakeFieldDeclPtr,decl,bool,last); }
+        virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last) override
+            { IMPL_VISIT4(ExprMakeVariantField,ExprMakeVariant,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
+    // make structure
+        IMPL_BIND_EXPR(ExprMakeStruct);
+        virtual void preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override
+            { IMPL_PREVISIT3(ExprMakeStructIndex,ExprMakeStruct,int,index,bool,last); }
+        virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override
+            { IMPL_VISIT_VOID3(ExprMakeStructIndex,ExprMakeStruct,int,index,bool,last); }
+        virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override
+             { IMPL_PREVISIT4(ExprMakeStructField,ExprMakeStruct,int,index,MakeFieldDeclPtr,decl,bool,last); }
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override
+            { IMPL_VISIT4(ExprMakeStructField,ExprMakeStruct,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
+    // make array
+        IMPL_BIND_EXPR(ExprMakeArray);
+        virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override
+            { IMPL_PREVISIT4(ExprMakeArrayIndex,ExprMakeArray,int,index,ExpressionPtr,init,bool,last); }
+        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override
+            { IMPL_VISIT4(ExprMakeArrayIndex,ExprMakeArray,Expression,init,int,index,ExpressionPtr,init,bool,last); }
+    // make tuple
+        IMPL_BIND_EXPR(ExprMakeTuple);
+        virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool last ) override
+            { IMPL_PREVISIT4(ExprMakeTupleIndex,ExprMakeTuple,int,index,ExpressionPtr,init,bool,last); }
+        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool last ) override
+            { IMPL_VISIT4(ExprMakeTupleIndex,ExprMakeTuple,Expression,init,int,index,ExpressionPtr,init,bool,last); }
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -1168,10 +1294,11 @@ namespace das {
             addAlias(makeVariableAccessFlags());
             addAlias(makeExprBlockFlags());
             addAlias(makeExprAtFlags());
+            addAlias(makeExprMakeLocalFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
-            auto exa = make_smart<AstExpressionAnnotation>(lib);
+            auto exa = make_smart<AstExprAnnotation<Expression>>("Expression",lib);
             addAnnotation(exa);
             auto tda = make_smart<AstTypeDeclAnnnotation>(lib);
             addAnnotation(tda);
@@ -1220,6 +1347,11 @@ namespace das {
             addAnnotation(make_smart<AstExprTryCatchAnnotation>(lib));
             addAnnotation(make_smart<AstExprIfThenElseAnnotation>(lib));
             addAnnotation(make_smart<AstExprForAnnotation>(lib));
+            addAnnotation(make_smart<AstExprMakeLocalAnnotation<ExprMakeLocal>>("ExprMakeLocal",lib));
+            addAnnotation(make_smart<AstExprMakeStructAnnotation>(lib));
+            addAnnotation(make_smart<AstExprMakeVariantAnnotation>(lib));
+            addAnnotation(make_smart<AstExprMakeArrayAnnotation<ExprMakeArray>>("ExprMakeArray",lib));
+            addAnnotation(make_smart<AstExprMakeTupleAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
