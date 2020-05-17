@@ -101,7 +101,7 @@ namespace das {
     struct AstExpressionAnnotation : AstExprAnnotation<EXPR> {
         AstExpressionAnnotation(const string & en, ModuleLibrary & ml)
             :  AstExprAnnotation<EXPR> (en, ml) {
-            init();
+            this->init();
         }
     };
 
