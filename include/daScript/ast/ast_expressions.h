@@ -332,6 +332,7 @@ namespace das
         ExprCallFunc () { __rtti = "ExprCallFunc"; };
         ExprCallFunc ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprCallFunc"; }
+        virtual bool rtti_isCallFunc() const override { return true; }
         Function *      func = nullptr;
         uint32_t        stackTop = 0;
     };

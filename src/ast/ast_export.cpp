@@ -5,6 +5,25 @@
 
 namespace das {
 
+    class ClearUnusedSymbols : public Visitor {
+    public:
+        virtual void preVisit(ExprAddr * expr) override {
+            Visitor::preVisit(expr);
+            if ( expr->func && !expr->func->used && !expr->func->builtIn ) {
+                expr->func = nullptr;
+            }
+        }
+        virtual void preVisitExpression(Expression * expr) override {
+            Visitor::preVisitExpression(expr);
+            if ( expr->rtti_isCallFunc() ) {
+                auto cfe = static_cast<ExprCallFunc *>(expr);
+                if ( cfe->func && !cfe->func->used && !cfe->func->builtIn ) {
+                    cfe->func = nullptr;
+                }
+            }
+        }
+    };
+
     class MarkSymbolUse : public Visitor {
     public:
         MarkSymbolUse ( bool bid ) : builtInDependencies(bid) {
@@ -215,6 +234,8 @@ namespace das {
         vis.markUsedFunctions(library, forceAll);
         vis.markVarsUsed(library, forceAll);
         if ( options.getBoolOption("remove_unused_symbols",true) ) {
+            ClearUnusedSymbols cvis;
+            visit(cvis);
             vis.RemoveUnusedSymbols(*thisModule);
         }
     }

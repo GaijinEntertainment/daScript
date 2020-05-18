@@ -508,8 +508,7 @@ namespace das {
             :  AstExpressionAnnotation<ExprAddr> ("ExprAddr", ml) {
             addField<DAS_BIND_MANAGED_FIELD(target)>("target");
             addField<DAS_BIND_MANAGED_FIELD(funcType)>("funcType");
-            // TODO: find out why its garbage after the infer
-            // addField<DAS_BIND_MANAGED_FIELD(func)>("func");
+            addField<DAS_BIND_MANAGED_FIELD(func)>("func");
         }
     };
 
