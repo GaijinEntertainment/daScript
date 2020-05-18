@@ -33,7 +33,7 @@ namespace das
     class TableHash {
         Context *   context = nullptr;
         uint32_t    valueTypeSize = 0;
-        constexpr static uint32_t minCapacity = 64u;
+        constexpr static uint32_t minCapacity = 8u;
         constexpr static uint32_t minLookups = 4u;
     public:
         TableHash () = delete;
