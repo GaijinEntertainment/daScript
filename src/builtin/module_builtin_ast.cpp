@@ -52,6 +52,9 @@ MAKE_TYPE_FACTORY(ExprMakeVariant,ExprMakeVariant)
 MAKE_TYPE_FACTORY(ExprMakeStruct,ExprMakeStruct)
 MAKE_TYPE_FACTORY(ExprMakeArray,ExprMakeArray)
 MAKE_TYPE_FACTORY(ExprMakeTuple,ExprMakeTuple)
+MAKE_TYPE_FACTORY(ExprArrayComprehension,ExprArrayComprehension)
+MAKE_TYPE_FACTORY(TypeInfoMacro,TypeInfoMacro);
+MAKE_TYPE_FACTORY(ExprTypeInfo,ExprTypeInfo)
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -378,6 +381,37 @@ namespace das {
         AstExprMakeTupleAnnotation(ModuleLibrary & ml)
             :  AstExprMakeArrayAnnotation<ExprMakeTuple> ("ExprMakeTuple", ml) {
             addField<DAS_BIND_MANAGED_FIELD(isKeyValue)>("isKeyValue");
+        }
+    };
+
+
+    struct AstExprArrayComprehensionAnnotation : AstExpressionAnnotation<ExprArrayComprehension> {
+        AstExprArrayComprehensionAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprArrayComprehension> ("ExprArrayComprehension", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(exprFor)>("exprFor");
+            addField<DAS_BIND_MANAGED_FIELD(exprWhere)>("exprWhere");
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(generatorSyntax)>("generatorSyntax");
+        }
+    };
+
+    struct AstTypeInfoMacroAnnotation : ManagedStructureAnnotation<TypeInfoMacro,false> {
+        AstTypeInfoMacroAnnotation(ModuleLibrary & ml)
+            :  ManagedStructureAnnotation<TypeInfoMacro,false> ("TypeInfoMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+        }
+    };
+
+    struct AstExprTypeInfoAnnotation : AstExpressionAnnotation<ExprTypeInfo> {
+        AstExprTypeInfoAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprTypeInfo> ("ExprTypeInfo", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(trait)>("trait");
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
+            addField<DAS_BIND_MANAGED_FIELD(subtrait)>("subtrait");
+            addField<DAS_BIND_MANAGED_FIELD(extratrait)>("extratrait");
+            addField<DAS_BIND_MANAGED_FIELD(macro)>("macro");
         }
     };
 
@@ -897,7 +931,10 @@ namespace das {
             IMPL_ADAPT(ExprMakeArrayIndex);
             IMPL_ADAPT(ExprMakeTuple);
             IMPL_ADAPT(ExprMakeTupleIndex);
-
+            IMPL_ADAPT(ExprArrayComprehension);
+            FN_PREVISIT(ExprArrayComprehensionSubexpr) = adapt("preVisitExprArrayComprehensionSubexpr",pClass,info);
+            FN_PREVISIT(ExprArrayComprehensionWhere) = adapt("preVisitExprArrayComprehensionWhere",pClass,info);
+            IMPL_ADAPT(ExprTypeInfo);
         }
     protected:
         void *      classPtr;
@@ -980,6 +1017,10 @@ namespace das {
         DECL_VISIT(ExprMakeArrayIndex);
         DECL_VISIT(ExprMakeTuple);
         DECL_VISIT(ExprMakeTupleIndex);
+        DECL_VISIT(ExprArrayComprehension);
+        Func FN_PREVISIT(ExprArrayComprehensionSubexpr);
+        Func FN_PREVISIT(ExprArrayComprehensionWhere);
+        DECL_VISIT(ExprTypeInfo);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -1219,6 +1260,14 @@ namespace das {
             { IMPL_PREVISIT4(ExprMakeTupleIndex,ExprMakeTuple,int,index,ExpressionPtr,init,bool,last); }
         virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool last ) override
             { IMPL_VISIT4(ExprMakeTupleIndex,ExprMakeTuple,Expression,init,int,index,ExpressionPtr,init,bool,last); }
+    // array comprehension
+        IMPL_BIND_EXPR(ExprArrayComprehension);
+        virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override
+            { IMPL_PREVISIT2(ExprArrayComprehensionSubexpr,ExprArrayComprehension,ExpressionPtr,subexpr); }
+        virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override
+            { IMPL_PREVISIT2(ExprArrayComprehensionWhere,ExprArrayComprehension,ExpressionPtr,where); }
+    // type info
+        IMPL_BIND_EXPR(ExprTypeInfo);
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -1322,7 +1371,7 @@ namespace das {
             initRecAnnotation(fna, lib);
             initRecAnnotation(iha, lib);
             initRecAnnotation(vaa, lib);
-            // expressions
+            // basic expressions
             addAnnotation(make_smart<AstExprBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprLetAnnotation>(lib));
             addAnnotation(make_smart<AstExprStringBuilderAnnotation>(lib));
@@ -1352,6 +1401,10 @@ namespace das {
             addAnnotation(make_smart<AstExprMakeVariantAnnotation>(lib));
             addAnnotation(make_smart<AstExprMakeArrayAnnotation<ExprMakeArray>>("ExprMakeArray",lib));
             addAnnotation(make_smart<AstExprMakeTupleAnnotation>(lib));
+            addAnnotation(make_smart<AstExprArrayComprehensionAnnotation>(lib));
+            addAnnotation(make_smart<AstTypeInfoMacroAnnotation>(lib));
+            addAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib));
+            // expressions with extra syntax
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",

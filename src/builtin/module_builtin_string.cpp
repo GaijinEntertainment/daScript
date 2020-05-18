@@ -404,7 +404,7 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");
         addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", SideEffects::none, "builtin_string_strip_right");
         addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", SideEffects::none, "builtin_string_strip_left");
-        addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop", 
+        addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
             SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string", SideEffects::none, "builtin_as_string");
         addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice1");
@@ -417,7 +417,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
         addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
         addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");
-        addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place", 
+        addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty", SideEffects::none, "builtin_empty_das_string");
+        addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
             SideEffects::none, "builtin_string_tolower_in_place")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
             SideEffects::none, "builtin_string_toupper_in_place")->unsafeOperation = true;

@@ -361,6 +361,20 @@ class AstVisitor
         pass
     def visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
         return ExpressionPtr(expr)
+// array comprehension
+    def preVisitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>)
+        pass
+    def visitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>) : ExpressionPtr
+        return ExpressionPtr(expr)
+    def preVisitExprArrayComprehensionSubexpr(expr:smart_ptr<ExprArrayComprehension>;subexrp:ExpressionPtr)
+        pass
+    def preVisitExprArrayComprehensionWhere(expr:smart_ptr<ExprArrayComprehension>;filter:ExpressionPtr)
+        pass
+// type info
+    def preVisitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>)
+        pass
+    def visitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : ExpressionPtr
+        return ExpressionPtr(expr)
 
 //////////
 // example
@@ -752,6 +766,29 @@ class PrintVisitor : AstVisitor
         if !last
             print(", ")
         return ExpressionPtr(expr)
+// array comprehension
+    def override preVisitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>)
+        print("{expr.generatorSyntax ? "[[" : "[\{"}")
+    def override visitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>)
+        print("{expr.generatorSyntax ? "]]" : "\}]"}")
+        return ExpressionPtr(expr)
+    def override preVisitExprArrayComprehensionSubexpr(expr:smart_ptr<ExprArrayComprehension>;subexrp:ExpressionPtr)
+        print("; ")
+    def override preVisitExprArrayComprehensionWhere(expr:smart_ptr<ExprArrayComprehension>;filter:ExpressionPtr)
+        print("; where ")
+// type info
+    def override preVisitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>)
+        print("typeinfo({expr.trait}")
+        if !empty(expr.subtrait)
+            print("<{expr.subtrait}")
+            if !empty(expr.extratrait)
+                print(";{expr.extratrait}")
+        print(">")
+        if expr.subexpr == null
+            print("type<{describe(expr.typeexpr)}>")
+    def override visitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>)
+        print(")")
+        return ExpressionPtr(expr)
 
 typedef
     Integer = int
@@ -849,6 +886,14 @@ def allExpr(arg:int)
     // ExprMakeTuple
     var mkt = [[auto 1,2.0,"three"]]
     mkt = [[auto 2,3.0,"four"]]
+    // ExprArrayCompehension
+    var acomp <- [{for x in range(0,3); x*x; where x!=1}]
+    var gcomp <- [[for x in range(0,3); x*x; where x!=1]]
+    for ta,tg in acomp,gcomp
+        verify(ta==tg)
+    // ExprTypeInfo
+    var tinfo = typeinfo(rtti_typeinfo type<int>).basicType
+    print("{tinfo}\n")
 
 [export]
 def test

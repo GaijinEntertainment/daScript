@@ -27,6 +27,7 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) { return true; }
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) { return true; }
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}
@@ -161,8 +162,6 @@ namespace das {
         // ARRAY COMPREHENSION
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) {}
         virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) {}
-        // TYPE INFO
-        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
         // EXPRESSIONS
 #define VISIT_EXPR(ExprType) \
         virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \

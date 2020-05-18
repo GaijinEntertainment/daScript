@@ -43,7 +43,7 @@ namespace das {
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context );
     char * builtin_string_clone ( const char *str, Context * context );
     __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
-
+    __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }
 
     __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
 

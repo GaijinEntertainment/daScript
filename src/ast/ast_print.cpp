@@ -998,7 +998,7 @@ namespace das {
     // array comprehension
         virtual void preVisit ( ExprArrayComprehension * expr ) override {
             Visitor::preVisit(expr);
-            ss << "[[";
+            ss << (expr->generatorSyntax ? "[[" : "[{");
         }
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override {
             Visitor::preVisitArrayComprehensionSubexpr(expr, subexpr);
@@ -1009,7 +1009,7 @@ namespace das {
             ss << "; where ";
         }
         virtual ExpressionPtr visit ( ExprArrayComprehension * expr ) override {
-            ss << "]]";
+            ss << (expr->generatorSyntax ? "]]" : "}]");
             return Visitor::visit(expr);
         }
     protected:
