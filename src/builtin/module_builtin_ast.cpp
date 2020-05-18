@@ -489,6 +489,20 @@ namespace das {
         }
     };
 
+    struct AstExprRef2ValueAnnotation : AstExpressionAnnotation<ExprRef2Value> {
+        AstExprRef2ValueAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprRef2Value> ("ExprRef2Value", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+        }
+    };
+
+    struct AstExprRef2PtrAnnotation : AstExpressionAnnotation<ExprRef2Ptr> {
+        AstExprRef2PtrAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprRef2Ptr> ("ExprRef2Ptr", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+        }
+    };
+
     // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
@@ -1011,10 +1025,8 @@ namespace das {
             IMPL_ADAPT(ExprTypeInfo);
         IMPL_ADAPT(ExprLabel);
         IMPL_ADAPT(ExprGoto);
-        /*
         IMPL_ADAPT(ExprRef2Value);
         IMPL_ADAPT(ExprRef2Ptr);
-        */
         IMPL_ADAPT(ExprPtr2Ref);
         /*
         IMPL_ADAPT(ExprAddr);
@@ -1467,10 +1479,8 @@ namespace das {
     // all other expressions
         IMPL_BIND_EXPR(ExprLabel);
         IMPL_BIND_EXPR(ExprGoto);
-    /*
         IMPL_BIND_EXPR(ExprRef2Value);
         IMPL_BIND_EXPR(ExprRef2Ptr);
-    */
         IMPL_BIND_EXPR(ExprPtr2Ref);
     /*
         IMPL_BIND_EXPR(ExprAddr);
@@ -1667,9 +1677,9 @@ namespace das {
             // expressions with no extra syntax
             addAnnotation(make_smart<AstExprLabelAnnotation>(lib));
             addAnnotation(make_smart<AstExprGotoAnnotation>(lib));
-        /*
             addAnnotation(make_smart<AstExprRef2ValueAnnotation>(lib));
             addAnnotation(make_smart<AstExprRef2PtrAnnotation>(lib));
+            /*
             addAnnotation(make_smart<AstExprAddrAnnotation>(lib));
             addAnnotation(make_smart<AstExprAssertAnnotation>(lib));
             addAnnotation(make_smart<AstExprStaticAssertAnnotation>(lib));
