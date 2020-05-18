@@ -380,6 +380,16 @@ class AstVisitor
         pass
     def visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
         return ExpressionPtr(expr)
+// label
+    def preVisitExprLabel(expr:smart_ptr<ExprLabel>)
+        pass
+    def visitExprLabel(expr:smart_ptr<ExprLabel>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// goto
+    def preVisitExprGoto(expr:smart_ptr<ExprGoto>)
+        pass
+    def visitExprGoto(expr:smart_ptr<ExprGoto>) : ExpressionPtr
+        return ExpressionPtr(expr)
 
 //////////
 // example
@@ -800,6 +810,16 @@ class PrintVisitor : AstVisitor
     def override visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>)
         print(")")
         return ExpressionPtr(expr)
+// label
+    def override preVisitExprLabel(expr:smart_ptr<ExprLabel>)
+        print("label {expr.labelName}:")
+        if !empty(expr.comment)
+            print("/*{expr.comment}*/")
+// goto
+    def override preVisitExprGoto(expr:smart_ptr<ExprGoto>)
+        print("goto ")
+        if expr.subexpr==null
+            print("label {expr.labelName}")
 
 typedef
     Integer = int
@@ -907,6 +927,10 @@ def allExpr(arg:int)
     print("{tinfo}\n")
     // ExprPtr2Ref
     print("{*pFoo1}")
+    // label and goto
+    goto label 1
+    print("nop")
+    label 1:
 
 [export]
 def test

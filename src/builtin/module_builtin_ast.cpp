@@ -473,6 +473,22 @@ namespace das {
         }
     };
 
+    struct AstExprLabelAnnotation : AstExpressionAnnotation<ExprLabel> {
+        AstExprLabelAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprLabel> ("ExprLabel", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(label)>("labelName","label");
+            addField<DAS_BIND_MANAGED_FIELD(comment)>("comment");
+        }
+    };
+
+    struct AstExprGotoAnnotation : AstExpressionAnnotation<ExprGoto> {
+        AstExprGotoAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprGoto> ("ExprGoto", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(label)>("labelName","label");
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+        }
+    };
+
     // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
@@ -993,9 +1009,9 @@ namespace das {
             FN_PREVISIT(ExprArrayComprehensionSubexpr) = adapt("preVisitExprArrayComprehensionSubexpr",pClass,info);
             FN_PREVISIT(ExprArrayComprehensionWhere) = adapt("preVisitExprArrayComprehensionWhere",pClass,info);
             IMPL_ADAPT(ExprTypeInfo);
-        /*
         IMPL_ADAPT(ExprLabel);
         IMPL_ADAPT(ExprGoto);
+        /*
         IMPL_ADAPT(ExprRef2Value);
         IMPL_ADAPT(ExprRef2Ptr);
         */
@@ -1449,9 +1465,9 @@ namespace das {
     // type info
         IMPL_BIND_EXPR(ExprTypeInfo);
     // all other expressions
-    /*
         IMPL_BIND_EXPR(ExprLabel);
         IMPL_BIND_EXPR(ExprGoto);
+    /*
         IMPL_BIND_EXPR(ExprRef2Value);
         IMPL_BIND_EXPR(ExprRef2Ptr);
     */
@@ -1649,9 +1665,9 @@ namespace das {
             addAnnotation(make_smart<AstTypeInfoMacroAnnotation>(lib));
             addAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib));
             // expressions with no extra syntax
-/*
             addAnnotation(make_smart<AstExprLabelAnnotation>(lib));
             addAnnotation(make_smart<AstExprGotoAnnotation>(lib));
+        /*
             addAnnotation(make_smart<AstExprRef2ValueAnnotation>(lib));
             addAnnotation(make_smart<AstExprRef2PtrAnnotation>(lib));
             addAnnotation(make_smart<AstExprAddrAnnotation>(lib));
