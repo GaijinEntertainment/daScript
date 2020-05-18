@@ -1,5 +1,7 @@
 options rtti = true
 
+// options log = true
+
 require ast
 require rtti
 
@@ -399,6 +401,21 @@ class AstVisitor
     def preVisitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>)
         pass
     def visitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// @@
+    def preVisitExprAddr(expr:smart_ptr<ExprAddr>)
+        pass
+    def visitExprAddr(expr:smart_ptr<ExprAddr>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// assert / verify
+    def preVisitExprAssert(expr:smart_ptr<ExprAssert>)
+        pass
+    def visitExprAssert(expr:smart_ptr<ExprAssert>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// static_assert
+    def preVisitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>)
+        pass
+    def visitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>) : ExpressionPtr
         return ExpressionPtr(expr)
 
 //////////
@@ -842,6 +859,12 @@ class PrintVisitor : AstVisitor
     def override visitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>)
         print(")")
         return ExpressionPtr(expr)
+// @@
+    def override preVisitExprAddr(expr:smart_ptr<ExprAddr>)
+        print("@@")
+        if expr.funcType != null
+            print("<{describe(expr.funcType)}>")
+        print("{expr.target}")
 
 typedef
     Integer = int
@@ -956,6 +979,14 @@ def allExpr(arg:int)
     // ExprRef2Ptr
     let aacomp = addr(acomp)
     print("{aacomp}")
+    // ExprAddr
+    let eaddr = @@add
+    print("{eaddr}")
+    // ExprAssert, ExprStaticAssert
+    assert(aa==4,"assert here")
+    verify(aa==4,"verify here")
+    static_assert(true,"static assert here")
+    concept_assert(true,"concept assert here")
 
 [export]
 def test

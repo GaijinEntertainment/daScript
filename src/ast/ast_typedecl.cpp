@@ -646,6 +646,8 @@ namespace das
             return structType->isPod();
         if ( baseType==Type::tHandle )
             return annotation->isPod();
+        if ( baseType==Type::tPointer )
+            return !smartPtr;
         if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
             for ( auto & arg : argTypes ) {
                 if ( !arg->isPod() ) {
@@ -1339,9 +1341,10 @@ namespace das
             case Type::tRange:
             case Type::tURange:
             case Type::tString:
-            case Type::tPointer:
             case Type::tDouble:
                 return true;
+            case Type::tPointer:
+                return !smartPtr;
             default:
                 return false;
         }

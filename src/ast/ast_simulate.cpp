@@ -1919,7 +1919,8 @@ namespace das
     SimNode * ExprIfThenElse::simulate (Context & context) const {
         ExpressionPtr zeroCond;
         bool condIfZero = false;
-        if ( matchEquNequZero(cond, zeroCond, condIfZero) ) {
+        bool match0 = matchEquNequZero(cond, zeroCond, condIfZero);
+        if ( match0 && zeroCond->type->isWorkhorseType() ) {
             if ( condIfZero ) {
                 if ( if_false ) {
                     return context.code->makeNumericValueNode<SimNode_IfZeroThenElse>(zeroCond->type->baseType,
@@ -1935,7 +1936,6 @@ namespace das
                     return context.code->makeNumericValueNode<SimNode_IfNotZeroThenElse>(zeroCond->type->baseType,
                                     at, zeroCond->simulate(context), if_true->simulate(context),
                                             if_false->simulate(context));
-
                 } else {
                     return context.code->makeNumericValueNode<SimNode_IfNotZeroThen>(zeroCond->type->baseType,
                                     at, zeroCond->simulate(context), if_true->simulate(context));
