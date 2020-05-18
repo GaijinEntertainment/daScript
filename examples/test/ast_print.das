@@ -375,6 +375,11 @@ class AstVisitor
         pass
     def visitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : ExpressionPtr
         return ExpressionPtr(expr)
+// ptr to ref
+    def preVisitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>)
+        pass
+    def visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
+        return ExpressionPtr(expr)
 
 //////////
 // example
@@ -789,6 +794,12 @@ class PrintVisitor : AstVisitor
     def override visitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>)
         print(")")
         return ExpressionPtr(expr)
+// ptr to ref
+    def override preVisitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>)
+        print("deref(")
+    def override visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>)
+        print(")")
+        return ExpressionPtr(expr)
 
 typedef
     Integer = int
@@ -894,6 +905,8 @@ def allExpr(arg:int)
     // ExprTypeInfo
     var tinfo = typeinfo(rtti_typeinfo type<int>).basicType
     print("{tinfo}\n")
+    // ExprPtr2Ref
+    print("{*pFoo1}")
 
 [export]
 def test

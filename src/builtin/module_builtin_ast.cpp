@@ -55,6 +55,64 @@ MAKE_TYPE_FACTORY(ExprMakeTuple,ExprMakeTuple)
 MAKE_TYPE_FACTORY(ExprArrayComprehension,ExprArrayComprehension)
 MAKE_TYPE_FACTORY(TypeInfoMacro,TypeInfoMacro);
 MAKE_TYPE_FACTORY(ExprTypeInfo,ExprTypeInfo)
+MAKE_TYPE_FACTORY(ExprLabel,ExprLabel);
+MAKE_TYPE_FACTORY(ExprGoto,ExprGoto);
+MAKE_TYPE_FACTORY(ExprRef2Value,ExprRef2Value);
+MAKE_TYPE_FACTORY(ExprRef2Ptr,ExprRef2Ptr);
+MAKE_TYPE_FACTORY(ExprAddr,ExprAddr);
+MAKE_TYPE_FACTORY(ExprAssert,ExprAssert);
+MAKE_TYPE_FACTORY(ExprStaticAssert,ExprStaticAssert);
+MAKE_TYPE_FACTORY(ExprDebug,ExprDebug);
+MAKE_TYPE_FACTORY(ExprInvoke,ExprInvoke);
+MAKE_TYPE_FACTORY(ExprErase,ExprErase);
+MAKE_TYPE_FACTORY(ExprFind,ExprFind);
+MAKE_TYPE_FACTORY(ExprKeyExists,ExprKeyExists);
+MAKE_TYPE_FACTORY(ExprAscend,ExprAscend);
+MAKE_TYPE_FACTORY(ExprCast,ExprCast);
+MAKE_TYPE_FACTORY(ExprDelete,ExprDelete);
+MAKE_TYPE_FACTORY(ExprVar,ExprVar);
+MAKE_TYPE_FACTORY(ExprSwizzle,ExprSwizzle);
+MAKE_TYPE_FACTORY(ExprField,ExprField);
+MAKE_TYPE_FACTORY(ExprSafeField,ExprSafeField);
+MAKE_TYPE_FACTORY(ExprIsVariant,ExprIsVariant);
+MAKE_TYPE_FACTORY(ExprAsVariant,ExprAsVariant);
+MAKE_TYPE_FACTORY(ExprSafeAsVariant,ExprSafeAsVariant);
+MAKE_TYPE_FACTORY(ExprOp1,ExprOp1);
+MAKE_TYPE_FACTORY(ExprReturn,ExprReturn);
+MAKE_TYPE_FACTORY(ExprYield,ExprYield);
+MAKE_TYPE_FACTORY(ExprBreak,ExprBreak);
+MAKE_TYPE_FACTORY(ExprContinue,ExprContinue);
+MAKE_TYPE_FACTORY(ExprConst,ExprConst);
+MAKE_TYPE_FACTORY(ExprFakeContext,ExprFakeContext);
+MAKE_TYPE_FACTORY(ExprConstPtr,ExprConstPtr);
+MAKE_TYPE_FACTORY(ExprConstEnumeration,ExprConstEnumeration);
+MAKE_TYPE_FACTORY(ExprConstBitfield,ExprConstBitfield);
+MAKE_TYPE_FACTORY(ExprConstInt8,ExprConstInt8);
+MAKE_TYPE_FACTORY(ExprConstInt16,ExprConstInt16);
+MAKE_TYPE_FACTORY(ExprConstInt64,ExprConstInt64);
+MAKE_TYPE_FACTORY(ExprConstInt,ExprConstInt);
+MAKE_TYPE_FACTORY(ExprConstInt2,ExprConstInt2);
+MAKE_TYPE_FACTORY(ExprConstInt3,ExprConstInt3);
+MAKE_TYPE_FACTORY(ExprConstInt4,ExprConstInt4);
+MAKE_TYPE_FACTORY(ExprConstUInt8,ExprConstUInt8);
+MAKE_TYPE_FACTORY(ExprConstUInt16,ExprConstUInt16);
+MAKE_TYPE_FACTORY(ExprConstUInt64,ExprConstUInt64);
+MAKE_TYPE_FACTORY(ExprConstUInt,ExprConstUInt);
+MAKE_TYPE_FACTORY(ExprConstUInt2,ExprConstUInt2);
+MAKE_TYPE_FACTORY(ExprConstUInt3,ExprConstUInt3);
+MAKE_TYPE_FACTORY(ExprConstUInt4,ExprConstUInt4);
+MAKE_TYPE_FACTORY(ExprConstRange,ExprConstRange);
+MAKE_TYPE_FACTORY(ExprConstURange,ExprConstURange);
+MAKE_TYPE_FACTORY(ExprConstBool,ExprConstBool);
+MAKE_TYPE_FACTORY(ExprConstFloat,ExprConstFloat);
+MAKE_TYPE_FACTORY(ExprConstFloat2,ExprConstFloat2);
+MAKE_TYPE_FACTORY(ExprConstFloat3,ExprConstFloat3);
+MAKE_TYPE_FACTORY(ExprConstFloat4,ExprConstFloat4);
+MAKE_TYPE_FACTORY(ExprConstString,ExprConstString);
+MAKE_TYPE_FACTORY(ExprConstDouble,ExprConstDouble);
+MAKE_TYPE_FACTORY(ExprMakeBlock,ExprMakeBlock);
+MAKE_TYPE_FACTORY(ExprMakeGenerator,ExprMakeGenerator);
+MAKE_TYPE_FACTORY(ExprMemZero,ExprMemZero);
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -935,6 +993,69 @@ namespace das {
             FN_PREVISIT(ExprArrayComprehensionSubexpr) = adapt("preVisitExprArrayComprehensionSubexpr",pClass,info);
             FN_PREVISIT(ExprArrayComprehensionWhere) = adapt("preVisitExprArrayComprehensionWhere",pClass,info);
             IMPL_ADAPT(ExprTypeInfo);
+        /*
+        IMPL_ADAPT(ExprLabel);
+        IMPL_ADAPT(ExprGoto);
+        IMPL_ADAPT(ExprRef2Value);
+        IMPL_ADAPT(ExprRef2Ptr);
+        */
+        IMPL_ADAPT(ExprPtr2Ref);
+        /*
+        IMPL_ADAPT(ExprAddr);
+        IMPL_ADAPT(ExprAssert);
+        IMPL_ADAPT(ExprStaticAssert);
+        IMPL_ADAPT(ExprDebug);
+        IMPL_ADAPT(ExprInvoke);
+        IMPL_ADAPT(ExprErase);
+        IMPL_ADAPT(ExprFind);
+        IMPL_ADAPT(ExprKeyExists);
+        IMPL_ADAPT(ExprAscend);
+        IMPL_ADAPT(ExprCast);
+        IMPL_ADAPT(ExprDelete);
+        IMPL_ADAPT(ExprVar);
+        IMPL_ADAPT(ExprSwizzle);
+        IMPL_ADAPT(ExprField);
+        IMPL_ADAPT(ExprSafeField);
+        IMPL_ADAPT(ExprIsVariant);
+        IMPL_ADAPT(ExprAsVariant);
+        IMPL_ADAPT(ExprSafeAsVariant);
+        IMPL_ADAPT(ExprOp1);
+        IMPL_ADAPT(ExprReturn);
+        IMPL_ADAPT(ExprYield);
+        IMPL_ADAPT(ExprBreak);
+        IMPL_ADAPT(ExprContinue);
+        IMPL_ADAPT(ExprConst);
+        IMPL_ADAPT(ExprFakeContext);
+        IMPL_ADAPT(ExprConstPtr);
+        IMPL_ADAPT(ExprConstEnumeration);
+        IMPL_ADAPT(ExprConstBitfield);
+        IMPL_ADAPT(ExprConstInt8);
+        IMPL_ADAPT(ExprConstInt16);
+        IMPL_ADAPT(ExprConstInt64);
+        IMPL_ADAPT(ExprConstInt);
+        IMPL_ADAPT(ExprConstInt2);
+        IMPL_ADAPT(ExprConstInt3);
+        IMPL_ADAPT(ExprConstInt4);
+        IMPL_ADAPT(ExprConstUInt8);
+        IMPL_ADAPT(ExprConstUInt16);
+        IMPL_ADAPT(ExprConstUInt64);
+        IMPL_ADAPT(ExprConstUInt);
+        IMPL_ADAPT(ExprConstUInt2);
+        IMPL_ADAPT(ExprConstUInt3);
+        IMPL_ADAPT(ExprConstUInt4);
+        IMPL_ADAPT(ExprConstRange);
+        IMPL_ADAPT(ExprConstURange);
+        IMPL_ADAPT(ExprConstBool);
+        IMPL_ADAPT(ExprConstFloat);
+        IMPL_ADAPT(ExprConstFloat2);
+        IMPL_ADAPT(ExprConstFloat3);
+        IMPL_ADAPT(ExprConstFloat4);
+        IMPL_ADAPT(ExprConstString);
+        IMPL_ADAPT(ExprConstDouble);
+        IMPL_ADAPT(ExprMakeBlock);
+        IMPL_ADAPT(ExprMakeGenerator);
+        IMPL_ADAPT(ExprMemZero);
+        */
         }
     protected:
         void *      classPtr;
@@ -1021,6 +1142,65 @@ namespace das {
         Func FN_PREVISIT(ExprArrayComprehensionSubexpr);
         Func FN_PREVISIT(ExprArrayComprehensionWhere);
         DECL_VISIT(ExprTypeInfo);
+        DECL_VISIT(ExprLabel);
+        DECL_VISIT(ExprGoto);
+        DECL_VISIT(ExprRef2Value);
+        DECL_VISIT(ExprRef2Ptr);
+        DECL_VISIT(ExprPtr2Ref);
+        DECL_VISIT(ExprAddr);
+        DECL_VISIT(ExprAssert);
+        DECL_VISIT(ExprStaticAssert);
+        DECL_VISIT(ExprDebug);
+        DECL_VISIT(ExprInvoke);
+        DECL_VISIT(ExprErase);
+        DECL_VISIT(ExprFind);
+        DECL_VISIT(ExprKeyExists);
+        DECL_VISIT(ExprAscend);
+        DECL_VISIT(ExprCast);
+        DECL_VISIT(ExprDelete);
+        DECL_VISIT(ExprVar);
+        DECL_VISIT(ExprSwizzle);
+        DECL_VISIT(ExprField);
+        DECL_VISIT(ExprSafeField);
+        DECL_VISIT(ExprIsVariant);
+        DECL_VISIT(ExprAsVariant);
+        DECL_VISIT(ExprSafeAsVariant);
+        DECL_VISIT(ExprOp1);
+        DECL_VISIT(ExprReturn);
+        DECL_VISIT(ExprYield);
+        DECL_VISIT(ExprBreak);
+        DECL_VISIT(ExprContinue);
+        DECL_VISIT(ExprConst);
+        DECL_VISIT(ExprFakeContext);
+        DECL_VISIT(ExprConstPtr);
+        DECL_VISIT(ExprConstEnumeration);
+        DECL_VISIT(ExprConstBitfield);
+        DECL_VISIT(ExprConstInt8);
+        DECL_VISIT(ExprConstInt16);
+        DECL_VISIT(ExprConstInt64);
+        DECL_VISIT(ExprConstInt);
+        DECL_VISIT(ExprConstInt2);
+        DECL_VISIT(ExprConstInt3);
+        DECL_VISIT(ExprConstInt4);
+        DECL_VISIT(ExprConstUInt8);
+        DECL_VISIT(ExprConstUInt16);
+        DECL_VISIT(ExprConstUInt64);
+        DECL_VISIT(ExprConstUInt);
+        DECL_VISIT(ExprConstUInt2);
+        DECL_VISIT(ExprConstUInt3);
+        DECL_VISIT(ExprConstUInt4);
+        DECL_VISIT(ExprConstRange);
+        DECL_VISIT(ExprConstURange);
+        DECL_VISIT(ExprConstBool);
+        DECL_VISIT(ExprConstFloat);
+        DECL_VISIT(ExprConstFloat2);
+        DECL_VISIT(ExprConstFloat3);
+        DECL_VISIT(ExprConstFloat4);
+        DECL_VISIT(ExprConstString);
+        DECL_VISIT(ExprConstDouble);
+        DECL_VISIT(ExprMakeBlock);
+        DECL_VISIT(ExprMakeGenerator);
+        DECL_VISIT(ExprMemZero);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override
@@ -1268,6 +1448,70 @@ namespace das {
             { IMPL_PREVISIT2(ExprArrayComprehensionWhere,ExprArrayComprehension,ExpressionPtr,where); }
     // type info
         IMPL_BIND_EXPR(ExprTypeInfo);
+    // all other expressions
+    /*
+        IMPL_BIND_EXPR(ExprLabel);
+        IMPL_BIND_EXPR(ExprGoto);
+        IMPL_BIND_EXPR(ExprRef2Value);
+        IMPL_BIND_EXPR(ExprRef2Ptr);
+    */
+        IMPL_BIND_EXPR(ExprPtr2Ref);
+    /*
+        IMPL_BIND_EXPR(ExprAddr);
+        IMPL_BIND_EXPR(ExprAssert);
+        IMPL_BIND_EXPR(ExprStaticAssert);
+        IMPL_BIND_EXPR(ExprDebug);
+        IMPL_BIND_EXPR(ExprInvoke);
+        IMPL_BIND_EXPR(ExprErase);
+        IMPL_BIND_EXPR(ExprFind);
+        IMPL_BIND_EXPR(ExprKeyExists);
+        IMPL_BIND_EXPR(ExprAscend);
+        IMPL_BIND_EXPR(ExprCast);
+        IMPL_BIND_EXPR(ExprDelete);
+        IMPL_BIND_EXPR(ExprVar);
+        IMPL_BIND_EXPR(ExprSwizzle);
+        IMPL_BIND_EXPR(ExprField);
+        IMPL_BIND_EXPR(ExprSafeField);
+        IMPL_BIND_EXPR(ExprIsVariant);
+        IMPL_BIND_EXPR(ExprAsVariant);
+        IMPL_BIND_EXPR(ExprSafeAsVariant);
+        IMPL_BIND_EXPR(ExprOp1);
+        IMPL_BIND_EXPR(ExprReturn);
+        IMPL_BIND_EXPR(ExprYield);
+        IMPL_BIND_EXPR(ExprBreak);
+        IMPL_BIND_EXPR(ExprContinue);
+        IMPL_BIND_EXPR(ExprConst);
+        IMPL_BIND_EXPR(ExprFakeContext);
+        IMPL_BIND_EXPR(ExprConstPtr);
+        IMPL_BIND_EXPR(ExprConstEnumeration);
+        IMPL_BIND_EXPR(ExprConstBitfield);
+        IMPL_BIND_EXPR(ExprConstInt8);
+        IMPL_BIND_EXPR(ExprConstInt16);
+        IMPL_BIND_EXPR(ExprConstInt64);
+        IMPL_BIND_EXPR(ExprConstInt);
+        IMPL_BIND_EXPR(ExprConstInt2);
+        IMPL_BIND_EXPR(ExprConstInt3);
+        IMPL_BIND_EXPR(ExprConstInt4);
+        IMPL_BIND_EXPR(ExprConstUInt8);
+        IMPL_BIND_EXPR(ExprConstUInt16);
+        IMPL_BIND_EXPR(ExprConstUInt64);
+        IMPL_BIND_EXPR(ExprConstUInt);
+        IMPL_BIND_EXPR(ExprConstUInt2);
+        IMPL_BIND_EXPR(ExprConstUInt3);
+        IMPL_BIND_EXPR(ExprConstUInt4);
+        IMPL_BIND_EXPR(ExprConstRange);
+        IMPL_BIND_EXPR(ExprConstURange);
+        IMPL_BIND_EXPR(ExprConstBool);
+        IMPL_BIND_EXPR(ExprConstFloat);
+        IMPL_BIND_EXPR(ExprConstFloat2);
+        IMPL_BIND_EXPR(ExprConstFloat3);
+        IMPL_BIND_EXPR(ExprConstFloat4);
+        IMPL_BIND_EXPR(ExprConstString);
+        IMPL_BIND_EXPR(ExprConstDouble);
+        IMPL_BIND_EXPR(ExprMakeBlock);
+        IMPL_BIND_EXPR(ExprMakeGenerator);
+        IMPL_BIND_EXPR(ExprMemZero);
+    */
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -1371,7 +1615,7 @@ namespace das {
             initRecAnnotation(fna, lib);
             initRecAnnotation(iha, lib);
             initRecAnnotation(vaa, lib);
-            // basic expressions
+            // expressions
             addAnnotation(make_smart<AstExprBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprLetAnnotation>(lib));
             addAnnotation(make_smart<AstExprStringBuilderAnnotation>(lib));
@@ -1404,7 +1648,67 @@ namespace das {
             addAnnotation(make_smart<AstExprArrayComprehensionAnnotation>(lib));
             addAnnotation(make_smart<AstTypeInfoMacroAnnotation>(lib));
             addAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib));
-            // expressions with extra syntax
+            // expressions with no extra syntax
+/*
+            addAnnotation(make_smart<AstExprLabelAnnotation>(lib));
+            addAnnotation(make_smart<AstExprGotoAnnotation>(lib));
+            addAnnotation(make_smart<AstExprRef2ValueAnnotation>(lib));
+            addAnnotation(make_smart<AstExprRef2PtrAnnotation>(lib));
+            addAnnotation(make_smart<AstExprAddrAnnotation>(lib));
+            addAnnotation(make_smart<AstExprAssertAnnotation>(lib));
+            addAnnotation(make_smart<AstExprStaticAssertAnnotation>(lib));
+            addAnnotation(make_smart<AstExprDebugAnnotation>(lib));
+            addAnnotation(make_smart<AstExprInvokeAnnotation>(lib));
+            addAnnotation(make_smart<AstExprEraseAnnotation>(lib));
+            addAnnotation(make_smart<AstExprFindAnnotation>(lib));
+            addAnnotation(make_smart<AstExprKeyExistsAnnotation>(lib));
+            addAnnotation(make_smart<AstExprAscendAnnotation>(lib));
+            addAnnotation(make_smart<AstExprCastAnnotation>(lib));
+            addAnnotation(make_smart<AstExprDeleteAnnotation>(lib));
+            addAnnotation(make_smart<AstExprVarAnnotation>(lib));
+            addAnnotation(make_smart<AstExprSwizzleAnnotation>(lib));
+            addAnnotation(make_smart<AstExprFieldAnnotation>(lib));
+            addAnnotation(make_smart<AstExprSafeFieldAnnotation>(lib));
+            addAnnotation(make_smart<AstExprIsVariantAnnotation>(lib));
+            addAnnotation(make_smart<AstExprAsVariantAnnotation>(lib));
+            addAnnotation(make_smart<AstExprSafeAsVariantAnnotation>(lib));
+            addAnnotation(make_smart<AstExprOp1Annotation>(lib));
+            addAnnotation(make_smart<AstExprReturnAnnotation>(lib));
+            addAnnotation(make_smart<AstExprYieldAnnotation>(lib));
+            addAnnotation(make_smart<AstExprBreakAnnotation>(lib));
+            addAnnotation(make_smart<AstExprContinueAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstAnnotation>(lib));
+            addAnnotation(make_smart<AstExprFakeContextAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstPtrAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstInt8Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstInt16Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstInt64Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstIntAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstInt2Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstInt3Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstInt4Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstUInt8Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstUInt16Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstUInt64Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstUIntAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstUInt2Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstUInt3Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstUInt4Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstRangeAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstURangeAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstBoolAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstFloatAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstFloat2Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstFloat3Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstFloat4Annotation>(lib));
+            addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstDoubleAnnotation>(lib));
+            addAnnotation(make_smart<AstExprMakeBlockAnnotation>(lib));
+            addAnnotation(make_smart<AstExprMakeGeneratorAnnotation>(lib));
+            addAnnotation(make_smart<AstExprMemZeroAnnotation>(lib));
+        */
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
