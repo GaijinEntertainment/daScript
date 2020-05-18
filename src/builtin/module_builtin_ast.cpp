@@ -314,8 +314,8 @@ namespace das {
     struct AstExprOpAnnotation : AstExpressionAnnotation<EXPR> {
         AstExprOpAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExpressionAnnotation<EXPR> (na, ml) {
-			using ManagedType = EXPR;
-			this->template addField<DAS_BIND_MANAGED_FIELD(op)>("op");
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(op)>("op");
         }
     };
 

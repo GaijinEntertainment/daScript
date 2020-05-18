@@ -55,6 +55,6 @@ def test
         var a:array<int>
         push(a,1)
         push(a,2)
-        let b <- a   
+        let b <- a
         assert(length(a)==0 & length(b)==2)
     return true

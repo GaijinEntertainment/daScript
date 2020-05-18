@@ -19,7 +19,7 @@ let
     kMaxDepth = 10
 
 var
-    RAND_SEED : int4 
+    RAND_SEED : int4
 
 def schlick(cosine,ri:float)
     var r0 = (1. - ri) / (1. + ri)
@@ -258,7 +258,7 @@ def job(var backbuffer:array<float3>;frameCount,width,height,ymin,ymax:int)
     var totalRayCount = 0
     draw(frameCount, width, height, ymin, ymax, backbuffer, totalRayCount)
     return totalRayCount
-    
+
 
 [export]
 def test

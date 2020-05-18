@@ -3,7 +3,7 @@ while IFS= read -r -d '' -u 9
 do
     if [[ "$(file -bs --mime-type -- "$REPLY")" = text/* ]]
     then
-        sed 's/[ \t]\+\(\r\?\)$/\1/' "$REPLY" | expand -t 4 | sponge "$REPLY"
+        sed 's/ *$//g' "$REPLY" | expand -t 4 | sponge "$REPLY"
     else
         echo "Skipping $REPLY" >&2
     fi

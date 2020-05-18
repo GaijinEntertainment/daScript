@@ -33,7 +33,7 @@ namespace das {
             return nullptr;
         }
         virtual void set(SimNode_Op2Fusion * result, SimNode * node) override {
-            result->set("CopyReference",Type::none,node->debugInfo); 
+            result->set("CopyReference",Type::none,node->debugInfo);
         }
         virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override {
             SimNode_CopyReference * crnode = static_cast<SimNode_CopyReference *>(node);
@@ -88,7 +88,7 @@ namespace das {
 #define MATCH_OP2_COPYREF(LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
     else if (is(info, node_l, LNODENAME) && is(info, node_r, RNODENAME)) { \
         MATCH_OP2_COPYREF_NODE(COMPUTEL,COMPUTER); \
-    } 
+    }
 
     // copy reference value
     //  *a = *b
@@ -114,7 +114,7 @@ namespace das {
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             uint32_t size = crnode->size;
-            if (false) { } 
+            if (false) { }
             // *, *
             MATCH_OP2_COPYREF("GetLocal","GetLocal",Local,Local)
             MATCH_OP2_COPYREF("GetLocal","GetThisBlockArgument",Local,ThisBlockArgumentRef)
@@ -147,7 +147,7 @@ namespace das {
         virtual void set(SimNode_Op2Fusion * result, SimNode * node) override {
             auto opcresult = static_cast<SimNode_Op2FusionCopyRef *>(result);
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
-            opcresult->set("CopyRefValue",Type::none,node->debugInfo); 
+            opcresult->set("CopyRefValue",Type::none,node->debugInfo);
             opcresult->size = crnode->size;
         }
         virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override {

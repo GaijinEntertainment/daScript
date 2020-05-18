@@ -199,7 +199,7 @@ inline void das_qsort_r(void *base, uint32_t nel, uint32_t width, Compare cmp)
             } else {
                 sift(head, width, cmp, pshift, lp);
             }
-            
+
             if(pshift == 1) {
                 shl(p, 1);
                 pshift = 0;
@@ -208,7 +208,7 @@ inline void das_qsort_r(void *base, uint32_t nel, uint32_t width, Compare cmp)
                 pshift = 1;
             }
         }
-        
+
         p[0] |= 1;
         head += width;
     }

@@ -58,8 +58,8 @@ namespace das {
 
         virtual ExpressionPtr visit ( ExprCall * call ) override {
             if (        call->func->fromGeneric                                         // find(tab, key, block<(pvalue?))
-                &&      call->func->fromGeneric->module==thisModule                      
-                &&      call->name=="find" 
+                &&      call->func->fromGeneric->module==thisModule
+                &&      call->name=="find"
                 &&      call->arguments.size()==3
                 &&      call->arguments[0]->type->isGoodTableType() ) {
                 return replaceFindWithFindIfExists(call,"find_if_exists");

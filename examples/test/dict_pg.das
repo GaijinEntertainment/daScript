@@ -30,7 +30,7 @@ def test
                 fopen("c:/users/boris/work/pg/das.freq", "wb") <| $( fw )
                     if fw != null
                         for t in arr
-                            var ts = "{t._1} {t._0}\n"  
+                            var ts = "{t._1} {t._0}\n"
                             fwrite(fw,ts)
                             delete ts               // gc hint
                 delete arr                          // gc hint

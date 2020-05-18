@@ -11,7 +11,7 @@ let
     floatnum = 5.5
     stringval = "hello, world"
 
-let 
+let
     some_a = "test"
     some_b <- [{ auto[] some_a }]
 

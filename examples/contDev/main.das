@@ -79,7 +79,7 @@ def cppTypeName(info)
         else
             res += cppBaseTypeName(info.basicType)
     return res
-    
+
 def dumpAnnotations(file:FILE const?;info)
     rtti::structure_for_each_annotation(info) <| $(ann,annArg)
         fprint(file,"// struct {info.name} annotation {ann.name}\n")
@@ -170,9 +170,9 @@ def generateCppEvent(file:FILE const?;info)
             if isBaseCoreAttr(field)
                 continue
             fprint(file,"{INDENT}template<> const {cppTypeName(field)}{cppTypeDim(field)} & get<{count++}>() const \{ return {field.name}; \};\n");
-    else    
+    else
         fprint(file,"{INDENT}Event *moveHeap()&& override\{return new {info.name};\}\n");
-    
+
     //fprint(file,"{INDENT}{INDENT}{INDENT}eastl::move(*this)");
 
     fprint(file,"\};\n\n")
@@ -201,7 +201,7 @@ def generate(atdir)
         return
     fcpp = fopen(EVENTS_CPP_FILE,"wb")
     if fcpp==null
-        print("can't open {EVENTS_CPP_FILE}\n") 
+        print("can't open {EVENTS_CPP_FILE}\n")
         return
     // coreEvents.h header
     fprint(fh,"#ifndef _DAGOR_GAMELIB_DAECS_CORE_{to_upper(eventListName)}_H_\n")
@@ -218,7 +218,7 @@ def generate(atdir)
     fprint(fcpp,"\{\n\n")
     fprint(fcpp,"void ecs_register_sq_das_binding_{eventListName}(HSQUIRRELVM vm)\n\{\n")
     fprint(fcpp,"{INDENT}ecs::sq::EventsBindingType eventsBinding;\n\n")
-    
+
     dir(atdir) <| $ (fname)
         let fileName = atdir + "/" + fname
         var st : FStat

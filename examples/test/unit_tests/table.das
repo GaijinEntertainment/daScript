@@ -7,7 +7,7 @@ def test_find
         assert(deref(num)==1)
     find(const_tab,"one") <| $(num:int?)    // this one will optimize into find_if_exists
         if num != null
-            assert(deref(num)==1)    
+            assert(deref(num)==1)
     assert(deref(find(const_tab,"one"))==1)
     var tab <- {{ "one"=>1; "two"=>2 }}
     find(tab,"one") <| $(num:int?)
@@ -119,7 +119,7 @@ def test : bool
     verify(erase(tab,"1"))
     verify(!erase(tab,"-1"))
 
-    
+
     var tab_bool:table<bool;int>
     assert(!key_exists(tab_bool, false))
     assert(!key_exists(tab_bool, true))

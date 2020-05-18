@@ -48,7 +48,7 @@ namespace das {
             return tab->data + index * valueTypeSize + offset; \
         } \
         DAS_PTR_NODE; \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_OpTableIndex { \
@@ -62,13 +62,13 @@ namespace das {
             return tab->data + index * valueTypeSize + offset; \
         } \
         DAS_PTR_NODE; \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
     auto rn = (SimNode_OpTableIndex *)result; \
     auto sn = (SimNode_TableIndex<int> *)node; \
     rn->valueTypeSize = sn->valueTypeSize; \
-    rn->offset = sn->offset; 
+    rn->offset = sn->offset;
 
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_Table *>(node))->tabExpr)
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_Table *>(node))->keyExpr)
@@ -81,7 +81,7 @@ namespace das {
 
     void createFusionEngine_tableindex() {
         REGISTER_SETOP_NUMERIC(TableIndex);
-        REGISTER_SETOP(TableIndex,Ptr,StringPtr); 
+        REGISTER_SETOP(TableIndex,Ptr,StringPtr);
     }
 }
 

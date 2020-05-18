@@ -26,7 +26,7 @@ def test
     //verify(global_2=="from_a")            // 30305: can't locate variable global_2, not visible
     //verify(from_a_get_3()=="from_a")      // 30304: no matching functions or generics from_a_get_3, not visible
     verify(from_b_get_3()=="from_a")
-    verify(from_b_get_4()=="from_b")        
+    verify(from_b_get_4()=="from_b")
     verify(global_3=="local")
 
 

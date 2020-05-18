@@ -553,7 +553,7 @@ namespace das
     };
 
     struct PointerDimIterator : Iterator {
-        PointerDimIterator  ( char ** d, uint32_t cnt, uint32_t sz ) 
+        PointerDimIterator  ( char ** d, uint32_t cnt, uint32_t sz )
             : data(d), data_end(d+cnt), size(sz) {}
         virtual bool first(Context &, char * _value) override;
         virtual bool next(Context &, char * _value) override;

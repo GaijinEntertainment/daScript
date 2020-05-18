@@ -5,7 +5,7 @@ var
 
 typedef
     Foo = tuple<int; float3>
-  
+
 def foo(var attached_fires : array<Foo>)
     let t = random_int(seed) % 100
     for x in attached_fires

@@ -31,7 +31,7 @@ namespace das {
             return nullptr;
         }
     }
-    
+
     SimNode * BasicStructureAnnotation::simulateGetField ( const string & na, Context & context,
             const LineInfo & at, const ExpressionPtr & value ) const {
         auto it = fields.find(na);
@@ -41,7 +41,7 @@ namespace das {
             return nullptr;
         }
     }
-    
+
     SimNode * BasicStructureAnnotation::simulateGetFieldR2V ( const string & na, Context & context,
             const LineInfo & at, const ExpressionPtr & value ) const {
         auto it = fields.find(na);
@@ -52,7 +52,7 @@ namespace das {
             return nullptr;
         }
     }
-    
+
     SimNode * BasicStructureAnnotation::simulateSafeGetField ( const string & na, Context & context,
             const LineInfo & at, const ExpressionPtr & value ) const {
         auto it = fields.find(na);
@@ -62,7 +62,7 @@ namespace das {
             return nullptr;
         }
     }
-    
+
     SimNode * BasicStructureAnnotation::simulateSafeGetFieldPtr ( const string & na, Context & context,
             const LineInfo & at, const ExpressionPtr & value ) const {
         auto it = fields.find(na);
@@ -72,8 +72,8 @@ namespace das {
             return nullptr;
         }
     }
-    
-    void BasicStructureAnnotation::aotVisitGetField ( TextWriter & ss, const string & fieldName ) { 
+
+    void BasicStructureAnnotation::aotVisitGetField ( TextWriter & ss, const string & fieldName ) {
         auto it = fields.find(fieldName);
         if (it != fields.end()) {
             ss << "." << it->second.cppName;
@@ -81,7 +81,7 @@ namespace das {
             ss << "." << fieldName << " /*undefined */";
         }
     }
-    
+
     void BasicStructureAnnotation::aotVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) {
         auto it = fields.find(fieldName);
         if (it != fields.end()) {
@@ -90,7 +90,7 @@ namespace das {
             ss << "->" << fieldName << " /*undefined */";
         }
     }
-    
+
     void BasicStructureAnnotation::addFieldEx ( const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT ) {
         auto & field = fields[na];
         if ( field.decl ) {
@@ -126,7 +126,7 @@ namespace das {
             }
         };
     }
-    
+
     void BasicStructureAnnotation::walk ( DataWalker & walker, void * data ) {
         if ( !sti ) {
             auto debugInfo = helpA.debugInfo;

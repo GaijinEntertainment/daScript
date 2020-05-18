@@ -14,7 +14,7 @@
             SimPolicy<CTYPE>::OPNAME(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context); \
             return v_zero(); \
         } \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2Fusion { \
@@ -25,7 +25,7 @@
             SimPolicy<CTYPE>::OPNAME(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context); \
             return v_zero(); \
         } \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node)
 
@@ -35,7 +35,7 @@
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
 
-// OP(COMPUTEL,*) 
+// OP(COMPUTEL,*)
 #define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
     struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2Fusion { \
         INLINE auto compute ( Context & context ) { \
@@ -45,7 +45,7 @@
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
         } \
         DAS_NODE(TYPE,CTYPE); \
-    }; 
+    };
 
 // OP(*,COMPUTER)
 #define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
@@ -57,7 +57,7 @@
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
         } \
         DAS_NODE(TYPE,CTYPE); \
-    }; 
+    };
 
 // OP(COMPUTEL,COMPUTER)
 #define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
@@ -69,7 +69,7 @@
             return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
         } \
         DAS_NODE(TYPE,CTYPE); \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SETUP_NODE(result,node)
 

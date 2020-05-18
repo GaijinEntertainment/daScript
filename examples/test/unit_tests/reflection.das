@@ -37,7 +37,7 @@ def main
 "
 
 def describeType(info)
-    var res : string 
+    var res : string
     if info.basicType==Type tHandle
         res = string(info.annotation.name)
     elif info.basicType==Type tStructure
@@ -145,7 +145,7 @@ def describeModule(mod)
         describeFunction(finfo)
     module_for_each_global(mod) <| $ ( glob )
         describeVariable(glob)
-    
+
 [export]
 def main
     // global modules

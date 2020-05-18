@@ -80,7 +80,7 @@ def test
         c <- d          // can only move same type          (30303)
     if true
         var a,b:int
-        a <- b          
+        a <- b
         a = b
     if true
         var a : ::TestObjectFoo

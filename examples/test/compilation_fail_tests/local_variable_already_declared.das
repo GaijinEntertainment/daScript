@@ -1,4 +1,4 @@
-expect 30305    
+expect 30305
 
 def test
     let a : int

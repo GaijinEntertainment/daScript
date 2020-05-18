@@ -15,7 +15,7 @@ namespace das
     protected:
         ProgramPtr              program;
     protected:
-        virtual void preVisit ( Structure * var ) override { 
+        virtual void preVisit ( Structure * var ) override {
             Visitor::preVisit(var);
             for ( const auto & pA : var->annotations ) {
                 if (pA->annotation->rtti_isStructureAnnotation()) {

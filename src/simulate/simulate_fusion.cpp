@@ -53,8 +53,8 @@ namespace das {
     SimNode * FusionPointOp2::fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) {
         anyLeft = anyRight = false;
         SimNode_Op2Fusion * result = (SimNode_Op2Fusion *) match(info,node,node_l,node_r,context);
-        if ( result ) { 
-            set(result,node); 
+        if ( result ) {
+            set(result,node);
             if ( !anyLeft && node_l->rtti_isSourceBase() ) {
                 result->l = static_cast<SimNode_SourceBase *>(node_l)->subexpr;
             } else {
@@ -65,10 +65,10 @@ namespace das {
             } else {
                 result->r.setSimNode(node_r);
             }
-            return result; 
-        } else { 
-            return node; 
-        } 
+            return result;
+        } else {
+            return node;
+        }
     }
 
     const char * getSimSourceName(SimSourceType st) {

@@ -6,7 +6,7 @@ struct Foo
     a : array<int>
 
 var
-    g : Foo? = new Foo()    
+    g : Foo? = new Foo()
 
 [export]
 def test

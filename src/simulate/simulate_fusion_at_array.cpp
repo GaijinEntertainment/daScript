@@ -47,7 +47,7 @@ namespace das {
             return *((CTYPE *)(pl->data + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
     struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2ArrayAt { \
@@ -59,13 +59,13 @@ namespace das {
             return *((CTYPE *)(pl->data + rr*stride + offset)); \
         } \
         DAS_NODE(TYPE,CTYPE); \
-    }; 
+    };
 
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \
     auto rn = (SimNode_Op2ArrayAt *)result; \
     auto sn = (SimNode_ArrayAt *)node; \
     rn->stride = sn->stride; \
-    rn->offset = sn->offset; 
+    rn->offset = sn->offset;
 
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_ArrayAt *>(node))->l)
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_ArrayAt *>(node))->r)
@@ -87,7 +87,7 @@ namespace das {
             if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %u", rr, pl->size); \
             return v_ldu((const float *)(pl + rr*stride + offset)); \
         } \
-    }; 
+    };
 
 #undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
@@ -99,7 +99,7 @@ namespace das {
             if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %u", rr, pl->size); \
             return v_ldu((const float *)(pl->data + rr*stride + offset)); \
         } \
-    }; 
+    };
 
 #include "daScript/simulate/simulate_fusion_op2_set_impl.h"
 #include "daScript/simulate/simulate_fusion_op2_set_perm.h"
@@ -119,7 +119,7 @@ namespace das {
             return pl->data + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
-    }; 
+    };
 
 #undef IMPLEMENT_OP2_SET_NODE
 #define IMPLEMENT_OP2_SET_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
@@ -132,7 +132,7 @@ namespace das {
             return pl->data + rr*stride + offset; \
         } \
         DAS_PTR_NODE; \
-    }; 
+    };
 
 #undef IMPLEMENT_OP2_SET_SETUP_NODE
 #define IMPLEMENT_OP2_SET_SETUP_NODE(result,node) \

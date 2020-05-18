@@ -16,5 +16,5 @@ def test
     let aaa <- {{ "one" => 1; "two" => 2 }}
     let bbb <- [[ table<string;int>[1] aaa ]]       // 30508: can't move from a constant value
     print("aaa={aaa} bbb={bbb}\n")
-    
+
     return true

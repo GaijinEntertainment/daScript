@@ -17,7 +17,7 @@ namespace das { \
   struct typeName<CTYPE> { \
       static string name() { return #TYPE; } \
   }; \
-}; 
+};
 
 #define MAKE_EXTERNAL_TYPE_FACTORY(TYPE,CTYPE) \
 namespace das { \
@@ -34,11 +34,11 @@ namespace das { \
   struct typeName<CTYPE> { \
       static string name() { return #TYPE; } \
   }; \
-}; 
+};
 
 #define IMPLEMENT_EXTERNAL_TYPE_FACTORY(TYPE,CTYPE) \
 namespace das { \
     TypeDeclPtr typeFactory<CTYPE>::make(const ModuleLibrary & library ) { \
         return makeHandleType(library,#TYPE); \
     } \
-}; 
+};
