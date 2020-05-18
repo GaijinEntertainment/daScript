@@ -140,6 +140,7 @@ include/daScript/misc/lookup1.h
 include/daScript/misc/memory_model.h
 include/daScript/misc/fnv.h
 include/daScript/misc/smart_ptr.h
+include/daScript/misc/free_list.h
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 )
