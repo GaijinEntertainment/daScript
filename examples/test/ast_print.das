@@ -59,409 +59,233 @@ def describe_bitfield(bf;merger:string = "")
 
 class AstVisitor
 // program
-    def preVisitProgram(prog:ProgramPtr) : void
-        pass
-    def visitProgram(porg:ProgramPtr) : void
-        pass
-    def preVisitProgramBody(prog:ProgramPtr) : void
-        pass
+    def abstract preVisitProgram(prog:ProgramPtr) : void
+    def abstract visitProgram(porg:ProgramPtr) : void
+    def abstract preVisitProgramBody(prog:ProgramPtr) : void
 // type
-    def preVisitTypeDecl(typ:TypeDeclPtr) : void
-        pass
-    def visitTypeDecl(typ:TypeDeclPtr) : TypeDeclPtr
-        return typ
+    def abstract preVisitTypeDecl(typ:TypeDeclPtr) : void
+    def abstract visitTypeDecl(typ:TypeDeclPtr) : TypeDeclPtr
 // type alias
-    def preVisitAlias(typ:TypeDeclPtr;name:das_string) : void
-        pass
-    def visitAlias(typ:TypeDeclPtr;name:das_string)
-        return typ
+    def abstract preVisitAlias(typ:TypeDeclPtr;name:das_string) : void
+    def abstract visitAlias(typ:TypeDeclPtr;name:das_string) : TypeDeclPtr
 // enumeration
-    def preVisitEnumeration(enu:EnumerationPtr) : void
-        pass
-    def preVisitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool) : void
-        pass
-    def visitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool) : ExpressionPtr
-        return value
-    def visitEnumeration(enu:EnumerationPtr) : EnumerationPtr
-        return enu
+    def abstract preVisitEnumeration(enu:EnumerationPtr) : void
+    def abstract preVisitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool) : void
+    def abstract visitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool) : ExpressionPtr
+    def abstract visitEnumeration(enu:EnumerationPtr) : EnumerationPtr
 // structure
-    def preVisitStructure(str:StructurePtr) : void
-        pass
-    def preVisitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool) : void
-        pass
-    def visitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool) : void
-        pass
-    def visitStructure(str:StructurePtr) : StructurePtr
-        return str
+    def abstract preVisitStructure(str:StructurePtr) : void
+    def abstract preVisitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool) : void
+    def abstract visitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool) : void
+    def abstract visitStructure(str:StructurePtr) : StructurePtr
 // function
-    def preVisitFunction(fun:FunctionPtr) : void
-        pass
-    def visitFunction(fun:FunctionPtr) : FunctionPtr
-        return fun
-    def preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : void
-        pass
-    def visitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : VariablePtr
-        return arg
-    def preVisitFunctionArgumentInit(fun:FunctionPtr;arg:VariablePtr;value:ExpressionPtr) : void
-        pass
-    def visitFunctionArgumentInit(fun:FunctionPtr;arg:VariablePtr;value:ExpressionPtr) : ExpressionPtr
-        return value
-    def preVisitFunctionBody(fun:FunctionPtr) : void
-        pass
-    def visitFunctionBody(fun:FunctionPtr) : void
-        pass
+    def abstract preVisitFunction(fun:FunctionPtr) : void
+    def abstract visitFunction(fun:FunctionPtr) : FunctionPtr
+    def abstract preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : void
+    def abstract visitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : VariablePtr
+    def abstract preVisitFunctionArgumentInit(fun:FunctionPtr;arg:VariablePtr;value:ExpressionPtr) : void
+    def abstract visitFunctionArgumentInit(fun:FunctionPtr;arg:VariablePtr;value:ExpressionPtr) : ExpressionPtr
+    def abstract preVisitFunctionBody(fun:FunctionPtr) : void
+    def abstract visitFunctionBody(fun:FunctionPtr) : void
 // any expression there is
-    def preVisitExpression(expr:ExpressionPtr) : void
-        pass
-    def visitExpression(expr:ExpressionPtr) : ExpressionPtr
-        return expr
+    def abstract preVisitExpression(expr:ExpressionPtr) : void
+    def abstract visitExpression(expr:ExpressionPtr) : ExpressionPtr
 // block
-    def preVisitExprBlock(blk:smart_ptr<ExprBlock>)
-        pass
-    def visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
-        return ExpressionPtr(blk)
-    def preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool)
-        pass
-    def visitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool) : VariablePtr
-        return arg
-    def preVisitExprBlockArgumentInit(blk:smart_ptr<ExprBlock>;arg:VariablePtr;expr:ExpressionPtr)
-        pass
-    def visitExprBlockArgumentInit(blk:smart_ptr<ExprBlock>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
-        return expr
-    def preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
-        pass
-    def visitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr) : ExpressionPtr
-        return expr
-    def preVisitExprBlockFinal(blk:smart_ptr<ExprBlock>)
-        pass
-    def visitExprBlockFinal(blk:smart_ptr<ExprBlock>)
-        pass
-    def preVisitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
-        pass
-    def visitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr) : ExpressionPtr
-        return expr
+    def abstract preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
+    def abstract visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
+    def abstract preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool): void
+    def abstract visitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool) : VariablePtr
+    def abstract preVisitExprBlockArgumentInit(blk:smart_ptr<ExprBlock>;arg:VariablePtr;expr:ExpressionPtr): void
+    def abstract visitExprBlockArgumentInit(blk:smart_ptr<ExprBlock>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
+    def abstract preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr): void
+    def abstract visitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr) : ExpressionPtr
+    def abstract preVisitExprBlockFinal(blk:smart_ptr<ExprBlock>): void
+    def abstract visitExprBlockFinal(blk:smart_ptr<ExprBlock>): void
+    def abstract preVisitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr): void
+    def abstract visitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr) : ExpressionPtr
 // let
-    def preVisitExprLet(expr:smart_ptr<ExprLet>) : void
-        pass
-    def visitExprLet(expr:smart_ptr<ExprLet>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
-        pass
-    def visitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : VariablePtr
-        return arg
-    def preVisitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr)
-        pass
-    def visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
-        return expr
+    def abstract preVisitExprLet(expr:smart_ptr<ExprLet>) : void
+    def abstract visitExprLet(expr:smart_ptr<ExprLet>) : ExpressionPtr
+    def abstract preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
+    def abstract visitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : VariablePtr
+    def abstract preVisitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr): void
+    def abstract visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
 // global let
-    def preVisitGlobalLet(prog:ProgramPtr) : void
-        pass
-    def visitGlobalLet(prog:ProgramPtr) : void
-        pass
-    def preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : void
-        pass
-    def visitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : VariablePtr
-        return arg
-    def preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr)
-        pass
-    def visitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
-        return expr
+    def abstract preVisitGlobalLet(prog:ProgramPtr) : void
+    def abstract visitGlobalLet(prog:ProgramPtr) : void
+    def abstract preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : void
+    def abstract visitGlobalLetVariable(arg:VariablePtr;lastArg:bool) : VariablePtr
+    def abstract preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr): void
+    def abstract visitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
 // string builder
-    def preVisitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>)
-        pass
-    def visitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprStringBuilderElement(expr:smart_ptr<ExprStringBuilder>;elem:ExpressionPtr;last:bool)
-        pass
-    def visitExprStringBuilderElement(expr:smart_ptr<ExprStringBuilder>;elem:ExpressionPtr;last:bool) : ExpressionPtr
-        return elem
+    def abstract preVisitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>): void
+    def abstract visitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>) : ExpressionPtr
+    def abstract preVisitExprStringBuilderElement(expr:smart_ptr<ExprStringBuilder>;elem:ExpressionPtr;last:bool): void
+    def abstract visitExprStringBuilderElement(expr:smart_ptr<ExprStringBuilder>;elem:ExpressionPtr;last:bool) : ExpressionPtr
 // new
-    def preVisitExprNew(expr:smart_ptr<ExprNew>)
-        pass
-    def visitExprNew(expr:smart_ptr<ExprNew>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool)
-        pass
-    def visitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool) : ExpressionPtr
-        return arg
+    def abstract preVisitExprNew(expr:smart_ptr<ExprNew>): void
+    def abstract visitExprNew(expr:smart_ptr<ExprNew>) : ExpressionPtr
+    def abstract preVisitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool): void
+    def abstract visitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool) : ExpressionPtr
 // named call (this one only exists before or during the infer)
-    def preVisitExprNamedCall(expr:smart_ptr<ExprNamedCall>)
-        pass
-    def visitExprNamedCall(expr:smart_ptr<ExprNamedCall>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool)
-        pass
-    def visitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
-        return arg
+    def abstract preVisitExprNamedCall(expr:smart_ptr<ExprNamedCall>): void
+    def abstract visitExprNamedCall(expr:smart_ptr<ExprNamedCall>) : ExpressionPtr
+    def abstract preVisitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool): void
+    def abstract visitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
 // looks like call (debug,assert,verify,erase,find,key_exists,keys,values,invoke,memzero etc)
-    def preVisitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>)
-        pass
-    def visitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool)
-        pass
-    def visitExprLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool) : ExpressionPtr
-        return arg
+    def abstract preVisitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>): void
+    def abstract visitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>) : ExpressionPtr
+    def abstract preVisitExprLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool): void
+    def abstract visitExprLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool) : ExpressionPtr
 // call
-    def preVisitExprCall(expr:smart_ptr<ExprCall>)
-        pass
-    def visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool)
-        pass
-    def visitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool) : ExpressionPtr
-        return arg
+    def abstract preVisitExprCall(expr:smart_ptr<ExprCall>): void
+    def abstract visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+    def abstract preVisitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool): void
+    def abstract visitExprCallArgument(expr:smart_ptr<ExprCall>;arg:ExpressionPtr;last:bool) : ExpressionPtr
 // null coaelescing
-    def preVisitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>)
-        pass
-    def visitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprNullCoalescingDefault(expr:smart_ptr<ExprNullCoalescing>;defval:ExpressionPtr)
-        pass
+    def abstract preVisitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>): void
+    def abstract visitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>) : ExpressionPtr
+    def abstract preVisitExprNullCoalescingDefault(expr:smart_ptr<ExprNullCoalescing>;defval:ExpressionPtr): void
 // at
-    def preVisitExprAt(expr:smart_ptr<ExprAt>)
-        pass
-    def visitExprAt(expr:smart_ptr<ExprAt>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
-        pass
+    def abstract preVisitExprAt(expr:smart_ptr<ExprAt>): void
+    def abstract visitExprAt(expr:smart_ptr<ExprAt>) : ExpressionPtr
+    def abstract preVisitExprAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr): void
 // safe at
-    def preVisitExprSafeAt(expr:smart_ptr<ExprSafeAt>)
-        pass
-    def visitExprSafeAt(expr:smart_ptr<ExprSafeAt>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprSafeAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr)
-        pass
+    def abstract preVisitExprSafeAt(expr:smart_ptr<ExprSafeAt>): void
+    def abstract visitExprSafeAt(expr:smart_ptr<ExprSafeAt>) : ExpressionPtr
+    def abstract preVisitExprSafeAtIndex(expr:smart_ptr<ExprAt>;index:ExpressionPtr): void
 // is
-    def preVisitExprIs(expr:smart_ptr<ExprIs>)
-        pass
-    def visitExprIs(expr:smart_ptr<ExprIs>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprIsType(expr:smart_ptr<ExprAt>;typeDecl:TypeDeclPtr)
-        pass
+    def abstract preVisitExprIs(expr:smart_ptr<ExprIs>): void
+    def abstract visitExprIs(expr:smart_ptr<ExprIs>) : ExpressionPtr
+    def abstract preVisitExprIsType(expr:smart_ptr<ExprAt>;typeDecl:TypeDeclPtr): void
 // op2
-    def preVisitExprOp2(expr:smart_ptr<ExprOp2>)
-        pass
-    def visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprOp2(expr:smart_ptr<ExprOp2>): void
+    def abstract visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
+    def abstract preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr): void
 // op3
-    def preVisitExprOp3(expr:smart_ptr<ExprOp3>)
-        pass
-    def visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr)
-        pass
-    def preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprOp3(expr:smart_ptr<ExprOp3>): void
+    def abstract visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
+    def abstract preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr): void
+    def abstract preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
 // copy
-    def preVisitExprCopy(expr:smart_ptr<ExprCopy>)
-        pass
-    def visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprCopy(expr:smart_ptr<ExprCopy>): void
+    def abstract visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
+    def abstract preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr): void
 // move
-    def preVisitExprMove(expr:smart_ptr<ExprMove>)
-        pass
-    def visitExprMove(expr:smart_ptr<ExprMove>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprMoveRight(expr:smart_ptr<ExprMove>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprMove(expr:smart_ptr<ExprMove>): void
+    def abstract visitExprMove(expr:smart_ptr<ExprMove>) : ExpressionPtr
+    def abstract preVisitExprMoveRight(expr:smart_ptr<ExprMove>;right:ExpressionPtr) : void
 // clone
-    def preVisitExprClone(expr:smart_ptr<ExprClone>)
-        pass
-    def visitExprClone(expr:smart_ptr<ExprClone>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprClone(expr:smart_ptr<ExprClone>) : void
+    def abstract visitExprClone(expr:smart_ptr<ExprClone>) : ExpressionPtr
+    def abstract preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr) : void
 // with
-    def preVisitExprWith(expr:smart_ptr<ExprWith>)
-        pass
-    def visitExprWith(expr:smart_ptr<ExprWith>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprWithBody(expr:smart_ptr<ExprWith>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprWith(expr:smart_ptr<ExprWith>) : void
+    def abstract visitExprWith(expr:smart_ptr<ExprWith>) : ExpressionPtr
+    def abstract preVisitExprWithBody(expr:smart_ptr<ExprWith>;right:ExpressionPtr) : void
 // while
-    def preVisitExprWhile(expr:smart_ptr<ExprWhile>)
-        pass
-    def visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
+    def abstract visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
+    def abstract preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr) : void
 // try-catch
-    def preVisitExprTryCatch(expr:smart_ptr<ExprTryCatch>)
-        pass
-    def visitExprTryCatch(expr:smart_ptr<ExprTryCatch>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprTryCatchCatch(expr:smart_ptr<ExprTryCatch>;right:ExpressionPtr)
-        pass
+    def abstract preVisitExprTryCatch(expr:smart_ptr<ExprTryCatch>) : void
+    def abstract visitExprTryCatch(expr:smart_ptr<ExprTryCatch>) : ExpressionPtr
+    def abstract preVisitExprTryCatchCatch(expr:smart_ptr<ExprTryCatch>;right:ExpressionPtr) : void
 // if-then-else
-    def preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>)
-        pass
-    def visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr)
-        pass
-    def preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr)
-        pass
+    def abstract preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
+    def abstract visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
+    def abstract preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr) : void
+    def abstract preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr) : void
 // for
-    def preVisitExprFor(expr:smart_ptr<ExprFor>)
-        pass
-    def visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool)
-        pass
-    def visitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : VariablePtr
-        return svar
-    def preVisitExprForSource(expr:smart_ptr<ExprFor>;source:ExpressionPtr;last:bool)
-        pass
-    def visitExprForSource(expr:smart_ptr<ExprFor>;source:ExpressionPtr;last:bool) : ExpressionPtr
-        return ExpressionPtr(source)
-    def preVisitExprForStack(expr:smart_ptr<ExprFor>)
-        pass
-    def preVisitExprForBody(expr:smart_ptr<ExprFor>)
-        pass
+    def abstract preVisitExprFor(expr:smart_ptr<ExprFor>) : void
+    def abstract visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
+    def abstract preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : void
+    def abstract visitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : VariablePtr
+    def abstract preVisitExprForSource(expr:smart_ptr<ExprFor>;source:ExpressionPtr;last:bool) : void
+    def abstract visitExprForSource(expr:smart_ptr<ExprFor>;source:ExpressionPtr;last:bool) : ExpressionPtr
+    def abstract preVisitExprForStack(expr:smart_ptr<ExprFor>) : void
+    def abstract preVisitExprForBody(expr:smart_ptr<ExprFor>) : void
 // make variant
-    def preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>)
-        pass
-    def visitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool)
-        pass
-    def visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
-        return decl
+    def abstract preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : void
+    def abstract visitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : ExpressionPtr
+    def abstract preVisitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
+    def abstract visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
 // make structure
-    def preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>)
-        pass
-    def visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool)
-        pass
-    def visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool)
-        pass
-    def preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool)
-        pass
-    def visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
-        return decl
+    def abstract preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
+    def abstract visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
+    def abstract preVisitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
+    def abstract visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
+    def abstract preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
+    def abstract visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
 // make array
-    def preVisitExprMakeArray(expr:smart_ptr<ExprMakeArray>)
-        pass
-    def visitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool)
-        pass
-    def visitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : void
+    def abstract visitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : ExpressionPtr
+    def abstract preVisitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool) : void
+    def abstract visitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
 // make tuple
-    def preVisitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>)
-        pass
-    def visitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool)
-        pass
-    def visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : void
+    def abstract visitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : ExpressionPtr
+    def abstract preVisitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : void
+    def abstract visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
 // array comprehension
-    def preVisitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>)
-        pass
-    def visitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>) : ExpressionPtr
-        return ExpressionPtr(expr)
-    def preVisitExprArrayComprehensionSubexpr(expr:smart_ptr<ExprArrayComprehension>;subexrp:ExpressionPtr)
-        pass
-    def preVisitExprArrayComprehensionWhere(expr:smart_ptr<ExprArrayComprehension>;filter:ExpressionPtr)
-        pass
+    def abstract preVisitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>) : void
+    def abstract visitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>) : ExpressionPtr
+    def abstract preVisitExprArrayComprehensionSubexpr(expr:smart_ptr<ExprArrayComprehension>;subexrp:ExpressionPtr) : void
+    def abstract preVisitExprArrayComprehensionWhere(expr:smart_ptr<ExprArrayComprehension>;filter:ExpressionPtr) : void
 // type info
-    def preVisitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>)
-        pass
-    def visitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : void
+    def abstract visitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : ExpressionPtr
 // ptr to ref
-    def preVisitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>)
-        pass
-    def visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : void
+    def abstract visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
 // label
-    def preVisitExprLabel(expr:smart_ptr<ExprLabel>)
-        pass
-    def visitExprLabel(expr:smart_ptr<ExprLabel>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprLabel(expr:smart_ptr<ExprLabel>) : void
+    def abstract visitExprLabel(expr:smart_ptr<ExprLabel>) : ExpressionPtr
 // goto
-    def preVisitExprGoto(expr:smart_ptr<ExprGoto>)
-        pass
-    def visitExprGoto(expr:smart_ptr<ExprGoto>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprGoto(expr:smart_ptr<ExprGoto>) : void
+    def abstract visitExprGoto(expr:smart_ptr<ExprGoto>) : ExpressionPtr
 // ref to value
-    def preVisitExprRef2Value(expr:smart_ptr<ExprRef2Value>)
-        pass
-    def visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : void
+    def abstract visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
 // ref to ptr
-    def preVisitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>)
-        pass
-    def visitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>) : void
+    def abstract visitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>) : ExpressionPtr
 // @@
-    def preVisitExprAddr(expr:smart_ptr<ExprAddr>)
-        pass
-    def visitExprAddr(expr:smart_ptr<ExprAddr>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprAddr(expr:smart_ptr<ExprAddr>) : void
+    def abstract visitExprAddr(expr:smart_ptr<ExprAddr>) : ExpressionPtr
 // assert / verify
-    def preVisitExprAssert(expr:smart_ptr<ExprAssert>)
-        pass
-    def visitExprAssert(expr:smart_ptr<ExprAssert>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprAssert(expr:smart_ptr<ExprAssert>) : void
+    def abstract visitExprAssert(expr:smart_ptr<ExprAssert>) : ExpressionPtr
 // static_assert
-    def preVisitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>)
-        pass
-    def visitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>) : void
+    def abstract visitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>) : ExpressionPtr
 // debug
-    def preVisitExprDebug(expr:smart_ptr<ExprDebug>)
-        pass
-    def visitExprDebug(expr:smart_ptr<ExprDebug>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprDebug(expr:smart_ptr<ExprDebug>) : void
+    def abstract visitExprDebug(expr:smart_ptr<ExprDebug>) : ExpressionPtr
 // invoke
-    def preVisitExprInvoke(expr:smart_ptr<ExprInvoke>)
-        pass
-    def visitExprInvoke(expr:smart_ptr<ExprInvoke>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprInvoke(expr:smart_ptr<ExprInvoke>) : void
+    def abstract visitExprInvoke(expr:smart_ptr<ExprInvoke>) : ExpressionPtr
 // erase
-    def preVisitExprErase(expr:smart_ptr<ExprErase>)
-        pass
-    def visitExprErase(expr:smart_ptr<ExprErase>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprErase(expr:smart_ptr<ExprErase>) : void
+    def abstract visitExprErase(expr:smart_ptr<ExprErase>) : ExpressionPtr
 // find
-    def preVisitExprFind(expr:smart_ptr<ExprFind>)
-        pass
-    def visitExprFind(expr:smart_ptr<ExprFind>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprFind(expr:smart_ptr<ExprFind>) : void
+    def abstract visitExprFind(expr:smart_ptr<ExprFind>) : ExpressionPtr
 // key exists
-    def preVisitExprKeyExists(expr:smart_ptr<ExprKeyExists>)
-        pass
-    def visitExprKeyExists(expr:smart_ptr<ExprKeyExists>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprKeyExists(expr:smart_ptr<ExprKeyExists>) : void
+    def abstract visitExprKeyExists(expr:smart_ptr<ExprKeyExists>) : ExpressionPtr
 // ascend
-    def preVisitExprAscend(expr:smart_ptr<ExprAscend>)
-        pass
-    def visitExprAscend(expr:smart_ptr<ExprAscend>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprAscend(expr:smart_ptr<ExprAscend>) : void
+    def abstract visitExprAscend(expr:smart_ptr<ExprAscend>) : ExpressionPtr
 // cast
-    def preVisitExprCast(expr:smart_ptr<ExprCast>)
-        pass
-    def visitExprCast(expr:smart_ptr<ExprCast>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprCast(expr:smart_ptr<ExprCast>) : void
+    def abstract visitExprCast(expr:smart_ptr<ExprCast>) : ExpressionPtr
 // delete
-    def preVisitExprDelete(expr:smart_ptr<ExprDelete>)
-        pass
-    def visitExprDelete(expr:smart_ptr<ExprDelete>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprDelete(expr:smart_ptr<ExprDelete>) : void
+    def abstract visitExprDelete(expr:smart_ptr<ExprDelete>) : ExpressionPtr
 // var
-    def preVisitExprVar(expr:smart_ptr<ExprVar>)
-        pass
-    def visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
-        return ExpressionPtr(expr)
+    def abstract preVisitExprVar(expr:smart_ptr<ExprVar>) : void
+    def abstract visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
 
 //////////
 // example

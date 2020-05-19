@@ -75,6 +75,8 @@
     void das_checkName(const string & name, const LineInfo &at);
     int yylex();
     void yybegin(const char * str);
+
+    __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
 %}
 
 %locations
@@ -167,6 +169,7 @@
 %token  DAS_WITH            "with"
 %token  DAS_CAST            "cast"
 %token  DAS_OVERRIDE        "override"
+%token  DAS_ABSTRACT        "abstract"
 %token  DAS_UPCAST          "upcast"
 %token  DAS_ITERATOR        "iterator"
 %token  DAS_VAR             "var"
@@ -374,6 +377,7 @@
 %type <pExpression>     func_addr_expr
 
 %type <pFuncDecl>       function_declaration
+%type <pFuncDecl>       function_declaration_header
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -853,13 +857,11 @@ global_function_declaration
     }
     ;
 
-function_declaration
-    :  function_name[name]
-            optional_function_argument_list[list] optional_function_type[result] expression_block[block] {
+function_declaration_header
+    :  function_name[name] optional_function_argument_list[list] optional_function_type[result] {
         auto pFunction = make_smart<Function>();
         pFunction->at = tokAt(@name);
         pFunction->name = *$name;
-        pFunction->body = ExpressionPtr($block);
         pFunction->result = TypeDeclPtr($result);
         if ( $list ) {
             for ( auto pDecl : *$list ) {
@@ -890,6 +892,13 @@ function_declaration
         }
         delete $name;
         $$ = pFunction.orphan();
+    }
+    ;
+
+function_declaration
+    :  function_declaration_header[func] expression_block[block] {
+        $func->body = ExpressionPtr($block);
+        $$ = $func;
     }
     ;
 
@@ -1516,6 +1525,46 @@ struct_variable_declaration_list
         $$ = $list;
         if ( $decl ) $list->push_back($decl);
     }
+    |   struct_variable_declaration_list[list] optional_annotation_list[annL]
+            DAS_DEF[from] DAS_ABSTRACT { das_force_oxford_comma=true; } function_declaration_header[func] ';' {
+        if ( !g_thisStructure->isClass ) {
+            das_yyerror("structure can't have member function",
+                $func->at, CompilationError::invalid_member_function);
+        } else if ( $func->isGeneric() ) {
+            das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
+                $func->at, CompilationError::invalid_member_function);
+        } else if ( $func->name==g_thisStructure->name || $func->name=="finalize" ) {
+            das_yyerror("initializers and finalizers can't be abstract " + $func->getMangledName(),
+                $func->at, CompilationError::invalid_member_function);
+        } else if ( $annL!=nullptr ) {
+            das_yyerror("abstract functions can't have annotations " + $func->getMangledName(),
+                $func->at, CompilationError::invalid_member_function);
+            delete $annL;
+        } else {
+            auto varName = $func->name;
+            $func->name = g_thisStructure->name + "`" + $func->name;
+            auto vars = new vector<pair<string,LineInfo>>();
+            vars->emplace_back(make_pair(varName,$func->at));
+            TypeDecl * funcType = new TypeDecl(Type::tFunction);
+            funcType->at = $func->at;
+            swap ( funcType->firstType, $func->result );
+            funcType->argTypes.reserve ( $func->arguments.size() );
+            if ( g_thisStructure->isClass ) {
+                funcType->argTypes.push_back(make_smart<TypeDecl>(g_thisStructure));
+            }
+            for ( auto & arg : $func->arguments ) {
+                funcType->argTypes.push_back(arg->type);
+            }
+            VariableDeclaration * decl = new VariableDeclaration(
+                vars,
+                funcType,
+                nullptr
+            );
+            $list->push_back(decl);
+        }
+        $func->delRef();
+        $$ = $list;
+    }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL] DAS_DEF[from] optional_override[ovr] function_declaration[func] {
         $func->atDecl = tokRangeAt(@from,@func);
         if ( !g_thisStructure->isClass ) {
@@ -1530,7 +1579,7 @@ struct_variable_declaration_list
                 $func->name = g_thisStructure->name + "`" + $func->name;
                 auto vars = new vector<pair<string,LineInfo>>();
                 vars->emplace_back(make_pair(varName,$func->at));
-                Expression * finit = new ExprAddr($func->at, "_::" + $func->name);
+                Expression * finit = new ExprAddr($func->at, inThisModule($func->name));
                 if ( $ovr ) {
                     finit = new ExprCast($func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
                 }
