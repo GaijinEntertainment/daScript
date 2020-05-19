@@ -1,5 +1,6 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
+#include "daScript/misc/performance_time.h"
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -86,6 +87,7 @@ bool compilation_fail_test ( const string & fn, bool ) {
 }
 
 bool unit_test ( const string & fn, bool useAot ) {
+    uint64_t timeStamp = ref_time_ticks();
     tout << fn << " ";
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
@@ -132,7 +134,8 @@ bool unit_test ( const string & fn, bool useAot ) {
                     tout << "failed\n";
                     return false;
                 }
-                tout << (useAot ? "ok AOT\n" : "ok\n");
+                int usec = get_time_usec(timeStamp);
+                tout << (useAot ? "ok AOT " : "ok ") << ((usec/1000)/1000.0) << "\n";
                 return true;
             } else {
                 tout << "function 'test' not found\n";
@@ -378,7 +381,8 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "examples/test/hello_world.das"
+    // #define TEST_NAME   "examples/test/hello_world.das"
+    #define TEST_NAME   "examples/test/ast_print.das"
     // #define TEST_NAME   "examples/test/unit_tests/reflection.das"
     // debug_unit_test(TEST_PATH TEST_NAME,16,23,false);
     unit_test(TEST_PATH TEST_NAME,false);
@@ -387,6 +391,7 @@ int main() {
     getchar();
     return 0;
 #endif
+    uint64_t timeStamp = ref_time_ticks();
     bool ok = true;
     ok = run_compilation_fail_tests(TEST_PATH "examples/test/compilation_fail_tests") && ok;
     ok = run_unit_tests(TEST_PATH "examples/test/unit_tests") && ok;
@@ -396,7 +401,8 @@ int main() {
     ok = run_module_test(TEST_PATH "examples/test/module", "main_default.das", false) && ok;
     ok = run_module_test(TEST_PATH "examples/test/module/alias", "main.das", true) && ok;
     ok = run_module_test(TEST_PATH "examples/test/module/cdp", "main.das", true) && ok;
-    tout << "TESTS " << (ok ? "PASSED" : "FAILED!!!") << "\n";
+    int usec = get_time_usec(timeStamp);
+    tout << "TESTS " << (ok ? "PASSED " : "FAILED!!! ") << ((usec/1000)/1000.0) << "\n";
     // shutdown
     Module::Shutdown();
     return ok ? 0 : -1;
