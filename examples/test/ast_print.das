@@ -442,6 +442,26 @@ class AstVisitor
         pass
     def visitExprKeyExists(expr:smart_ptr<ExprKeyExists>) : ExpressionPtr
         return ExpressionPtr(expr)
+// ascend
+    def preVisitExprAscend(expr:smart_ptr<ExprAscend>)
+        pass
+    def visitExprAscend(expr:smart_ptr<ExprAscend>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// cast
+    def preVisitExprCast(expr:smart_ptr<ExprCast>)
+        pass
+    def visitExprCast(expr:smart_ptr<ExprCast>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// delete
+    def preVisitExprDelete(expr:smart_ptr<ExprDelete>)
+        pass
+    def visitExprDelete(expr:smart_ptr<ExprDelete>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// var
+    def preVisitExprVar(expr:smart_ptr<ExprVar>)
+        pass
+    def visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
+        return ExpressionPtr(expr)
 
 //////////
 // example
@@ -890,6 +910,29 @@ class PrintVisitor : AstVisitor
         if expr.funcType != null
             print("<{describe(expr.funcType)}>")
         print("{expr.target}")
+// ascend
+    def override preVisitExprAscend(expr:smart_ptr<ExprAscend>)
+        if expr.ascType != null
+            print("new<{describe(expr.ascType)}> ")
+        else
+            print("new ")
+// cast
+    def override preVisitExprCast(expr:smart_ptr<ExprCast>)
+        if expr.castFlags.reinterpretCast
+            print("reinterpret")
+        elif expr.castFlags.upcastCast
+            print("upcast")
+        else
+            print("cast")
+        print("<{describe(expr.castType)}> ")
+// delete
+    def override preVisitExprDelete(expr:smart_ptr<ExprDelete>)
+        print("delete ")
+        if expr.native
+            print("/*native*/ ")
+// var
+    def override preVisitExprVar(expr:smart_ptr<ExprVar>)
+        print("{expr.name}")
 
 typedef
     Integer = int
@@ -1025,6 +1068,14 @@ def allExpr(arg:int)
         print("{arg}")
     // ExprKeyExists
     assert(key_exists(tab,2))
+    // ExprAscend
+    let easc = new [[auto 1;2;3;4]]
+    print("{easc}")
+    // ExprCast
+    let aaf = reinterpret<float> aa
+    print("{aaf}")
+    // ExprDelete
+    delete pFoo1
 
 [export]
 def test

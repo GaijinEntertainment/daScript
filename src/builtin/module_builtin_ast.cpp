@@ -564,6 +564,66 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeExprAscendFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprAscendFlags";
+        ft->argNames = { "useStackRef", "needTypeInfo" };
+        return ft;
+    }
+
+    struct AstExprAscendAnnotation : AstExpressionAnnotation<ExprAscend> {
+        AstExprAscendAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprAscend> ("ExprAscend", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(ascType)>("ascType");
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addFieldEx ( "ascendFlags", "ascendFlags", offsetof(ExprAscend, ascendFlags), makeExprAscendFlags() );
+        }
+    };
+
+    TypeDeclPtr makeExprCastFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprCastFlags";
+        ft->argNames = { "upcastCast", "reinterpretCast" };
+        return ft;
+    }
+
+    struct AstExprCastAnnotation : AstExpressionAnnotation<ExprCast> {
+        AstExprCastAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprCast> ("ExprCast", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(castType)>("castType");
+            addFieldEx ( "castFlags", "castFlags", offsetof(ExprCast, castFlags), makeExprCastFlags() );
+        }
+    };
+
+    struct AstExprDeleteAnnotation : AstExpressionAnnotation<ExprDelete> {
+        AstExprDeleteAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprDelete> ("ExprDelete", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(native)>("native");
+        }
+    };
+
+    TypeDeclPtr makeExprVarFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprVarFlags";
+        ft->argNames = { "local", "argument", "block",
+            "thisBlock", "r2v", "r2cr", "write" };
+        return ft;
+    }
+
+    struct AstExprVarAnnotation : AstExpressionAnnotation<ExprVar> {
+        AstExprVarAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprVar> ("ExprVar", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(variable)>("variable");
+            addField<DAS_BIND_MANAGED_FIELD(pBlock)>("pBlock");
+            addField<DAS_BIND_MANAGED_FIELD(argumentIndex)>("argumentIndex");
+            addFieldEx ( "varFlags", "varFlags", offsetof(ExprVar, varFlags), makeExprVarFlags() );
+        }
+    };
+
     // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
@@ -1097,11 +1157,11 @@ namespace das {
         IMPL_ADAPT(ExprErase);
         IMPL_ADAPT(ExprFind);
         IMPL_ADAPT(ExprKeyExists);
-        /*
         IMPL_ADAPT(ExprAscend);
         IMPL_ADAPT(ExprCast);
         IMPL_ADAPT(ExprDelete);
         IMPL_ADAPT(ExprVar);
+        /*
         IMPL_ADAPT(ExprSwizzle);
         IMPL_ADAPT(ExprField);
         IMPL_ADAPT(ExprSafeField);
@@ -1546,17 +1606,16 @@ namespace das {
         IMPL_BIND_EXPR(ExprAddr);
         IMPL_BIND_EXPR(ExprAssert);
         IMPL_BIND_EXPR(ExprStaticAssert);
-
         IMPL_BIND_EXPR(ExprDebug);
         IMPL_BIND_EXPR(ExprInvoke);
         IMPL_BIND_EXPR(ExprErase);
         IMPL_BIND_EXPR(ExprFind);
         IMPL_BIND_EXPR(ExprKeyExists);
-        /*
         IMPL_BIND_EXPR(ExprAscend);
         IMPL_BIND_EXPR(ExprCast);
         IMPL_BIND_EXPR(ExprDelete);
         IMPL_BIND_EXPR(ExprVar);
+        /*
         IMPL_BIND_EXPR(ExprSwizzle);
         IMPL_BIND_EXPR(ExprField);
         IMPL_BIND_EXPR(ExprSafeField);
@@ -1676,6 +1735,9 @@ namespace das {
             addAlias(makeExprBlockFlags());
             addAlias(makeExprAtFlags());
             addAlias(makeExprMakeLocalFlags());
+            addAlias(makeExprAscendFlags());
+            addAlias(makeExprCastFlags());
+            addAlias(makeExprVarFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
@@ -1749,11 +1811,11 @@ namespace das {
             addAnnotation(make_smart<AstExprEraseAnnotation>(lib));
             addAnnotation(make_smart<AstExprFindAnnotation>(lib));
             addAnnotation(make_smart<AstExprKeyExistsAnnotation>(lib));
-            /*
             addAnnotation(make_smart<AstExprAscendAnnotation>(lib));
             addAnnotation(make_smart<AstExprCastAnnotation>(lib));
             addAnnotation(make_smart<AstExprDeleteAnnotation>(lib));
             addAnnotation(make_smart<AstExprVarAnnotation>(lib));
+            /*
             addAnnotation(make_smart<AstExprSwizzleAnnotation>(lib));
             addAnnotation(make_smart<AstExprFieldAnnotation>(lib));
             addAnnotation(make_smart<AstExprSafeFieldAnnotation>(lib));
