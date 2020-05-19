@@ -28,6 +28,7 @@ bool g_reportCompilationFailErrors = false;
 TextPrinter tout;
 
 bool compilation_fail_test ( const string & fn, bool ) {
+    uint64_t timeStamp = ref_time_ticks();
     tout << fn << " ";
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
@@ -74,7 +75,8 @@ bool compilation_fail_test ( const string & fn, bool ) {
                 tout << "\n";
                 return false;
             }
-            tout << "ok\n";
+            int usec = get_time_usec(timeStamp);
+            tout << "ok " << ((usec/1000)/1000.0) << "\n";
             return true;
         } else {
             tout << "failed, compiled without errors\n";
