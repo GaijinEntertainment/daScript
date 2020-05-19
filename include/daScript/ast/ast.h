@@ -186,6 +186,7 @@ namespace das
                 bool    cppLayout : 1;
                 bool    cppLayoutNotPod : 1;
                 bool    generated : 1;
+                bool    persistent : 1;
             };
             uint32_t    flags = 0;
         };

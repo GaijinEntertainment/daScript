@@ -701,7 +701,8 @@ namespace das {
     TypeDeclPtr makeStructureFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "StructureFlags";
-        ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod", "generated" };
+        ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
+            "generated", "persistent" };
         return ft;
     }
 

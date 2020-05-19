@@ -212,6 +212,29 @@ namespace das
         }
     };
 
+    struct PersistentStructureAnnotation : StructureAnnotation {
+        PersistentStructureAnnotation() : StructureAnnotation("persistent") {}
+        virtual bool touch(const StructurePtr & ps, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            ps->persistent = true;
+            return true;
+        }
+        virtual bool look ( const StructurePtr & st, ModuleGroup &,
+                           const AnnotationArgumentList & args, string & errors ) override {
+            bool allPod = true;
+            if ( !args.getBoolOption("mixed_heap", false) ) {
+                for ( const auto & field : st->fields ) {
+                    if ( !field.type->isPod() ) {
+                        allPod = false;
+                        errors += "\t" + field.name + " : " + field.type->describe() + " is not a pod\n";
+                    }
+                }
+            }
+            return allPod;
+        }
+    };
+
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -550,6 +573,7 @@ namespace das
         addAnnotation(make_smart<UnsafeDerefFunctionAnnotation>());
         addAnnotation(make_smart<MarkUsedFunctionAnnotation>());
         addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
+        addAnnotation(make_smart<PersistentStructureAnnotation>());
         // typeinfo macros
         addTypeInfoMacro(make_smart<ClassInfoMacro>());
         // iterator functions

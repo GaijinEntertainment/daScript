@@ -188,11 +188,12 @@ namespace das {
 
     // Delete structures
     struct SimNode_DeleteStructPtr : SimNode_Delete {
-        SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss )
-            : SimNode_Delete(a,s,t), structSize(ss) {}
+        SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss, bool ps )
+            : SimNode_Delete(a,s,t), structSize(ss), persistent(ps) {}
         virtual vec4f eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
         uint32_t    structSize;
+        bool        persistent;
     };
 
     // Delete lambda
@@ -1628,12 +1629,18 @@ SIM_NODE_AT_VECTOR(Float, float)
     // NEW
     struct SimNode_New : SimNode {
         DAS_PTR_NODE;
-        SimNode_New ( const LineInfo & at, int32_t b )
-            : SimNode(at), bytes(b) {}
+        SimNode_New ( const LineInfo & at, int32_t b, bool ps )
+            : SimNode(at), bytes(b), persistent(ps) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
-            if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+            char * ptr;
+            if ( !persistent ) {
+                ptr = context.heap.allocate(bytes);
+            } else {
+                ptr = (char *) das_aligned_alloc16(bytes);
+            }
+            if ( ptr ) {
                 memset ( ptr, 0, bytes );
                 return ptr;
             } else {
@@ -1642,17 +1649,24 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         }
         int32_t     bytes;
+        bool        persistent;
     };
 
     template <bool move>
     struct SimNode_Ascend : SimNode {
         DAS_PTR_NODE;
-        SimNode_Ascend ( const LineInfo & at, SimNode * se, uint32_t b, TypeInfo * ti )
-            : SimNode(at), subexpr(se), bytes(b), typeInfo(ti) {}
+        SimNode_Ascend ( const LineInfo & at, SimNode * se, uint32_t b, TypeInfo * ti, bool ps )
+            : SimNode(at), subexpr(se), bytes(b), typeInfo(ti), persistent(ps) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
-            if ( char * ptr = (char *) context.heap.allocate(bytes + (typeInfo ? 16 : 0)) ) {
+            char * ptr;
+            if ( !persistent ) {
+                ptr = context.heap.allocate(bytes + (typeInfo ? 16 : 0));
+            } else {
+                ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
+            }
+            if ( ptr ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1671,17 +1685,24 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode *   subexpr;
         uint32_t    bytes;
         TypeInfo *  typeInfo;
+        bool        persistent;
     };
 
     template <bool move>
     struct SimNode_AscendAndRef : SimNode {
         DAS_PTR_NODE;
-        SimNode_AscendAndRef ( const LineInfo & at, SimNode * se, uint32_t b, uint32_t sp, TypeInfo * ti )
-            : SimNode(at), subexpr(se), bytes(b), stackTop(sp), typeInfo(ti) {}
+        SimNode_AscendAndRef ( const LineInfo & at, SimNode * se, uint32_t b, uint32_t sp, TypeInfo * ti, bool ps )
+            : SimNode(at), subexpr(se), bytes(b), stackTop(sp), typeInfo(ti), persistent(ps) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
-            if ( char * ptr = (char *) context.heap.allocate(bytes + (typeInfo ? 16 : 0)) ) {
+            char * ptr;
+            if ( !persistent ) {
+                ptr = context.heap.allocate(bytes + (typeInfo ? 16 : 0));
+            } else {
+                ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
+            }
+            if ( ptr ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1700,17 +1721,24 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t    bytes;
         uint32_t    stackTop;
         TypeInfo *  typeInfo;
+        bool        persistent;
     };
 
     template <int argCount>
     struct SimNode_NewWithInitializer : SimNode_CallBase {
         DAS_PTR_NODE;
-        SimNode_NewWithInitializer ( const LineInfo & at, uint32_t b )
-            : SimNode_CallBase(at), bytes(b) {}
+        SimNode_NewWithInitializer ( const LineInfo & at, uint32_t b, bool ps )
+            : SimNode_CallBase(at), bytes(b), persistent(ps) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
-            if ( char * ptr = (char *) context.heap.allocate(bytes) ) {
+            char * ptr;
+            if ( !persistent ) {
+                ptr = context.heap.allocate(bytes);
+            } else {
+                ptr = (char *) das_aligned_alloc16(bytes);
+            }
+            if ( ptr ) {
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
                 context.callWithCopyOnReturn(fnPtr, argValues, ptr, debugInfo.line);
@@ -1721,6 +1749,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         }
         uint32_t     bytes;
+        bool         persistent;
     };
 
     struct SimNode_NewArray : SimNode {

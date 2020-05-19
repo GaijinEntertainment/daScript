@@ -1,14 +1,19 @@
+options log = true
 options log_nodes = true
 
-enum Bar
-    none
-    yes
-    no
+[persistent]
+class Foo
+    count : int = 0
+    def Foo ( ic : int )
+        count = ic
+    def update
+        return count++
 
-[export]
-def foo ( a : int )
-    return Bar yes
-
-[export]
+[export,unsafe]
 def test
+    var pFoo = new Foo(13)
+    print("{pFoo->update()}\n")
+    print("{pFoo->update()}\n")
+    print("{pFoo->update()}\n")
+    delete pFoo
     return true

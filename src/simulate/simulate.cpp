@@ -101,7 +101,11 @@ namespace das
         pStruct = pStruct + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pStruct-- ) {
             if ( *pStruct ) {
-                context.heap.free(*pStruct, structSize);
+                if ( persistent ) {
+                    das_aligned_free16(pStruct);
+                } else {
+                    context.heap.free(*pStruct, structSize);
+                }
                 *pStruct = nullptr;
             }
         }

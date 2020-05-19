@@ -1050,13 +1050,14 @@ namespace das
         } else if ( subexpr->type->baseType==Type::tPointer ) {
             if ( subexpr->type->firstType->baseType==Type::tStructure ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
-                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
+                bool persistent = subexpr->type->firstType->structType->persistent;
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, persistent);
             } else if ( subexpr->type->firstType->baseType==Type::tTuple ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
-                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, false);
             } else if ( subexpr->type->firstType->baseType==Type::tVariant ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
-                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize);
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, false);
             } else {
                 auto ann = subexpr->type->firstType->annotation;
                 assert(ann->canDeletePtr() && "has to be able to delete ptr");
@@ -1101,10 +1102,14 @@ namespace das
         if ( needTypeInfo ) {
             typeInfo = context.thisHelper->makeTypeInfo(nullptr, subexpr->type);
         }
+        bool peristent = false;
+        if ( subexpr->type->baseType==Type::tStructure ) {
+            peristent = subexpr->type->structType->persistent;
+        }
         if ( useStackRef ) {
-            return context.code->makeNode<SimNode_AscendAndRef<false>>(at, se, bytes, stackTop, typeInfo);
+            return context.code->makeNode<SimNode_AscendAndRef<false>>(at, se, bytes, stackTop, typeInfo, peristent);
         } else {
-            return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes, typeInfo);
+            return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes, typeInfo, peristent);
         }
     }
 
@@ -1118,13 +1123,17 @@ namespace das
                                            at, CompilationError::missing_node );
             }
         } else {
+            bool persistent = false;
+            if ( typeexpr->baseType == Type::tStructure ) {
+                persistent = typeexpr->structType->persistent;
+            }
             int32_t bytes = type->firstType->getSizeOf();
             if ( initializer ) {
-                auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes);
+                auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes,persistent);
                 pCall->cmresEval = nullptr;
                 newNode = ExprCall::simulateCall(func, this, context, pCall);
             } else {
-                newNode = context.code->makeNode<SimNode_New>(at,bytes);
+                newNode = context.code->makeNode<SimNode_New>(at,bytes,persistent);
             }
         }
         if ( type->dim.size() ) {
