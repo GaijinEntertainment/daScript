@@ -417,6 +417,31 @@ class AstVisitor
         pass
     def visitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>) : ExpressionPtr
         return ExpressionPtr(expr)
+// debug
+    def preVisitExprDebug(expr:smart_ptr<ExprDebug>)
+        pass
+    def visitExprDebug(expr:smart_ptr<ExprDebug>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// invoke
+    def preVisitExprInvoke(expr:smart_ptr<ExprInvoke>)
+        pass
+    def visitExprInvoke(expr:smart_ptr<ExprInvoke>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// erase
+    def preVisitExprErase(expr:smart_ptr<ExprErase>)
+        pass
+    def visitExprErase(expr:smart_ptr<ExprErase>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// find
+    def preVisitExprFind(expr:smart_ptr<ExprFind>)
+        pass
+    def visitExprFind(expr:smart_ptr<ExprFind>) : ExpressionPtr
+        return ExpressionPtr(expr)
+// key exists
+    def preVisitExprKeyExists(expr:smart_ptr<ExprKeyExists>)
+        pass
+    def visitExprKeyExists(expr:smart_ptr<ExprKeyExists>) : ExpressionPtr
+        return ExpressionPtr(expr)
 
 //////////
 // example
@@ -987,6 +1012,19 @@ def allExpr(arg:int)
     verify(aa==4,"verify here")
     static_assert(true,"static assert here")
     concept_assert(true,"concept assert here")
+    // ExprDebug
+    debug(aa)
+    // ExprInvoke
+    let atadd = @@add
+    invoke(atadd,1,2)
+    // ExprErase
+    var tab <- {{ 1 => "one"; 2 => "two" }}
+    erase(tab,1)
+    // ExprFind
+    find(tab, 2) <| $(arg)
+        print("{arg}")
+    // ExprKeyExists
+    assert(key_exists(tab,2))
 
 [export]
 def test

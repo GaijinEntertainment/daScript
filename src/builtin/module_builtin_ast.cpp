@@ -532,6 +532,38 @@ namespace das {
         }
     };
 
+    struct AstExprDebugAnnotation : AstExprLikeCallAnnotation<ExprDebug> {
+        AstExprDebugAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprDebug> ("ExprDebug", ml) {
+        }
+    };
+
+    struct AstExprInvokeAnnotation : AstExprLikeCallAnnotation<ExprInvoke> {
+        AstExprInvokeAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprInvoke> ("ExprInvoke", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addField<DAS_BIND_MANAGED_FIELD(doesNotNeedSp)>("doesNotNeedSp");
+        }
+    };
+
+    struct AstExprEraseAnnotation : AstExprLikeCallAnnotation<ExprErase> {
+        AstExprEraseAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprErase> ("ExprErase", ml) {
+        }
+    };
+
+    struct AstExprFindAnnotation : AstExprLikeCallAnnotation<ExprFind> {
+        AstExprFindAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprFind> ("ExprFind", ml) {
+        }
+    };
+
+    struct AstExprKeyExistsAnnotation : AstExprLikeCallAnnotation<ExprKeyExists> {
+        AstExprKeyExistsAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprKeyExists> ("ExprKeyExists", ml) {
+        }
+    };
+
     // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
@@ -1060,12 +1092,12 @@ namespace das {
         IMPL_ADAPT(ExprAddr);
         IMPL_ADAPT(ExprAssert);
         IMPL_ADAPT(ExprStaticAssert);
-        /*
         IMPL_ADAPT(ExprDebug);
         IMPL_ADAPT(ExprInvoke);
         IMPL_ADAPT(ExprErase);
         IMPL_ADAPT(ExprFind);
         IMPL_ADAPT(ExprKeyExists);
+        /*
         IMPL_ADAPT(ExprAscend);
         IMPL_ADAPT(ExprCast);
         IMPL_ADAPT(ExprDelete);
@@ -1514,12 +1546,13 @@ namespace das {
         IMPL_BIND_EXPR(ExprAddr);
         IMPL_BIND_EXPR(ExprAssert);
         IMPL_BIND_EXPR(ExprStaticAssert);
-        /*
+
         IMPL_BIND_EXPR(ExprDebug);
         IMPL_BIND_EXPR(ExprInvoke);
         IMPL_BIND_EXPR(ExprErase);
         IMPL_BIND_EXPR(ExprFind);
         IMPL_BIND_EXPR(ExprKeyExists);
+        /*
         IMPL_BIND_EXPR(ExprAscend);
         IMPL_BIND_EXPR(ExprCast);
         IMPL_BIND_EXPR(ExprDelete);
@@ -1711,12 +1744,12 @@ namespace das {
             addAnnotation(make_smart<AstExprAddrAnnotation>(lib));
             addAnnotation(make_smart<AstExprAssertAnnotation>(lib));
             addAnnotation(make_smart<AstExprStaticAssertAnnotation>(lib));
-            /*
             addAnnotation(make_smart<AstExprDebugAnnotation>(lib));
             addAnnotation(make_smart<AstExprInvokeAnnotation>(lib));
             addAnnotation(make_smart<AstExprEraseAnnotation>(lib));
             addAnnotation(make_smart<AstExprFindAnnotation>(lib));
             addAnnotation(make_smart<AstExprKeyExistsAnnotation>(lib));
+            /*
             addAnnotation(make_smart<AstExprAscendAnnotation>(lib));
             addAnnotation(make_smart<AstExprCastAnnotation>(lib));
             addAnnotation(make_smart<AstExprDeleteAnnotation>(lib));
