@@ -154,13 +154,13 @@ namespace das {
             }
         }
         if ( baseType==Type::alias ) {
-            stream << "/* alias */";
+            stream << "DAS_COMMENT(alias)";
         } else if ( baseType==Type::autoinfer ) {
-            stream << "/* auto";
+            stream << "DAS_COMMENT(auto";
             if ( !type->alias.empty() ) {
-                stream << " (" << type->alias << ")";
+                stream << "(" << type->alias << ")";
             }
-            stream << " */";
+            stream << ")";
         } else if ( baseType==Type::tHandle ) {
             if ( type->annotation->cppName.empty() ) {
                 stream << type->annotation->name;
@@ -199,7 +199,7 @@ namespace das {
                     stream << "struct " << aotModuleName(type->structType->module) << "::" << type->structType->name;
                 }
             } else {
-                stream << "/* unspecified structure */";
+                stream << "DAS_COMMENT(unspecified structure) ";
             }
         } else if ( baseType==Type::tPointer ) {
             if ( !type->smartPtr ) {
@@ -220,26 +220,26 @@ namespace das {
         } else if ( type->isEnumT() ) {
             if ( type->enumType ) {
                 if ( type->enumType->external ) {
-                    stream << "/*bound enum*/ " << type->enumType->cppName;
+                    stream << "DAS_COMMENT(bound_enum) " << type->enumType->cppName;
                 } else if ( type->enumType->module->name.empty() ) {
-                    stream << "/*enum*/ " << type->enumType->name;
+                    stream << "DAS_COMMENT(enum) " << type->enumType->name;
                 } else {
-                    stream << "/*enum*/ " << aotModuleName(type->enumType->module) << "::" << type->enumType->name;
+                    stream << "DAS_COMMENT(enum) " << aotModuleName(type->enumType->module) << "::" << type->enumType->name;
                 }
             } else {
-                stream << "/* unspecified enumeration */";
+                stream << "DAS_COMMENT(unspecified enumeration)";
             }
         } else if ( baseType==Type::tIterator ) {
-            // if ( type->firstType ) {
-            //     stream << "Sequence /*" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "*/";
-            // } else {
+            if ( type->firstType ) {
+                stream << "Sequence DAS_COMMENT((" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "))";
+            } else {
                 stream << "Sequence";
-            // }
+            }
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
             if ( !type->constant && type->baseType==Type::tBlock ) {
                 stream << "const ";
             }
-            stream << das_to_cppString(baseType) << " /*";
+            stream << das_to_cppString(baseType) << " DAS_COMMENT((";
             if ( type->firstType ) {
                 stream << describeCppType(type->firstType);
             } else {
@@ -250,7 +250,7 @@ namespace das {
                     stream << "," << describeCppType(arg);
                 }
             }
-            stream << "*/";
+            stream << "))";
         } else {
             stream << das_to_cppString(baseType);
         }
