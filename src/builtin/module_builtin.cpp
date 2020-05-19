@@ -12,6 +12,8 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_policy_types.h"
 
+#include "daScript/misc/performance_time.h"
+
 namespace das
 {
     // unary
@@ -95,6 +97,7 @@ namespace das
     void verifyOptions();
 
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
+        DAS_PROFILE_SECTION("Module_Builtin");
         ModuleLibrary lib;
         lib.addModule(this);
         // boolean

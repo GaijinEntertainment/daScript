@@ -1,4 +1,19 @@
 #include "daScript/misc/platform.h"
+#include "daScript/misc/performance_time.h"
+
+#if DAS_PROFILE_SECTIONS
+namespace das {
+    ProfileSection::ProfileSection(const char * n) {
+        name = n;
+        timeStamp = ref_time_ticks();
+    }
+    ProfileSection::~ProfileSection() {
+        int usec = get_time_usec(timeStamp);
+        printf("\"%s\", %.4f\n", name ? name : "unspecified", usec / 1000000.0f);
+    }
+}
+
+#endif
 
 #ifdef _MSC_VER
 
@@ -37,7 +52,7 @@ extern "C" int get_time_usec ( int64_t reft ) {
     return (int) ((ref_time_ticks() - reft) / (NSEC_IN_SEC/1000000));
 }
 
-#else // __linux__
+#else // osx
 
 #include <mach/mach.h>
 #include <mach/mach_time.h>

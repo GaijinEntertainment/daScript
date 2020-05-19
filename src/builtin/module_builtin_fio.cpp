@@ -10,6 +10,8 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/aot_builtin_time.h"
 
+#include "daScript/misc/performance_time.h"
+
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
 #if _WIN32
@@ -383,6 +385,7 @@ namespace das {
     class Module_FIO : public Module {
     public:
         Module_FIO() : Module("fio") {
+            DAS_PROFILE_SECTION("Module_FIO");
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();

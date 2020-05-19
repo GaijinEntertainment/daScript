@@ -159,8 +159,6 @@ namespace das {
         }
         cs->at = at;
         cs->module = module;
-        cs->genCtor = genCtor;
-        cs->cppLayout = cppLayout;
         cs->flags = flags;
         cs->annotations = annotations;
         return cs;

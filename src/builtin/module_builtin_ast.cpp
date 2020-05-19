@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/simulate/aot_builtin_ast.h"
+#include "daScript/misc/performance_time.h"
 
 using namespace das;
 
@@ -1713,6 +1714,7 @@ namespace das {
             initRecAnnotation(rec, lib);
         }
         Module_Ast() : Module("ast") {
+            DAS_PROFILE_SECTION("Module_Ast");
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();

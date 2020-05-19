@@ -362,6 +362,11 @@ namespace das {
             for (auto & fun : program->thisModule->functions) {
                 addFunction(fun.second);
             }
+            for (auto & rqm : program->thisModule->requireModule) {
+                if ( rqm.first != this ) {
+                    requireModule[rqm.first] |= rqm.second;
+                }
+            }
             return true;
         } else {
             DAS_FATAL_LOG("builtin module did not parse %s\n", modName.c_str());

@@ -9,11 +9,14 @@
 
 #include <dag_noise/dag_uint_noise.h>
 
+#include "daScript/misc/performance_time.h"
+
 namespace das {
 
     class Module_Random : public Module {
     public:
         Module_Random() : Module("random") {
+            DAS_PROFILE_SECTION("Module_Random");
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();

@@ -187,6 +187,7 @@ SOURCE_GROUP_FILES("fusion" SIMULATE_FUSION_SRC)
 
 SET(SIMULATE_SRC
 src/hal/performance_time.cpp
+include/daScript/misc/performance_time.h
 src/hal/debug_break.cpp
 src/hal/project_specific.cpp
 src/simulate/hash.cpp

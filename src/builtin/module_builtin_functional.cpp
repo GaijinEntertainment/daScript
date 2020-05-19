@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "module_builtin.h"
+#include "daScript/misc/performance_time.h"
 
 namespace das {
 
@@ -9,6 +10,7 @@ namespace das {
     class Module_Functional : public Module {
     public:
         Module_Functional() : Module("functional") {
+            DAS_PROFILE_SECTION("Module_Functional");
             // add builtin module
             compileBuiltinModule("functional.das",functional_das, sizeof(functional_das));
             // lets verify all names

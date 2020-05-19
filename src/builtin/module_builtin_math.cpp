@@ -9,6 +9,8 @@
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/aot_builtin_math.h"
 
+#include "daScript/misc/performance_time.h"
+
 namespace das {
 #define MATH_FUN_OP1(fun)\
       DEFINE_POLICY(fun);\
@@ -161,6 +163,8 @@ namespace das {
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
+            DAS_PROFILE_SECTION("Module_Math");
+
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();

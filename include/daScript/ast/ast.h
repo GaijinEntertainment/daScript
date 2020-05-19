@@ -149,7 +149,7 @@ namespace das
             }
         };
     public:
-        Structure() = default;
+        Structure() {}
         Structure ( const string & n ) : name(n) {}
         StructurePtr clone() const;
         bool isCompatibleCast ( const Structure & castS ) const;

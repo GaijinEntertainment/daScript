@@ -8,6 +8,8 @@
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
+#include "daScript/misc/performance_time.h"
+
 using namespace das;
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FileInfo,FileInfo)
@@ -654,6 +656,7 @@ namespace das {
             initRecAnnotation(rec, lib);
         }
         Module_Rtti() : Module("rtti") {
+            DAS_PROFILE_SECTION("Module_Rtti");
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();
