@@ -1747,6 +1747,36 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprNullCoalescing
+        void propagateAlwaysSafe ( const ExpressionPtr & expr ) {
+            if ( expr->alwaysSafe ) return;
+            // make a ?as b ?? c always safe
+            if (expr->rtti_isSafeAsVariant()) {
+                reportAstChanged();
+                auto sav = static_pointer_cast<ExprSafeAsVariant>(expr);
+                sav->alwaysSafe = true;
+                if ( sav->value->type->isPointer() ) {
+                    propagateAlwaysSafe(sav->value);
+                }
+            }
+            // make a ?[b] ?? c always safe
+            else if ( expr->rtti_isSafeAt() ) {
+                reportAstChanged();
+                auto sat = static_pointer_cast<ExprSafeAt>(expr);
+                sat->alwaysSafe = true;
+                if ( sat->subexpr->type->isPointer() ) {
+                    propagateAlwaysSafe(sat->subexpr);
+                }
+            }
+            // make a ? b ?? c always safe (we need flag only)
+            else if ( expr->rtti_isSafeField() ) {
+                reportAstChanged();
+                auto saf = static_pointer_cast<ExprSafeField>(expr);
+                saf->alwaysSafe = true;
+                if ( saf->value->type->isPointer() ) {
+                    propagateAlwaysSafe(saf->value);
+                }
+            }
+        }
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
             if ( !expr->subexpr->type | !expr->defaultValue->type ) return Visitor::visit(expr);
             // infer
@@ -1771,22 +1801,7 @@ namespace das {
                 expr->type = make_smart<TypeDecl>(*dvT);
                 expr->type->constant |= expr->subexpr->type->constant;
                 propagateTempType(expr->subexpr->type, expr->type);
-                if (!expr->subexpr->alwaysSafe) {
-                    // make a ?as b ?? c always safe, if a is not a pointer
-                    if (expr->subexpr->rtti_isSafeAsVariant()) {
-                        auto sav = static_pointer_cast<ExprSafeAsVariant>(expr->subexpr);
-                        if (!sav->value->type->isPointer()) {
-                            reportAstChanged();
-                            sav->alwaysSafe = true;
-                        }
-                    }
-                    // make a ?[b] ?? c always safe
-                    else if (expr->subexpr->rtti_isSafeAt()) {
-                        auto sat = static_pointer_cast<ExprSafeAt>(expr->subexpr);
-                        reportAstChanged();
-                        sat->alwaysSafe = true;
-                    }
-                }
+                propagateAlwaysSafe(expr->subexpr);
             }
             return Visitor::visit(expr);
         }
@@ -3091,7 +3106,7 @@ namespace das {
                 auto seT = expr->subexpr->type->firstType;
                 if (seT->isGoodTableType()) {
                     if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                        error("safe-index of array<> requires [unsafe]",  "", "",
+                        error("safe-index of table<> requires [unsafe]",  "", "",
                             expr->at, CompilationError::unsafe);
                     }
                     if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
@@ -3161,7 +3176,7 @@ namespace das {
                 expr->type->firstType->constant |= seT->constant;
             } else if ( expr->subexpr->type->isGoodTableType() ) {
                 if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("safe-index of array<> requires [unsafe]",  "", "",
+                    error("safe-index of table<> requires [unsafe]",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
                 const auto & seT = expr->subexpr->type;
