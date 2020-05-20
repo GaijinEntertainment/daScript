@@ -319,7 +319,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( !expr->generated && canPointAt() ) {
                 int vi = 0;
-                for ( const auto v : expr->variables ) {
+                for ( const auto & v : expr->variables ) {
                     if ( cursor.inside(v->at) && !v->generated ) {
                         info.variable.emplace_back(expr,vi,function);
                     }
