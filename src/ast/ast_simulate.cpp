@@ -498,15 +498,17 @@ namespace das
 
     void ExprMakeStruct::setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) {
         ExprMakeLocal::setRefSp(ref, cmres, sp, off);
-        int total = int(structs.size());
-        int stride = makeType->getStride();
+        // if it's a handle type, we can't reuse the make-local chain
+        if ( makeType->baseType == Type::tHandle ) return;
         // we go through all fields, and if its [[ ]] field
         // we tell it to piggy-back on our current sp, with appropriate offset
+        int total = int(structs.size());
+        int stride = makeType->getStride();
         for ( int index=0; index != total; ++index ) {
             auto & fields = structs[index];
             for ( const auto & decl : *fields ) {
                 auto field = makeType->structType->findField(decl->name);
-                assert(field && "should have failed in type infer otherwise");
+                DAS_ASSERT(field && "should have failed in type infer otherwise");
                 if ( decl->value->rtti_isMakeLocal() ) {
                     uint32_t offset =  extraOffset + index*stride + field->offset;
                     auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
@@ -547,42 +549,110 @@ namespace das
             }
             simlist.push_back(init0);
         }
-        for ( int index=0; index != total; ++index ) {
-            auto & fields = structs[index];
-            for ( const auto & decl : *fields ) {
-                auto field = makeType->structType->findField(decl->name);
-                assert(field && "should have failed in type infer otherwise");
-                uint32_t offset =  extraOffset + index*stride + field->offset;
-                SimNode * cpy;
-                if ( decl->value->rtti_isMakeLocal() ) {
-                    // so what happens here, is we ask it for the generated commands and append it to this list only
-                    auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
-                    auto lsim = mkl->simulateLocal(context);
-                    simlist.insert(simlist.end(), lsim.begin(), lsim.end());
-                    continue;
-                } else if ( useCMRES ) {
-                    if ( decl->moveSemantic ){
-                        cpy = makeLocalCMResMove(at,context,offset,decl->value);
+        if ( makeType->baseType == Type::tStructure ) {
+            for ( int index=0; index != total; ++index ) {
+                auto & fields = structs[index];
+                for ( const auto & decl : *fields ) {
+                    auto field = makeType->structType->findField(decl->name);
+                    assert(field && "should have failed in type infer otherwise");
+                    uint32_t offset =  extraOffset + index*stride + field->offset;
+                    SimNode * cpy;
+                    if ( decl->value->rtti_isMakeLocal() ) {
+                        // so what happens here, is we ask it for the generated commands and append it to this list only
+                        auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                        auto lsim = mkl->simulateLocal(context);
+                        simlist.insert(simlist.end(), lsim.begin(), lsim.end());
+                        continue;
+                    } else if ( useCMRES ) {
+                        if ( decl->moveSemantic ){
+                            cpy = makeLocalCMResMove(at,context,offset,decl->value);
+                        } else {
+                            cpy = makeLocalCMResCopy(at,context,offset,decl->value);
+                        }
+                    } else if ( useStackRef ) {
+                        if ( decl->moveSemantic ){
+                            cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
+                        } else {
+                            cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
+                        }
                     } else {
-                        cpy = makeLocalCMResCopy(at,context,offset,decl->value);
+                        if ( decl->moveSemantic ){
+                            cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
+                        } else {
+                            cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
+                        }
                     }
+                    if ( !cpy ) {
+                        context.thisProgram->error("internal compilation error, can't generate structure initialization", "", "", at);
+                    }
+                    simlist.push_back(cpy);
+                }
+            }
+        } else {
+            auto ann = makeType->annotation;
+            // making fake variable, which points to out field
+            string fakeName = "__makelocal";
+            auto fakeVariable = make_smart<Variable>();
+            fakeVariable->name = fakeName;
+            fakeVariable->type = make_smart<TypeDecl>(Type::tHandle);
+            fakeVariable->type->annotation = ann;
+            fakeVariable->at = at;
+            if ( useCMRES ) {
+                fakeVariable->aliasCMRES = true;
+            } else if ( useStackRef ) {
+                fakeVariable->stackTop = stackTop + extraOffset;
+                fakeVariable->type->ref = true;
+                if ( total != 1 ) {
+                    fakeVariable->type->dim.push_back(total);
+                }
+            }
+            fakeVariable->generated = true;
+            // make fake ExprVar which is that field
+            auto fakeVar = make_smart<ExprVar>(at, fakeName);
+            fakeVar->type = fakeVariable->type;
+            fakeVar->variable = fakeVariable;
+            fakeVar->local = true;
+            // make fake expression
+            ExpressionPtr fakeExpr = fakeVar;
+            smart_ptr<ExprConstInt> indexExpr;
+            if ( useStackRef && total > 1 ) {
+                // if its stackRef with multiple indices, its actually var[total], and lookup is var[index]
+                indexExpr = make_smart<ExprConstInt>(at, 0);
+                indexExpr->type = make_smart<TypeDecl>(Type::tInt);
+                fakeExpr = make_smart<ExprAt>(at, fakeExpr, indexExpr);
+                fakeExpr->type = make_smart<TypeDecl>(Type::tHandle);
+                fakeExpr->type->annotation = ann;
+                fakeExpr->type->ref = true;
+            }
+            for ( int index=0; index != total; ++index ) {
+                auto & fields = structs[index];
+                // adjust var for index
+                if ( useCMRES ) {
+                    fakeVariable->stackTop = extraOffset + index*stride;
                 } else if ( useStackRef ) {
-                    if ( decl->moveSemantic ){
-                        cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
-                    } else {
-                        cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
+                    if ( total > 1 ) {
+                        indexExpr->value = cast<int32_t>::from(index);
                     }
                 } else {
-                    if ( decl->moveSemantic ){
-                        cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
+                    fakeVariable->stackTop = stackTop + extraOffset + index*stride;
+                }
+                // now, setup fields
+                for ( const auto & decl : *fields ) {
+                    auto fieldType = ann->makeFieldType(decl->name);
+                    DAS_ASSERT(fieldType && "how did this infer?");
+                    uint32_t fieldSize = fieldType->getSizeOf();
+                    SimNode * cpy = nullptr;
+                    auto left = ann->simulateGetField(decl->name, context, at, fakeExpr);
+                    auto right = decl->value->simulate(context);
+                    if ( !decl->value->type->isRef() ) {
+                        cpy = context.code->makeValueNode<SimNode_Set>(decl->value->type->baseType, decl->at, left, right);
+                    } else if ( decl->moveSemantic ) {
+                        cpy = context.code->makeNode<SimNode_MoveRefValue>(decl->at, left, right, fieldSize);
                     } else {
-                        cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
+                        cpy = context.code->makeNode<SimNode_CopyRefValue>(decl->at, left, right, fieldSize);
                     }
+                    simlist.push_back(cpy);
                 }
-                if ( !cpy ) {
-                    context.thisProgram->error("internal compilation error, can't generate structure initialization", "", "", at);
-                }
-                simlist.push_back(cpy);
             }
         }
         return simlist;

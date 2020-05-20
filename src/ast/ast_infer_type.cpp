@@ -5122,7 +5122,7 @@ namespace das {
                 return;
             }
             verifyType(expr->makeType);
-            if ( expr->makeType->baseType != Type::tStructure ) {
+            if ( expr->makeType->baseType!=Type::tStructure && expr->makeType->baseType!=Type::tHandle ) {
                 if ( expr->structs.size() ) {
                     error("[[" + expr->makeType->describe() + "]] with non-structure type", "", "",
                           expr->at, CompilationError::invalid_type);
@@ -5137,6 +5137,9 @@ namespace das {
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->ref ) {
                 error("[[" + expr->makeType->describe() + "]] can't be reference", "", "",
+                    expr->at, CompilationError::invalid_type);
+            } else if ( !expr->makeType->isLocal() ) {
+                error("[[" + expr->makeType->describe() + "]] can't is not a local type", "", "",
                     expr->at, CompilationError::invalid_type);
             }
         }
@@ -5160,6 +5163,28 @@ namespace das {
                     }
                 } else {
                     error("field not found, " + decl->name, "", "",
+                        decl->at, CompilationError::cant_get_field);
+                }
+            } else if ( expr->makeType->baseType == Type::tHandle ) {
+                if ( auto fldt = expr->makeType->annotation->makeFieldType(decl->name) ) {
+                    if ( !fldt->isRef() ) {
+                        error("field is a property, not a value; " + decl->name, "", "",
+                            decl->at, CompilationError::cant_get_field);
+                    }
+                    if ( !fldt->isSameType(*decl->value->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                        error("can't initialize field " + decl->name + "; expecting "
+                              + fldt->describe()+", passing "+decl->value->type->describe(), "", "",
+                                decl->value->at, CompilationError::invalid_type );
+                    }
+                    if( !fldt->canCopy() && !decl->moveSemantic ) {
+                        error("this field can't be copied","","use <- instead",
+                              decl->at, CompilationError::invalid_type );
+                    } else if (decl->moveSemantic && decl->value->type->isConst()) {
+                        error("can't move from a constant value " + decl->value->type->describe(), "", "",
+                            decl->value->at, CompilationError::cant_move);
+                    }
+                } else {
+                    error("annotation field not found, " + decl->name, "", "",
                         decl->at, CompilationError::cant_get_field);
                 }
             }
