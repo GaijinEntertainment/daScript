@@ -27,6 +27,9 @@ namespace das {
         __forceinline operator smart_ptr<T,smart_ptr_policy<T>> & () const {
             return *((smart_ptr<T,smart_ptr_policy<T>> *)this);
         }
+        __forceinline operator bool() const {
+            return ptr != nullptr;
+        }
         T * ptr;
     };
 

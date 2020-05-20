@@ -935,12 +935,29 @@ namespace das {
     struct das_new {
         static __forceinline TT * make ( Context * __context__ ) {
             char * data = __context__->heap.allocate( sizeof(TT) );
+            if ( !data ) __context__->throw_error("out of heap");
             memset ( data, 0, sizeof(TT) );
             return (TT *) data;
         }
         template <typename QQ>
         static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
             TT * data = (TT *) __context__->heap.allocate( sizeof(TT) );
+            if ( !data ) __context__->throw_error("out of heap");
+            *data = init();
+            return data;
+        }
+    };
+
+    template <typename TT>
+    struct das_new_persistent {
+        static __forceinline TT * make ( Context * __context__ ) {
+            char * data = (char *) das_aligned_alloc16(sizeof(TT));
+            memset ( data, 0, sizeof(TT) );
+            return (TT *) data;
+        }
+        template <typename QQ>
+        static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
+            TT * data = (TT *) das_aligned_alloc16(sizeof(TT));
             *data = init();
             return data;
         }
@@ -1042,8 +1059,23 @@ namespace das {
     template <typename TT>
     struct das_delete_handle<smart_ptr_raw<TT>> {
         static __forceinline void clear ( Context *, smart_ptr_raw<TT> & p ) {
-            p.ptr->delRef();
-            p.ptr = nullptr;
+            if ( p ) {
+                p.ptr->delRef();
+                p.ptr = nullptr;
+            }
+        }
+    };
+
+    template <typename TT>
+    struct das_delete_persistent;
+
+    template <typename TT>
+    struct das_delete_persistent<TT *> {
+        static __forceinline void clear ( Context *, TT * & ptr ) {
+            if ( ptr ) {
+                das_aligned_free16(ptr);
+                ptr = nullptr;
+            }
         }
     };
 

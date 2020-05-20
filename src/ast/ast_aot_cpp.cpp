@@ -2056,8 +2056,13 @@ namespace das {
     // delete
         virtual void preVisit ( ExprDelete * edel ) override {
             Visitor::preVisit(edel);
-            if ( edel->subexpr->type->isPointer() && edel->subexpr->type->firstType->baseType==Type::tHandle ) {
+            const auto & subt = edel->subexpr->type;
+            const auto & subft = subt->firstType;
+            if ( subt->isPointer() && subft->baseType==Type::tHandle ) {
                 ss << "das_delete_handle<";
+            } else if ( subt->isPointer() && subft->baseType==Type::tStructure &&
+                       subft->structType->persistent ) {
+                ss << "das_delete_persistent<";
             } else {
                 ss << "das_delete<";
             }
@@ -2124,7 +2129,12 @@ namespace das {
                         ss << ">::make(__context__";
                     }
                 } else {
-                    ss << "das_new<" << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
+                    if ( enew->type->firstType->isStructure() && enew->type->firstType->structType->persistent ) {
+                        ss << "das_new_persistent<";
+                    } else {
+                        ss << "das_new<";
+                    }
+                    ss << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
                     if ( enew->initializer ) {
                         ss << ">::make_and_init(__context__,[&](){ return ";
                         CallFunc_preVisit(enew);
