@@ -102,7 +102,7 @@ namespace das
         for ( uint32_t i=0; i!=total; ++i, pStruct-- ) {
             if ( *pStruct ) {
                 if ( persistent ) {
-                    das_aligned_free16(pStruct);
+                    das_aligned_free16(*pStruct);
                 } else {
                     context.heap.free(*pStruct, structSize);
                 }

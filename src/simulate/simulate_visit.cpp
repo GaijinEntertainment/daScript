@@ -92,6 +92,7 @@ namespace das {
         V_OP(DeleteStructPtr);
         V_ARG(total);
         V_ARG(structSize);
+        V_ARG(persistent);
         V_SUB(subexpr);
         V_END();
     }
@@ -539,6 +540,7 @@ namespace das {
         V_BEGIN();
         V_OP(New);
         V_ARG(bytes);
+        V_ARG(persistent);
         V_END();
     }
 

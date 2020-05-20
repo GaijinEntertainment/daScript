@@ -257,6 +257,7 @@ namespace das {
         V_OP(Ascend);
         V_SUB(subexpr);
         V_ARG(bytes);
+        V_ARG(persistent);
         V_END();
     }
 
@@ -266,6 +267,7 @@ namespace das {
         V_OP(AscendAndRef);
         V_SUB(subexpr);
         V_ARG(bytes);
+        V_ARG(persistent);
         V_SP(stackTop);
         V_END();
     }
@@ -276,6 +278,7 @@ namespace das {
         V_OP(NewWithInitializer);
         V_CALL();
         V_ARG(bytes);
+        V_ARG(persistent);
         V_END();
     }
 
