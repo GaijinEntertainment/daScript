@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2019  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -637,6 +637,13 @@ VECMATH_FINLINE quat4f VECTORCALL v_quat_lerp(vec4f tttt, quat4f a, quat4f b)
 
 VECMATH_FINLINE quat4f VECTORCALL v_quat_conjugate(quat4f q) { return v_perm_xyzd(v_neg(q), q); }
 
+VECMATH_FINLINE vec3f VECTORCALL v_quat_mul_vec3(quat4f q, vec3f v)
+{
+  vec3f t = v_cross3(q, v);
+  t = v_add(t,t);//*2
+  return v_add(v, v_madd(v_splat_w(q), t, v_cross3(q, t)));//v + q.w * t + v_cross3(q.xyz, t);
+}
+
 #if _TARGET_SIMD_VMX|_TARGET_SIMD_SPU|_TARGET_SIMD_SSE
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat(vec3f col0, vec3f col1, vec3f col2)
 {
@@ -749,6 +756,21 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang
   vec4f s, c;
   v_sincos_x(v_mul(ang, V_C_HALF), s, c);
   return v_perm_xyzd(v_mul(v, s), c);
+}
+
+
+VECMATH_FINLINE quat4f VECTORCALL v_quat_qslerp(float t, quat4f l, quat4f r)
+{
+  float ca = v_extract_x(v_dot4_x(l, r));
+  //todo: vectorize
+  float d = fabsf(ca);
+  float k = 0.931872f + d * (-1.25654f + d * 0.331442f);
+  float ot = t + t * (t - 0.5f) * (t - 1) * k;
+
+  float lt = 1 - ot;
+  float rt = ca > 0 ? ot : -ot;
+
+  return v_norm4(v_add(v_mul(l, v_splats(lt)), v_mul(r, v_splats(rt))));
 }
 
 VECMATH_FINLINE quat4f VECTORCALL v_quat_qsquad(float t,
@@ -1077,6 +1099,21 @@ VECMATH_FINLINE vec4f VECTORCALL vis_hor_or_ff_0(vec4f a)
 }
 #endif
 
+#if _TARGET_SIMD_SSE
+VECMATH_FINLINE int VECTORCALL v_test_vec_mask_eq_0(vec4f v) { return (~unsigned(-_mm_movemask_ps(v))) >> 31; }
+VECMATH_FINLINE int VECTORCALL v_test_vec_mask_neq_0(vec4f v) { return (unsigned(-_mm_movemask_ps(v))) >> 31; }
+#else
+VECMATH_FINLINE int VECTORCALL v_test_vec_mask_eq_0(vec4f v)
+{
+  return v_test_vec_x_eq_0(v_cast_vec4f(v_srli(v_cast_vec4i(vis_hor_or_ff_0(v)), 31)));
+}
+
+VECMATH_FINLINE int VECTORCALL v_test_vec_mask_neq_0(vec4f v)
+{
+  return !v_test_vec_mask_eq_0(v);
+}
+#endif
+
 //universal visibility function (accepts worldviewproj matrix)
 
 ///return zero if not visible. 0xff in all bytes, otherwise
@@ -1211,12 +1248,7 @@ VECMATH_FINLINE int VECTORCALL v_is_visible_sphere(vec3f center, vec3f r,
   res03 = v_or(res03, v_add(v_add(v_dot3(center, plane4), r), v_splat_w(plane4)));
   res03 = v_or(res03, v_add(v_add(v_dot3(center, plane5), r), v_splat_w(plane5)));
 
-  #if _TARGET_SIMD_SSE
-  int result = _mm_movemask_ps(res03);
-  return (~unsigned(-result))>>31;
-  #else
-  return v_test_vec_x_eq_0(v_cast_vec4f(v_srli(v_cast_vec4i(vis_hor_or_ff_0(res03)), 31)));
-  #endif
+  return v_test_vec_mask_eq_0(res03);
 }
 
 VECMATH_FINLINE int VECTORCALL v_sphere_intersect(vec3f center, vec3f r,
@@ -1230,14 +1262,9 @@ VECMATH_FINLINE int VECTORCALL v_sphere_intersect(vec3f center, vec3f r,
   res03 = v_add(res03, r);
   res03 = v_or(res03, v_add(v_add(v_dot3(center, plane4), r), v_splat_w(plane4)));
   res03 = v_or(res03, v_add(v_add(v_dot3(center, plane5), r), v_splat_w(plane5)));
-  #if _TARGET_SIMD_SSE
-  int result = _mm_movemask_ps(res03);
-  if ((unsigned(-result))>>31)
+
+  if (v_test_vec_mask_neq_0(res03))
     return 0;
-  #else
-  if (!v_test_vec_x_eq_0(v_cast_vec4f(v_srli(v_cast_vec4i(vis_hor_or_ff_0(res03)), 31))))
-    return 0;
-  #endif
 
   res03 = v_madd(v_splat_x(center), plane03X, plane03W);
   res03 = v_madd(v_splat_y(center), plane03Y, res03);
@@ -1246,12 +1273,7 @@ VECMATH_FINLINE int VECTORCALL v_sphere_intersect(vec3f center, vec3f r,
   res03 = v_or(res03, v_add(v_sub(v_dot3(center, plane4), r), v_splat_w(plane4)));
   res03 = v_or(res03, v_add(v_sub(v_dot3(center, plane5), r), v_splat_w(plane5)));
 
-  #if _TARGET_SIMD_SSE
-  result = _mm_movemask_ps(res03);
-  return ((unsigned(-result))>>31) + 1;
-  #else
-  return ((~v_test_vec_x_eq_0(v_cast_vec4f(v_srli(v_cast_vec4i(vis_hor_or_ff_0(res03)), 31))))&1) + 1;
-  #endif
+  return v_test_vec_mask_neq_0(res03) + 1;
 }
 
 VECMATH_FINLINE int VECTORCALL v_is_visible_box_extent2(vec3f center, vec3f extent,//center and extent should be multiplied by 2
@@ -1266,12 +1288,7 @@ VECMATH_FINLINE int VECTORCALL v_is_visible_box_extent2(vec3f center, vec3f exte
   res03 = v_or(res03, v_add(v_dot3(v_add(v_xor(extent, v_and(plane4W2, signmask)), center), plane4W2), v_splat_w(plane4W2)));
   res03 = v_or(res03, v_add(v_dot3(v_add(v_xor(extent, v_and(plane5W2, signmask)), center), plane5W2), v_splat_w(plane5W2)));
 
-#if _TARGET_SIMD_SSE
-  int result = _mm_movemask_ps(res03);
-  return (~unsigned(-result))>>31;
-#else
-  return v_test_vec_x_eq_0(v_cast_vec4f(v_srli(v_cast_vec4i(vis_hor_or_ff_0(res03)), 31)));
-#endif
+  return v_test_vec_mask_eq_0(res03);
 }
 
 VECMATH_FINLINE int VECTORCALL v_box_frustum_intersect_extent2(vec3f center, vec3f extent,//center and extent should be multiplied by 2
@@ -1286,14 +1303,8 @@ VECMATH_FINLINE int VECTORCALL v_box_frustum_intersect_extent2(vec3f center, vec
   res03 = v_or(res03, v_add(v_dot3(v_add(v_xor(extent, v_and(plane4W2, signmask)), center), plane4W2), v_splat_w(plane4W2)));
   res03 = v_or(res03, v_add(v_dot3(v_add(v_xor(extent, v_and(plane5W2, signmask)), center), plane5W2), v_splat_w(plane5W2)));
 
-#if _TARGET_SIMD_SSE
-  int result = _mm_movemask_ps(res03);
-  if ((unsigned(-result))>>31)
+  if (v_test_vec_mask_neq_0(res03))
     return 0;
-#else
-  if (!v_test_vec_x_eq_0(v_cast_vec4f(v_srli(v_cast_vec4i(vis_hor_or_ff_0(res03)), 31))))
-    return 0;
-#endif
 
   res03 = v_madd(v_sub(v_splat_x(center), v_xor(v_splat_x(extent), v_and(plane03X, signmask))), plane03X, plane03W2);
   res03 = v_madd(v_sub(v_splat_y(center), v_xor(v_splat_y(extent), v_and(plane03Y, signmask))), plane03Y, res03);
@@ -1301,12 +1312,7 @@ VECMATH_FINLINE int VECTORCALL v_box_frustum_intersect_extent2(vec3f center, vec
   res03 = v_or(res03, v_add(v_dot3(v_sub(center, v_xor(extent, v_and(plane4W2, signmask))), plane4W2), v_splat_w(plane4W2)));
   res03 = v_or(res03, v_add(v_dot3(v_sub(center, v_xor(extent, v_and(plane5W2, signmask))), plane5W2), v_splat_w(plane5W2)));
 
-#if _TARGET_SIMD_SSE
-  result = _mm_movemask_ps(res03);
-  return ((unsigned(-result))>>31) + 1;
-#else
-  return ((~v_test_vec_x_eq_0(v_cast_vec4f(v_srli(v_cast_vec4i(vis_hor_or_ff_0(res03)), 31))))&1) + 1;
-#endif
+  return v_test_vec_mask_neq_0(res03) + 1;
 }
 
 VECMATH_FINLINE int VECTORCALL v_is_visible_extent_fast(vec3f center, vec3f extent, mat44f_cref clip)//center and extent should be multiplied by 2
@@ -1576,7 +1582,7 @@ VECMATH_FINLINE int VECTORCALL v_screen_size_b(vec3f bmin, vec3f bmax, vec3f thr
     return 0;
   #else
   screenSizeVisible = v_or(screenSizeVisible, v_rot_1(screenSizeVisible));
-  if (v_test_vec_x_eq_0(screenSizeVisible))
+  if (!v_test_vec_x_eq_0(screenSizeVisible))
     return 0;
   #endif
   return 1;
@@ -1680,7 +1686,7 @@ VECMATH_FINLINE int VECTORCALL
     return 0;
   #else
   screenSizeVisible = v_or(screenSizeVisible, v_rot_1(screenSizeVisible));
-  if (v_test_vec_x_eq_0(screenSizeVisible))
+  if (!v_test_vec_x_eq_0(screenSizeVisible))
     return 0;
   #endif
   return 1;
@@ -1695,7 +1701,7 @@ VECMATH_FINLINE int VECTORCALL v_screen_size_b(vec3f box2_xyXY, vec3f threshold,
 {
   // get aabb points (SoA)
   vec4f minmax_x = v_perm_xzxz(box2_xyXY);
-  vec4f minmax_y = v_rot_2(v_perm_wwyy(box2_xyXY));//fixme: replace with v_perm_yyww
+  vec4f minmax_y = v_perm_yyww(box2_xyXY);
 
   // transform points to clip space
   vec4f points_cs_0[4];
@@ -1776,7 +1782,7 @@ VECMATH_FINLINE int VECTORCALL v_screen_size_b(vec3f box2_xyXY, vec3f threshold,
     return 0;
   #else
   screenSizeVisible = v_or(screenSizeVisible, v_rot_1(screenSizeVisible));
-  if (v_test_vec_x_eq_0(screenSizeVisible))
+  if (!v_test_vec_x_eq_0(screenSizeVisible))
     return 0;
   #endif
   return 1;
@@ -1807,7 +1813,7 @@ VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, v
   result = v_splat_x(result);
   return !v_test_vec_x_eq_0(result);
   #else
-  vec4f result = v_and(v_and(_mm_cmpge_ss(lmax, (*(vec4f*)&V_CI_MASK0000)), _mm_cmpge_ss(lmax, lmin)), _mm_cmpge_ss(V_C_ONE, lmin));
+  vec4f result = v_and(v_and(_mm_cmpge_ss(lmax, v_zero()), _mm_cmpge_ss(lmax, lmin)), _mm_cmpge_ss(V_C_ONE, lmin));
   return _mm_movemask_ps(result)&1;
   #endif
 }
@@ -1815,11 +1821,6 @@ VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, v
 VECMATH_FINLINE int VECTORCALL v_test_segment_box_intersection(vec3f start, vec3f end, bbox3f_cref box)
 { return v_test_segment_box_intersection_dir(start, v_sub(end, start), box); }
 
-#if _TARGET_SIMD_SSE
-#define MEMZERO (*(vec4f*)&V_CI_MASK0000)
-#else
-#define MEMZERO (v_zero())
-#endif
 
 //Point3 pc = sphere_center - p;
 //real t = min(max(pc*normalized_dir, 0), mint);
@@ -1830,7 +1831,7 @@ VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection_dir_t(vec3f p
                                             const vec4f &sphere_center__sr2)
 {
   vec3f ap = v_sub(sphere_center__sr2, p0);
-  vec4f t = v_min (v_max(v_dot3(ap, normalized_dir), MEMZERO), len);
+  vec4f t = v_min (v_max(v_dot3(ap, normalized_dir), v_zero()), len);
   return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(normalized_dir, t), ap)), v_splat_w(sphere_center__sr2));
 }
 
@@ -1851,7 +1852,7 @@ VECMATH_INLINE vec4f VECTORCALL v_test_segment_sphere_intersection_dir(vec3f p0,
 {
   vec3f ap = v_sub(sphere_center, p0);
   vec4f lenSq = v_length3_sq(dir);
-  vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), MEMZERO), V_C_ONE);
+  vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), v_zero()), V_C_ONE);
   return v_cmp_gt(v_length3_sq(v_sub(v_mul(dir, t), ap)), squared_sphere_radius);
 }
 
@@ -1871,7 +1872,7 @@ VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection(vec3f p0,
   vec3f dir = v_sub(p1, p0);
   vec4f lenSq = v_length3_sq(dir);
   vec3f ap = v_sub(sphere_center, p0);
-  vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), MEMZERO), V_C_ONE);
+  vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), v_zero()), V_C_ONE);
   return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(dir,t), ap)), squared_sphere_radius);
 }
 
@@ -1890,7 +1891,7 @@ VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection_dir_b(vec3f p
 {
   vec3f ap = v_sub(sphere_center, p0);
   vec4f lenSq = v_length3_sq(dir);
-  vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), MEMZERO), V_C_ONE);
+  vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), v_zero()), V_C_ONE);
   return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(dir,t), ap)), squared_sphere_radius);
 }
 
@@ -1908,11 +1909,9 @@ VECMATH_INLINE bool VECTORCALL v_test_ray_sphere_intersection_b(vec3f p0,
 {
 
   vec3f ap = v_sub(sphere_center, p0);
-  vec4f t = v_max(v_dot3(ap, normalized_dir), MEMZERO);
+  vec4f t = v_max(v_dot3(ap, normalized_dir), v_zero());
   return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(normalized_dir, t), ap)), squared_sphere_radius);
 }
-
-#undef MEMZERO
 
 VECMATH_FINLINE void VECTORCALL v_mat_43ca_from_mat44(float * __restrict m43, const mat44f &tm)
 {
@@ -2261,14 +2260,25 @@ VECMATH_FINLINE vec4f VECTORCALL v_distance3p_x(plane3f a, vec3f b) {return v_di
 VECMATH_FINLINE plane3f VECTORCALL v_make_plane_dir(vec3f p0, vec3f dir0, vec3f dir1)
 {
   vec3f n = v_cross3(dir0, dir1);
-  vec3f d = v_neg(v_dot3(n, p0));
-  return v_perm_xyzd(n, d);
+  return v_make_plane_norm(p0, n);
 }
 VECMATH_FINLINE plane3f VECTORCALL v_make_plane(vec3f p0, vec3f p1, vec3f p2)
 {
   return v_make_plane_dir(p0, v_sub(p1,p0), v_sub(p2, p0));
 }
 
+VECMATH_FINLINE plane3f VECTORCALL v_make_plane_norm(vec3f p0, vec3f norm)
+{
+  vec3f d = v_neg(v_dot3(norm, p0));
+  return v_perm_xyzd(norm, d);
+}
+
+VECMATH_FINLINE plane3f VECTORCALL v_transform_plane(plane3f plane, mat44f_cref transform)
+{
+  // simple way
+  vec3f p0 = v_mul(plane, v_neg(v_splat_w(plane))); // p0 = norm * -d
+  return v_make_plane_norm(v_mat44_mul_vec3p(transform, p0), v_mat44_mul_vec3v(transform, plane));
+}
 
 VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_to_bbox_x(vec4f bmin, vec4f bmax, vec4f c)
 {
@@ -2339,7 +2349,8 @@ VECMATH_FINLINE vec4f VECTORCALL distance_to_seg_x(vec3f point, vec3f a, vec3f b
   return v_length3_x(v_sub(point, pt));
 };
 
-VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const vec4f v)
+
+VECMATH_FINLINE vec4i VECTORCALL v_float_to_half(vec4f v)
 {
   vec4i fltInt32 = v_cast_vec4i(v);
   vec4i fltInt16 = v_slli(v_srli(fltInt32, 31), 5);
@@ -2347,8 +2358,12 @@ VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const ve
   tmp = v_andi( v_subi(tmp, V_CI_070), v_srli(v_srai(v_subi(V_CI_070, tmp), 4), 27));
   fltInt16 = v_slli(v_ori(fltInt16, tmp), 10);
   fltInt16 = v_ori(fltInt16, v_andi(v_srli(fltInt32, 13), V_CI_3FF));
-  fltInt16 = v_packus(fltInt16);//replace for sse2
-  v_stu_w_half(m, fltInt16);
+  return fltInt16;
+}
+
+VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const vec4f v)
+{
+  v_stu_w_half(m, v_packus(v_float_to_half(v)));
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m)
@@ -2362,6 +2377,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m)
   fltInt32 = v_ori(fltInt32, v_andi(v_slli(fltInt16, 13), V_CI_07FFFFF));
   return v_cast_vec4f(fltInt32);
 }
+
 
 VECMATH_INLINE vec3f VECTORCALL v_triangle_bounding_sphere_center( const vec3f& p1, const vec3f& p2, const vec3f& p3 )
 {
