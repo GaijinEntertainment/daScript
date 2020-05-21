@@ -489,8 +489,6 @@ namespace das
         } else if ( baseType==Type::tPointer ) {
             if ( !firstType ) {
                 return false;
-            } else if ( firstType->dim.size() ) {
-                return false;
             } else if (firstType->baseType==Type::tHandle ) {
                 return firstType->annotation->canDeletePtr();
             } else if ( firstType->baseType==Type::tStructure ) {

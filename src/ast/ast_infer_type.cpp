@@ -2910,9 +2910,26 @@ namespace das {
     // ExprAscend
         virtual ExpressionPtr visit ( ExprAscend * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( expr->subexpr->type->baseType==Type::tHandle && expr->subexpr->rtti_isMakeStruct() ) {
+                auto mks = static_pointer_cast<ExprMakeStruct>(expr->subexpr);
+                if ( !mks->isNewHandle ) {
+                    reportAstChanged();
+                    mks->isNewHandle = true;
+                }
+            }
             if ( !expr->subexpr->type->isRef() ) {
                 error("can't ascend (to heap) non-reference value",  "", "",
                     expr->at, CompilationError::invalid_new_type);
+            } else if ( expr->subexpr->type->baseType==Type::tHandle ) {
+                const auto & subt = expr->subexpr->type;
+                if ( !subt->dim.empty() ) {
+                    error("can't new [] of handled type, " + subt->describe(),  "", "",
+                        expr->at, CompilationError::invalid_new_type);
+                }
+                if ( !subt->annotation->canNew() ) {
+                    error("can't new this handled type at all, " + subt->describe(),  "", "",
+                        expr->at, CompilationError::invalid_new_type);
+                }
             }
             if ( expr->ascType ) {
                 expr->type = make_smart<TypeDecl>(*expr->ascType);
@@ -2920,6 +2937,9 @@ namespace das {
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
                 expr->type->firstType->ref = false;
+                if ( expr->type->firstType->baseType==Type::tHandle ) {
+                    expr->type->smartPtr = expr->type->firstType->annotation->isSmart();
+                }
             }
             return Visitor::visit(expr);
         }
@@ -5138,8 +5158,12 @@ namespace das {
             } else if ( expr->makeType->ref ) {
                 error("[[" + expr->makeType->describe() + "]] can't be reference", "", "",
                     expr->at, CompilationError::invalid_type);
-            } else if ( !expr->makeType->isLocal() ) {
-                error("[[" + expr->makeType->describe() + "]] can't is not a local type", "", "",
+            } else if ( !expr->makeType->isLocal() && !expr->isNewHandle ) {
+                error("[[" + expr->makeType->describe() + "]] can't make a non local type", "", "",
+                    expr->at, CompilationError::invalid_type);
+            } else if ( expr->makeType->baseType==Type::tHandle && expr->isNewHandle && !expr->useInitializer ) {
+                error("new [[" + expr->makeType->describe() + "]] requires initializer syntax", "",
+                        "use new [[" + expr->makeType->describe() + "()]] instead",
                     expr->at, CompilationError::invalid_type);
             }
         }

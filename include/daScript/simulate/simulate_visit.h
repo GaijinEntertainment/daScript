@@ -261,17 +261,6 @@ namespace das {
         V_END();
     }
 
-    template <bool move>
-    SimNode * SimNode_AscendAndRef<move>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(AscendAndRef);
-        V_SUB(subexpr);
-        V_ARG(bytes);
-        V_ARG(persistent);
-        V_SP(stackTop);
-        V_END();
-    }
-
     template <int argCount>
     SimNode * SimNode_NewWithInitializer<argCount>::visit ( SimVisitor & vis ) {
         V_BEGIN();

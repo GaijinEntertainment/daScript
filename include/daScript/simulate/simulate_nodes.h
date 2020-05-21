@@ -1688,7 +1688,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         bool        persistent;
     };
 
-    template <bool move>
     struct SimNode_AscendAndRef : SimNode {
         DAS_PTR_NODE;
         SimNode_AscendAndRef ( const LineInfo & at, SimNode * se, uint32_t b, uint32_t sp, TypeInfo * ti, bool ps )
@@ -1723,6 +1722,30 @@ SIM_NODE_AT_VECTOR(Float, float)
         TypeInfo *  typeInfo;
         bool        persistent;
     };
+
+    struct SimNode_AscendNewHandleAndRef : SimNode {
+        DAS_PTR_NODE;
+        SimNode_AscendNewHandleAndRef ( const LineInfo & at, SimNode * se, SimNode * nh, uint32_t b, uint32_t sp )
+            : SimNode(at), subexpr(se), newexpr(nh), bytes(b), stackTop(sp) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            if ( char * ptr = newexpr->evalPtr(context) ) {
+                char ** pRef = (char **)(context.stack.sp()+stackTop);
+                *pRef = ptr;
+                subexpr->evalPtr(context);
+                return ptr;
+            } else {
+                context.throw_error_at(debugInfo,"new of handled type returned null");
+                return nullptr;
+            }
+        }
+        SimNode *   subexpr;
+        SimNode *   newexpr;
+        uint32_t    bytes;
+        uint32_t    stackTop;
+    };
+
 
     template <int argCount>
     struct SimNode_NewWithInitializer : SimNode_CallBase {

@@ -411,11 +411,18 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeExprMakeStructFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprMakeStructFlags";
+        ft->argNames = { "useInitializer", "isNewHandle" };
+        return ft;
+    }
+
     struct AstExprMakeStructAnnotation : AstExprMakeLocalAnnotation<ExprMakeStruct> {
         AstExprMakeStructAnnotation(ModuleLibrary & ml)
             :  AstExprMakeLocalAnnotation<ExprMakeStruct> ("ExprMakeStruct", ml) {
             addField<DAS_BIND_MANAGED_FIELD(structs)>("structs");
-            addField<DAS_BIND_MANAGED_FIELD(useInitializer)>("useInitializer");
+            this->addFieldEx ( "makeStructFlags", "makeStructFlags", offsetof(ExprMakeStruct, makeStructFlags), makeExprMakeStructFlags() );
         }
     };
 
@@ -1741,6 +1748,7 @@ namespace das {
             addAlias(makeExprAscendFlags());
             addAlias(makeExprCastFlags());
             addAlias(makeExprVarFlags());
+            addAlias(makeExprMakeStructFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)

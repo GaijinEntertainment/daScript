@@ -1172,14 +1172,20 @@ namespace das
         if ( needTypeInfo ) {
             typeInfo = context.thisHelper->makeTypeInfo(nullptr, subexpr->type);
         }
-        bool peristent = false;
-        if ( subexpr->type->baseType==Type::tStructure ) {
-            peristent = subexpr->type->structType->persistent;
-        }
-        if ( useStackRef ) {
-            return context.code->makeNode<SimNode_AscendAndRef<false>>(at, se, bytes, stackTop, typeInfo, peristent);
+        if ( subexpr->type->baseType==Type::tHandle ) {
+            DAS_ASSERTF(useStackRef,"new of handled type should always be over stackref");
+            auto ne = subexpr->type->annotation->simulateGetNew(context, at);
+            return context.code->makeNode<SimNode_AscendNewHandleAndRef>(at, se, ne, bytes, stackTop);
         } else {
-            return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes, typeInfo, peristent);
+            bool peristent = false;
+            if ( subexpr->type->baseType==Type::tStructure ) {
+                peristent = subexpr->type->structType->persistent;
+            }
+            if ( useStackRef ) {
+                return context.code->makeNode<SimNode_AscendAndRef>(at, se, bytes, stackTop, typeInfo, peristent);
+            } else {
+                return context.code->makeNode<SimNode_Ascend<false>>(at, se, bytes, typeInfo, peristent);
+            }
         }
     }
 

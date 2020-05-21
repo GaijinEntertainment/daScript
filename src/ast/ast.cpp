@@ -1878,7 +1878,7 @@ namespace das {
             cexpr->structs.push_back(mfd);
         }
         cexpr->makeType = make_smart<TypeDecl>(*makeType);
-        cexpr->useInitializer = useInitializer;
+        cexpr->makeStructFlags = makeStructFlags;
         return cexpr;
     }
 

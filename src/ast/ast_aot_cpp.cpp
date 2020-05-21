@@ -2080,8 +2080,19 @@ namespace das {
             if ( expr->needTypeInfo ) {
                 info = helper.makeTypeInfo(nullptr, expr->subexpr->type);
             }
-            ss << "das_ascend<" << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ","
-            << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::make(__context__,";
+            if ( expr->type->firstType->baseType==Type::tHandle ) {
+                ss  << "das_ascend_handle<"
+                    << (expr->type->smartPtr ? "true" : "false") << ","
+                    << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                    << ">::make(__context__,";
+
+            } else {
+                ss  << "das_ascend<"
+                    << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ","
+                    << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                    << ">::make(__context__,";
+            }
+
             if ( info ) {
                 ss << "&" << helper.typeInfoName(info) << ",";
             } else {
@@ -2227,31 +2238,56 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
-            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
-                << (needTempSrc(expr) ? "&" : "") << " {\n";
-            tab ++;
-            if ( !needTempSrc(expr) ) {
-                ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
-                    << " " << mksName(expr) << ";\n";
+            ss << "(([&](";
+            if ( expr->isNewHandle ) {
+                ss << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes) << " & " << mksName(expr);
             }
-            if ( !expr->initAllFields ) {
-                ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
+            ss << ")";
+            if ( !expr->isNewHandle ) {
+                ss << " -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+                    << (needTempSrc(expr) ? "&" : "");
+            }
+            ss << " {\n";
+            tab ++;
+            if ( !expr->isNewHandle ) {
+                if ( !needTempSrc(expr) ) {
+                    ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+                        << " " << mksName(expr) << ";\n";
+                }
+                if ( !expr->initAllFields ) {
+                    ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
+                }
             }
         }
         virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
-            ss << string(tab,'\t') << mksName(expr);
+            ss << string(tab,'\t');
+            ss << (decl->moveSemantic ? "das_move((" : "das_copy((");
+            if ( expr->makeType->baseType==Type::tHandle ) {
+                expr->makeType->annotation->aotPreVisitGetField(ss, decl->name);
+            }
+            ss << mksName(expr);
             if ( expr->structs.size()!=1 ) ss << "(" << index << ",__context__)";
-            ss << "." << decl->name << " = ";
+            if ( expr->makeType->baseType==Type::tHandle ) {
+                expr->makeType->annotation->aotVisitGetField(ss, decl->name);
+                ss << " /*" << decl->name << "*/";
+            } else {
+                ss << "." << decl->name;
+            }
+            ss << "),(";
         }
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
-            ss << ";\n";
+            ss << "));\n";
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
         virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
-            ss << string(tab,'\t') << "return " << mksName(expr)<< ";\n";
+            if ( !expr->isNewHandle ) {
+                ss << string(tab,'\t') << "return " << mksName(expr)<< ";\n";
+            }
             tab --;
-            ss << string(tab,'\t') << "})())";
+            ss << string(tab,'\t') << "})";
+            if ( !expr->isNewHandle ) ss << "()" ;
+            ss << ")";
             return Visitor::visit(expr);
         }
     // make array

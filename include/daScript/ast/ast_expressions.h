@@ -1092,8 +1092,15 @@ namespace das
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
+        virtual bool rtti_isMakeStruct() const override { return true; }
         vector<MakeStructPtr>       structs;
-        bool                        useInitializer = false;
+        union {
+            struct {
+                bool useInitializer : 1;
+                bool isNewHandle : 1;
+            };
+            uint32_t makeStructFlags = 0;
+        };
     };
 
     struct ExprMakeVariant : ExprMakeLocal {

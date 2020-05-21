@@ -1193,6 +1193,38 @@ namespace das {
         }
     };
 
+    template <bool smart, typename TT>
+    struct das_ascend_handle;
+
+    template <typename TT>
+    struct das_ascend_handle<false,TT *> {
+        template <typename QQ>
+        static __forceinline TT * make(Context * __context__,TypeInfo * ,QQ && init) {
+            TT * ptr = das_new_handle<TT,false>::make(__context__);
+            if ( ptr ) {
+                init(*ptr);
+                return ptr;
+            } else {
+                __context__->throw_error("new of handled type returned null");
+                return nullptr;
+            }
+        }
+    };
+    template <typename TT>
+    struct das_ascend_handle<true,smart_ptr_raw<TT>> {
+        template <typename QQ>
+        static __forceinline smart_ptr_raw<TT> make(Context * __context__,TypeInfo * ,QQ && init) {
+            smart_ptr_raw<TT> ptr = das_new_handle<TT,true>::make(__context__);
+            if ( ptr ) {
+                init(*ptr);
+                return ptr;
+            } else {
+                __context__->throw_error("new of handled type returned null");
+                return nullptr;
+            }
+        }
+    };
+
     template <typename AT>
     struct das_ascend<Lambda,AT,false> {
         static __forceinline Lambda make(Context * __context__,TypeInfo * typeInfo,const AT & init) {

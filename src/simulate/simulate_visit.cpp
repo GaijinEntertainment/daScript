@@ -536,6 +536,27 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_AscendAndRef::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(AscendAndRef);
+        V_SUB(subexpr);
+        V_ARG(bytes);
+        V_ARG(typeInfo ? typeInfo->hash : 0);
+        V_ARG(persistent);
+        V_SP(stackTop);
+        V_END();
+    }
+
+    SimNode * SimNode_AscendNewHandleAndRef::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(AscendNewHandleAndRef);
+        V_SUB(newexpr);
+        V_SUB(subexpr);
+        V_ARG(bytes);
+        V_SP(stackTop);
+        V_END();
+    }
+
     SimNode * SimNode_New::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(New);

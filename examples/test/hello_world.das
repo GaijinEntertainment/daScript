@@ -1,19 +1,16 @@
-options log = true
-options log_nodes = true
+// options log_cpp = true
 
-[persistent]
-class Foo
-    count : int = 0
-    def Foo ( ic : int )
-        count = ic
-    def update
-        return count++
+require UnitTest
 
-[export,unsafe]
+[export, unsafe]
 def test
-    var pFoo = new Foo(13)
-    print("{pFoo->update()}\n")
-    print("{pFoo->update()}\n")
-    print("{pFoo->update()}\n")
-    delete pFoo
+
+    var ascend_t <- new [[TestObjectFoo() fooData=1]]
+    assert(ascend_t.fooData==1)
+    delete ascend_t
+
+    var ascend_smart_t <- new [[TestObjectSmart() fooData=1]]
+    assert(ascend_smart_t.fooData==1)
+    delete ascend_smart_t
+
     return true
