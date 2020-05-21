@@ -5179,7 +5179,7 @@ namespace das {
                 DAS_ASSERT(mkb->block->rtti_isBlock());
                 auto blk = static_pointer_cast<ExprBlock>(mkb->block);
                 auto cle = convertToCloneExpr(expr,index,decl);
-                blk->list.push_back(cle);
+                blk->list.insert(blk->list.begin(), cle); // TODO: fix order. we are making them backwards now
                 reportAstChanged();
                 return nullptr;
             }
@@ -5239,8 +5239,52 @@ namespace das {
                         expr->makeType->at, CompilationError::type_not_found );
                 }
             }
+            if ( expr->block ) {
+                if ( !expr->block ) expr->block = makeStructWhereBlock(expr);
+                DAS_ASSERT(expr->block->rtti_isMakeBlock());
+                auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
+                DAS_ASSERT(mkb->block->rtti_isBlock());
+                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                if ( blk->arguments.size()!=1 ) {
+                    error("where closure should only have one argument",  "", "",
+                        expr->block->at, CompilationError::invalid_block );
+                } else {
+                    auto arg = blk->arguments[0];
+                    if ( arg->type ) {
+                        int32_t rec = 0;
+                        if ( expr->structs.size()>1 ) rec = int32_t(expr->structs.size());
+                        auto passT = make_smart<TypeDecl>(*expr->makeType);
+                        passT->dim.clear();
+                        if ( rec ) passT->dim.push_back(rec);
+                        if ( arg->type->isAuto() ) {
+                            auto nargT = TypeDecl::inferGenericType(passT, arg->type, nullptr);
+                            if ( nargT ) {
+                                TypeDecl::applyAutoContracts(nargT, arg->type);
+                                arg->type = nargT;
+                            } else {
+                                error("can't infer where closure block argument",  "", "",
+                                    arg->at, CompilationError::invalid_block );
+                            }
+                        }
+                        if ( !arg->type->isSameType(*passT,RefMatters::no,ConstMatters::no,TemporaryMatters::no) ) {
+                            error("where closure block argument type mismatch, " +
+                                arg->type->describe() + " vs " + expr->makeType->describe(),  "", "",
+                                    arg->at, CompilationError::invalid_block );
+                        } else if ( arg->type->constant ) {
+                            error("where closure block argument can't be constant, " +
+                                arg->type->describe() + " vs " + expr->makeType->describe(),  "", "",
+                                    arg->at, CompilationError::invalid_block );
+                        }
+                    }
+                }
+            }
             // promote to make variant
             if ( expr->makeType->baseType == Type::tVariant ) {
+                if ( expr->block ) {
+                    error("[[variant]] can't have where closure",  "", "",
+                        expr->block->at, CompilationError::invalid_block );
+                    return Visitor::visit(expr);
+                }
                 auto mkv = make_smart<ExprMakeVariant>(expr->at);
                 mkv->makeType = make_smart<TypeDecl>(*expr->makeType);
                 auto allGood = true;

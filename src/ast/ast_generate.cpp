@@ -1467,14 +1467,19 @@ namespace das {
 
     ExpressionPtr convertToCloneExpr ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl ) {
         bool needIndex = expr->structs.size()>1;
-        auto blk = static_pointer_cast<ExprBlock>(expr->block);
+        DAS_ASSERT(expr->block->rtti_isMakeBlock());
+        auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
+        DAS_ASSERT(mkb->block->rtti_isBlock());
+        auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+        DAS_ASSERT(blk->arguments.size()==1);
+        auto selfName = blk->arguments[0]->name;
         if ( !needIndex ) {
-            auto vself = make_smart<ExprVar>(decl->at, "self");
+            auto vself = make_smart<ExprVar>(decl->at, selfName);
             auto fdecl = make_smart<ExprField>(decl->at, vself, decl->name);
             auto op2c = make_smart<ExprClone>(decl->at, fdecl, decl->value->clone());
             return op2c;
         } else {
-            auto vself = make_smart<ExprVar>(decl->at, "self");
+            auto vself = make_smart<ExprVar>(decl->at, selfName);
             auto cidx = make_smart<ExprConstInt>(decl->at, index);
             auto vat = make_smart<ExprAt>(decl->at, vself, cidx);
             auto fdecl = make_smart<ExprField>(decl->at, vat, decl->name);

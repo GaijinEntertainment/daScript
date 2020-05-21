@@ -1879,6 +1879,9 @@ namespace das {
         }
         cexpr->makeType = make_smart<TypeDecl>(*makeType);
         cexpr->makeStructFlags = makeStructFlags;
+        if ( block ) {
+            cexpr->block = block->clone();
+        }
         return cexpr;
     }
 

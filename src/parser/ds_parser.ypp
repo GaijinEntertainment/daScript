@@ -376,6 +376,8 @@
 %type <pExpression>     block_or_simple_block
 %type <pExpression>     func_addr_expr
 
+%type <pExpression>     optional_block
+
 %type <pFuncDecl>       function_declaration
 %type <pFuncDecl>       function_declaration_header
 
@@ -2362,34 +2364,44 @@ make_struct_dim
     }
     ;
 
+optional_block
+    :   { $$ = nullptr; }
+    |   DAS_WHERE expr_block[blk] { $$ = $blk; }
+    ;
+
 make_struct_decl
-    :   BRABRAB [loc] type_declaration[mkt] make_struct_dim[msd] ']' ']' {
+    :   BRABRAB [loc] type_declaration[mkt] make_struct_dim[msd] optional_block[blk] ']' ']' {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
-    |   BRABRAB [loc] type_declaration[mkt] ']' ']' {
+    |   BRABRAB [loc] type_declaration[mkt] optional_block[blk] ']' ']' {
         auto msd = new ExprMakeStruct();
         msd->makeType = TypeDeclPtr($mkt);
+        msd->block = $blk;
         msd->at = tokAt(@loc);
         $$ = msd;
     }
-    |   BRABRAB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] ']' ']' {
+    |   BRABRAB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] ']' ']' {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(@loc);
         $$ = $msd;
     }
-    |   BRACBRB [loc] type_declaration[mkt] make_struct_dim[msd] '}' ']' {
+    |   BRACBRB [loc] type_declaration[mkt] make_struct_dim[msd] optional_block[blk] '}' ']' {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(@loc);
         auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
     }
-    |   BRACBRB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] '}' ']' {
+    |   BRACBRB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] '}' ']' {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(@loc);
         auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
         tam->arguments.push_back(ExpressionPtr($msd));

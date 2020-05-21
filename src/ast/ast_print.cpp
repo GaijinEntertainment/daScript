@@ -954,7 +954,7 @@ namespace das {
             Visitor::visitMakeStructureIndex(expr, index, lastField);
         }
         virtual void preVisitMakeStructureBlock ( ExprMakeStruct *, Expression * ) override {
-            ss << "; where ";
+            ss << " where ";
         }
         virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
             ss << "]]";
