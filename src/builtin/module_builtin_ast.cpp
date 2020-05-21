@@ -188,7 +188,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addField<DAS_BIND_MANAGED_FIELD(annotationData)>("annotationData");
             addField<DAS_BIND_MANAGED_FIELD(annotationDataSid)>("annotationDataSid");
-            // properties
             addFieldEx ( "blockFlags", "blockFlags", offsetof(ExprBlock, blockFlags), makeExprBlockFlags() );
         }
     };
@@ -208,13 +207,20 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeMakeFieldDeclFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "MakeFieldDeclFlags";
+        ft->argNames = { "moveSemantics", "cloneSemantics" };
+        return ft;
+    }
+
     struct AstMakeFieldDeclAnnotation : ManagedStructureAnnotation<MakeFieldDecl> {
         AstMakeFieldDeclAnnotation(ModuleLibrary & ml)
             :  ManagedStructureAnnotation<MakeFieldDecl> ("MakeFieldDecl", ml) {
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(value)>("value");
-            addField<DAS_BIND_MANAGED_FIELD(moveSemantic)>("moveSemantic");
+            addFieldEx ( "flags", "flags", offsetof(MakeFieldDecl, flags), makeMakeFieldDeclFlags() );
         }
     };
 
@@ -1749,6 +1755,7 @@ namespace das {
             addAlias(makeExprCastFlags());
             addAlias(makeExprVarFlags());
             addAlias(makeExprMakeStructFlags());
+            addAlias(makeMakeFieldDeclFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)

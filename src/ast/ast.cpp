@@ -1859,7 +1859,7 @@ namespace das {
     MakeFieldDeclPtr MakeFieldDecl::clone() const {
         auto md = make_smart<MakeFieldDecl>();
         md->at = at;
-        md->moveSemantic = moveSemantic;
+        md->flags = flags;
         md->name = name;
         md->value = value->clone();
         return md;
@@ -1902,6 +1902,11 @@ namespace das {
                 if ( field ) ++it; else it = fields->erase(it);
             }
             vis.visitMakeStructureIndex(this, index, index==int(structs.size()-1));
+        }
+        if ( block && vis.canVisitMakeStructureBlock(this, block.get()) ) {
+            vis.preVisitMakeStructureBlock(this, block.get());
+            block = block->visit(vis);
+            if ( block ) block = vis.visitMakeStructureBlock(this, block.get());
         }
         return vis.visit(this);
     }

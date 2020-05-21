@@ -5172,6 +5172,17 @@ namespace das {
             if ( !decl->value->type ) {
                 return Visitor::visitMakeStructureField(expr,index,decl,last);
             }
+            if ( decl->cloneSemantic ) {
+                if ( !expr->block ) expr->block = makeStructWhereBlock(expr);
+                DAS_ASSERT(expr->block->rtti_isMakeBlock());
+                auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
+                DAS_ASSERT(mkb->block->rtti_isBlock());
+                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                auto cle = convertToCloneExpr(expr,index,decl);
+                blk->list.push_back(cle);
+                reportAstChanged();
+                return nullptr;
+            }
             if ( expr->makeType->baseType == Type::tStructure ) {
                 if ( auto field = expr->makeType->structType->findField(decl->name) ) {
                     if ( !field->type->isSameType(*decl->value->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
@@ -5282,7 +5293,7 @@ namespace das {
                                     return fd->name == fi.name;
                                 });
                                 if ( it==st->end() ) {
-                                    auto msf = make_smart<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy());
+                                    auto msf = make_smart<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy(), false);
                                     st->push_back(msf);
                                     reportAstChanged();
                                 }

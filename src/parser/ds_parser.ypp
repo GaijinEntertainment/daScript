@@ -2329,14 +2329,21 @@ make_decl
 
 make_struct_fields
     :   NAME[fn] copy_or_move[com] expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com,false);
+        delete $fn;
+        auto msd = new MakeStruct();
+        msd->push_back(mfd);
+        $$ = msd;
+    }
+    |   NAME[fn] CLONEEQU expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),false,true);
         delete $fn;
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
     |   make_struct_fields[msd] ',' NAME[fn] copy_or_move[com] expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com);
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com,false);
         delete $fn;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;

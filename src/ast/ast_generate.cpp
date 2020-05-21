@@ -530,14 +530,14 @@ namespace das {
         auto ms = make_smart<MakeStruct>();
         auto atTHIS = make_smart<ExprAddr>(lf->at, "_::" + lf->name);
         // TODO: expand atTHIS->funcType, so that it points to correct function by type as well
-        auto mTHIS = make_smart<MakeFieldDecl>(lf->at, "__lambda", atTHIS, false);
+        auto mTHIS = make_smart<MakeFieldDecl>(lf->at, "__lambda", atTHIS, false, false);
         ms->push_back(mTHIS);
         auto atTHISF = make_smart<ExprAddr>(lff->at, "_::" + lff->name);
-        auto mTHISF = make_smart<MakeFieldDecl>(lf->at, "__finalize", atTHISF, false);
+        auto mTHISF = make_smart<MakeFieldDecl>(lf->at, "__finalize", atTHISF, false, false);
         ms->push_back(mTHISF);
         for ( auto cV : capt ) {
             auto varV = make_smart<ExprVar>(cV->at, cV->name);
-            auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, !cV->type->canCopy());
+            auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, !cV->type->canCopy(), false);
             ms->push_back(mV);
         }
         makeS->structs.push_back(ms);
@@ -589,6 +589,41 @@ namespace das {
     void giveBlockVariablesUniqueNames  ( const ExpressionPtr & expr ) {
         RenameVar rename;
         expr->visit(rename);
+    }
+
+    // rename variable
+    class RenameBlockArgument : public Visitor {
+    public:
+        RenameBlockArgument ( const string & name, const string & newName, ExprBlock * block )
+            : argName(name), argNewName(newName), renameBlock(block) {
+
+        }
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            scopes.push_back(block);
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            scopes.pop_back();
+            return Visitor::visit(block);
+        }
+        virtual void preVisit ( ExprVar * expr ) override {
+            if ( !scopes.empty() ) {
+                auto thisBlock = scopes.back();
+                if ( expr->name==argName && expr->block && renameBlock==thisBlock ) {
+                    expr->name = argNewName;
+                }
+            }
+        }
+    protected:
+        string argName;
+        string argNewName;
+        ExprBlock * renameBlock;
+        vector<ExprBlock *> scopes;
+    };
+
+    void renameBlockArgument ( ExprBlock * block, const string & name, const string & newName ) {
+        RenameBlockArgument vis(name,newName,block);
+        block->visit(vis);
     }
 
     // replace ref to ptr
@@ -1428,6 +1463,49 @@ namespace das {
         // and done
         verifyGenerated(func->body);
         return func;
+    }
+
+    ExpressionPtr convertToCloneExpr ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl ) {
+        bool needIndex = expr->structs.size()>1;
+        auto blk = static_pointer_cast<ExprBlock>(expr->block);
+        if ( !needIndex ) {
+            auto vself = make_smart<ExprVar>(decl->at, "self");
+            auto fdecl = make_smart<ExprField>(decl->at, vself, decl->name);
+            auto op2c = make_smart<ExprClone>(decl->at, fdecl, decl->value->clone());
+            return op2c;
+        } else {
+            auto vself = make_smart<ExprVar>(decl->at, "self");
+            auto cidx = make_smart<ExprConstInt>(decl->at, index);
+            auto vat = make_smart<ExprAt>(decl->at, vself, cidx);
+            auto fdecl = make_smart<ExprField>(decl->at, vat, decl->name);
+            auto op2c = make_smart<ExprClone>(decl->at, fdecl, decl->value->clone());
+            return op2c;
+        }
+    }
+
+    ExpressionPtr makeStructWhereBlock ( ExprMakeStruct * mks ) {
+        // make a block
+        auto block = make_smart<ExprBlock>();
+        block->at = mks->at;
+        block->isClosure = true;
+        block->returnType = make_smart<TypeDecl>(Type::tVoid);
+        // only one argument, and its 'self'
+        auto argT = make_smart<TypeDecl>(*(mks->makeType));
+        argT->constant = false;
+        if ( mks->structs.size() > 1 ) {
+            argT->dim.push_back(int32_t(mks->structs.size()));
+        }
+        auto argV = make_smart<Variable>();
+        argV->name = "self";
+        argV->type = argT;
+        argV->at = mks->at;
+        argV->generated = true;
+        block->arguments.push_back(argV);
+        // make-block
+        auto mkb = make_smart<ExprMakeBlock>(mks->at,block,false);
+        // and done
+        verifyGenerated(mkb);
+        return mkb;
     }
 }
 

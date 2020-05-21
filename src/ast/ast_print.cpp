@@ -953,6 +953,9 @@ namespace das {
             if ( !lastField ) ss << "; ";
             Visitor::visitMakeStructureIndex(expr, index, lastField);
         }
+        virtual void preVisitMakeStructureBlock ( ExprMakeStruct *, Expression * ) override {
+            ss << "; where ";
+        }
         virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
             ss << "]]";
             return Visitor::visit(expr);

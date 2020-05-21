@@ -1,7 +1,3 @@
-// options log = true
-
-require UnitTest
-
 struct Foo
     a : array<int>
 

@@ -655,22 +655,56 @@ namespace das
                 }
             }
         }
+        if ( block ) {
+            /*
+                TODO: optimize
+                    there is no point in making fake invoke expression, we can replace 'self' with fake variable we've made
+                    however this needs to happen during infer, and this needs to have different visitor,
+                    so that stack is allocated properly in subexpressions etc
+            */
+            // making fake variable, which points to entire structure
+            string fakeName = "__makelocal";
+            auto fakeVariable = make_smart<Variable>();
+            fakeVariable->name = fakeName;
+            fakeVariable->type = make_smart<TypeDecl>(*type);
+            if ( useCMRES ) {
+                fakeVariable->aliasCMRES = true;
+            } else if ( useStackRef ) {
+                fakeVariable->stackTop = stackTop + extraOffset;
+                fakeVariable->type->ref = true;
+            } else {
+                fakeVariable->stackTop = stackTop + extraOffset;
+            }
+            fakeVariable->generated = true;
+            // make fake ExprVar which is that field
+            auto fakeVar = make_smart<ExprVar>(at, fakeName);
+            fakeVar->type = fakeVariable->type;
+            fakeVar->variable = fakeVariable;
+            fakeVar->local = true;
+            // make fake invoke expression
+            auto fakeInvoke = make_smart<ExprInvoke>(at,"invoke");
+            fakeInvoke->arguments.push_back(block);
+            fakeInvoke->arguments.push_back(fakeVar);
+            // simulate it
+            auto simI = fakeInvoke->simulate(context);
+            simlist.push_back(simI);
+        }
         return simlist;
     }
 
     SimNode * ExprMakeStruct::simulate (Context & context) const {
-        SimNode_Block * block;
+        SimNode_Block * blk;
         if ( useCMRES ) {
-            block = context.code->makeNode<SimNode_MakeLocalCMRes>(at);
+            blk = context.code->makeNode<SimNode_MakeLocalCMRes>(at);
         } else {
-            block = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
+            blk = context.code->makeNode<SimNode_MakeLocal>(at, stackTop);
         }
         auto simlist = simulateLocal(context);
-        block->total = int(simlist.size());
-        block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
-        for ( uint32_t i = 0; i != block->total; ++i )
-            block->list[i] = simlist[i];
-        return block;
+        blk->total = int(simlist.size());
+        blk->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*blk->total);
+        for ( uint32_t i = 0; i != blk->total; ++i )
+            blk->list[i] = simlist[i];
+        return blk;
     }
 
     // make array

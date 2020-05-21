@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/ast/ast_generate.h"
 
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/hash.h"
@@ -626,6 +627,9 @@ namespace das {
         }
         __forceinline bool isMoved(const VariablePtr & var) const {
             return moved.find(var.get()) != moved.end();
+        }
+        void renameVariable ( Variable * var, const string & newName ) {
+            rename[var] = newName;
         }
     protected:
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
@@ -2286,9 +2290,19 @@ namespace das {
             ss << "));\n";
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct *, Expression * ) override { return false; }
         virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
+            if ( expr->block ) {
+                DAS_ASSERT(expr->block->rtti_isMakeBlock());
+                auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
+                DAS_ASSERT(mkb->block->rtti_isBlock());
+                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                collector.renameVariable(blk->arguments[0].get(), mksName(expr));
+                ss << string(tab,'\t');
+                blk->visit(*this);
+            }
             if ( !expr->isNewHandle ) {
-                ss << string(tab,'\t') << "return " << mksName(expr)<< ";\n";
+                ss << string(tab,'\t') << "return " << mksName(expr) << ";\n";
             }
             tab --;
             ss << string(tab,'\t') << "})";

@@ -1038,10 +1038,19 @@ namespace das
         LineInfo        at;
         string          name;
         ExpressionPtr   value;
-        bool            moveSemantic;
+        union {
+            struct {
+                bool    moveSemantic : 1;
+                bool    cloneSemantic : 1;
+            };
+            uint32_t    flags = 0;
+        };
         MakeFieldDecl () = default;
-        MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e, bool mv )
-            : at(a), name(n), value(e), moveSemantic(mv) {}
+        MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e, bool mv, bool cl )
+            : at(a), name(n), value(e) {
+            moveSemantic = mv;
+            cloneSemantic = cl;
+        }
         MakeFieldDeclPtr clone() const;
     };
 
@@ -1094,6 +1103,7 @@ namespace das
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual bool rtti_isMakeStruct() const override { return true; }
         vector<MakeStructPtr>       structs;
+        ExpressionPtr               block;
         union {
             struct {
                 bool useInitializer : 1;

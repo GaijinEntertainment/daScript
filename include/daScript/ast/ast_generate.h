@@ -19,6 +19,26 @@ namespace das {
     // gives combined region for all subexpressions
     LineInfo encloseAt ( const ExpressionPtr & expr );
 
+    // replaces all occurences of block argument name
+    void renameBlockArgument ( ExprBlock * block, const string & name, const string & newName );
+
+    /*
+        $(self:MKS)
+            ...
+    or
+        $(self:MKS[])
+            ...
+    */
+    struct ExprMakeStruct;
+    ExpressionPtr makeStructWhereBlock ( ExprMakeStruct * mks );
+
+    /*
+        self.decl := decl.value or self[index].decl = decl.value
+    */
+    struct MakeFieldDecl;
+    ExpressionPtr convertToCloneExpr ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl );
+
+
     /*
         def foo ( var self : Foo; ... )
             with self

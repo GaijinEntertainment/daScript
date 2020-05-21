@@ -28,6 +28,7 @@ namespace das {
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) { return true; }
         virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) { return true; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}
@@ -40,9 +41,7 @@ namespace das {
         // ENUMERATOIN
         virtual void preVisit ( Enumeration * enu ) { }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) { }
-        virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) {
-            return value;
-        }
+        virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) { return value; }
         virtual EnumerationPtr visit ( Enumeration * enu ) { return enu; }
         // STRUCTURE
         virtual void preVisit ( Structure * var ) { }
@@ -140,25 +139,20 @@ namespace das {
         virtual ExpressionPtr visitForSource ( ExprFor *, Expression * that , bool ) { return that; }
         // MAKE VARIANT
         virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
-        virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField) {
-            return decl;
-        }
+        virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField) { return decl; }
             // MAKE STRUCTURE
         virtual void preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool lastIndex ) {}
         virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool lastField ) {}
         virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool lastField ) {}
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool lastField ) {
-            return decl; }
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool lastField ) { return decl; }
+        virtual void preVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) {}
+        virtual ExpressionPtr visitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) { return blk; }
         // MAKE ARRAY
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) {}
-        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) {
-            return init;
-        }
+        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) { return init; }
         // MAKE TUPLE
         virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastIndex ) {}
-        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) {
-            return init;
-        }
+        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) { return init; }
         // ARRAY COMPREHENSION
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) {}
         virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) {}
