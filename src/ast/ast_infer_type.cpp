@@ -3312,12 +3312,13 @@ namespace das {
                     TypeDecl::applyAutoContracts(argT, arg->type);
                     arg->type = argT;
                     reportAstChanged();
+                    return Visitor::visitBlockArgumentInit(block, arg, that);
                 }
             }
             if (!arg->type->isAuto()) {
                 if (!arg->init->type || !arg->type->isSameType(*arg->init->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
                     error("block argument default value type mismatch "
-                        + arg->type->describe() + " vs " + arg->init->type->describe(),  "", "",
+                        + arg->type->describe() + " vs " + (arg->init->type ? arg->init->type->describe() : "???"),  "", "",
                         arg->init->at, CompilationError::invalid_argument_type);
                 }
                 if (arg->init->type && arg->type->ref && !arg->init->type->ref) {
