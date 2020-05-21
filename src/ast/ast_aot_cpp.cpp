@@ -1908,8 +1908,14 @@ namespace das {
                     ss << ">::swizzle(";
                 }
             }
-        }
+            if ( expr->value->type->aotAlias ) {
+                ss << "das_alias<" << expr->value->type->alias << ">::from(";
+            }
+         }
         virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
+            if ( expr->value->type->aotAlias ) {
+                ss << ")";
+            }
             if ( expr->type->ref ) {
                 ss << ")";
             } else {

@@ -3,6 +3,12 @@ require UnitTest
 require math
 
 [export]
+def swizzleFail(battleAreaPoints:Point3Array)
+    var pointStart : float2
+    pointStart.x = battleAreaPoints[0].x
+    print("{pointStart}")
+
+[export]
 def test:bool
     var a = UnitTest::getSamplePoint3()
     assert(typeinfo(typename a) == "float3")
