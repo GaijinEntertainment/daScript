@@ -74,6 +74,18 @@ namespace das {
             evalTop = stack + et;
         }
 
+        __forceinline bool push_invoke(uint32_t size, uint32_t et, char * & EP, char * & SP ) {
+            DAS_ASSERTF(stack,"can't push on null stack");
+            if (stackTop - size < stack ) {
+                return false;
+            }
+            EP = evalTop;
+            SP = stackTop;
+            stackTop -= size;
+            evalTop = stack + et;
+            return true;
+        }
+
         __forceinline char * ap() const {                // allocation stack
             return stackTop;
         }

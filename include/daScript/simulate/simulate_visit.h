@@ -101,6 +101,22 @@ namespace das {
         V_END();
     }
 
+   template <int argCount>
+    SimNode * SimNode_Invoke_StackWalk<argCount>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Invoke);
+        V_CALL();
+        V_END();
+    }
+
+    template <int argCount>
+    SimNode * SimNode_InvokeAndCopyOrMove_StackWalk<argCount>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(InvokeAndCopyOrMove);
+        V_CALL();
+        V_END();
+    }
+
     template <int argCount>
     SimNode * SimNode_InvokeFn<argCount>::visit ( SimVisitor & vis ) {
         V_BEGIN();

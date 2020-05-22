@@ -151,7 +151,7 @@ namespace das {
         virtual FunctionPtr visit ( Function * that ) override {
             func->totalStackSize = das::max(func->totalStackSize, stackTop);
             // detecting fastcall
-            if ( !program->policies.debugger ) {
+            if ( !program->getDebugger() ) {
                 if (!func->exports && !func->addr && func->totalStackSize == sizeof(Prologue)) {
                     if (func->body->rtti_isBlock()) {
                         auto block = static_pointer_cast<ExprBlock>(func->body);

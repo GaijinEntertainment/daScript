@@ -235,6 +235,11 @@ namespace das
             }
             for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
                 TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i]);
+                if ( !autoT->argNames.empty() ) {
+                    TT->argNames.push_back(autoT->argNames[i]);
+                } else if ( !initT->argNames.empty() ) {
+                    TT->argNames.push_back(initT->argNames[i]);
+                }
                 if ( !TT->argTypes[i] ) return nullptr;
             }
         }

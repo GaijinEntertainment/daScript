@@ -359,7 +359,9 @@ namespace das {
         "infer_time_folding",           Type::tBool,
         "disable_run",                  Type::tBool,
         "max_infer_passes",             Type::tInt,
-        "indenting",                    Type::tInt
+        "indenting",                    Type::tInt,
+    // debugger
+        "debugger",                     Type::tBool
     };
 
     void verifyOptions() {

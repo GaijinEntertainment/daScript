@@ -1,4 +1,4 @@
-options log = true
+options debugger = true
 
 def funC(y:string)
     var q = y

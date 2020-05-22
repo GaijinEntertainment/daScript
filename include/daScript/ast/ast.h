@@ -816,6 +816,7 @@ namespace das
         VarInfo * makeVariableDebugInfo ( const Structure & st, const Structure::FieldDeclaration & var );
         StructInfo * makeStructureDebugInfo ( const Structure & st );
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
+        FuncInfo * makeBlockDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
     public:
         smart_ptr<DebugInfoAllocator>  debugInfo;
@@ -849,6 +850,11 @@ namespace das
         bool smart_pointer_by_value_unsafe = false;     // is passing smart_ptr by value unsafe?
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
+    // debugger
+        //  when enabled
+        //      1. disables [fastcall]
+        //      2. invoke of blocks will have extra prologue overhead
+        bool debugger = false;
     };
 
     struct CursorVariable {
@@ -933,6 +939,7 @@ namespace das
         void buildADLookup ( Context & context, TextWriter & logs );
         CursorInfo cursor ( const LineInfo & info );
         bool getOptimize() const;
+        bool getDebugger() const;
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {

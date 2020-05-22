@@ -1,4 +1,4 @@
-expect 30116:8
+expect 30116:9
 
 enum do // 30116: invalid name
     foo

@@ -393,6 +393,7 @@ namespace das
 #pragma warning(disable:4701)
 #pragma warning(disable:4324)
 #endif
+
         __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
             char * EP, *SP;
             vec4f * TBA = nullptr;
@@ -401,6 +402,45 @@ namespace das
             BlockArguments saveArguments;
             if ( block.argumentsOffset || cmres ) {
                 ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
+                saveArguments = *ba;
+                ba->arguments = args;
+                ba->copyOrMoveResult = (char *) cmres;
+                TBA = abiThisBlockArg;
+                abiThisBlockArg = args;
+            }
+            vec4f * __restrict saveFunctionArguments = abiArg;
+            abiArg = block.functionArguments;
+            vec4f block_result = block.body->eval(*this);
+            abiArg = saveFunctionArguments;
+            if ( ba ) {
+                *ba = saveArguments;
+                abiThisBlockArg = TBA;
+            }
+            stack.pop(EP, SP);
+            return block_result;
+        }
+
+        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres, FuncInfo * finfo, int line ) {
+            char * EP, *SP;
+            vec4f * TBA = nullptr;
+            char * STB = stack.bottom();
+#if DAS_ENABLE_STACK_WALK
+            if (!stack.push_invoke(sizeof(Prologue), block.stackOffset, EP, SP)) {
+                throw_error_ex("stack overflow during block invoke");
+                return v_zero();
+            }
+            Prologue * pp = (Prologue *)stack.ap();
+            pp->arguments = args;
+            pp->info = finfo;
+            pp->line = line;
+#else
+            finfo;
+            stack.invoke(block.stackOffset, EP, SP);
+#endif
+            BlockArguments * __restrict ba = nullptr;
+            BlockArguments saveArguments;
+            if ( block.argumentsOffset || cmres ) {
+                ba = (BlockArguments *) ( STB + block.argumentsOffset );
                 saveArguments = *ba;
                 ba->arguments = args;
                 ba->copyOrMoveResult = (char *) cmres;

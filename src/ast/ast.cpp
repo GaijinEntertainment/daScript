@@ -1094,6 +1094,7 @@ namespace das {
         for ( auto & arg : arguments ) {
             if ( arg->type ) {
                 eT->argTypes.push_back(make_smart<TypeDecl>(*arg->type));
+                eT->argNames.push_back(arg->name);
             }
         }
         return eT;
@@ -2383,6 +2384,10 @@ namespace das {
 
     bool Program::getOptimize() const {
         return !policies.no_optimizations && options.getBoolOption("optimize",true);
+    }
+
+    bool Program::getDebugger() const {
+        return policies.debugger || options.getBoolOption("debugger",false);
     }
 
     void Program::optimize(TextWriter & logs, ModuleGroup & libGroup) {
