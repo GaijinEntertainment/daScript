@@ -5240,7 +5240,6 @@ namespace das {
                 }
             }
             if ( expr->block ) {
-                if ( !expr->block ) expr->block = makeStructWhereBlock(expr);
                 DAS_ASSERT(expr->block->rtti_isMakeBlock());
                 auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
                 DAS_ASSERT(mkb->block->rtti_isBlock());
