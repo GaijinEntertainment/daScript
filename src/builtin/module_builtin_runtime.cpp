@@ -556,6 +556,11 @@ namespace das
         }
     };
 
+    bool is_compiling ( Context * ctx ) {
+        if ( !ctx->thisProgram ) return false;
+        return ctx->thisProgram->isCompiling || ctx->thisProgram->isSimulating;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
@@ -576,6 +581,8 @@ namespace das
         addAnnotation(make_smart<PersistentStructureAnnotation>());
         // typeinfo macros
         addTypeInfoMacro(make_smart<ClassInfoMacro>());
+        // compile-time functions
+        addExtern<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling", SideEffects::accessExternal, "is_compiling");
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_first");

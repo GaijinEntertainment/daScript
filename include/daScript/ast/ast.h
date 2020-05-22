@@ -955,12 +955,14 @@ namespace das
         int                         totalVariables = 0;
         int                         newLambdaIndex = 1;
         vector<Error>               errors;
-        bool                        failToCompile = false;
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
         union {
             struct {
+                bool    failToCompile : 1;
                 bool    unsafe : 1;
+                bool    isCompiling : 1;
+                bool    isSimulating : 1;
             };
             uint32_t    flags = 0;
         };

@@ -289,6 +289,7 @@ namespace das {
     public:
         FoldingVisitor(const ProgramPtr & prog)
             : ctx(prog->getContextStackSize()) {
+            ctx.thisProgram = prog.get();
         }
     protected:
         Context         ctx;

@@ -1,6 +1,7 @@
 #pragma once
 
 namespace das {
+    bool is_compiling ( Context * ctx );
     void builtin_throw ( char * text, Context * context );
     void builtin_print ( char * text, Context * context );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );

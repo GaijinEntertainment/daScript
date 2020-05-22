@@ -194,6 +194,7 @@ namespace das {
         auto time0 = ref_time_ticks();
         int err;
         auto program = g_Program = make_smart<Program>();
+        program->isCompiling = true;
         g_Program->policies = policies;
         g_Access = access;
         program->thisModuleGroup = &libGroup;
@@ -214,6 +215,7 @@ namespace das {
             g_Program.reset();
             g_Access.reset();
             g_FileAccessStack.clear();
+            program->isCompiling = false;
             return program;
         }
         err = das_yyparse();        // TODO: add mutex or make thread safe?
@@ -223,6 +225,7 @@ namespace das {
         g_FileAccessStack.clear();
         if ( err || program->failed() ) {
             sort(program->errors.begin(),program->errors.end());
+            program->isCompiling = false;
             return program;
         } else {
             program->inferTypes(logs, libGroup);
@@ -255,6 +258,7 @@ namespace das {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << "\n";
             }
+            program->isCompiling = false;
             return program;
         }
     }

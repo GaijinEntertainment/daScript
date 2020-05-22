@@ -207,7 +207,6 @@ namespace das
         }
 
         __forceinline void simEnd() {
-            thisProgram = nullptr;
             thisHelper = nullptr;
         }
 

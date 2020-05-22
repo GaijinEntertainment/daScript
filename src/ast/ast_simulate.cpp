@@ -2402,6 +2402,7 @@ namespace das
     }
 
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
+        isSimulating = true;
         context.thisProgram = this;
         context.constStringHeap = make_smart<StringAllocator>();
         if ( globalStringHeapSize ) {
@@ -2504,10 +2505,10 @@ namespace das
         buildADLookup(context, logs);
         context.simEnd();
         // if RTTI is enabled
-        if ( options.getBoolOption("rtti",policies.rtti) ) {
-            context.thisProgram = this;
+        if (errors.size()) {
+            isSimulating = false;
+            return false;
         }
-        if (errors.size()) return false;
         fusion(context, logs);
         context.relocateCode();
         context.restart();
@@ -2590,6 +2591,10 @@ namespace das
             aotCpp(context,logs);
             registerAotCpp(logs,context);
         }
+        if ( !options.getBoolOption("rtti",policies.rtti) ) {
+            context.thisProgram = nullptr;
+        }
+        isSimulating = false;
         return errors.size() == 0;
     }
 
