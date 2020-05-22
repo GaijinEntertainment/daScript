@@ -794,7 +794,7 @@ namespace das
         TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
         ssw << "\nCALL STACK (sp=" << (stack.top() - stack.sp()) << "):\n";
-        char * sp = stack.sp();
+        char * sp = stack.ap();
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             if ( !pp->info ) {

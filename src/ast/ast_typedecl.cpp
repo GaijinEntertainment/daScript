@@ -315,11 +315,12 @@ namespace das
             stream << das_to_string(baseType) << "<";
             if ( argTypes.size() ) {
                 stream << "(";
-                for ( const auto & arg : argTypes ) {
-                    stream << arg->describe(extra);
-                    if ( arg != argTypes.back() ) {
-                        stream << ";";
+                for ( size_t ai=0; ai!=argTypes.size(); ++ ai ) {
+                    if ( ai!=0 ) stream << ";";
+                    if ( !argNames.empty() ) {
+                        stream << argNames[ai] << ":";
                     }
+                    stream << argTypes[ai]->describe(extra);
                 }
                 stream << ")";
             }

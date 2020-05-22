@@ -55,7 +55,7 @@ namespace das {
 
     FuncInfo * DebugInfoHelper::makeBlockDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at ) {
         Function fakeFunc;
-        fakeFunc.name = "invoke block " + blk->describe();
+        fakeFunc.name = "invoke " + blk->describe();
         fakeFunc.at = at;
         fakeFunc.result = blk->firstType ? blk->firstType : make_smart<TypeDecl>(Type::tVoid);
         fakeFunc.totalStackSize = sizeof(Prologue);

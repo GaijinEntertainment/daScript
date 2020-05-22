@@ -466,6 +466,9 @@ namespace das
         vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when);
 
         template <typename Fn>
+        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, FuncInfo * info, int line);
+
+        template <typename Fn>
         vec4f callEx(const SimFunction * fn, vec4f *args, void * cmres, int line, Fn && when) {
             // PUSH
             char * EP, *SP;
@@ -796,6 +799,46 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
         BlockArguments saveArguments;
         if ( block.argumentsOffset || cmres ) {
             ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
+            saveArguments = *ba;
+            ba->arguments = args;
+            ba->copyOrMoveResult = (char *) cmres;
+            TBA = abiThisBlockArg;
+            abiThisBlockArg = args;
+        }
+        vec4f * __restrict saveFunctionArguments = abiArg;
+        abiArg = block.functionArguments;
+        SimNode_ClosureBlock * cb = (SimNode_ClosureBlock *) block.body;
+        when(cb->code0 ? cb->list[0] : block.body);
+        abiArg = saveFunctionArguments;
+        if ( ba ) {
+            *ba = saveArguments;
+            abiThisBlockArg = TBA;
+        }
+        return result;
+    }
+
+    template <typename Fn>
+    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, FuncInfo * finfo, int line ) {
+        char * EP, *SP;
+        vec4f * TBA = nullptr;
+        char * STB = stack.bottom();
+#if DAS_ENABLE_STACK_WALK
+        if (!stack.push_invoke(sizeof(Prologue), block.stackOffset, EP, SP)) {
+            throw_error_ex("stack overflow during invokeEx");
+            return v_zero();
+        }
+        Prologue * pp = (Prologue *)stack.ap();
+        pp->arguments = args;
+        pp->info = finfo;
+        pp->line = line;
+#else
+        finfo;
+        stack.invoke(block.stackOffset, EP, SP);
+#endif
+        BlockArguments * ba = nullptr;
+        BlockArguments saveArguments;
+        if ( block.argumentsOffset || cmres ) {
+            ba = (BlockArguments *) ( STB + block.argumentsOffset );
             saveArguments = *ba;
             ba->arguments = args;
             ba->copyOrMoveResult = (char *) cmres;
