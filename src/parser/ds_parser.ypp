@@ -961,11 +961,21 @@ expr_pipe
         if ( pipeCall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(ExpressionPtr($arg));
-            $$ = $fncall;
+        } else if ( pipeCall->rtti_isMakeStruct() ) {
+            auto pMS = (ExprMakeStruct *) pipeCall;
+            if ( pMS->block ) {
+                das_yyerror("can't pipe into [[ make structure ]]. it already has where closure",
+                    tokAt(@loc),CompilationError::cant_pipe);
+                delete $arg;
+            } else {
+                pMS->block = $arg;
+            }
         } else {
-            das_yyerror("can only pipe into function call",tokAt(@loc),CompilationError::cant_pipe);
-            $$ = $fncall;
+            das_yyerror("can only pipe into function call or [[ make structure ]]",
+                tokAt(@loc),CompilationError::cant_pipe);
+            delete $arg;
         }
+        $$ = $fncall;
     }
     |   LAPIPE expr_block[arg] {
         $$ = $arg;

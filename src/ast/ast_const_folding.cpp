@@ -193,12 +193,18 @@ namespace das {
         }
     // make structure
         virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
-            expr->noSideEffects = true;
-            expr->noNativeSideEffects = true;
-            for ( const auto & mksp : expr->structs ) {
-                for ( const auto & fld : *mksp ) {
-                    expr->noSideEffects &= fld->value->noSideEffects;
-                    expr->noNativeSideEffects &= fld->value->noNativeSideEffects;
+            if ( expr->block ) {
+                // TODO: determine real side effects of the block
+                expr->noSideEffects = false;
+                expr->noNativeSideEffects = false;
+            } else {
+                expr->noSideEffects = true;
+                expr->noNativeSideEffects = true;
+                for ( const auto & mksp : expr->structs ) {
+                    for ( const auto & fld : *mksp ) {
+                        expr->noSideEffects &= fld->value->noSideEffects;
+                        expr->noNativeSideEffects &= fld->value->noNativeSideEffects;
+                    }
                 }
             }
             return Visitor::visit(expr);
@@ -530,7 +536,7 @@ namespace das {
             return Visitor::visit(expr);
         }
     // block
-        virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) override {
+        virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             if ( expr->constexpression ) {  // top level constant expresson like 4;
                 reportFolding();
                 return nullptr;
