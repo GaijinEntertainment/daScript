@@ -21,6 +21,9 @@
 
 namespace das {
 
+    #define DAS_SETBOOLOR(a,b)  (([&]()->bool{ bool & A=((a)); A=A||((b)); return A; })())
+    #define DAS_SETBOOLAND(a,b) (([&]()->bool{ bool & A=((a)); A=A&&((b)); return A; })())
+
     #define DAS_MAKE_ANNOTATION(name)   ((TypeAnnotation*)(intptr_t(name)|1))
 
     #define DAS_COMMENT(...)

@@ -63,10 +63,6 @@ namespace das
     DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinRotl);
     DEFINE_OP2_SET_NUMERIC_INTEGER(SetBinRotr);
     // boolean and, or, xor
-    DEFINE_POLICY(SetBoolAnd);
-    IMPLEMENT_OP2_SET_POLICY(SetBoolAnd, Bool, bool);
-    DEFINE_POLICY(SetBoolOr);
-    IMPLEMENT_OP2_SET_POLICY(SetBoolOr, Bool, bool);
     DEFINE_POLICY(SetBoolXor);
     IMPLEMENT_OP2_SET_POLICY(SetBoolXor, Bool, bool);
     DEFINE_POLICY(BoolXor);

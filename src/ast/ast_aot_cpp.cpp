@@ -1257,6 +1257,9 @@ namespace das {
             return Visitor::visit(that);
         }
     // op2
+        bool isSetBool ( ExprOp2 * that ) const {
+            return (that->op=="|=" || that->op=="&=") && that->right->type->isSimpleType(Type::tBool);
+        }
         bool isOpPolicy ( ExprOp2 * that ) const {
             if ( isalpha(that->op[0]) ) return true;
             if ( that->op=="/" || that->op=="%" ) return true;
@@ -1320,6 +1323,9 @@ namespace das {
                         ss << "cast<" << describeCppType(that->left->type, CpptSubstitureRef::no, CpptSkipRef::yes, CpptSkipConst::yes) << ">::from(";
                     }
                 }
+            } else if ( isSetBool(that) ) {
+                if ( that->op=="|=" ) ss << "DAS_SETBOOLOR((";
+                else if ( that->op=="&=" ) ss << "DAS_SETBOOLAND((";
             }
         }
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
@@ -1346,6 +1352,8 @@ namespace das {
                         ss << "cast<" << describeCppType(that->right->type, CpptSubstitureRef::no, CpptSkipRef::yes, CpptSkipConst::yes) << ">::from(";
                     }
                 }
+            } else if ( isSetBool(that) ) {
+                ss << "),(";
             } else {
                 if ( that->type->baseType==Type::tBool ) {
                     ss << " ";
@@ -1377,6 +1385,8 @@ namespace das {
                 if ( policyResultNeedCast(pt, that->type) ) {
                     ss << ")";
                 }
+            } else if ( isSetBool(that) ) {
+                ss << "))";
             }
             if ( !noBracket(that) ) ss << ")";
             return Visitor::visit(that);

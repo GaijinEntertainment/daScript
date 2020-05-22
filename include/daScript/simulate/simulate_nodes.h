@@ -2433,6 +2433,22 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    struct Sim_SetBoolAnd : SimNode_Op2 {
+        DAS_BOOL_NODE;
+        Sim_SetBoolAnd ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "SetBoolAnd", sizeof(bool), "bool");
+        }
+        __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            auto lv = (bool *) l->evalPtr(context);
+            if ( *lv ) {                        // if left then right
+                *lv = r->evalBool(context);
+            }
+            return bool();
+        }
+    };
+
     struct Sim_BoolOr : SimNode_Op2 {
         DAS_BOOL_NODE;
         Sim_BoolOr ( const LineInfo & at ) : SimNode_Op2(at) {}
@@ -2446,6 +2462,22 @@ SIM_NODE_AT_VECTOR(Float, float)
             } else {
                 return r->evalBool(context);    // if not left, then right
             }
+        }
+    };
+
+    struct Sim_SetBoolOr : SimNode_Op2 {
+        DAS_BOOL_NODE;
+        Sim_SetBoolOr ( const LineInfo & at ) : SimNode_Op2(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitOp2(vis, "SetBoolOr", sizeof(bool), "bool");
+        }
+        __forceinline bool compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            auto lv = (bool *) l->evalPtr(context);
+            if ( !*lv ) {            // if not left, then right
+                *lv = r->evalBool(context);
+            }
+            return bool();
         }
     };
 
@@ -2885,8 +2917,6 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_POLICY(SetBinRotl);
     DEFINE_POLICY(SetBinRotr);
     // boolean and, or, xor
-    DEFINE_POLICY(SetBoolAnd);
-    DEFINE_POLICY(SetBoolOr);
     DEFINE_POLICY(SetBoolXor);
     DEFINE_POLICY(BoolXor);
     // vector*scalar, scalar*vector
@@ -2894,8 +2924,6 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_POLICY(MulVecScal);
     DEFINE_POLICY(DivScalVec);
     DEFINE_POLICY(MulScalVec);
-    DEFINE_POLICY(SetBoolAnd);
-    DEFINE_POLICY(SetBoolOr);
     DEFINE_POLICY(SetBoolXor);
     DEFINE_POLICY(SetDivScal);
     DEFINE_POLICY(SetMulScal);

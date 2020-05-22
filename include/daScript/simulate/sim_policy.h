@@ -56,9 +56,9 @@ namespace  das {
         static __forceinline bool BoolAnd ( bool a, bool b, Context & ) { return a && b; }
         static __forceinline bool BoolOr  ( bool a, bool b, Context & ) { return a || b; }
         static __forceinline bool BoolXor ( bool a, bool b, Context & ) { return a ^ b; }
-        static __forceinline void SetBoolAnd  ( bool & a, bool b, Context & ) { a &= b; }
-        static __forceinline void SetBoolOr   ( bool & a, bool b, Context & ) { a |= b; }
-        static __forceinline void SetBoolXor  ( bool & a, bool b, Context & ) { a ^= b; }
+        static __forceinline void SetBoolAnd  ( bool & a, bool b, Context & ) { a = a && b; }
+        static __forceinline void SetBoolOr   ( bool & a, bool b, Context & ) { a = a || b; }
+        static __forceinline void SetBoolXor  ( bool & a, bool b, Context & ) { a = a ^ b; }
     };
 
     template <typename TT>

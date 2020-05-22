@@ -68,9 +68,9 @@ namespace  das {
         mod.addFunction( make_smart<BuiltInFn<Sim_BoolAnd,         TT,   TT,  TT>  >("&",      lib, "BoolAnd") );
         mod.addFunction( make_smart<BuiltInFn<Sim_BoolOr,          TT,   TT,  TT>  >("|",      lib, "BoolOr") );
         mod.addFunction( make_smart<BuiltInFn<Sim_BoolXor<TT>,     TT,   TT,  TT>  >("^",      lib, "BoolXor") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBoolAnd<TT>,  void, TT&, TT>  >("&=",     lib, "SetBoolAnd")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBoolAnd,      void, TT&, TT>  >("&=",     lib, "SetBoolAnd")
                         ->setSideEffects(SideEffects::modifyArgument) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_SetBoolOr<TT>,   void, TT&, TT>  >("|=",     lib, "SetBoorOr")
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetBoolOr,       void, TT&, TT>  >("|=",     lib, "SetBoorOr")
                         ->setSideEffects(SideEffects::modifyArgument) );
         mod.addFunction( make_smart<BuiltInFn<Sim_SetBoolXor<TT>,  void, TT&, TT>  >("^=",     lib, "SetBoolXor")
                         ->setSideEffects(SideEffects::modifyArgument) );
