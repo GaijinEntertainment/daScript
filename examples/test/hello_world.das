@@ -1,15 +1,22 @@
 options log = true
 
-require UnitTest
+def funC(y:string)
+    var q = y
+    q += " before"
+    stackwalk()
+    q += " after"
 
-struct Foo
-    a : array<int>
-    b : string
+def invBlock(z,blk)
+    invoke(blk,z)
 
-[export, unsafe]
+def funB(x:string)
+    invBlock(x) <| $ (copyX : string)
+        funC("from B {copyX}")
+
+def funA(a:int;b:string)
+    funB("{a} is {b}")
+
+[export]
 def test
-    let sa <- [{int 1;2;3;4}]
-    let faw <- [[Foo a := sa, b="a is " where $(var boo) { boo.b+=join(boo.a,"-"); } ]]
-    assert(length(faw.a)==4)
-    assert(faw.b=="a is 1-2-3-4")
+    funA(1,"one")
     return true

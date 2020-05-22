@@ -53,6 +53,26 @@ namespace das {
         return fni;
     }
 
+    FuncInfo * DebugInfoHelper::makeBlockDebugInfo ( const ExprBlock & blk ) {
+        string mangledName = blk.getMangledName() + " " + blk.at.describe();
+        auto it = fmn2f.find(mangledName);
+        if ( it!=fmn2f.end() ) return it->second;
+        FuncInfo * fni = debugInfo->makeNode<FuncInfo>();
+        fni->name = debugInfo->allocateName(mangledName);
+        fni->cppName = nullptr;
+        fni->stackSize = 0;
+        fni->count = (uint32_t) blk.arguments.size();
+        fni->fields = (VarInfo **) debugInfo->allocate(sizeof(VarInfo *) * fni->count);
+        for ( uint32_t i=0; i!=fni->count; ++i ) {
+            fni->fields[i] = makeVariableDebugInfo(*blk.arguments[i]);
+        }
+        fni->flags = 0;
+        fni->result = makeTypeInfo(nullptr, blk.returnType);
+        fni->hash = hash_blockz32((uint8_t *)mangledName.c_str());
+        fmn2f[mangledName] = fni;
+        return fni;
+    }
+
     StructInfo * DebugInfoHelper::makeStructureDebugInfo ( const Structure & st ) {
         string mangledName = st.getMangledName();
         auto it = smn2s.find(mangledName);

@@ -474,9 +474,9 @@ namespace das
         HeapAllocator                   heap;
         char *                          globals = nullptr;
         char *                          shared = nullptr;
-        smart_ptr<StringAllocator>     constStringHeap;
-        smart_ptr<NodeAllocator>       code;
-        smart_ptr<DebugInfoAllocator>  debugInfo;
+        smart_ptr<StringAllocator>      constStringHeap;
+        smart_ptr<NodeAllocator>        code;
+        smart_ptr<DebugInfoAllocator>   debugInfo;
         StackAllocator                  stack;
         uint32_t                        insideContext = 0;
         bool                            ownStack = false;
