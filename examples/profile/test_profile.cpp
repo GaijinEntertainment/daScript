@@ -108,7 +108,6 @@ struct EsGroupData : ModuleGroupUserData {
     }
     vector<unique_ptr<EsPassAttributeTable>>    g_esPassTable;
     vector<unique_ptr<EsAttributeTable>>        g_esBlockTable;
-    DebugInfoHelper                             g_debugHepler;
     static EsGroupData * THAT;
 };
 EsGroupData * EsGroupData::THAT = nullptr;
@@ -166,7 +165,6 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
         block->annotationDataSid = hash_blockz32((uint8_t *)mangledName.c_str());
         buildAttributeTable(*tab, block->arguments, err);
-        tab->info = esData->g_debugHepler.makeBlockDebugInfo(block->makeBlockType(),LineInfo());
         esData->g_esBlockTable.emplace_back(move(tab));
         return err.empty();
     }
@@ -221,7 +219,6 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             return false;
         }
         buildAttributeTable(*tab, func->arguments, err);
-        tab->info = esData->g_debugHepler.makeFunctionDebugInfo(*func);
         esData->g_esPassTable.emplace_back(move(tab));
         return err.empty();
     }
@@ -333,7 +330,7 @@ uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsCom
                 return;
             }
         }
-    }, table->info, 0); // TODO: line?
+    }); // TODO: line?
     return totalComponents;
 }
 
@@ -473,8 +470,9 @@ void verifyEsComponents(Context * context) {
     }
 }
 
+
 void testEsUpdate ( char * pass, Context * ctx ) {
-    das_stack_prologue guard(ctx, sizeof(Prologue), "testEsUpdate", 0 );
+    das_stack_prologue guard(ctx, sizeof(Prologue), "testEsUpdate " DAS_FILE_LINE);
     if ( !EsGroupData::THAT ) {
         ctx->throw_error_ex("missing pass data for the pass %s", pass);
         return;
@@ -487,7 +485,7 @@ void testEsUpdate ( char * pass, Context * ctx ) {
 }
 
 uint32_t queryEs (const Block & block, Context * context) {
-    das_stack_prologue guard(context,sizeof(Prologue), "queryEs", 0 );
+    das_stack_prologue guard(context,sizeof(Prologue), "queryEs " DAS_FILE_LINE);
     return EsRunBlock(*context, block, g_components, g_total);
 }
 

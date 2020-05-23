@@ -98,7 +98,10 @@ namespace das
                     const char *    fileName;
                 };
                 FuncInfo *  info;
-                int32_t     line;
+                union {
+                    int32_t         line;           // for das
+                    int32_t         stackSize;      // for aot prologue
+                };
             };
             vec4f           dummy;
         };
@@ -394,33 +397,7 @@ namespace das
 #pragma warning(disable:4324)
 #endif
 
-        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres ) {
-            char * EP, *SP;
-            vec4f * TBA = nullptr;
-            stack.invoke(block.stackOffset, EP, SP);
-            BlockArguments * __restrict ba = nullptr;
-            BlockArguments saveArguments;
-            if ( block.argumentsOffset || cmres ) {
-                ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
-                saveArguments = *ba;
-                ba->arguments = args;
-                ba->copyOrMoveResult = (char *) cmres;
-                TBA = abiThisBlockArg;
-                abiThisBlockArg = args;
-            }
-            vec4f * __restrict saveFunctionArguments = abiArg;
-            abiArg = block.functionArguments;
-            vec4f block_result = block.body->eval(*this);
-            abiArg = saveFunctionArguments;
-            if ( ba ) {
-                *ba = saveArguments;
-                abiThisBlockArg = TBA;
-            }
-            stack.pop(EP, SP);
-            return block_result;
-        }
-
-        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres, FuncInfo * finfo, int line ) {
+        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres, int line=0 ) {
             char * EP, *SP;
             vec4f * TBA = nullptr;
             char * STB = stack.bottom();
@@ -431,7 +408,7 @@ namespace das
             }
             Prologue * pp = (Prologue *)stack.ap();
             pp->arguments = args;
-            pp->info = finfo;
+            pp->info = block.info;
             pp->line = line;
 #else
             finfo;
@@ -463,10 +440,7 @@ namespace das
 #endif
 
         template <typename Fn>
-        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when);
-
-        template <typename Fn>
-        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, FuncInfo * info, int line);
+        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, int line = 0);
 
         template <typename Fn>
         vec4f callEx(const SimFunction * fn, vec4f *args, void * cmres, int line, Fn && when) {
@@ -791,34 +765,7 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
 #pragma warning(disable:4324)
 #endif
     template <typename Fn>
-    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when) {
-        char * EP, *SP;
-        vec4f * TBA = nullptr;
-        stack.invoke(block.stackOffset,EP,SP);
-        BlockArguments * ba = nullptr;
-        BlockArguments saveArguments;
-        if ( block.argumentsOffset || cmres ) {
-            ba = (BlockArguments *) ( stack.bottom() + block.argumentsOffset );
-            saveArguments = *ba;
-            ba->arguments = args;
-            ba->copyOrMoveResult = (char *) cmres;
-            TBA = abiThisBlockArg;
-            abiThisBlockArg = args;
-        }
-        vec4f * __restrict saveFunctionArguments = abiArg;
-        abiArg = block.functionArguments;
-        SimNode_ClosureBlock * cb = (SimNode_ClosureBlock *) block.body;
-        when(cb->code0 ? cb->list[0] : block.body);
-        abiArg = saveFunctionArguments;
-        if ( ba ) {
-            *ba = saveArguments;
-            abiThisBlockArg = TBA;
-        }
-        return result;
-    }
-
-    template <typename Fn>
-    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, FuncInfo * finfo, int line ) {
+    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, int line ) {
         char * EP, *SP;
         vec4f * TBA = nullptr;
         char * STB = stack.bottom();
@@ -829,7 +776,7 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
         }
         Prologue * pp = (Prologue *)stack.ap();
         pp->arguments = args;
-        pp->info = finfo;
+        pp->info = block.info;
         pp->line = line;
 #else
         finfo;

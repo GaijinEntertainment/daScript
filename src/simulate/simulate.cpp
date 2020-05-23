@@ -154,6 +154,7 @@ namespace das
         block->argumentsOffset = argStackTop ? (context.stack.spi() + argStackTop) : 0;
         block->body = subexpr;
         block->functionArguments = context.abiArguments();
+        block->info = info;
         return cast<Block *>::from(block);
     }
 
@@ -797,8 +798,9 @@ namespace das
         char * sp = stack.ap();
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
+            // ssw << HEX << "pp at " << intptr_t(pp) << DEC << "\n";
             if ( !pp->info ) {
-                ssw << pp->fileName << ", AOT at line " << pp->line << " (sp=" << (stack.top() - sp) << ")\n";
+                ssw << pp->fileName << ", AOT (sp=" << (stack.top() - sp) << ")\n";
             } else if ( pp->line ) {
                 ssw << pp->info->name << " at line " << pp->line << " (sp=" << (stack.top() - sp) << ")\n";
             } else {
@@ -811,7 +813,7 @@ namespace das
                         << " = \t" << debug_value(pp->arguments[i], pp->info->fields[i], PrintFlags::stackwalker) << "\n";
                 }
             }
-            sp += pp->info ? pp->info->stackSize : sizeof(Prologue);
+            sp += pp->info ? pp->info->stackSize : pp->stackSize;
         }
         ssw << "\n";
     #else

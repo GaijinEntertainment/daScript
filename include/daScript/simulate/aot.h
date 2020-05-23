@@ -28,6 +28,11 @@ namespace das {
 
     #define DAS_COMMENT(...)
 
+    #define DAS_STRINGIFY(x) #x
+    #define DAS_TOSTRING(x) DAS_STRINGIFY(x)
+    #define DAS_FILE_LINE_NAME(a,b) a " at line " DAS_TOSTRING(b)
+    #define DAS_FILE_LINE   DAS_FILE_LINE_NAME(__FILE__,__LINE__)
+
     void das_debug ( Context * context, TypeInfo * typeInfo, const char * FILE, int LINE, vec4f res, const char * message = nullptr );
 
     template <typename TT>
@@ -1405,7 +1410,7 @@ namespace das {
     }
 
     struct das_stack_prologue {
-        __forceinline das_stack_prologue ( Context * __context__, uint32_t stackSize, const char * fn, int32_t line )
+        __forceinline das_stack_prologue ( Context * __context__, uint32_t stackSize, const char * fn )
             : context(__context__) {
             if (!context->stack.push(stackSize, EP, SP)) {
                 context->throw_error("stack overflow");
@@ -1414,7 +1419,7 @@ namespace das {
             Prologue * pp = (Prologue *)context->stack.sp();
             pp->fileName = fn;
             pp->info = nullptr;         // FunctionDebugInfo
-            pp->line = line;
+            pp->stackSize = stackSize;
 #endif
         }
         __forceinline ~das_stack_prologue () {
@@ -1427,12 +1432,13 @@ namespace das {
     template <typename resType, typename ...argType>
     struct das_make_block : Block, SimNode_ClosureBlock {
         typedef function < resType ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
                 : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
             functionArguments = context->abiArguments();
+            info = fi;
         };
         template <size_t... I>
         __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
@@ -1455,12 +1461,13 @@ namespace das {
     template <typename resType>
     struct das_make_block<resType> : Block, SimNode_ClosureBlock {
         typedef function < resType () > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
             functionArguments = context->abiArguments();
+            info = fi;
         };
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1472,12 +1479,13 @@ namespace das {
     template <>
     struct das_make_block<void> : Block, SimNode_ClosureBlock {
         typedef function < void () > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
             functionArguments = context->abiArguments();
+            info = fi;
         };
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1494,13 +1502,14 @@ namespace das {
     template <typename ...argType>
     struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
         typedef function < void ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
                 : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
             functionArguments = context->abiArguments();
-        };
+            info = fi;
+       };
         template <size_t... I>
         __forceinline void callBlockFunction(vec4f * args, index_sequence<I...>) {
             blockFunction((cast<argType>::to(args[I]))...);
@@ -1518,12 +1527,13 @@ namespace das {
     template <typename resType, typename ...argType>
     struct das_make_block_cmres : Block, SimNode_ClosureBlock {
         typedef function < resType ( argType... ) > BlockFn;
-        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
             functionArguments = context->abiArguments();
+            info = fi;
         };
         template <size_t... I>
         __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
@@ -1544,12 +1554,13 @@ namespace das {
     template <typename resType>
     struct das_make_block_cmres<resType> : Block, SimNode_ClosureBlock {
         typedef function < resType () > BlockFn;
-        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, BlockFn && func )
+        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
             functionArguments = context->abiArguments();
+            info = fi;
         };
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE

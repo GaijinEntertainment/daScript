@@ -4,12 +4,14 @@ namespace das
 {
     struct SimNode;
     struct TypeInfo;
+    struct FuncInfo;
 
     struct Block {
         uint32_t    stackOffset;
         uint32_t    argumentsOffset;
         SimNode *   body;
         vec4f *     functionArguments;
+        FuncInfo *  info;
         __forceinline bool operator == ( const Block & b ) const {
             return b.stackOffset==stackOffset && b.argumentsOffset==argumentsOffset
                 && b.body==body && b.functionArguments==functionArguments;

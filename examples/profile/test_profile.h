@@ -67,7 +67,6 @@ struct EsAttribute {
 
 struct EsAttributeTable {
     das::vector<EsAttribute> attributes;
-    das::FuncInfo * info = nullptr;
 };
 
 struct EsPassAttributeTable  : EsAttributeTable {

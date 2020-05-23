@@ -404,6 +404,12 @@ namespace das {
                 describeCppStructInfo(ss, ti.second);
                 ss << " };\n";
             }
+            for ( auto & ti : this->fmn2f ) {
+                describeCppFuncInfoFields(ss, ti.second);
+                ss << "FuncInfo " << funcInfoName(ti.second) << " = {";
+                describeCppFuncInfo(ss, ti.second);
+                ss << " };\n";
+            }
             for ( auto & ti : tmn2t ) {
                 auto tinfo = ti.second;
                 writeDim(ss, tinfo);
@@ -479,7 +485,38 @@ namespace das {
             ss << "nullptr, ";  // annotation list
             ss << "0x" << HEX << info->hash << DEC;
         }
-
+        void describeCppFuncInfoFields ( TextWriter & ss, FuncInfo * info ) const {
+            if ( !info->fields ) return;
+            for ( uint32_t fi=0; fi!=info->count; ++fi ) {
+                auto suffix = "_var_" + to_string(info->hash);
+                writeDim(ss, info->fields[fi], suffix);
+                writeArgTypes(ss, info->fields[fi], suffix);
+                writeArgNames(ss, info->fields[fi], suffix);
+                ss << "VarInfo " << funcInfoName(info) << "_field_" << fi << " =  { ";
+                describeCppVarInfo(ss, info->fields[fi],suffix);
+                ss << " };\n";
+            }
+            ss << "VarInfo * " << funcInfoName(info) << "_fields[" << info->count << "] =  { ";
+            for ( uint32_t fi=0; fi!=info->count; ++fi ) {
+                if ( fi ) ss << ", ";
+                ss << "&" << funcInfoName(info) << "_field_" << fi;
+            }
+            ss << " };\n";
+        }
+        void describeCppFuncInfo ( TextWriter & ss, FuncInfo * info ) const {
+            ss << "\"" << info->name << "\", ";
+            ss << "\"" << info->cppName << "\", ";
+            if ( info->fields ) {
+                ss << funcInfoName(info) << "_fields, ";
+            } else {
+                ss << "nullptr, ";
+            }
+            ss << info->count << ", ";
+            ss << info->stackSize << ", ";
+            ss << "&" << typeInfoName(info->result) << ", ";
+            ss << "0x" << HEX << info->hash << DEC << ", ";
+            ss << "0x" << HEX << info->flags << DEC;
+        }
         void describeCppEnumInfoValues ( TextWriter & ss, EnumInfo * einfo ) const {
             for ( uint32_t v=0; v!=einfo->count; ++v ) {
                 auto val = einfo->fields[v];
@@ -493,12 +530,10 @@ namespace das {
             }
             ss << " };\n";
         }
-
         void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) const {
             ss << "\"" << info->name << "\", " << enumInfoName(info) << "_values, "
                 << info->count << ", 0x" << HEX << info->hash << DEC;
         }
-
         void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
             ss << "Type::" << das_to_cppCTypeString(info->type) << ", ";
             if ( info->structType ) {
@@ -769,7 +804,8 @@ namespace das {
     public:
         CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl ) : program(prog), collector(cl) {
             helper.rtti = program->options.getBoolOption("rtti",false);
-            prologue = program->options.getBoolOption("aot_prologue",false);
+            prologue = program->options.getBoolOption("aot_prologue",false) ||
+                program->getDebugger();
         }
         string str() const {
             return "\n" + helper.str() + sti.str()  + stg.str() + ss.str();
@@ -969,7 +1005,7 @@ namespace das {
             Visitor::preVisitFunctionBody(fn,expr);
             if ( fn->aotNeedPrologue || prologue ) {
                 ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize
-                    << ",\"" << fn->name << " \" __FILE__,__LINE__);\n";
+                    << ",\"" << fn->name << " \" DAS_FILE_LINE);\n";
             } else {
                 ss << " )\n";
             }
@@ -2419,6 +2455,10 @@ namespace das {
                     ss << "0";
                 }
                 ss << ",";
+            }
+            if ( !block->aotSkipMakeBlock ) {
+                auto info = helper.makeBlockDebugInfo(block->makeBlockType(), block->at);
+                ss << "&" << helper.funcInfoName(info) << ",";
             }
             ss << "[&](";
             int ai = 0;
