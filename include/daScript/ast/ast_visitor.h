@@ -274,7 +274,7 @@ namespace das {
         VisitorMacro ( const string & na = "" ) : LintMacro(na) {}
         bool didAnything () const { return anyFolding; }
     protected:
-        void reportFolding();
+        virtual void reportFolding();
         virtual void preVisitProgram ( Program * prog ) override;
     private:
         bool    anyFolding = false;

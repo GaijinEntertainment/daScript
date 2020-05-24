@@ -78,6 +78,10 @@ namespace das {
         void reportAstChanged() {
             needRestart = true;
         }
+        virtual void reportFolding() override {
+            FoldingVisitor::reportFolding();
+            needRestart = true;
+        }
     protected:
 
         void verifyType ( const TypeDeclPtr & decl ) const {
@@ -3768,7 +3772,6 @@ namespace das {
                         expr->at, CompilationError::unsafe);
                 } else if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     if ( auto se = getConstExpr(expr->subexpr.get()) ) {
-                        reportAstChanged();
                         expr->subexpr = se;
                         return evalAndFold(expr);
                     }
@@ -3867,7 +3870,6 @@ namespace das {
                     auto lcc = getConstExpr(expr->left.get());
                     auto rcc = getConstExpr(expr->right.get());
                     if ( lcc && rcc ) {
-                        reportAstChanged();
                         expr->left = lcc;
                         expr->right = rcc;
                         return evalAndFold(expr);
@@ -3905,7 +3907,6 @@ namespace das {
                     auto lcc = getConstExpr(expr->left.get());
                     auto rcc = getConstExpr(expr->right.get());
                     if ( ccc && lcc && rcc ) {
-                        reportAstChanged();
                         expr->subexpr = ccc;
                         expr->left = lcc;
                         expr->right = rcc;
@@ -5039,7 +5040,6 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 }
-                reportAstChanged();
                 swap(cargs, expr->arguments);
                 return evalAndFold(expr);
             }
