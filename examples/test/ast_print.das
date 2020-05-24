@@ -230,7 +230,7 @@ class PrintVisitor : AstVisitor
         print("])")
         return ExpressionPtr(expr)
     def override preVisitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool)
-        print("{arg.name}{arg.moveSemantic ? "<-" : "="}")
+        print("{arg.name}{arg.flags.moveSemantics ? "<-" : "="}")
     def override visitExprNamedCallArgument(expr:smart_ptr<ExprNamedCall>;arg:MakeFieldDeclPtr;last:bool)
         if !last
             print(",")
@@ -350,7 +350,7 @@ class PrintVisitor : AstVisitor
         print("]]")
         return ExpressionPtr(expr)
     def override preVisitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool)
-        print("{decl.name} {decl.moveSemantic ? "<-" : "=" } ")
+        print("{decl.name} {decl.flags.moveSemantics ? "<-" : "=" } ")
     def override visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool)
         if !last
             print("; ")
@@ -359,7 +359,7 @@ class PrintVisitor : AstVisitor
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>)
         print("[[")
         if expr.typeDecl != null
-            print("{describe(expr.typeDecl)}{expr.useInitializer ? "()" : ""} ")
+            print("{describe(expr.typeDecl)}{expr.makeStructFlags.useInitializer ? "()" : ""} ")
     def override visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>)
         print("]]")
         return ExpressionPtr(expr)
@@ -367,7 +367,7 @@ class PrintVisitor : AstVisitor
         if !last
             print("; ")
     def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool)
-        print("{decl.name} {decl.moveSemantic ? "<-" : "=" } ")
+        print("{decl.name} {decl.flags.moveSemantics ? "<-" : "=" } ")
     def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool)
         if !last
             print(", ")
