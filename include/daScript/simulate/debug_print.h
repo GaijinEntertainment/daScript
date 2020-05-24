@@ -33,6 +33,7 @@ namespace das {
         Writer & ss;
         PrintFlags flags;
         vector<void *> visited;
+        vector<void *> visited_handles;
         DebugDataWalker() = delete;
         DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
     // data structures
@@ -41,6 +42,14 @@ namespace das {
                 return true;
             } else {
                 ss << "~loop at 0x" << HEX << intptr_t(ps) << DEC << " " << info->name << "~";
+                return false;
+            }
+        }
+        virtual bool canVisitHandle ( char * ps, TypeInfo * ) override {
+            if ( find(visited_handles.begin(),visited_handles.end(),ps)==visited_handles.end() ) {
+                return true;
+            } else {
+                ss  << "~handle loop at 0x" << HEX << intptr_t(ps) << DEC << "~";
                 return false;
             }
         }
@@ -188,7 +197,8 @@ namespace das {
                 ss << ")";
             }
         }
-        virtual void beforeHandle ( char *, TypeInfo * ti ) override {
+        virtual void beforeHandle ( char * ps, TypeInfo * ti ) override {
+            visited_handles.push_back(ps);
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << "[[" << debug_type(ti) << " ";
             }
@@ -197,6 +207,7 @@ namespace das {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << "]]";
             }
+            visited_handles.pop_back();
         }
         virtual void beforeLambda ( Lambda *, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {

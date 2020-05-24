@@ -237,11 +237,13 @@ namespace das {
                     }
                     break;
                 case Type::tHandle:
-                    beforeHandle(pa, info);
-                    if ( cancel ) return;
-                    info->getAnnotation()->walk(*this, pa);
-                    if ( cancel ) return;
-                    afterHandle(pa, info);
+                    if ( canVisitHandle(pa, info) ) {
+                        beforeHandle(pa, info);
+                        if ( cancel ) return;
+                        info->getAnnotation()->walk(*this, pa);
+                        if ( cancel ) return;
+                        afterHandle(pa, info);
+                    }
                     break;
                 case Type::tVoid:       break;  // skip void
                 case Type::anyArgument: break;  // skip any argument

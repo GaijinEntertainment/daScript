@@ -1,6 +1,7 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/misc/performance_time.h"
+#include "daScript/misc/fpe.h"
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -362,6 +363,7 @@ int main() {
     // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
+    FPE_ENABLE_ALL;
 #ifdef _MSC_VER
     #define    TEST_PATH "../"
 #else

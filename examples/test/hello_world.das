@@ -4,13 +4,7 @@ options log = true
 
 [export,unsafe]
 def test
-    /*
-    TestObjectFoo t
+    var t : TestObjectFoo
     t.foo_loop = addr(t)
-    print("t = {t}\n")
-     */
-
-    var b = 1.0
-    b = 0.0
-    print("{testGetDiv(0.0,b)}\n")
+    debug(t,"t=")
     return true
