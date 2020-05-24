@@ -1,19 +1,12 @@
-options log = true
-options log_nodes = true
+// options log = true
+// options log_nodes = true
 
-[persistent]
-class Foo
-    count : int = 0
-    def Foo ( ic : int )
-        count = ic
-    def update
-        return count++
+require UnitTest
 
 [export,unsafe]
 def test
-    var pFoo = new Foo(13)
-    print("{pFoo->update()}\n")
-    print("{pFoo->update()}\n")
-    print("{pFoo->update()}\n")
-    delete pFoo
+    // pdiv(1.0,0.0)
+    let a = 1.0
+    let b = 0.0
+    print("c = {testGetDiv(a,b)}\n")
     return true

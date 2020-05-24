@@ -125,6 +125,8 @@ struct CppS2 : CppS1 {
     int32_t d;
 };
 
+__forceinline float testGetDiv ( float a, float b ) { return a / b; }
+
 __forceinline int CppS1Size() { return int(sizeof(CppS1)); }
 __forceinline int CppS2Size() { return int(sizeof(CppS2)); }
 __forceinline int CppS2DOffset() { return int(offsetof(CppS2, d)); }
