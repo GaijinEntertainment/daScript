@@ -69,6 +69,7 @@ struct TestObjectFoo {
     Point3 hit;
     int fooData;
     SomeEnum_16 e16;
+    TestObjectFoo * foo_loop = nullptr;
     int propAdd13() {
         return fooData + 13;
     }
@@ -126,6 +127,7 @@ struct CppS2 : CppS1 {
 };
 
 __forceinline float testGetDiv ( float a, float b ) { return a / b; }
+__forceinline float testGetNan() { return nanf("test"); }
 
 __forceinline int CppS1Size() { return int(sizeof(CppS1)); }
 __forceinline int CppS2Size() { return int(sizeof(CppS2)); }

@@ -85,6 +85,9 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
         addProperty<DAS_BIND_MANAGED_PROP(hitPos)>("hitPos");
     }
+    void init() {
+        addField<DAS_BIND_MANAGED_FIELD(foo_loop)>("foo_loop");
+    }
     virtual bool isLocal() const override { return true; }
     virtual bool canMove() const override { return true; }
     virtual bool canCopy() const override { return true; }
@@ -552,7 +555,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
     addAnnotation(make_smart<TestObjectNotLocalAnnotation>(lib));
-    addAnnotation(make_smart<TestObjectFooAnnotation>(lib));
+    auto fooann = make_smart<TestObjectFooAnnotation>(lib);
+    addAnnotation(fooann);
+    initRecAnnotation(fooann,lib);
     addAnnotation(make_smart<TestObjectBarAnnotation>(lib));
     // smart object recursive type
     auto tosa = make_smart<TestObjectSmartAnnotation>(lib);
@@ -652,6 +657,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // div
     addExtern<DAS_BIND_FUN(testGetDiv)>(*this, lib, "testGetDiv",
         SideEffects::none, "testGetDiv");
+    addExtern<DAS_BIND_FUN(testGetNan)>(*this, lib, "testGetNan",
+        SideEffects::none, "testGetNan");
     // and verify
     verifyAotReady();
 }

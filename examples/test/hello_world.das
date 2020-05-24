@@ -1,12 +1,16 @@
-// options log = true
-// options log_nodes = true
-
 require UnitTest
+
+options log = true
 
 [export,unsafe]
 def test
-    // pdiv(1.0,0.0)
-    let a = 1.0
-    let b = 0.0
-    print("c = {testGetDiv(a,b)}\n")
+    /*
+    TestObjectFoo t
+    t.foo_loop = addr(t)
+    print("t = {t}\n")
+     */
+
+    var b = 1.0
+    b = 0.0
+    print("{testGetDiv(0.0,b)}\n")
     return true

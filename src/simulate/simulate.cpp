@@ -4,6 +4,8 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_print.h"
+#include "daScript/misc/fpe.h"
+
 #include <stdarg.h>
 
 // this is here for the default implementation of to_out and to_err
@@ -170,6 +172,7 @@ namespace das
 
     vec4f SimNode_Debug::eval ( Context & context ) {
         DAS_PROFILE_NODE
+        FPE_DISABLE;
         vec4f res = subexpr->eval(context);
         TextWriter ssw;
         if ( message ) ssw << message << " ";
@@ -792,6 +795,7 @@ namespace das
     }
 
     string Context::getStackWalk( bool args ) {
+        FPE_DISABLE;
         TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
         ssw << "\nCALL STACK (sp=" << (stack.top() - stack.sp()) << "):\n";
