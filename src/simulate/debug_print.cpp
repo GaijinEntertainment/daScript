@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/debug_print.h"
+#include "daScript/misc/fpe.h"
 
 namespace das {
 
@@ -66,6 +67,7 @@ namespace das {
     }
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
+        // FPE_DISABLE;
         TextWriter ss;
         DebugDataWalker<TextWriter> walker(ss,flags);
         walker.walk((char*)pX,info);
@@ -73,6 +75,7 @@ namespace das {
     }
 
     string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags ) {
+        // FPE_DISABLE;
         TextWriter ss;
         DebugDataWalker<TextWriter> walker(ss,flags);
         walker.walk(value,info);

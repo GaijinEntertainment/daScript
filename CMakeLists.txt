@@ -129,6 +129,7 @@ SET(MISC_SRC
 include/daScript/misc/enums.h
 include/daScript/misc/function_traits.h
 include/daScript/misc/hal.h
+include/daScript/misc/fpe.h
 include/daScript/misc/copy_bytes.h
 include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h

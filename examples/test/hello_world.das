@@ -1,22 +1,12 @@
-options debugger = true
+// options log = true
+// options log_nodes = true
 
-def funC(y:string)
-    var q = y
-    q += " before"
-    stackwalk()
-    q += " after"
+require UnitTest
 
-def invBlock(z,blk)
-    invoke(blk,z)
-
-def funB(x:string)
-    invBlock(x) <| $ (copyX : string)
-        funC("from B {copyX}")
-
-def funA(a:int;b:string)
-    funB("{a} is {b}")
-
-[export]
+[export,unsafe]
 def test
-    funA(1,"one")
+    // pdiv(1.0,0.0)
+    let a = 1.0
+    let b = 0.0
+    print("c = {testGetDiv(a,b)}\n")
     return true
