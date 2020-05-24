@@ -797,6 +797,7 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
             *ba = saveArguments;
             abiThisBlockArg = TBA;
         }
+        stack.pop(EP, SP);
         return result;
     }
 #ifdef _MSC_VER
