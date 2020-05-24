@@ -118,7 +118,7 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
             DAS_PROFILE_NODE \
             vec4f argValues[1]; \
             argValues[0] = v_ldu((const float *)subexpr.compute##COMPUTE(context)); \
-            return context.call(fnPtr, argValues, debugInfo.line); \
+            return context.call(fnPtr, argValues, &debugInfo); \
         } \
         virtual vec4f eval ( Context & context ) override { \
             return compute(context); \

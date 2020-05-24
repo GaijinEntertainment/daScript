@@ -1417,8 +1417,8 @@ namespace das {
             }
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)context->stack.sp();
+            pp->info = nullptr;
             pp->fileName = fn;
-            pp->info = nullptr;         // FunctionDebugInfo
             pp->stackSize = stackSize;
 #endif
         }

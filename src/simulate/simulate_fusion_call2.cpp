@@ -72,7 +72,7 @@ namespace das {
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
             argValues[1] = v_ldu((const float *)r.compute##COMPUTEL(context)); \
-            return context.call(fnPtr, argValues, debugInfo.line); \
+            return context.call(fnPtr, argValues, &debugInfo); \
         } \
         virtual vec4f eval ( Context & context ) override { \
             return compute(context); \
@@ -89,7 +89,7 @@ namespace das {
             vec4f argValues[2]; \
             argValues[0] = v_ldu((const float *)l.compute##COMPUTER(context)); \
             argValues[1] = r.subexpr->eval(context); \
-            return context.call(fnPtr, argValues, debugInfo.line); \
+            return context.call(fnPtr, argValues, &debugInfo); \
         } \
         virtual vec4f eval ( Context & context ) override { \
             return compute(context); \
@@ -106,7 +106,7 @@ namespace das {
             vec4f argValues[2]; \
             argValues[0] = v_ldu((const float *)l.compute##COMPUTEL(context)); \
             argValues[1] = v_ldu((const float *)r.compute##COMPUTER(context)); \
-            return context.call(fnPtr, argValues, debugInfo.line); \
+            return context.call(fnPtr, argValues, &debugInfo); \
         } \
         virtual vec4f eval ( Context & context ) override { \
             return compute(context); \
@@ -147,7 +147,7 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
             argValues[1] = v_ldu((const float *)r.compute##COMPUTEL(context)); \
-            return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, debugInfo.line)); \
+            return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
         DAS_PTR_NODE; \
     };
@@ -162,7 +162,7 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             vec4f argValues[2]; \
             argValues[0] = v_ldu((const float *)l.compute##COMPUTER(context)); \
             argValues[1] = r.subexpr->eval(context); \
-            return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, debugInfo.line)); \
+            return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
         DAS_PTR_NODE; \
     };
@@ -177,7 +177,7 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             vec4f argValues[2]; \
             argValues[0] = v_ldu((const float *)l.compute##COMPUTEL(context)); \
             argValues[1] = v_ldu((const float *)r.compute##COMPUTER(context)); \
-            return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, debugInfo.line)); \
+            return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
         DAS_PTR_NODE; \
     };

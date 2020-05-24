@@ -736,9 +736,9 @@ namespace das
 #if DAS_ENABLE_STACK_WALK
                         finfo.stackSize = globalInitStackSize;
                         Prologue * pp = (Prologue *)stack.sp();
-                        pp->arguments = nullptr;    // TODO: args
                         pp->info = &finfo;
-                        pp->line = 0;
+                        pp->arguments = nullptr;    // TODO: args
+                        pp->line = &pv.init->debugInfo;
 #endif
                         pv.init->eval(*this);
                     }
@@ -802,7 +802,7 @@ namespace das
             if ( !pp->info ) {
                 ssw << pp->fileName << ", AOT (sp=" << (stack.top() - sp) << ")\n";
             } else if ( pp->line ) {
-                ssw << pp->info->name << " at line " << pp->line << " (sp=" << (stack.top() - sp) << ")\n";
+                ssw << pp->info->name << " from " << pp->line->describe() << " (sp=" << (stack.top() - sp) << ")\n";
             } else {
                 ssw << pp->info->name << "(sp=" << (stack.top() - sp) << ")\n";
             }
@@ -822,7 +822,7 @@ namespace das
         return ssw.str();
     }
 
-    void Context::breakPoint(int, int ) const {
+    void Context::breakPoint(const LineInfo &) const {
         os_debug_break();
     }
 

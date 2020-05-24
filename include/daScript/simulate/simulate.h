@@ -90,23 +90,19 @@ namespace das
         virtual ~SimNode() {}
     };
 
-    struct Prologue {
+    struct alignas(16) Prologue {
+        FuncInfo *  info;
         union {
             struct {
-                union {
-                    vec4f *         arguments;
-                    const char *    fileName;
-                };
-                FuncInfo *  info;
-                union {
-                    int32_t         line;           // for das
-                    int32_t         stackSize;      // for aot prologue
-                };
+                const char * fileName;
+                int32_t      stackSize;
             };
-            vec4f           dummy;
+            struct {
+                vec4f *     arguments;
+                LineInfo *  line;
+            };
         };
     };
-    static_assert((sizeof(Prologue) & 0xf)==0, "it has to be 16 byte aligned");
 
     struct BlockArguments {
         vec4f *     arguments;
@@ -289,7 +285,7 @@ namespace das
 
         virtual void to_out ( const char * message );           // output to stdout or equivalent
         virtual void to_err ( const char * message );           // output to stderr or equivalent
-        virtual void breakPoint(int column, int line) const;    // what to do in case of breakpoint
+        virtual void breakPoint(const LineInfo & info) const;    // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {
             return abiArg;
@@ -307,7 +303,7 @@ namespace das
             return (char *) abiCMRES;
         }
 
-        __forceinline vec4f call(const SimFunction * fn, vec4f * args, int line) {
+        __forceinline vec4f call(const SimFunction * fn, vec4f * args, LineInfo * line) {
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
@@ -319,8 +315,8 @@ namespace das
             abiArg = args;
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)stack.sp();
-            pp->arguments = args;
             pp->info = fn->debugInfo;
+            pp->arguments = args;
             pp->line = line;
 #endif
             // CALL
@@ -332,7 +328,7 @@ namespace das
             return result;
         }
 
-        __forceinline vec4f callOrFastcall(const SimFunction * fn, vec4f * args, int line) {
+        __forceinline vec4f callOrFastcall(const SimFunction * fn, vec4f * args, LineInfo * line) {
             if ( fn->fastcall ) {
                 auto aa = abiArg;
                 abiArg = args;
@@ -352,8 +348,8 @@ namespace das
                 abiArg = args;
     #if DAS_ENABLE_STACK_WALK
                 Prologue * pp = (Prologue *)stack.sp();
-                pp->arguments = args;
                 pp->info = fn->debugInfo;
+                pp->arguments = args;
                 pp->line = line;
     #endif
                 // CALL
@@ -366,7 +362,7 @@ namespace das
             }
         }
 
-        __forceinline vec4f callWithCopyOnReturn(const SimFunction * fn, vec4f * args, void * cmres, int line) {
+        __forceinline vec4f callWithCopyOnReturn(const SimFunction * fn, vec4f * args, void * cmres, LineInfo * line) {
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
@@ -378,8 +374,8 @@ namespace das
             abiArg = args; abiCMRES = cmres;
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)stack.sp();
-            pp->arguments = args;
             pp->info = fn->debugInfo;
+            pp->arguments = args;
             pp->line = line;
 #endif
             // CALL
@@ -397,7 +393,7 @@ namespace das
 #pragma warning(disable:4324)
 #endif
 
-        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres, int line=0 ) {
+        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres, LineInfo * line = nullptr ) {
             char * EP, *SP;
             vec4f * TBA = nullptr;
             char * STB = stack.bottom();
@@ -407,8 +403,8 @@ namespace das
                 return v_zero();
             }
             Prologue * pp = (Prologue *)stack.ap();
-            pp->arguments = args;
             pp->info = block.info;
+            pp->arguments = args;
             pp->line = line;
 #else
             finfo;
@@ -440,10 +436,10 @@ namespace das
 #endif
 
         template <typename Fn>
-        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, int line = 0);
+        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, LineInfo * line = nullptr);
 
         template <typename Fn>
-        vec4f callEx(const SimFunction * fn, vec4f *args, void * cmres, int line, Fn && when) {
+        vec4f callEx(const SimFunction * fn, vec4f *args, void * cmres, LineInfo * line, Fn && when) {
             // PUSH
             char * EP, *SP;
             if(!stack.push(fn->stackSize,EP,SP)) {
@@ -455,8 +451,8 @@ namespace das
             abiArg = args;  abiCMRES = cmres;
     #if DAS_ENABLE_STACK_WALK
             Prologue * pp           = (Prologue *) stack.sp();
-            pp->arguments           = args;
             pp->info                = fn->debugInfo;
+            pp->arguments           = args;
             pp->line                = line;
     #endif
             // CALL
@@ -765,7 +761,7 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
 #pragma warning(disable:4324)
 #endif
     template <typename Fn>
-    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, int line ) {
+    vec4f Context::invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, LineInfo * line ) {
         char * EP, *SP;
         vec4f * TBA = nullptr;
         char * STB = stack.bottom();
@@ -775,8 +771,8 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
             return v_zero();
         }
         Prologue * pp = (Prologue *)stack.ap();
-        pp->arguments = args;
         pp->info = block.info;
+        pp->arguments = args;
         pp->line = line;
 #else
         finfo;
