@@ -191,3 +191,5 @@ __forceinline SampleVariant makeSampleS() {
 }
 
 __forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg->line : 0; }
+
+void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context );

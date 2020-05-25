@@ -306,7 +306,7 @@ namespace das {
     };
 
     template <typename ResultType, typename ...Args>
-    struct typeFactory< TBlock<ResultType,Args...> > {
+    struct typeFactory<TBlock<ResultType,Args...>> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = make_smart<TypeDecl>(Type::tBlock);
             t->firstType = typeFactory<ResultType>::make(lib);
@@ -315,7 +315,7 @@ namespace das {
         }
     };
     template <typename ResultType, typename ...Args>
-    struct typeFactory< TFunc<ResultType,Args...> > {
+    struct typeFactory<TFunc<ResultType,Args...>> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = make_smart<TypeDecl>(Type::tFunction);
             t->firstType = typeFactory<ResultType>::make(lib);
@@ -349,10 +349,23 @@ namespace das {
     struct TArray;
 
     template <typename TT>
-    struct typeFactory< TArray<TT> > {
+    struct typeFactory<TArray<TT>> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = make_smart<TypeDecl>(Type::tArray);
             t->firstType = typeFactory<TT>::make(lib);
+            return t;
+        }
+    };
+
+    template <typename TK, typename TV>
+    struct TTable;
+
+    template <typename TK, typename TV>
+    struct typeFactory<TTable<TK,TV>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_smart<TypeDecl>(Type::tTable);
+            t->firstType = typeFactory<TK>::make(lib);
+            t->secondType = typeFactory<TV>::make(lib);
             return t;
         }
     };

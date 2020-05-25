@@ -543,6 +543,12 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
     context->invoke(blk, args, nullptr);
 }
 
+void tableMojo ( TTable<char *,int> & in, const TBlock<void,TTable<char *,int>> & block, Context * context ) {
+    vec4f args[1];
+    args[0] = cast<Table *>::from(&in);
+    context->invoke(block, args, nullptr);
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -662,6 +668,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // call line
     addExtern<DAS_BIND_FUN(testCallLine)>(*this, lib, "testCallLine",
         SideEffects::modifyExternal, "testCallLine");
+    // table mojo
+    addExtern<DAS_BIND_FUN(tableMojo)>(*this, lib, "tableMojo",
+        SideEffects::modifyExternal, "tableMojo");
+
     // and verify
     verifyAotReady();
 }
