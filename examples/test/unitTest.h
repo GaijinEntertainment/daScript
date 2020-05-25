@@ -189,3 +189,5 @@ __forceinline SampleVariant makeSampleS() {
     v.s_value = (char *)("3");
     return v;
 }
+
+__forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg->line : 0; }

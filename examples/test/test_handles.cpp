@@ -659,6 +659,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::none, "testGetDiv");
     addExtern<DAS_BIND_FUN(testGetNan)>(*this, lib, "testGetNan",
         SideEffects::none, "testGetNan");
+    // call line
+    addExtern<DAS_BIND_FUN(testCallLine)>(*this, lib, "testCallLine",
+        SideEffects::modifyExternal, "testCallLine");
     // and verify
     verifyAotReady();
 }
