@@ -840,12 +840,17 @@ namespace das
                 }
             }
             if ( showLocalVariables && info && info->locals ) {
-                ssw << "local variables\n";
+                bool first = true;
                 for ( uint32_t i = 0; i != info->localCount; ++i ) {
                     auto lv = info->locals[i];
+                    bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
+                    if ( !inScope ) continue;
+                    if ( first ) {
+                        ssw << "--> local variables\n";
+                        first = false;
+                    }
                     ssw << "\t" << lv->name
                         << " : " << debug_type(lv);
-                    bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
                     char * addr = nullptr;
                     string location;
                     if ( !inScope ) {

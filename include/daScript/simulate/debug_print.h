@@ -188,7 +188,7 @@ namespace das {
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(pa) << DEC
+                ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(*(char**)pa) << DEC
                     << (ti->flags & TypeInfo::flag_isSmartPtr ? " smart_ptr = " : " ptr = ");
             }
         }
