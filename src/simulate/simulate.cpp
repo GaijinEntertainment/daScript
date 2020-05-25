@@ -852,7 +852,10 @@ namespace das
                         } else {
                             lvd = v_ldu((const float *)addr);
                         }
-                        ssw << " = \t" << debug_value(lvd, lv, PrintFlags::stackwalker) << " at " << location << "\n";
+                        ssw << " = \t" << debug_value(lvd, lv, PrintFlags::stackwalker)
+                            << " at " << location
+                            << " 0x" << HEX << intptr_t(addr) << DEC
+                            << "\n";
                     } else {
                         if ( !inScope ) {
                             ssw << "\t// variable out of scope\n";
