@@ -799,8 +799,9 @@ namespace das
         FPE_DISABLE;
         TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
-        ssw << "\nCALL STACK (sp=" << (stack.top() - stack.sp()) << "):\n";
         char * sp = stack.ap();
+        ssw << "\nCALL STACK (sp=" << (stack.top() - stack.ap())
+            << ",sptr=0x" << HEX  << intptr_t(sp) << DEC << "):\n";
         const LineInfo * lineAt = at;
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
@@ -812,7 +813,8 @@ namespace das
             } else {
                 ssw << pp->info->name;
             }
-            ssw << "(sp=" << (stack.top() - sp);
+            ssw << "(sp=" << (stack.top() - sp)
+                << ",sptr=0x" << HEX  << intptr_t(sp) << DEC;
             if ( pp->cmres ) {
                 ssw << ",cmres=0x" << HEX << intptr_t(pp->cmres) << DEC;
             }
