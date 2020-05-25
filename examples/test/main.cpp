@@ -385,8 +385,8 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    // #define TEST_NAME   "examples/test/hello_world.das"
-    #define TEST_NAME   "examples/test/ast_print.das"
+    #define TEST_NAME   "examples/test/hello_world.das"
+    // #define TEST_NAME   "examples/test/ast_print.das"
     // #define TEST_NAME   "examples/test/unit_tests/reflection.das"
     // debug_unit_test(TEST_PATH TEST_NAME,16,23,false);
     unit_test(TEST_PATH TEST_NAME,false);

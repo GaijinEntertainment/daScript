@@ -329,7 +329,7 @@ namespace das {
         }
         virtual void preVisit ( ExprConst * expr ) override {
             Visitor::preVisit(expr);
-            if ( !expr->generated && canPointAt() && expr->baseType!=Type::fakeContext ) {
+            if ( !expr->generated && canPointAt() && expr->baseType!=Type::fakeContext && expr->baseType!=Type::fakeLineInfo ) {
                 if ( cursor.inside(expr->at) ) {
                     info.constants.emplace_back(expr,function);
                 }

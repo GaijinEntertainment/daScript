@@ -1034,7 +1034,10 @@ namespace das
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         auto blk = static_pointer_cast<ExprBlock>(block);
         uint32_t argSp = blk->stackTop;
-        auto info = context.thisHelper->makeBlockDebugInfo(blk->makeBlockType(),blk->at);
+        auto info = context.thisHelper->makeInvokeableTypeDebugInfo(blk->makeBlockType(),blk->at);
+        if ( context.thisProgram->getDebugger() ) {
+            context.thisHelper->appendLocalVariables(info, (Expression *)this);
+        }
         return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp,stackTop,info);
     }
 
@@ -2466,6 +2469,9 @@ namespace das
                     gfun.mangledName = context.code->allocateName(mangledName);
                     gfun.code = pfun->simulate(context);
                     gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
+                    if ( getDebugger() ) {
+                        helper.appendLocalVariables(gfun.debugInfo, pfun->body);
+                    }
                     gfun.stackSize = pfun->totalStackSize;
                     gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
                     gfun.flags = 0;

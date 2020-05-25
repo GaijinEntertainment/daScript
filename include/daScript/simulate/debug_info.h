@@ -12,6 +12,7 @@ namespace das
         autoinfer,
         alias,
         fakeContext,
+        fakeLineInfo,
         anyArgument,
         tVoid,
         tBool,
@@ -150,6 +151,8 @@ namespace das
         uint32_t    last_column = 0, last_line = 0;
     };
 
+    struct LineInfoArg : LineInfo {};
+
     struct TypeInfo {
         enum {
             flag_ref = 1<<0,
@@ -241,6 +244,18 @@ namespace das
         uint32_t            hash;
     };
 
+    struct LocalVariableInfo : TypeInfo {
+        char *      name;
+        uint32_t    stackTop;
+        LineInfo    visibility;
+        union {
+            struct {
+                bool    cmres : 1;
+            };
+            uint32_t    localFlags;
+        };
+    };
+
     struct FuncInfo {
         enum {
             flag_init = (1<<0)
@@ -252,6 +267,8 @@ namespace das
         uint32_t    count;
         uint32_t    stackSize;
         TypeInfo *  result;
+        LocalVariableInfo **  locals;
+        uint32_t    localCount;
         uint32_t    hash;
         uint32_t    flags;
     };

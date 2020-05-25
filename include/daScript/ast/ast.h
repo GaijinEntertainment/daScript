@@ -413,6 +413,7 @@ namespace das
         virtual bool rtti_isLabel() const { return false; }
         virtual bool rtti_isGoto() const { return false; }
         virtual bool rtti_isFakeContext() const { return false; }
+        virtual bool rtti_isFakeLineInfo() const { return false; }
         virtual Expression * tail() { return this; }
         virtual uint32_t getEvalFlags() const { return 0; }
         LineInfo    at;
@@ -816,8 +817,9 @@ namespace das
         VarInfo * makeVariableDebugInfo ( const Structure & st, const Structure::FieldDeclaration & var );
         StructInfo * makeStructureDebugInfo ( const Structure & st );
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
-        FuncInfo * makeBlockDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
+        FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
+        void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
     public:
         smart_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;

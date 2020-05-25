@@ -39,6 +39,8 @@ namespace das
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
                     arg->init = make_smart<ExprFakeContext>(at);
+                } else if ( arg->type->baseType==Type::fakeLineInfo ) {
+                    arg->init = make_smart<ExprFakeLineInfo>(at);
                 }
                 this->arguments.push_back(arg);
             }
@@ -75,6 +77,8 @@ namespace das
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
                     arg->init = make_smart<ExprConstPtr>(at);
+                } else if ( arg->type->baseType==Type::fakeLineInfo ) {
+                    arg->init = make_smart<ExprFakeLineInfo>(at);
                 }
                 this->arguments.push_back(arg);
             }

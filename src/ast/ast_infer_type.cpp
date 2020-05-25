@@ -100,7 +100,7 @@ namespace das {
                     decl->baseType==Type::tTuple ) {
                 if ( decl->argNames.size() && decl->argNames.size()!=decl->argTypes.size() ) {
                     string allNames = "\t";
-                    for ( const auto na : decl->argNames ) {
+                    for ( const auto & na : decl->argNames ) {
                         allNames += na + " ";
                     }
                     error("malformed type, " + decl->describe(), allNames, "",
@@ -4554,6 +4554,11 @@ namespace das {
     // ExprLet
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
+            DAS_ASSERT(!scopes.empty());
+            auto scope = scopes.back();
+            expr->visibility = expr->at;
+            expr->visibility.last_column = scope->at.last_column;
+            expr->visibility.last_line = scope->at.last_line;
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
@@ -5026,6 +5031,9 @@ namespace das {
                     if ( !newArg->type ) {
                         // recursive resolve???
                         newArg = newArg->visit(*this);
+                    }
+                    if ( newArg->type && newArg->type->baseType==Type::fakeLineInfo ) {
+                        newArg->at = expr->at;
                     }
                     expr->arguments.push_back(newArg);
                 }

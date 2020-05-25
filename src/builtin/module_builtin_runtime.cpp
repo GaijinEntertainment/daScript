@@ -285,8 +285,8 @@ namespace das
         return v_zero();
     }
 
-    void builtin_stackwalk ( Context * context) {
-        context->stackWalk();
+    void builtin_stackwalk ( Context * context, LineInfoArg * lineInfo ) {
+        context->stackWalk(lineInfo, true, true);
     }
 
     void builtin_terminate ( Context * context ) {

@@ -498,6 +498,12 @@ namespace das
         virtual bool rtti_isFakeContext() const override { return true; }
     };
 
+    struct ExprFakeLineInfo : ExprConstT<void *, ExprFakeLineInfo> {
+        ExprFakeLineInfo(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeLineInfo) { __rtti = "ExprFakeLineInfo"; }
+        ExprFakeLineInfo(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeLineInfo) { __rtti = "ExprFakeLineInfo"; }
+        virtual bool rtti_isFakeLineInfo() const override { return true; }
+    };
+
     struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
         ExprConstPtr(void * ptr = nullptr)
             : ExprConstT(ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
@@ -721,6 +727,7 @@ namespace das
         static vector<SimNode *> simulateInit(Context & context, const ExprLet * pLet);
         virtual bool rtti_isLet() const override { return true; }
         vector<VariablePtr>     variables;
+        LineInfo                visibility;
         bool                    inScope = false;
     };
 

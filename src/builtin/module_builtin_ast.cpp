@@ -85,6 +85,7 @@ MAKE_TYPE_FACTORY(ExprBreak,ExprBreak);
 MAKE_TYPE_FACTORY(ExprContinue,ExprContinue);
 MAKE_TYPE_FACTORY(ExprConst,ExprConst);
 MAKE_TYPE_FACTORY(ExprFakeContext,ExprFakeContext);
+MAKE_TYPE_FACTORY(ExprFakeLineInfo,ExprFakeLineInfo);
 MAKE_TYPE_FACTORY(ExprConstPtr,ExprConstPtr);
 MAKE_TYPE_FACTORY(ExprConstEnumeration,ExprConstEnumeration);
 MAKE_TYPE_FACTORY(ExprConstBitfield,ExprConstBitfield);
@@ -1190,6 +1191,7 @@ namespace das {
         IMPL_ADAPT(ExprContinue);
         IMPL_ADAPT(ExprConst);
         IMPL_ADAPT(ExprFakeContext);
+        IMPL_ADAPT(ExprFakeLineInfo);
         IMPL_ADAPT(ExprConstPtr);
         IMPL_ADAPT(ExprConstEnumeration);
         IMPL_ADAPT(ExprConstBitfield);
@@ -1336,6 +1338,7 @@ namespace das {
         DECL_VISIT(ExprContinue);
         DECL_VISIT(ExprConst);
         DECL_VISIT(ExprFakeContext);
+        DECL_VISIT(ExprFakeLineInfo);
         DECL_VISIT(ExprConstPtr);
         DECL_VISIT(ExprConstEnumeration);
         DECL_VISIT(ExprConstBitfield);
@@ -1644,6 +1647,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprContinue);
         IMPL_BIND_EXPR(ExprConst);
         IMPL_BIND_EXPR(ExprFakeContext);
+        IMPL_BIND_EXPR(ExprFakeLineInfo);
         IMPL_BIND_EXPR(ExprConstPtr);
         IMPL_BIND_EXPR(ExprConstEnumeration);
         IMPL_BIND_EXPR(ExprConstBitfield);
@@ -1847,6 +1851,7 @@ namespace das {
             addAnnotation(make_smart<AstExprContinueAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstAnnotation>(lib));
             addAnnotation(make_smart<AstExprFakeContextAnnotation>(lib));
+            addAnnotation(make_smart<AstExprFakeLineInfoAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstPtrAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));

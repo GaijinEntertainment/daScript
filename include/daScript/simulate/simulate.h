@@ -99,6 +99,7 @@ namespace das
             };
             struct {
                 vec4f *     arguments;
+                void *      cmres;
                 LineInfo *  line;
             };
         };
@@ -279,8 +280,8 @@ namespace das
 
         SimFunction * findFunction ( const char * name ) const;
         int findVariable ( const char * name ) const;
-        void stackWalk();
-        string getStackWalk( bool args = true );
+        void stackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables );
+        string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables );
         void runInitScript ();
 
         virtual void to_out ( const char * message );           // output to stdout or equivalent
@@ -307,7 +308,11 @@ namespace das
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
-                throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
+                if ( line ) {
+                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                } else {
+                    throw_error_ex("stack overflow while calling %s",fn->mangledName);
+                }
                 return v_zero();
             }
             // fill prologue
@@ -317,6 +322,7 @@ namespace das
             Prologue * pp = (Prologue *)stack.sp();
             pp->info = fn->debugInfo;
             pp->arguments = args;
+            pp->cmres = nullptr;
             pp->line = line;
 #endif
             // CALL
@@ -340,8 +346,11 @@ namespace das
                 // PUSH
                 char * EP, *SP;
                 if (!stack.push(fn->stackSize, EP, SP)) {
-                    throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
-                    return v_zero();
+                if ( line ) {
+                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                } else {
+                    throw_error_ex("stack overflow while calling %s",fn->mangledName);
+                }
                 }
                 // fill prologue
                 auto aa = abiArg;
@@ -350,6 +359,7 @@ namespace das
                 Prologue * pp = (Prologue *)stack.sp();
                 pp->info = fn->debugInfo;
                 pp->arguments = args;
+                pp->cmres = nullptr;
                 pp->line = line;
     #endif
                 // CALL
@@ -366,8 +376,11 @@ namespace das
             // PUSH
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
-                throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
-                return v_zero();
+                if ( line ) {
+                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                } else {
+                    throw_error_ex("stack overflow while calling %s",fn->mangledName);
+                }
             }
             // fill prologue
             auto aa = abiArg; auto acm = abiCMRES;
@@ -376,6 +389,7 @@ namespace das
             Prologue * pp = (Prologue *)stack.sp();
             pp->info = fn->debugInfo;
             pp->arguments = args;
+            pp->cmres = cmres;
             pp->line = line;
 #endif
             // CALL
@@ -399,12 +413,16 @@ namespace das
             char * STB = stack.bottom();
 #if DAS_ENABLE_STACK_WALK
             if (!stack.push_invoke(sizeof(Prologue), block.stackOffset, EP, SP)) {
-                throw_error_ex("stack overflow during block invoke");
-                return v_zero();
+                if ( line ) {
+                    throw_error_at(*line, "stack overflow during invoke");
+                } else {
+                    throw_error_ex("stack overflow during invoke");
+                }
             }
             Prologue * pp = (Prologue *)stack.ap();
             pp->info = block.info;
             pp->arguments = args;
+            pp->cmres = cmres;
             pp->line = line;
 #else
             finfo;
@@ -443,8 +461,11 @@ namespace das
             // PUSH
             char * EP, *SP;
             if(!stack.push(fn->stackSize,EP,SP)) {
-                throw_error_ex("stack overflow at line %i, while calling %s",line,fn->mangledName);
-                return v_zero();
+                if ( line ) {
+                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                } else {
+                    throw_error_ex("stack overflow while calling %s",fn->mangledName);
+                }
             }
             // fill prologue
             auto aa = abiArg; auto acm = cmres;
@@ -453,6 +474,7 @@ namespace das
             Prologue * pp           = (Prologue *) stack.sp();
             pp->info                = fn->debugInfo;
             pp->arguments           = args;
+            pp->cmres               = cmres;
             pp->line                = line;
     #endif
             // CALL
@@ -767,12 +789,16 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
         char * STB = stack.bottom();
 #if DAS_ENABLE_STACK_WALK
         if (!stack.push_invoke(sizeof(Prologue), block.stackOffset, EP, SP)) {
-            throw_error_ex("stack overflow during invokeEx");
-            return v_zero();
+                if ( line ) {
+                    throw_error_at(*line, "stack overflow during invokeEx");
+                } else {
+                    throw_error_ex("stack overflow while during invokeEx");
+                }
         }
         Prologue * pp = (Prologue *)stack.ap();
         pp->info = block.info;
         pp->arguments = args;
+        pp->cmres = cmres;
         pp->line = line;
 #else
         finfo;

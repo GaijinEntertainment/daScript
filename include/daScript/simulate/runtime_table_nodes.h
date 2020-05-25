@@ -95,7 +95,7 @@ namespace das
         __forceinline bool compute ( Context & context ) {
             DAS_PROFILE_NODE
             Table * tab = (Table *) tabExpr->evalPtr(context);
-            if ( tab->isLocked() ) context.throw_error("can't erase from locked table");
+            if ( tab->isLocked() ) context.throw_error_at(debugInfo, "can't erase from locked table");
             auto key = EvalTT<KeyType>::eval(context,keyExpr);
             auto hfn = hash_function(context, key);
             TableHash<KeyType> thh(&context,valueTypeSize);

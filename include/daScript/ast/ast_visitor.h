@@ -202,6 +202,7 @@ namespace das {
         VISIT_EXPR(ExprContinue)
         VISIT_EXPR(ExprConst)
         VISIT_EXPR(ExprFakeContext)
+        VISIT_EXPR(ExprFakeLineInfo)
         VISIT_EXPR(ExprConstPtr)
         VISIT_EXPR(ExprConstEnumeration)
         VISIT_EXPR(ExprConstBitfield)

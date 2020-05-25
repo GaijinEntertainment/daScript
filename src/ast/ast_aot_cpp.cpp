@@ -504,18 +504,20 @@ namespace das {
             ss << " };\n";
         }
         void describeCppFuncInfo ( TextWriter & ss, FuncInfo * info ) const {
-            ss << "\"" << info->name << "\", ";
-            ss << "\"" << info->cppName << "\", ";
+            ss  << "\"" << info->name << "\", "
+                << "\"" << info->cppName << "\", "            ;
             if ( info->fields ) {
                 ss << funcInfoName(info) << "_fields, ";
             } else {
                 ss << "nullptr, ";
             }
-            ss << info->count << ", ";
-            ss << info->stackSize << ", ";
-            ss << "&" << typeInfoName(info->result) << ", ";
-            ss << "0x" << HEX << info->hash << DEC << ", ";
-            ss << "0x" << HEX << info->flags << DEC;
+            ss  << info->count << ", "
+                << info->stackSize << ", "
+                << "&" << typeInfoName(info->result) << ", "
+                << "nullptr,"
+                << "0,"
+                << "0x" << HEX << info->hash << DEC << ", "
+                << "0x" << HEX << info->flags << DEC;
         }
         void describeCppEnumInfoValues ( TextWriter & ss, EnumInfo * einfo ) const {
             for ( uint32_t v=0; v!=einfo->count; ++v ) {
@@ -1746,6 +1748,10 @@ namespace das {
             ss << "__context__";
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit(ExprFakeLineInfo * c) override {
+            ss << "nullptr";
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
             if ( c->getValue() ) {
                 ss << "((void *) 0x" << HEX << intptr_t(c->getValue()) << DEC << ")";
@@ -2457,7 +2463,7 @@ namespace das {
                 ss << ",";
             }
             if ( !block->aotSkipMakeBlock ) {
-                auto info = helper.makeBlockDebugInfo(block->makeBlockType(), block->at);
+                auto info = helper.makeInvokeableTypeDebugInfo(block->makeBlockType(), block->at);
                 ss << "&" << helper.funcInfoName(info) << ",";
             }
             ss << "[&](";

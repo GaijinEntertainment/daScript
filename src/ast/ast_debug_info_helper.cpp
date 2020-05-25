@@ -2,9 +2,41 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/hash.h"
 
 namespace das {
+
+    class CollectLocalVariables : public Visitor {
+    public:
+        virtual void preVisit ( ExprLet * expr ) override {
+            for ( const auto & var : expr->variables) {
+                locals.push_back(make_pair(var,expr->visibility));
+            }
+        }
+    public:
+        vector<pair<VariablePtr,LineInfo>> locals;
+    };
+
+    void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body ) {
+        CollectLocalVariables lv;
+        body->visit(lv);
+        info->localCount = uint32_t(lv.locals.size());
+        info->locals = (LocalVariableInfo **) debugInfo->allocate(sizeof(VarInfo *) * info->localCount);
+        uint32_t i = 0;
+        for ( auto & var_vis : lv.locals ) {
+            auto var = var_vis.first;
+            LocalVariableInfo * lvar = (LocalVariableInfo *) debugInfo->allocate(sizeof(LocalVariableInfo));
+            info->locals[i] = lvar;
+            makeTypeInfo(lvar, var->type);
+            lvar->name = debugInfo->allocateName(var->name);
+            lvar->stackTop = var->stackTop;
+            lvar->visibility = var_vis.second;
+            lvar->localFlags = 0;
+            lvar->cmres = var->aliasCMRES;
+            i ++ ;
+        }
+    }
 
     EnumInfo * DebugInfoHelper::makeEnumDebugInfo ( const Enumeration & en ) {
         auto mangledName = en.getMangledName();
@@ -48,12 +80,14 @@ namespace das {
         if ( fn.init ) fni->flags |= FuncInfo::flag_init;
         if ( fn.builtIn ) fni->flags |= FuncInfo::flag_builtin;
         fni->result = makeTypeInfo(nullptr, fn.result);
+        fni->locals = nullptr;
+        fni->localCount = 0;
         fni->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         fmn2f[mangledName] = fni;
         return fni;
     }
 
-    FuncInfo * DebugInfoHelper::makeBlockDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at ) {
+    FuncInfo * DebugInfoHelper::makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at ) {
         Function fakeFunc;
         fakeFunc.name = "invoke " + blk->describe();
         fakeFunc.at = at;

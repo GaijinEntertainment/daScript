@@ -605,8 +605,9 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             bool allNoSideEffects = true;
             for ( auto & arg : expr->arguments ) {
-                if ( arg->type->baseType!=Type::fakeContext )
+                if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {
                     allNoSideEffects &= arg->noSideEffects;
+                }
             }
             if ( allNoSideEffects ) {
                 if ( isNop(expr->func) ) {
@@ -621,8 +622,9 @@ namespace das {
             if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {
-                    if ( arg->type->baseType!=Type::fakeContext )
+                    if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {
                         allConst &= arg->constexpression;
+                    }
                 }
                 if ( allConst ) {
                     if ( expr->func->builtIn ) {
@@ -777,14 +779,16 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             bool allNoSideEffects = true;
             for ( auto & arg : expr->arguments ) {
-                if ( arg->type->baseType!=Type::fakeContext )
+                if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {
                     allNoSideEffects &= arg->noSideEffects;
+                }
             }
             if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) && !expr->func->builtIn ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {
-                    if ( arg->type->baseType!=Type::fakeContext )
+                    if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {
                         allConst &= arg->constexpression;
+                    }
                 }
                 if ( allConst ) {
                     DAS_ASSERT ( expr->func->index!=-1 );

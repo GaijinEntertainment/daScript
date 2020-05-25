@@ -522,6 +522,10 @@ namespace das {
             ss << "__context__";
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit(ExprFakeLineInfo * c) override {
+            ss << "__lineinfo__";
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
             if ( c->getValue() ) {
                 ss << "*0x" << HEX << intptr_t(c->getValue()) << DEC;

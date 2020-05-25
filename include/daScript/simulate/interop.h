@@ -21,6 +21,13 @@ namespace das
     };
 
     template <>
+    struct cast_arg<LineInfoArg *> {
+        static __forceinline LineInfoArg * to ( Context &, SimNode * node ) {
+            return (LineInfoArg *) (&node->debugInfo);
+        }
+    };
+
+    template <>
     struct cast_arg<vec4f> {
         static __forceinline vec4f to ( Context & ctx, SimNode * x ) {
             return x->eval(ctx);

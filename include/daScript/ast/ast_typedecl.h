@@ -208,6 +208,7 @@ namespace das {
     template<> struct ToBasicType<Tuple>        { enum { type = Type::tTuple }; };
     template<> struct ToBasicType<Variant>      { enum { type = Type::tVariant }; };
     template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
+    template<> struct ToBasicType<LineInfoArg *>{ enum { type = Type::fakeLineInfo }; };
     template<> struct ToBasicType<vec4f>        { enum { type = Type::anyArgument }; };
 
     template <typename TT>
@@ -294,6 +295,13 @@ namespace das {
     struct typeFactory<Context *> {
         static TypeDeclPtr make(const ModuleLibrary &) {
             return make_smart<TypeDecl>(Type::fakeContext);
+        }
+    };
+
+    template <>
+    struct typeFactory<LineInfoArg *> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            return make_smart<TypeDecl>(Type::fakeLineInfo);
         }
     };
 

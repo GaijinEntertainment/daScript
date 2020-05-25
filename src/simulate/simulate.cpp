@@ -122,7 +122,7 @@ namespace das
             if ( pLambda->capture ) {
                 int32_t * fnIndex = (int32_t *) pLambda->capture;
                 SimFunction * simFunc = context.getFunction(fnIndex[1]-1);
-                if (!simFunc) context.throw_error("lambda finalizer is a null function");
+                if (!simFunc) context.throw_error_at(debugInfo, "lambda finalizer is a null function");
                 vec4f argValues[1] = {
                     cast<void *>::from(pLambda->capture)
                 };
@@ -191,7 +191,7 @@ namespace das
             if ( message )
                 error_message = error_message + ", " + message;
             string error = reportError(debugInfo, error_message, "", "");
-            error = context.getStackWalk(false) + error;
+            error = context.getStackWalk(&debugInfo, true, true) + error;
             context.to_err(error.c_str());
             context.throw_error_at(debugInfo,"assert failed");
         }
@@ -741,6 +741,7 @@ namespace das
                         Prologue * pp = (Prologue *)stack.sp();
                         pp->info = &finfo;
                         pp->arguments = nullptr;    // TODO: args
+                        pp->cmres = nullptr;
                         pp->line = &pv.init->debugInfo;
 #endif
                         pv.init->eval(*this);
@@ -789,34 +790,79 @@ namespace das
         return -1;
     }
 
-    void Context::stackWalk() {
-        auto str = getStackWalk();
+    void Context::stackWalk( const LineInfo * at, bool showArguments, bool showLocalVariables ) {
+        auto str = getStackWalk(at, showArguments, showLocalVariables);
         to_out(str.c_str());
     }
 
-    string Context::getStackWalk( bool args ) {
+    string Context::getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables ) {
         FPE_DISABLE;
         TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
         ssw << "\nCALL STACK (sp=" << (stack.top() - stack.sp()) << "):\n";
         char * sp = stack.ap();
+        const LineInfo * lineAt = at;
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             // ssw << HEX << "pp at " << intptr_t(pp) << DEC << "\n";
             if ( !pp->info ) {
-                ssw << pp->fileName << ", AOT (sp=" << (stack.top() - sp) << ")\n";
+                ssw << pp->fileName << ", AOT";
             } else if ( pp->line ) {
-                ssw << pp->info->name << " from " << pp->line->describe() << " (sp=" << (stack.top() - sp) << ")\n";
+                ssw << pp->info->name << " from " << pp->line->describe();
             } else {
-                ssw << pp->info->name << "(sp=" << (stack.top() - sp) << ")\n";
+                ssw << pp->info->name;
             }
-            if ( args && pp->info ) {
+            ssw << "(sp=" << (stack.top() - sp);
+            if ( pp->cmres ) {
+                ssw << ",cmres=0x" << HEX << intptr_t(pp->cmres) << DEC;
+            }
+            ssw << ")\n";
+            if ( showArguments && pp->info ) {
                 for ( uint32_t i = 0; i != pp->info->count; ++i ) {
                     ssw << "\t" << pp->info->fields[i]->name
                         << " : " << debug_type(pp->info->fields[i])
                         << " = \t" << debug_value(pp->arguments[i], pp->info->fields[i], PrintFlags::stackwalker) << "\n";
                 }
             }
+            if ( showLocalVariables && pp->info && pp->info->locals ) {
+                ssw << "local variables\n";
+                for ( uint32_t i = 0; i != pp->info->localCount; ++i ) {
+                    auto lv = pp->info->locals[i];
+                    ssw << "\t" << lv->name
+                        << " : " << debug_type(lv);
+                    bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
+                    char * addr = nullptr;
+                    string location;
+                    if ( !inScope ) {
+                        addr = nullptr;
+                    } else if ( lv->cmres ) {
+                        addr = (char *)pp->cmres;
+                        location = "CMRES";
+                    } else if ( lv->isRefValue( ) ) {
+                        location = "ref *(sp + " + to_string(lv->stackTop) + ")";
+                        addr = *(char **)(sp + lv->stackTop);
+                    } else {
+                        location = "sp + " + to_string(lv->stackTop);
+                        addr = sp + lv->stackTop;
+                    }
+                    if ( addr ) {
+                        vec4f lvd = v_zero();
+                        if ( lv->isRefType() ) {
+                            lvd = cast<char *>::from(addr);
+                        } else {
+                            lvd = v_ldu((const float *)addr);
+                        }
+                        ssw << " = \t" << debug_value(lvd, lv, PrintFlags::stackwalker) << " at " << location << "\n";
+                    } else {
+                        if ( !inScope ) {
+                            ssw << "\t// variable out of scope\n";
+                        } else {
+                            ssw << "\t// variable was optimized out\n";
+                        }
+                    }
+                }
+            }
+            lineAt = pp->info ? pp->line : nullptr;
             sp += pp->info ? pp->info->stackSize : pp->stackSize;
         }
         ssw << "\n";
@@ -879,7 +925,7 @@ namespace das
                 to_err(exception);
                 to_err("\n");
             }
-            stackWalk();
+            stackWalk(nullptr, false, false);
             os_debug_break();
         }
 #endif
@@ -907,7 +953,7 @@ namespace das
              to_err(exception);
              to_err("\n");
              }
-             stackWalk();
+             stackWalk(nullptr, false, false);
              */
             abiArg = aa; abiCMRES = acm;
             stack.pop(EP,SP);
@@ -946,7 +992,7 @@ namespace das
              to_err(exception);
              to_err("\n");
              }
-             stackWalk();
+             stackWalk(nullptr, false, false);
              */
             abiArg = aa; abiCMRES = acm;
             stack.pop(EP,SP);
@@ -984,7 +1030,7 @@ namespace das
                 to_err(exception);
                 to_err("\n");
             }
-            stackWalk();
+            stackWalk(nullptr, false, false);
             */
             abiArg = aa; abiCMRES = acm;
             stack.pop(EP,SP);

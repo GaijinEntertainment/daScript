@@ -296,6 +296,10 @@ namespace das {
             label(c, "__context__");
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit(ExprFakeLineInfo * c) override {
+            label(c, "LineInfo");
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit(ExprConstPtr * c) override {
             if (c->getValue()) {
                 TextWriter ss;

@@ -905,14 +905,16 @@ function_declaration
     ;
 
 expression_block
-    :   '{' expressions[block] '}' {
+    :   '{' [bbegin] expressions[block] '}' [bend] {
         $$ = $block;
+        $$->at = tokRangeAt(@bbegin,@bend);
     }
-    |   '{' expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' {
+    |   '{' [bbegin] expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' [bend] {
         auto pB = (ExprBlock *) $block;
         auto pF = (ExprBlock *) $final;
         swap ( pB->finalList, pF->list );
         $$ = $block;
+        $$->at = tokRangeAt(@bbegin,@bend);
         delete $final;
     }
     ;

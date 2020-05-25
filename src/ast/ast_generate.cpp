@@ -42,7 +42,7 @@ namespace das {
     struct CheckLineInfoVisitor : Visitor {
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
-            if ( expr->rtti_isFakeContext() ) return;
+            if ( expr->rtti_isFakeContext() || expr->rtti_isFakeLineInfo() ) return;
             DAS_ASSERT(expr->at.column && expr->at.line);
         }
         virtual void preVisit ( Structure * var ) override {
