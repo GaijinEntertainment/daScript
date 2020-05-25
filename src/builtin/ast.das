@@ -299,4 +299,22 @@ class AstVisitor
 // var
     def abstract preVisitExprVar(expr:smart_ptr<ExprVar>) : void
     def abstract visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
+// field
+    def abstract preVisitExprField(expr:smart_ptr<ExprField>) : void
+    def abstract visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
+// safe field
+    def abstract preVisitExprSafeField(expr:smart_ptr<ExprSafeField>) : void
+    def abstract visitExprSafeField(expr:smart_ptr<ExprSafeField>) : ExpressionPtr
+// swizzle
+    def abstract preVisitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : void
+    def abstract visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
+// is variant
+    def abstract preVisitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : void
+    def abstract visitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+// as variant
+    def abstract preVisitExprAsVariant(expr:smart_ptr<ExprAsVariant>) : void
+    def abstract visitExprAsVariant(expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
+// safe as variant
+    def abstract preVisitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : void
+    def abstract visitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
 

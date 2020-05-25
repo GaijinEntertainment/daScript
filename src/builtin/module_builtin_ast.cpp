@@ -457,7 +457,6 @@ namespace das {
         }
     };
 
-
     struct AstExprArrayComprehensionAnnotation : AstExpressionAnnotation<ExprArrayComprehension> {
         AstExprArrayComprehensionAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprArrayComprehension> ("ExprArrayComprehension", ml) {
@@ -636,6 +635,67 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(pBlock)>("pBlock");
             addField<DAS_BIND_MANAGED_FIELD(argumentIndex)>("argumentIndex");
             addFieldEx ( "varFlags", "varFlags", offsetof(ExprVar, varFlags), makeExprVarFlags() );
+        }
+    };
+
+    TypeDeclPtr makeExprFieldDerefFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprFieldDerefFlags";
+        ft->argNames = { "unsafeDeref", "ignoreCaptureConst" };
+        return ft;
+    }
+
+    TypeDeclPtr makeExprFieldFieldFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprFieldFieldFlags";
+        ft->argNames = { "r2v", "r2cr", "write" };
+        return ft;
+    }
+
+    template <typename EXPR>
+    struct AstExprFieldAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprFieldAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+            this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            this->template addField<DAS_BIND_MANAGED_FIELD(atField)>("atField");
+            this->template addField<DAS_BIND_MANAGED_FIELD(field)>("field");
+            this->template addField<DAS_BIND_MANAGED_FIELD(fieldIndex)>("fieldIndex");
+            this->template addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
+            this->addFieldEx ( "derefFlags", "derefFlags", offsetof(ExprField, derefFlags), makeExprFieldDerefFlags() );
+            this->addFieldEx ( "fieldFlags", "fieldFlags", offsetof(ExprField, fieldFlags), makeExprFieldFieldFlags() );
+        }
+    };
+
+    struct AstExprSafeFieldAnnotation : AstExprFieldAnnotation<ExprSafeField> {
+        AstExprSafeFieldAnnotation(ModuleLibrary & ml)
+            :  AstExprFieldAnnotation<ExprSafeField> ("ExprSafeField", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(skipQQ)>("skipQQ");
+        }
+    };
+
+    TypeDeclPtr makeExprSwizzleFieldFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprSwizzleFieldFlags";
+        ft->argNames = { "r2v", "r2cr", "write" };
+        return ft;
+    }
+
+    struct AstExprSwizzleAnnotation : AstExpressionAnnotation<ExprSwizzle> {
+        AstExprSwizzleAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprSwizzle> ("ExprSwizzle", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+            addField<DAS_BIND_MANAGED_FIELD(mask)>("mask");
+            addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
+            addFieldEx ( "fieldFlags", "fieldFlags", offsetof(ExprSwizzle, fieldFlags), makeExprSwizzleFieldFlags() );
+        }
+    };
+
+    struct AstExprSafeAsVariantAnnotation : AstExprFieldAnnotation<ExprSafeField> {
+        AstExprSafeAsVariantAnnotation(ModuleLibrary & ml)
+            :  AstExprFieldAnnotation<ExprSafeField> ("ExprSafeAsVariant", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(skipQQ)>("skipQQ");
         }
     };
 
@@ -1177,13 +1237,13 @@ namespace das {
         IMPL_ADAPT(ExprCast);
         IMPL_ADAPT(ExprDelete);
         IMPL_ADAPT(ExprVar);
-        /*
         IMPL_ADAPT(ExprSwizzle);
         IMPL_ADAPT(ExprField);
         IMPL_ADAPT(ExprSafeField);
         IMPL_ADAPT(ExprIsVariant);
         IMPL_ADAPT(ExprAsVariant);
         IMPL_ADAPT(ExprSafeAsVariant);
+        /*
         IMPL_ADAPT(ExprOp1);
         IMPL_ADAPT(ExprReturn);
         IMPL_ADAPT(ExprYield);
@@ -1633,13 +1693,13 @@ namespace das {
         IMPL_BIND_EXPR(ExprCast);
         IMPL_BIND_EXPR(ExprDelete);
         IMPL_BIND_EXPR(ExprVar);
-        /*
         IMPL_BIND_EXPR(ExprSwizzle);
         IMPL_BIND_EXPR(ExprField);
         IMPL_BIND_EXPR(ExprSafeField);
         IMPL_BIND_EXPR(ExprIsVariant);
         IMPL_BIND_EXPR(ExprAsVariant);
         IMPL_BIND_EXPR(ExprSafeAsVariant);
+        /*
         IMPL_BIND_EXPR(ExprOp1);
         IMPL_BIND_EXPR(ExprReturn);
         IMPL_BIND_EXPR(ExprYield);
@@ -1760,6 +1820,9 @@ namespace das {
             addAlias(makeExprVarFlags());
             addAlias(makeExprMakeStructFlags());
             addAlias(makeMakeFieldDeclFlags());
+            addAlias(makeExprFieldDerefFlags());
+            addAlias(makeExprFieldFieldFlags());
+            addAlias(makeExprSwizzleFieldFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
@@ -1837,13 +1900,13 @@ namespace das {
             addAnnotation(make_smart<AstExprCastAnnotation>(lib));
             addAnnotation(make_smart<AstExprDeleteAnnotation>(lib));
             addAnnotation(make_smart<AstExprVarAnnotation>(lib));
-            /*
             addAnnotation(make_smart<AstExprSwizzleAnnotation>(lib));
-            addAnnotation(make_smart<AstExprFieldAnnotation>(lib));
+            addAnnotation(make_smart<AstExprFieldAnnotation<ExprField>>("ExprField",lib));
             addAnnotation(make_smart<AstExprSafeFieldAnnotation>(lib));
-            addAnnotation(make_smart<AstExprIsVariantAnnotation>(lib));
-            addAnnotation(make_smart<AstExprAsVariantAnnotation>(lib));
+            addAnnotation(make_smart<AstExprFieldAnnotation<ExprIsVariant>>("ExprIsVariant",lib));
+            addAnnotation(make_smart<AstExprFieldAnnotation<ExprAsVariant>>("ExprAsVariant",lib));
             addAnnotation(make_smart<AstExprSafeAsVariantAnnotation>(lib));
+            /*
             addAnnotation(make_smart<AstExprOp1Annotation>(lib));
             addAnnotation(make_smart<AstExprReturnAnnotation>(lib));
             addAnnotation(make_smart<AstExprYieldAnnotation>(lib));

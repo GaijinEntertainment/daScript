@@ -476,6 +476,34 @@ class PrintVisitor : AstVisitor
 // var
     def override preVisitExprVar(expr:smart_ptr<ExprVar>)
         print("{expr.name}")
+// field
+    def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
+        print(".{expr.name}")
+        return ExpressionPtr(expr)
+// safe field
+    def override visitExprSafeField(expr:smart_ptr<ExprSafeField>) : ExpressionPtr
+        print("?.{expr.name}")
+        return ExpressionPtr(expr)
+// swizzle
+    def override visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
+        print(".")
+        let f2name = [[string "x";"y";"z";"w"]]
+        for fch in expr.fields
+            let f = int(fch)
+            print("{f>=0 & f<=3 ? f2name[f] : "?"}")
+        return ExpressionPtr(expr)
+// is variant
+    def override visitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+        print(" is {expr.name}")
+        return ExpressionPtr(expr)
+// as variant
+    def override visitExprAsVariant(expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
+        print(" as {expr.name}")
+        return ExpressionPtr(expr)
+// safe as variant
+    def override visitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
+        print(" ?as {expr.name}")
+        return ExpressionPtr(expr)
 
 typedef
     Integer = int
@@ -619,6 +647,9 @@ def allExpr(arg:int)
     print("{aaf}")
     // ExprDelete
     delete pFoo1
+    // swizzle
+    var fsw = float4(1,2,3,4)
+    fsw = fsw.yyzx
 
 [export]
 def test
