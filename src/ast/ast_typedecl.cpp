@@ -235,12 +235,10 @@ namespace das
             }
             for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
                 TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i]);
-                if ( !autoT->argNames.empty() ) {
-                    TT->argNames.push_back(autoT->argNames[i]);
-                } else if ( !initT->argNames.empty() ) {
-                    TT->argNames.push_back(initT->argNames[i]);
-                }
                 if ( !TT->argTypes[i] ) return nullptr;
+            }
+            if ( TT->argNames.size()==0 && !autoT->argNames.empty() ) {
+                TT->argNames = autoT->argNames;
             }
         }
         return TT;
@@ -317,7 +315,7 @@ namespace das
                 stream << "(";
                 for ( size_t ai=0; ai!=argTypes.size(); ++ ai ) {
                     if ( ai!=0 ) stream << ";";
-                    if ( !argNames.empty() ) {
+                    if ( argNames.size()==argTypes.size() ) {
                         stream << argNames[ai] << ":";
                     }
                     stream << argTypes[ai]->describe(extra);
@@ -331,12 +329,15 @@ namespace das
                 stream << firstType->describe(extra);
             }
             stream << ">";
+            if ( argNames.size() && argNames.size()!=argTypes.size() ) {
+                stream << " DAS_COMMENT(malformed) ";
+            }
         } else if ( baseType==Type::tTuple ) {
             stream << das_to_string(baseType) << "<";
             if ( argTypes.size() ) {
                 int ai = 0;
                 for ( const auto & arg : argTypes ) {
-                    if ( !argNames.empty() ) {
+                    if ( argNames.size()==argTypes.size() ) {
                         const auto & argName = argNames[ai];
                         if ( !argName.empty() ) stream << argName << ":";
                     }
@@ -353,7 +354,7 @@ namespace das
             if ( argTypes.size() ) {
                 int ai = 0;
                 for ( const auto & arg : argTypes ) {
-                    if ( !argNames.empty() ) {
+                    if ( argNames.size()==argTypes.size() ) {
                         const auto & argName = argNames[ai];
                         if ( !argName.empty() ) stream << argName << ":";
                     }

@@ -95,6 +95,18 @@ namespace das {
                           decl->at,CompilationError::invalid_array_dimension);
                 }
             }
+            if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda
+                || decl->baseType==Type::tBlock || decl->baseType==Type::tVariant ||
+                    decl->baseType==Type::tTuple ) {
+                if ( decl->argNames.size() && decl->argNames.size()!=decl->argTypes.size() ) {
+                    string allNames = "\t";
+                    for ( const auto na : decl->argNames ) {
+                        allNames += na + " ";
+                    }
+                    error("malformed type, " + decl->describe(), allNames, "",
+                        decl->at,CompilationError::invalid_type);
+                }
+            }
             if ( decl->baseType==Type::tVoid ) {
                 if ( decl->dim.size() ) {
                     error("can't declare an array of void, " + decl->describe(), "", "",
@@ -1694,6 +1706,7 @@ namespace das {
                 for ( auto & arg : expr->func->arguments ) {
                     auto at = make_smart<TypeDecl>(*arg->type);
                     expr->type->argTypes.push_back(at);
+                    expr->type->argNames.push_back(arg->name);
                 }
                 verifyType(expr->type);
             } else if ( fns.size()==0 ) {

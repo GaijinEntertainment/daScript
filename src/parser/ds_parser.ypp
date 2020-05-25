@@ -1563,9 +1563,11 @@ struct_variable_declaration_list
             funcType->argTypes.reserve ( $func->arguments.size() );
             if ( g_thisStructure->isClass ) {
                 funcType->argTypes.push_back(make_smart<TypeDecl>(g_thisStructure));
+                funcType->argNames.push_back("self");
             }
             for ( auto & arg : $func->arguments ) {
                 funcType->argTypes.push_back(arg->type);
+                funcType->argNames.push_back(arg->name);
             }
             VariableDeclaration * decl = new VariableDeclaration(
                 vars,

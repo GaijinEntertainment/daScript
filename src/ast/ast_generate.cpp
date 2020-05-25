@@ -493,6 +493,7 @@ namespace das {
         btd->constant = false;
         auto thisArg = make_smart<TypeDecl>(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
+        btd->argNames.insert(btd->argNames.begin(), "__this");
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
         auto finFunc = make_smart<TypeDecl>(Type::tFunction);
@@ -500,7 +501,8 @@ namespace das {
         finArg->firstType = make_smart<TypeDecl>(pStruct);
         finArg->constant = false;
         finArg->removeConstant = true;
-        finFunc->argTypes.emplace_back(finArg);
+        finFunc->argTypes.push_back(finArg);
+        finFunc->argNames.push_back("__this");
         finFunc->firstType = make_smart<TypeDecl>(Type::tVoid);
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         if ( needYield ) {
@@ -544,6 +546,7 @@ namespace das {
         asc->subexpr = makeS;
         asc->ascType = make_smart<TypeDecl>(*ls->fields[0].type);
         asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
+        asc->ascType->argNames.erase(asc->ascType->argNames.begin());
         asc->ascType->baseType = Type::tLambda;
         auto res = ExpressionPtr(asc);
         verifyGenerated(res);
