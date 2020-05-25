@@ -795,7 +795,7 @@ namespace das
         to_out(str.c_str());
     }
 
-    string Context::getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables ) {
+    string Context::getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope ) {
         FPE_DISABLE;
         TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
@@ -844,7 +844,7 @@ namespace das
                 for ( uint32_t i = 0; i != info->localCount; ++i ) {
                     auto lv = info->locals[i];
                     bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
-                    if ( !inScope ) continue;
+                    if ( !showOutOfScope && !inScope ) continue;
                     if ( first ) {
                         ssw << "--> local variables\n";
                         first = false;
@@ -989,8 +989,6 @@ namespace das
             throwBuf = JB;
             return v_zero();
         }
-        throwBuf = JB;
-        return v_zero();
 #endif
     }
 
@@ -1066,8 +1064,6 @@ namespace das
             throwBuf = JB;
             return v_zero();
         }
-        throwBuf = JB;
-        return v_zero();
 #endif
     }
 
