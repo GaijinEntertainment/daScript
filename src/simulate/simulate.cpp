@@ -836,23 +836,17 @@ namespace das
                     if ( !inScope ) {
                         addr = nullptr;
                     } else if ( lv->cmres ) {
-                        addr = (char *)pp->cmres;
                         location = "CMRES";
+                        addr = (char *)pp->cmres;
                     } else if ( lv->isRefValue( ) ) {
                         location = "ref *(sp + " + to_string(lv->stackTop) + ")";
-                        addr = *(char **)(sp + lv->stackTop);
+                        addr = sp + lv->stackTop;
                     } else {
                         location = "sp + " + to_string(lv->stackTop);
                         addr = sp + lv->stackTop;
                     }
                     if ( addr ) {
-                        vec4f lvd = v_zero();
-                        if ( lv->isRefType() ) {
-                            lvd = cast<char *>::from(addr);
-                        } else {
-                            lvd = v_ldu((const float *)addr);
-                        }
-                        ssw << " = \t" << debug_value(lvd, lv, PrintFlags::stackwalker)
+                        ssw << " = \t" << debug_value(addr, lv, PrintFlags::stackwalker)
                             << " at " << location
                             << " 0x" << HEX << intptr_t(addr) << DEC
                             << "\n";
