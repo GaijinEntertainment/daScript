@@ -806,30 +806,43 @@ namespace das
         while (  sp < stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             // ssw << HEX << "pp at " << intptr_t(pp) << DEC << "\n";
-            if ( !pp->info ) {
+            Block * block = nullptr;
+            FuncInfo * info = nullptr;
+            char * SP = sp;
+            if ( pp->info ) {
+                intptr_t iblock = intptr_t(pp->block);
+                if ( iblock & 1 ) {
+                    block = (Block *) (iblock & ~1);
+                    info = block->info;
+                    SP = stack.bottom() + block->stackOffset;
+                } else {
+                    info = pp->info;
+                }
+            }
+            if ( !info ) {
                 ssw << pp->fileName << ", AOT";
             } else if ( pp->line ) {
-                ssw << pp->info->name << " from " << pp->line->describe();
+                ssw << info->name << " from " << pp->line->describe();
             } else {
-                ssw << pp->info->name;
+                ssw << info->name;
             }
-            ssw << "(sp=" << (stack.top() - sp)
-                << ",sptr=0x" << HEX  << intptr_t(sp) << DEC;
+            ssw << "(sp=" << (stack.top() - SP)
+                << ",sptr=0x" << HEX  << intptr_t(SP) << DEC;
             if ( pp->cmres ) {
                 ssw << ",cmres=0x" << HEX << intptr_t(pp->cmres) << DEC;
             }
             ssw << ")\n";
-            if ( showArguments && pp->info ) {
-                for ( uint32_t i = 0; i != pp->info->count; ++i ) {
-                    ssw << "\t" << pp->info->fields[i]->name
-                        << " : " << debug_type(pp->info->fields[i])
-                        << " = \t" << debug_value(pp->arguments[i], pp->info->fields[i], PrintFlags::stackwalker) << "\n";
+            if ( showArguments && info ) {
+                for ( uint32_t i = 0; i != info->count; ++i ) {
+                    ssw << "\t" << info->fields[i]->name
+                        << " : " << debug_type(info->fields[i])
+                        << " = \t" << debug_value(pp->arguments[i], info->fields[i], PrintFlags::stackwalker) << "\n";
                 }
             }
-            if ( showLocalVariables && pp->info && pp->info->locals ) {
+            if ( showLocalVariables && info && info->locals ) {
                 ssw << "local variables\n";
-                for ( uint32_t i = 0; i != pp->info->localCount; ++i ) {
-                    auto lv = pp->info->locals[i];
+                for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                    auto lv = info->locals[i];
                     ssw << "\t" << lv->name
                         << " : " << debug_type(lv);
                     bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
@@ -842,10 +855,10 @@ namespace das
                         addr = (char *)pp->cmres;
                     } else if ( lv->isRefValue( ) ) {
                         location = "ref *(sp + " + to_string(lv->stackTop) + ")";
-                        addr = sp + lv->stackTop;
+                        addr = SP + lv->stackTop;
                     } else {
                         location = "sp + " + to_string(lv->stackTop);
-                        addr = sp + lv->stackTop;
+                        addr = SP + lv->stackTop;
                     }
                     if ( addr ) {
                         ssw << " = \t" << debug_value(addr, lv, PrintFlags::stackwalker)
@@ -861,8 +874,8 @@ namespace das
                     }
                 }
             }
-            lineAt = pp->info ? pp->line : nullptr;
-            sp += pp->info ? pp->info->stackSize : pp->stackSize;
+            lineAt = info ? pp->line : nullptr;
+            sp += info ? info->stackSize : pp->stackSize;
         }
         ssw << "\n";
     #else

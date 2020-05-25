@@ -14,7 +14,7 @@ namespace das {
                 locals.push_back(make_pair(var,expr->visibility));
             }
         }
-        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {
+        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool ) override {
             locals.push_back(make_pair(var,expr->visibility));
         }
     public:

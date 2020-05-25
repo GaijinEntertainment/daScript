@@ -91,7 +91,10 @@ namespace das
     };
 
     struct alignas(16) Prologue {
-        FuncInfo *  info;
+        union {
+            FuncInfo *  info;
+            Block *     block;
+        };
         union {
             struct {
                 const char * fileName;
@@ -420,7 +423,7 @@ namespace das
                 }
             }
             Prologue * pp = (Prologue *)stack.ap();
-            pp->info = block.info;
+            pp->block = (Block *)(intptr_t(&block) | 1);
             pp->arguments = args;
             pp->cmres = cmres;
             pp->line = line;
@@ -796,7 +799,7 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
                 }
         }
         Prologue * pp = (Prologue *)stack.ap();
-        pp->info = block.info;
+        pp->block = (Block *)(intptr_t(&block) | 1);
         pp->arguments = args;
         pp->cmres = cmres;
         pp->line = line;
