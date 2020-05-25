@@ -747,6 +747,7 @@ namespace das
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
         ExpressionPtr           body;
+        LineInfo                visibility;
     };
 
     struct ExprWhile : Expression {
