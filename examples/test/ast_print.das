@@ -1,7 +1,7 @@
 options rtti = true
 // options log_infer_passes = true
 
-// options log = true
+options log = true
 
 require ast
 require rtti
@@ -536,6 +536,75 @@ class PrintVisitor : AstVisitor
 // continue
     def override preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
         print("continue")
+// const ptr
+    def override preVisitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : void
+        print("{expr.value}")
+// const int 8
+    def override preVisitExprConstInt8(expr:smart_ptr<ExprConstInt8>) : void
+        print("{expr.value}")
+// const int 16
+    def override preVisitExprConstInt16(expr:smart_ptr<ExprConstInt16>) : void
+        print("{expr.value}")
+// const int 64
+    def override preVisitExprConstInt64(expr:smart_ptr<ExprConstInt64>) : void
+        print("{expr.value}")
+// const int
+    def override preVisitExprConstInt(expr:smart_ptr<ExprConstInt>) : void
+        print("{expr.value}")
+// const int2
+    def override preVisitExprConstInt2(expr:smart_ptr<ExprConstInt2>) : void
+        print("int2({expr.value})")
+// const int3
+    def override preVisitExprConstInt3(expr:smart_ptr<ExprConstInt3>) : void
+        print("int3({expr.value})")
+// const int4
+    def override preVisitExprConstInt4(expr:smart_ptr<ExprConstInt4>) : void
+        print("int4({expr.value})")
+// const uint 8
+    def override preVisitExprConstUInt8(expr:smart_ptr<ExprConstUInt8>) : void
+        print("{expr.value}")
+// const uint 16
+    def override preVisitExprConstUInt16(expr:smart_ptr<ExprConstUInt16>) : void
+        print("{expr.value}")
+// const uint 64
+    def override preVisitExprConstUInt64(expr:smart_ptr<ExprConstUInt64>) : void
+        print("{expr.value}")
+// const uint
+    def override preVisitExprConstUInt(expr:smart_ptr<ExprConstUInt>) : void
+        print("{expr.value}")
+// const uint2
+    def override preVisitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : void
+        print("uint2({expr.value})")
+// const uint3
+    def override preVisitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : void
+        print("uint3({expr.value})")
+// const uint4
+    def override preVisitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : void
+        print("uint4({expr.value})")
+// const range
+    def override preVisitExprConstRange(expr:smart_ptr<ExprConstRange>) : void
+        print("range({expr.value})")
+// const urnage
+    def override preVisitExprConstURange(expr:smart_ptr<ExprConstURange>) : void
+        print("urange({expr.value})")
+// const bool
+    def override preVisitExprConstBool(expr:smart_ptr<ExprConstBool>) : void
+        print("{expr.value}")
+// const float
+    def override preVisitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : void
+        print("{expr.value}")
+// const float2
+    def override preVisitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : void
+        print("float2({expr.value})")
+// const float3
+    def override preVisitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : void
+        print("float3({expr.value})")
+// const float4
+    def override preVisitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : void
+        print("float4({expr.value})")
+// const double
+    def override preVisitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : void
+        print("{expr.value}lf")
 
 typedef
     Integer = int
