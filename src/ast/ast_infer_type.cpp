@@ -2993,6 +2993,10 @@ namespace das {
                 error("can't new a reference",  "", "",
                     expr->at, CompilationError::invalid_new_type);
             } else if ( expr->typeexpr->baseType==Type::tStructure ) {
+                if ( !expr->initializer && expr->typeexpr->structType->isClass ) {
+                    error("new of class rquires () syntax; " + expr->typeexpr->describe(), "", "",
+                        expr->at, CompilationError::invalid_new_type);
+                }
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
                 expr->type->firstType->dim.clear();
