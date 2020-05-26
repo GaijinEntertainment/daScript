@@ -317,4 +317,19 @@ class AstVisitor
 // safe as variant
     def abstract preVisitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : void
     def abstract visitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
+// op1
+    def abstract preVisitExprOp1(expr:smart_ptr<ExprOp1>) : void
+    def abstract visitExprOp1(expr:smart_ptr<ExprOp1>) : ExpressionPtr
+// return
+    def abstract preVisitExprReturn(expr:smart_ptr<ExprReturn>) : void
+    def abstract visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
+// yield
+    def abstract preVisitExprYield(expr:smart_ptr<ExprYield>) : void
+    def abstract visitExprYield(expr:smart_ptr<ExprYield>) : ExpressionPtr
+// break
+    def abstract preVisitExprBreak(expr:smart_ptr<ExprBreak>) : void
+    def abstract visitExprBreak(expr:smart_ptr<ExprBreak>) : ExpressionPtr
+// continue
+    def abstract preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
+    def abstract visitExprContinue(expr:smart_ptr<ExprContinue>) : ExpressionPtr
 

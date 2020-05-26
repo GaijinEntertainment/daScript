@@ -699,7 +699,48 @@ namespace das {
         }
     };
 
-    // TYPE STUFF
+    struct AstExprOp1Annotation : AstExprOpAnnotation<ExprOp1> {
+        AstExprOp1Annotation(ModuleLibrary & ml)
+            :  AstExprOpAnnotation<ExprOp1> ("ExprOp1", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+        }
+    };
+
+    TypeDeclPtr makeExprYieldFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprYieldFlags";
+        ft->argNames = { "moveSemantics" };
+        return ft;
+    }
+
+    struct AstExprYieldAnnotation : AstExpressionAnnotation<ExprYield> {
+        AstExprYieldAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprYield> ("ExprYield", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addFieldEx ( "returnFlags", "returnFlags", offsetof(ExprYield, returnFlags), makeExprYieldFlags() );
+        }
+    };
+
+    TypeDeclPtr makeExprReturnFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprReturnFlags";
+        ft->argNames = { "moveSemantics", "returnReference", "returnInBlock",
+            "takeOverRightStack", "returnCallCMRES", "returnCMRES", "fromYield" };
+        return ft;
+    }
+
+    struct AstExprReturnAnnotation : AstExpressionAnnotation<ExprReturn> {
+        AstExprReturnAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprReturn> ("ExprReturn", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addField<DAS_BIND_MANAGED_FIELD(refStackTop)>("refStackTop");
+            addField<DAS_BIND_MANAGED_FIELD(block)>("block");
+            addFieldEx ( "returnFlags", "returnFlags", offsetof(ExprReturn, returnFlags), makeExprReturnFlags() );
+        }
+    };
+
+     // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
         AstEnumerationAnnotation(ModuleLibrary & ml)
@@ -753,7 +794,7 @@ namespace das {
     TypeDeclPtr makeFieldDeclarationFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FieldDeclarationFlags";
-        ft->argNames = { "moveSemantic", "parentType", "capturedConstant", "generated" };
+        ft->argNames = { "moveSemantics", "parentType", "capturedConstant", "generated" };
         return ft;
     }
 
@@ -1220,67 +1261,67 @@ namespace das {
             FN_PREVISIT(ExprArrayComprehensionSubexpr) = adapt("preVisitExprArrayComprehensionSubexpr",pClass,info);
             FN_PREVISIT(ExprArrayComprehensionWhere) = adapt("preVisitExprArrayComprehensionWhere",pClass,info);
             IMPL_ADAPT(ExprTypeInfo);
-        IMPL_ADAPT(ExprLabel);
-        IMPL_ADAPT(ExprGoto);
-        IMPL_ADAPT(ExprRef2Value);
-        IMPL_ADAPT(ExprRef2Ptr);
-        IMPL_ADAPT(ExprPtr2Ref);
-        IMPL_ADAPT(ExprAddr);
-        IMPL_ADAPT(ExprAssert);
-        IMPL_ADAPT(ExprStaticAssert);
-        IMPL_ADAPT(ExprDebug);
-        IMPL_ADAPT(ExprInvoke);
-        IMPL_ADAPT(ExprErase);
-        IMPL_ADAPT(ExprFind);
-        IMPL_ADAPT(ExprKeyExists);
-        IMPL_ADAPT(ExprAscend);
-        IMPL_ADAPT(ExprCast);
-        IMPL_ADAPT(ExprDelete);
-        IMPL_ADAPT(ExprVar);
-        IMPL_ADAPT(ExprSwizzle);
-        IMPL_ADAPT(ExprField);
-        IMPL_ADAPT(ExprSafeField);
-        IMPL_ADAPT(ExprIsVariant);
-        IMPL_ADAPT(ExprAsVariant);
-        IMPL_ADAPT(ExprSafeAsVariant);
+            IMPL_ADAPT(ExprLabel);
+            IMPL_ADAPT(ExprGoto);
+            IMPL_ADAPT(ExprRef2Value);
+            IMPL_ADAPT(ExprRef2Ptr);
+            IMPL_ADAPT(ExprPtr2Ref);
+            IMPL_ADAPT(ExprAddr);
+            IMPL_ADAPT(ExprAssert);
+            IMPL_ADAPT(ExprStaticAssert);
+            IMPL_ADAPT(ExprDebug);
+            IMPL_ADAPT(ExprInvoke);
+            IMPL_ADAPT(ExprErase);
+            IMPL_ADAPT(ExprFind);
+            IMPL_ADAPT(ExprKeyExists);
+            IMPL_ADAPT(ExprAscend);
+            IMPL_ADAPT(ExprCast);
+            IMPL_ADAPT(ExprDelete);
+            IMPL_ADAPT(ExprVar);
+            IMPL_ADAPT(ExprSwizzle);
+            IMPL_ADAPT(ExprField);
+            IMPL_ADAPT(ExprSafeField);
+            IMPL_ADAPT(ExprIsVariant);
+            IMPL_ADAPT(ExprAsVariant);
+            IMPL_ADAPT(ExprSafeAsVariant);
+            IMPL_ADAPT(ExprOp1);
+            IMPL_ADAPT(ExprReturn);
+            IMPL_ADAPT(ExprYield);
+            IMPL_ADAPT(ExprBreak);
+            IMPL_ADAPT(ExprContinue);
         /*
-        IMPL_ADAPT(ExprOp1);
-        IMPL_ADAPT(ExprReturn);
-        IMPL_ADAPT(ExprYield);
-        IMPL_ADAPT(ExprBreak);
-        IMPL_ADAPT(ExprContinue);
-        IMPL_ADAPT(ExprConst);
-        IMPL_ADAPT(ExprFakeContext);
-        IMPL_ADAPT(ExprFakeLineInfo);
-        IMPL_ADAPT(ExprConstPtr);
-        IMPL_ADAPT(ExprConstEnumeration);
-        IMPL_ADAPT(ExprConstBitfield);
-        IMPL_ADAPT(ExprConstInt8);
-        IMPL_ADAPT(ExprConstInt16);
-        IMPL_ADAPT(ExprConstInt64);
-        IMPL_ADAPT(ExprConstInt);
-        IMPL_ADAPT(ExprConstInt2);
-        IMPL_ADAPT(ExprConstInt3);
-        IMPL_ADAPT(ExprConstInt4);
-        IMPL_ADAPT(ExprConstUInt8);
-        IMPL_ADAPT(ExprConstUInt16);
-        IMPL_ADAPT(ExprConstUInt64);
-        IMPL_ADAPT(ExprConstUInt);
-        IMPL_ADAPT(ExprConstUInt2);
-        IMPL_ADAPT(ExprConstUInt3);
-        IMPL_ADAPT(ExprConstUInt4);
-        IMPL_ADAPT(ExprConstRange);
-        IMPL_ADAPT(ExprConstURange);
-        IMPL_ADAPT(ExprConstBool);
-        IMPL_ADAPT(ExprConstFloat);
-        IMPL_ADAPT(ExprConstFloat2);
-        IMPL_ADAPT(ExprConstFloat3);
-        IMPL_ADAPT(ExprConstFloat4);
-        IMPL_ADAPT(ExprConstString);
-        IMPL_ADAPT(ExprConstDouble);
-        IMPL_ADAPT(ExprMakeBlock);
-        IMPL_ADAPT(ExprMakeGenerator);
-        IMPL_ADAPT(ExprMemZero);
+            IMPL_ADAPT(ExprConst);
+            IMPL_ADAPT(ExprFakeContext);
+            IMPL_ADAPT(ExprFakeLineInfo);
+            IMPL_ADAPT(ExprConstPtr);
+            IMPL_ADAPT(ExprConstEnumeration);
+            IMPL_ADAPT(ExprConstBitfield);
+            IMPL_ADAPT(ExprConstInt8);
+            IMPL_ADAPT(ExprConstInt16);
+            IMPL_ADAPT(ExprConstInt64);
+            IMPL_ADAPT(ExprConstInt);
+            IMPL_ADAPT(ExprConstInt2);
+            IMPL_ADAPT(ExprConstInt3);
+            IMPL_ADAPT(ExprConstInt4);
+            IMPL_ADAPT(ExprConstUInt8);
+            IMPL_ADAPT(ExprConstUInt16);
+            IMPL_ADAPT(ExprConstUInt64);
+            IMPL_ADAPT(ExprConstUInt);
+            IMPL_ADAPT(ExprConstUInt2);
+            IMPL_ADAPT(ExprConstUInt3);
+            IMPL_ADAPT(ExprConstUInt4);
+            IMPL_ADAPT(ExprConstRange);
+            IMPL_ADAPT(ExprConstURange);
+            IMPL_ADAPT(ExprConstBool);
+            IMPL_ADAPT(ExprConstFloat);
+            IMPL_ADAPT(ExprConstFloat2);
+            IMPL_ADAPT(ExprConstFloat3);
+            IMPL_ADAPT(ExprConstFloat4);
+            IMPL_ADAPT(ExprConstString);
+            IMPL_ADAPT(ExprConstDouble);
+            IMPL_ADAPT(ExprMakeBlock);
+            IMPL_ADAPT(ExprMakeGenerator);
+            IMPL_ADAPT(ExprMemZero);
         */
         }
     protected:
@@ -1699,12 +1740,12 @@ namespace das {
         IMPL_BIND_EXPR(ExprIsVariant);
         IMPL_BIND_EXPR(ExprAsVariant);
         IMPL_BIND_EXPR(ExprSafeAsVariant);
-        /*
         IMPL_BIND_EXPR(ExprOp1);
         IMPL_BIND_EXPR(ExprReturn);
         IMPL_BIND_EXPR(ExprYield);
         IMPL_BIND_EXPR(ExprBreak);
         IMPL_BIND_EXPR(ExprContinue);
+        /*
         IMPL_BIND_EXPR(ExprConst);
         IMPL_BIND_EXPR(ExprFakeContext);
         IMPL_BIND_EXPR(ExprFakeLineInfo);
@@ -1823,6 +1864,8 @@ namespace das {
             addAlias(makeExprFieldDerefFlags());
             addAlias(makeExprFieldFieldFlags());
             addAlias(makeExprSwizzleFieldFlags());
+            addAlias(makeExprYieldFlags());
+            addAlias(makeExprReturnFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
@@ -1906,12 +1949,12 @@ namespace das {
             addAnnotation(make_smart<AstExprFieldAnnotation<ExprIsVariant>>("ExprIsVariant",lib));
             addAnnotation(make_smart<AstExprFieldAnnotation<ExprAsVariant>>("ExprAsVariant",lib));
             addAnnotation(make_smart<AstExprSafeAsVariantAnnotation>(lib));
-            /*
             addAnnotation(make_smart<AstExprOp1Annotation>(lib));
             addAnnotation(make_smart<AstExprReturnAnnotation>(lib));
             addAnnotation(make_smart<AstExprYieldAnnotation>(lib));
-            addAnnotation(make_smart<AstExprBreakAnnotation>(lib));
-            addAnnotation(make_smart<AstExprContinueAnnotation>(lib));
+            addAnnotation(make_smart<AstExpressionAnnotation<ExprBreak>>("ExprBreak",lib));
+            addAnnotation(make_smart<AstExpressionAnnotation<ExprContinue>>("ExprContinue",lib));
+            /*
             addAnnotation(make_smart<AstExprConstAnnotation>(lib));
             addAnnotation(make_smart<AstExprFakeContextAnnotation>(lib));
             addAnnotation(make_smart<AstExprFakeLineInfoAnnotation>(lib));

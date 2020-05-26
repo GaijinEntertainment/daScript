@@ -1277,13 +1277,13 @@ namespace das {
                         error("structure field initialization type mismatch, "
                               + decl.type->describe() + " = " + decl.init->type->describe(),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
-                    } else if ( !decl.type->canCopy() && !decl.moveSemantic ) {
+                    } else if ( !decl.type->canCopy() && !decl.moveSemantics ) {
                         error("this field can't be copied, use <- instead", "", "",
                               decl.init->at, CompilationError::invalid_initialization_type );
                     } else if ( !decl.init->type->canCopy() && !decl.init->type->canMove() ) {
                         error("this field can't be initialized at all",  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
-                    } else if (decl.moveSemantic && decl.init->type->isConst()) {
+                    } else if (decl.moveSemantics && decl.init->type->isConst()) {
                         error("can't move from a constant value " + decl.init->type->describe(), "", "",
                             decl.init->at, CompilationError::cant_move);
                     }
@@ -5129,10 +5129,10 @@ namespace das {
                         + fieldType->describe() + ", passing " + decl->value->type->describe(),"", "",
                         decl->value->at, CompilationError::invalid_type);
                 }
-                if (!fieldType->canCopy() && !decl->moveSemantic) {
+                if (!fieldType->canCopy() && !decl->moveSemantics) {
                     error("this field can't be copied","","use <- instead",
                         decl->at, CompilationError::invalid_type);
-                } else if (decl->moveSemantic && decl->value->type->isConst()) {
+                } else if (decl->moveSemantics && decl->value->type->isConst()) {
                     error("can't move from a constant value " + decl->value->type->describe(), "", "",
                         decl->value->at, CompilationError::cant_move);
                 }
@@ -5197,7 +5197,7 @@ namespace das {
             if ( !decl->value->type ) {
                 return Visitor::visitMakeStructureField(expr,index,decl,last);
             }
-            if ( decl->cloneSemantic ) {
+            if ( decl->cloneSemantics ) {
                 if ( !expr->block ) expr->block = makeStructWhereBlock(expr);
                 DAS_ASSERT(expr->block->rtti_isMakeBlock());
                 auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
@@ -5215,10 +5215,10 @@ namespace das {
                               +field->type->describe()+", passing "+decl->value->type->describe(), "", "",
                                 decl->value->at, CompilationError::invalid_type );
                     }
-                    if( !field->type->canCopy() && !decl->moveSemantic ) {
+                    if( !field->type->canCopy() && !decl->moveSemantics ) {
                         error("this field can't be copied","","use <- instead",
                               decl->at, CompilationError::invalid_type );
-                    } else if (decl->moveSemantic && decl->value->type->isConst()) {
+                    } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + decl->value->type->describe(), "", "",
                             decl->value->at, CompilationError::cant_move);
                     }
@@ -5237,10 +5237,10 @@ namespace das {
                               + fldt->describe()+", passing "+decl->value->type->describe(), "", "",
                                 decl->value->at, CompilationError::invalid_type );
                     }
-                    if( !fldt->canCopy() && !decl->moveSemantic ) {
+                    if( !fldt->canCopy() && !decl->moveSemantics ) {
                         error("this field can't be copied","","use <- instead",
                               decl->at, CompilationError::invalid_type );
-                    } else if (decl->moveSemantic && decl->value->type->isConst()) {
+                    } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + decl->value->type->describe(), "", "",
                             decl->value->at, CompilationError::cant_move);
                     }

@@ -1048,16 +1048,16 @@ namespace das
         ExpressionPtr   value;
         union {
             struct {
-                bool    moveSemantic : 1;
-                bool    cloneSemantic : 1;
+                bool    moveSemantics : 1;
+                bool    cloneSemantics : 1;
             };
             uint32_t    flags = 0;
         };
         MakeFieldDecl () = default;
         MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e, bool mv, bool cl )
             : at(a), name(n), value(e) {
-            moveSemantic = mv;
-            cloneSemantic = cl;
+            moveSemantics = mv;
+            cloneSemantics = cl;
         }
         MakeFieldDeclPtr clone() const;
     };

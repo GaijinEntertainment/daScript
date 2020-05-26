@@ -452,19 +452,19 @@ namespace das
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                 continue;
             } else if ( useCMRES ) {
-                if ( decl->moveSemantic ){
+                if ( decl->moveSemantics ){
                     cpy = makeLocalCMResMove(at,context,offset,decl->value);
                 } else {
                     cpy = makeLocalCMResCopy(at,context,offset,decl->value);
                 }
             } else if ( useStackRef ) {
-                if ( decl->moveSemantic ){
+                if ( decl->moveSemantics ){
                     cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
                 } else {
                     cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
                 }
             } else {
-                if ( decl->moveSemantic ){
+                if ( decl->moveSemantics ){
                     cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
                 } else {
                     cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
@@ -564,19 +564,19 @@ namespace das
                         simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                         continue;
                     } else if ( useCMRES ) {
-                        if ( decl->moveSemantic ){
+                        if ( decl->moveSemantics ){
                             cpy = makeLocalCMResMove(at,context,offset,decl->value);
                         } else {
                             cpy = makeLocalCMResCopy(at,context,offset,decl->value);
                         }
                     } else if ( useStackRef ) {
-                        if ( decl->moveSemantic ){
+                        if ( decl->moveSemantics ){
                             cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
                         } else {
                             cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
                         }
                     } else {
-                        if ( decl->moveSemantic ){
+                        if ( decl->moveSemantics ){
                             cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
                         } else {
                             cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
@@ -646,7 +646,7 @@ namespace das
                     auto right = decl->value->simulate(context);
                     if ( !decl->value->type->isRef() ) {
                         cpy = context.code->makeValueNode<SimNode_Set>(decl->value->type->baseType, decl->at, left, right);
-                    } else if ( decl->moveSemantic ) {
+                    } else if ( decl->moveSemantics ) {
                         cpy = context.code->makeNode<SimNode_MoveRefValue>(decl->at, left, right, fieldSize);
                     } else {
                         cpy = context.code->makeNode<SimNode_CopyRefValue>(decl->at, left, right, fieldSize);

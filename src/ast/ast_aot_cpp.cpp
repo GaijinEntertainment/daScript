@@ -2324,7 +2324,7 @@ namespace das {
         virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
             ss << string(tab,'\t');
-            ss << (decl->moveSemantic ? "das_move((" : "das_copy((");
+            ss << (decl->moveSemantics ? "das_move((" : "das_copy((");
             if ( expr->makeType->baseType==Type::tHandle ) {
                 expr->makeType->annotation->aotPreVisitGetField(ss, decl->name);
             }

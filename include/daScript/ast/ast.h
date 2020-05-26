@@ -134,7 +134,7 @@ namespace das
             int                     offset = 0;
             union {
                 struct {
-                    bool            moveSemantic : 1;
+                    bool            moveSemantics : 1;
                     bool            parentType : 1;
                     bool            capturedConstant : 1;
                     bool            generated : 1;
@@ -145,7 +145,7 @@ namespace das
             FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i,
                              const AnnotationArgumentList & alist, bool ms, const LineInfo & a )
                 : name(n), type(t), init(i), annotation(alist), at(a) {
-                moveSemantic = ms;
+                moveSemantics = ms;
             }
         };
     public:

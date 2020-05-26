@@ -185,7 +185,7 @@ namespace das {
                 ss << " /* from " << that->parent->name << " */";
             }
             if ( decl.init ) {
-                ss << (decl.moveSemantic ? " <- " : " = ");
+                ss << (decl.moveSemantics ? " <- " : " = ");
             }
         }
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
@@ -494,7 +494,7 @@ namespace das {
         }
         virtual void preVisitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) override {
             Visitor::preVisitNamedCallArg(call, arg, last);
-            ss << arg->name << (arg->moveSemantic ? "<-" : "=" );
+            ss << arg->name << (arg->moveSemantics ? "<-" : "=" );
         }
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) override {
             if ( !last ) ss << ",";
@@ -923,7 +923,7 @@ namespace das {
         }
         virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeVariantField(expr,index,decl,last);
-            ss << decl->name << (decl->moveSemantic ? " <- " : " = ");
+            ss << decl->name << (decl->moveSemantics ? " <- " : " = ");
         }
         virtual MakeFieldDeclPtr visitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if (!last) ss << "; ";
@@ -947,7 +947,7 @@ namespace das {
         }
         virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             Visitor::preVisitMakeStructureField(expr,index,decl,last);
-            ss << decl->name << (decl->moveSemantic ? " <- " : " = ");
+            ss << decl->name << (decl->moveSemantics ? " <- " : " = ");
         }
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !last ) ss << ", ";
