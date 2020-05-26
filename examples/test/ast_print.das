@@ -74,7 +74,7 @@ class PrintVisitor : AstVisitor
         if decl.flags.parentType
             print(" /* from {str.parent.name} */")
         if decl.init != null
-            print("{decl.flags.moveSemantic ? " <- " : " = "}")
+            print("{decl.flags.moveSemantics ? " <- " : " = "}")
     def override visitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool)
         print("\n")
     def override visitStructure(str:StructurePtr) : StructurePtr
@@ -504,6 +504,38 @@ class PrintVisitor : AstVisitor
     def override visitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
         print(" ?as {expr.name}")
         return ExpressionPtr(expr)
+// op1
+    def override preVisitExprOp1(expr:smart_ptr<ExprOp1>) : void
+        let op = "{expr.op}"
+        if op!="+++" & op!="---"
+            print(op)
+        if !noBracket(expr)
+            print("(")
+    def override visitExprOp1(expr:smart_ptr<ExprOp1>) : ExpressionPtr
+        let op = "{expr.op}"
+        if !noBracket(expr)
+            print(")")
+        if op=="+++" | op=="---"
+            print("{slice(op,0,-1)}")
+        return ExpressionPtr(expr)
+// return
+    def override preVisitExprReturn(expr:smart_ptr<ExprReturn>) : void
+        print("return ")
+        if expr.returnFlags.fromYield
+            print("/* from yield */ ")
+        if expr.returnFlags.moveSemantics
+            print("<- ")
+// yield
+    def override preVisitExprYield(expr:smart_ptr<ExprYield>) : void
+        print("yield ")
+        if expr.returnFlags.moveSemantics
+            print("<- ")
+// break
+    def override preVisitExprBreak(expr:smart_ptr<ExprBreak>) : void
+        print("break")
+// continue
+    def override preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
+        print("continue")
 
 typedef
     Integer = int
@@ -647,9 +679,15 @@ def allExpr(arg:int)
     print("{aaf}")
     // ExprDelete
     delete pFoo1
-    // swizzle
+    // ExprSwizzle
     var fsw = float4(1,2,3,4)
     fsw = fsw.yyzx
+    // ExprOp1
+    var eop1 = 1
+    eop1 ++
+    -- eop1
+    // ExprMemZero
+    memzero(eop1)
 
 [export]
 def test

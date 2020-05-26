@@ -332,4 +332,13 @@ class AstVisitor
 // continue
     def abstract preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
     def abstract visitExprContinue(expr:smart_ptr<ExprContinue>) : ExpressionPtr
+// make block
+    def abstract preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
+    def abstract visitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : ExpressionPtr
+// make generator
+    def abstract preVisitExprMakeGenerator(expr:smart_ptr<ExprMakeGenerator>) : void
+    def abstract visitExprMakeGenerator(expr:smart_ptr<ExprMakeGenerator>) : ExpressionPtr
+// memzero
+    def abstract preVisitExprMemZero(expr:smart_ptr<ExprMemZero>) : void
+    def abstract visitExprMemZero(expr:smart_ptr<ExprMemZero>) : ExpressionPtr
 

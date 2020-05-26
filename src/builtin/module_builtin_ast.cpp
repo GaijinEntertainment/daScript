@@ -740,6 +740,22 @@ namespace das {
         }
     };
 
+    struct AstExprMakeBlockAnnotation : AstExpressionAnnotation<ExprMakeBlock> {
+        AstExprMakeBlockAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprMakeBlock> ("ExprMakeBlock", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(block)>("block");
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addField<DAS_BIND_MANAGED_FIELD(isLambda)>("isLambda");
+        }
+    };
+
+    struct AstExprMakeGeneratorAnnotation : AstExprLooksLikeCallAnnotation<ExprMakeGenerator> {
+        AstExprMakeGeneratorAnnotation(ModuleLibrary & ml)
+            :  AstExprLooksLikeCallAnnotation<ExprMakeGenerator> ("ExprMakeGenerator", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(iterType)>("iterType");
+        }
+    };
+
      // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
@@ -1319,10 +1335,10 @@ namespace das {
             IMPL_ADAPT(ExprConstFloat4);
             IMPL_ADAPT(ExprConstString);
             IMPL_ADAPT(ExprConstDouble);
+            */
             IMPL_ADAPT(ExprMakeBlock);
             IMPL_ADAPT(ExprMakeGenerator);
             IMPL_ADAPT(ExprMemZero);
-        */
         }
     protected:
         void *      classPtr;
@@ -1775,10 +1791,10 @@ namespace das {
         IMPL_BIND_EXPR(ExprConstFloat4);
         IMPL_BIND_EXPR(ExprConstString);
         IMPL_BIND_EXPR(ExprConstDouble);
+    */
         IMPL_BIND_EXPR(ExprMakeBlock);
         IMPL_BIND_EXPR(ExprMakeGenerator);
         IMPL_BIND_EXPR(ExprMemZero);
-    */
     };
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
@@ -1984,10 +2000,10 @@ namespace das {
             addAnnotation(make_smart<AstExprConstFloat4Annotation>(lib));
             addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstDoubleAnnotation>(lib));
+            */
             addAnnotation(make_smart<AstExprMakeBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprMakeGeneratorAnnotation>(lib));
-            addAnnotation(make_smart<AstExprMemZeroAnnotation>(lib));
-        */
+            addAnnotation(make_smart<AstExprLikeCallAnnotation<ExprMemZero>>("ExprMemZero",lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
