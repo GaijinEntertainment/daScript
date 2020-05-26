@@ -341,4 +341,92 @@ class AstVisitor
 // memzero
     def abstract preVisitExprMemZero(expr:smart_ptr<ExprMemZero>) : void
     def abstract visitExprMemZero(expr:smart_ptr<ExprMemZero>) : ExpressionPtr
+// const
+    def abstract preVisitExprConst(expr:smart_ptr<ExprConst>) : void
+    def abstract visitExprConst(expr:smart_ptr<ExprConst>) : ExpressionPtr
+// MAKE_TYPE_FACTORY(ExprFakeContext,ExprFakeContext);
+//    def abstract preVisitExprConst(expr:smart_ptr<ExprConst>) : void
+//    def abstract visitExprConst(expr:smart_ptr<ExprConst>) : ExpressionPtr
+// MAKE_TYPE_FACTORY(ExprFakeLineInfo,ExprFakeLineInfo);
+//    def abstract preVisitExprConst(expr:smart_ptr<ExprConst>) : void
+//    def abstract visitExprConst(expr:smart_ptr<ExprConst>) : ExpressionPtr
+// const ptr
+    def abstract preVisitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : void
+    def abstract visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
+// const enumeration
+//    def abstract preVisitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : void
+//  def abstract visitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : ExpressionPtr
+// MAKE_TYPE_FACTORY(ExprConstBitfield,ExprConstBitfield);
+//    def abstract preVisitExprConst(expr:smart_ptr<ExprConst>) : void
+//    def abstract visitExprConst(expr:smart_ptr<ExprConst>) : ExpressionPtr
+// const int 8
+    def abstract preVisitExprConstInt8(expr:smart_ptr<ExprConstInt8>) : void
+    def abstract visitExprConstInt8(expr:smart_ptr<ExprConstInt8>) : ExpressionPtr
+// const int 16
+    def abstract preVisitExprConstInt16(expr:smart_ptr<ExprConstInt16>) : void
+    def abstract visitExprConstInt16(expr:smart_ptr<ExprConstInt16>) : ExpressionPtr
+// const int 64
+    def abstract preVisitExprConstInt64(expr:smart_ptr<ExprConstInt64>) : void
+    def abstract visitExprConstInt64(expr:smart_ptr<ExprConstInt64>) : ExpressionPtr
+// const int
+    def abstract preVisitExprConstInt(expr:smart_ptr<ExprConstInt>) : void
+    def abstract visitExprConstInt(expr:smart_ptr<ExprConstInt>) : ExpressionPtr
+// const int2
+    def abstract preVisitExprConstInt2(expr:smart_ptr<ExprConstInt2>) : void
+    def abstract visitExprConstInt2(expr:smart_ptr<ExprConstInt2>) : ExpressionPtr
+// const int3
+    def abstract preVisitExprConstInt3(expr:smart_ptr<ExprConstInt3>) : void
+    def abstract visitExprConstInt3(expr:smart_ptr<ExprConstInt3>) : ExpressionPtr
+// const int4
+    def abstract preVisitExprConstInt4(expr:smart_ptr<ExprConstInt4>) : void
+    def abstract visitExprConstInt4(expr:smart_ptr<ExprConstInt4>) : ExpressionPtr
+// const uint 8
+    def abstract preVisitExprConstUInt8(expr:smart_ptr<ExprConstUInt8>) : void
+    def abstract visitExprConstUInt8(expr:smart_ptr<ExprConstUInt8>) : ExpressionPtr
+// const uint 16
+    def abstract preVisitExprConstUInt16(expr:smart_ptr<ExprConstUInt16>) : void
+    def abstract visitExprConstUInt16(expr:smart_ptr<ExprConstUInt16>) : ExpressionPtr
+// const uint 64
+    def abstract preVisitExprConstUInt64(expr:smart_ptr<ExprConstUInt64>) : void
+    def abstract visitExprConstUInt64(expr:smart_ptr<ExprConstUInt64>) : ExpressionPtr
+// const uint
+    def abstract preVisitExprConstUInt(expr:smart_ptr<ExprConstUInt>) : void
+    def abstract visitExprConstUInt(expr:smart_ptr<ExprConstUInt>) : ExpressionPtr
+// const uint2
+    def abstract preVisitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : void
+    def abstract visitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : ExpressionPtr
+// const uint3
+    def abstract preVisitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : void
+    def abstract visitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : ExpressionPtr
+// const uint4
+    def abstract preVisitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : void
+    def abstract visitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : ExpressionPtr
+// const range
+    def abstract preVisitExprConstRange(expr:smart_ptr<ExprConstRange>) : void
+    def abstract visitExprConstRange(expr:smart_ptr<ExprConstRange>) : ExpressionPtr
+// const urnage
+    def abstract preVisitExprConstURange(expr:smart_ptr<ExprConstURange>) : void
+    def abstract visitExprConstURange(expr:smart_ptr<ExprConstURange>) : ExpressionPtr
+// const bool
+    def abstract preVisitExprConstBool(expr:smart_ptr<ExprConstBool>) : void
+    def abstract visitExprConstBool(expr:smart_ptr<ExprConstBool>) : ExpressionPtr
+// const float
+    def abstract preVisitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : void
+    def abstract visitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : ExpressionPtr
+// const float2
+    def abstract preVisitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : void
+    def abstract visitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : ExpressionPtr
+// const float3
+    def abstract preVisitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : void
+    def abstract visitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : ExpressionPtr
+// const float4
+    def abstract preVisitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : void
+    def abstract visitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : ExpressionPtr
+// const string
+//MAKE_TYPE_FACTORY(ExprConstString,ExprConstString);
+//    def abstract preVisitExprConst(expr:smart_ptr<ExprConst>) : void
+//    def abstract visitExprConst(expr:smart_ptr<ExprConst>) : ExpressionPtr
+// const double
+    def abstract preVisitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : void
+    def abstract visitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : ExpressionPtr
 

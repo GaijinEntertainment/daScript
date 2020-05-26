@@ -457,10 +457,13 @@ namespace das
 #pragma warning(disable:4324)
 #endif
     struct ExprConst : Expression {
+        ExprConst ( ) : baseType(Type::none) { __rtti = "ExprConst"; }
         ExprConst ( Type t ) : baseType(t) { __rtti = "ExprConst"; }
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) { __rtti = "ExprConst"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
+        template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
+        template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
         Type    baseType;
         vec4f   value;
       };

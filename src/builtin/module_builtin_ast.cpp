@@ -756,6 +756,29 @@ namespace das {
         }
     };
 
+    template <typename EXPR>
+    struct AstExprConstAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprConstAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
+        }
+        template <typename TT>
+        void init( ModuleLibrary & ml ) {
+            auto cpptype = makeType<TT>(ml);
+            string cppname = "cvalue<" + describeCppType(cpptype) + ">()";
+            this->addFieldEx ( "value", cppname, offsetof(ExprConst, value), cpptype );
+        }
+    };
+
+    template <typename EXPR, typename TT>
+    struct AstExprConstTAnnotation : AstExprConstAnnotation<EXPR> {
+        AstExprConstTAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprConstAnnotation<EXPR> (na, ml) {
+            this->template init<TT>(ml);
+        }
+    };
+
      // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
@@ -1305,13 +1328,12 @@ namespace das {
             IMPL_ADAPT(ExprYield);
             IMPL_ADAPT(ExprBreak);
             IMPL_ADAPT(ExprContinue);
-        /*
             IMPL_ADAPT(ExprConst);
-            IMPL_ADAPT(ExprFakeContext);
-            IMPL_ADAPT(ExprFakeLineInfo);
+            // IMPL_ADAPT(ExprFakeContext);
+            // IMPL_ADAPT(ExprFakeLineInfo);
             IMPL_ADAPT(ExprConstPtr);
-            IMPL_ADAPT(ExprConstEnumeration);
-            IMPL_ADAPT(ExprConstBitfield);
+            // IMPL_ADAPT(ExprConstEnumeration);
+            // IMPL_ADAPT(ExprConstBitfield);
             IMPL_ADAPT(ExprConstInt8);
             IMPL_ADAPT(ExprConstInt16);
             IMPL_ADAPT(ExprConstInt64);
@@ -1333,9 +1355,8 @@ namespace das {
             IMPL_ADAPT(ExprConstFloat2);
             IMPL_ADAPT(ExprConstFloat3);
             IMPL_ADAPT(ExprConstFloat4);
-            IMPL_ADAPT(ExprConstString);
+            // IMPL_ADAPT(ExprConstString);
             IMPL_ADAPT(ExprConstDouble);
-            */
             IMPL_ADAPT(ExprMakeBlock);
             IMPL_ADAPT(ExprMakeGenerator);
             IMPL_ADAPT(ExprMemZero);
@@ -1761,13 +1782,12 @@ namespace das {
         IMPL_BIND_EXPR(ExprYield);
         IMPL_BIND_EXPR(ExprBreak);
         IMPL_BIND_EXPR(ExprContinue);
-        /*
         IMPL_BIND_EXPR(ExprConst);
-        IMPL_BIND_EXPR(ExprFakeContext);
-        IMPL_BIND_EXPR(ExprFakeLineInfo);
+        // IMPL_BIND_EXPR(ExprFakeContext);
+        // IMPL_BIND_EXPR(ExprFakeLineInfo);
         IMPL_BIND_EXPR(ExprConstPtr);
-        IMPL_BIND_EXPR(ExprConstEnumeration);
-        IMPL_BIND_EXPR(ExprConstBitfield);
+        // IMPL_BIND_EXPR(ExprConstEnumeration);
+        // IMPL_BIND_EXPR(ExprConstBitfield);
         IMPL_BIND_EXPR(ExprConstInt8);
         IMPL_BIND_EXPR(ExprConstInt16);
         IMPL_BIND_EXPR(ExprConstInt64);
@@ -1789,9 +1809,8 @@ namespace das {
         IMPL_BIND_EXPR(ExprConstFloat2);
         IMPL_BIND_EXPR(ExprConstFloat3);
         IMPL_BIND_EXPR(ExprConstFloat4);
-        IMPL_BIND_EXPR(ExprConstString);
+        // IMPL_BIND_EXPR(ExprConstString);
         IMPL_BIND_EXPR(ExprConstDouble);
-    */
         IMPL_BIND_EXPR(ExprMakeBlock);
         IMPL_BIND_EXPR(ExprMakeGenerator);
         IMPL_BIND_EXPR(ExprMemZero);
@@ -1970,37 +1989,35 @@ namespace das {
             addAnnotation(make_smart<AstExprYieldAnnotation>(lib));
             addAnnotation(make_smart<AstExpressionAnnotation<ExprBreak>>("ExprBreak",lib));
             addAnnotation(make_smart<AstExpressionAnnotation<ExprContinue>>("ExprContinue",lib));
-            /*
-            addAnnotation(make_smart<AstExprConstAnnotation>(lib));
-            addAnnotation(make_smart<AstExprFakeContextAnnotation>(lib));
-            addAnnotation(make_smart<AstExprFakeLineInfoAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstPtrAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstInt8Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstInt16Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstInt64Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstIntAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstInt2Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstInt3Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstInt4Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstUInt8Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstUInt16Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstUInt64Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstUIntAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstUInt2Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstUInt3Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstUInt4Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstRangeAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstURangeAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstBoolAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstFloatAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstFloat2Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstFloat3Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstFloat4Annotation>(lib));
-            addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
-            addAnnotation(make_smart<AstExprConstDoubleAnnotation>(lib));
-            */
+            addAnnotation(make_smart<AstExprConstAnnotation<ExprConst>>("ExprConst",lib));
+            //addAnnotation(make_smart<AstExprFakeContextAnnotation>(lib));
+            //addAnnotation(make_smart<AstExprFakeLineInfoAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstPtr,void *>>("ExprConstPtr",lib));
+            // addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
+            // addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt8 ,int8_t>> ("ExprConstInt8",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt16,int16_t>>("ExprConstInt16",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt64,int64_t>>("ExprConstInt64",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt  ,int32_t>>("ExprConstInt",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt2 ,int2>>   ("ExprConstInt2",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt3 ,int3>>   ("ExprConstInt3",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt4 ,int4>>   ("ExprConstInt4",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt8 ,uint8_t>> ("ExprConstUInt8",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt16,uint16_t>>("ExprConstUInt16",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt64,uint64_t>>("ExprConstUInt64",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt  ,uint32_t>>("ExprConstUInt",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt2 ,uint2>>   ("ExprConstUInt2",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt3 ,uint3>>   ("ExprConstUInt3",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt4 ,uint4>>   ("ExprConstUInt4",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstRange ,range>> ("ExprConstRange",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstURange,urange>>("ExprConstURange",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat  ,float>> ("ExprConstFloat",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat2 ,float2>>("ExprConstFloat2",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat3 ,float3>>("ExprConstFloat3",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat4 ,float4>>("ExprConstFloat4",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstDouble,double>> ("ExprConstDouble",lib));
+            addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstBool,bool>> ("ExprConstBool",lib));
+            // addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
             addAnnotation(make_smart<AstExprMakeBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprMakeGeneratorAnnotation>(lib));
             addAnnotation(make_smart<AstExprLikeCallAnnotation<ExprMemZero>>("ExprMemZero",lib));
