@@ -9,6 +9,8 @@ def take3(t:float3)
 [export]
 def indexFail(arr:Point3Array)
     take3(arr[0])
+    let t & = arr[1]
+    take3(t)
 
 [export]
 def swizzleFail(battleAreaPoints:Point3Array)
