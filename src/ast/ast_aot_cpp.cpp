@@ -1498,6 +1498,9 @@ namespace das {
     // null coaelescing
         virtual void preVisit ( ExprNullCoalescing * nc ) override {
             Visitor::preVisit(nc);
+            if ( nc->type->aotAlias ) {
+                ss << "das_alias<" << nc->type->alias << ">::from(";
+            }
             ss << "das_null_coalescing<" << describeCppType(nc->defaultValue->type,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no)
                 << ">::get(";
         }
@@ -1507,6 +1510,9 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprNullCoalescing * nc ) override {
             ss << ")";
+            if ( nc->type->aotAlias ) {
+                ss << ")";
+            }
             return Visitor::visit(nc);
         }
     // is variant
@@ -1704,6 +1710,9 @@ namespace das {
     // at
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
+            if ( expr->type->aotAlias ) {
+                ss << "das_alias<" << expr->type->alias << ">::from(";
+            }
             if ( !(expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType()) ) {
                 ss << "das_index<" << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
                     << ">::at(";
@@ -1718,9 +1727,12 @@ namespace das {
             }
 
         }
-        virtual ExpressionPtr visit ( ExprAt * that ) override {
+        virtual ExpressionPtr visit ( ExprAt * expr ) override {
             ss << ",__context__)";
-            return Visitor::visit(that);
+            if ( expr->type->aotAlias ) {
+                ss << ")";
+            }
+            return Visitor::visit(expr);
         }
     // safe at
         virtual void preVisit ( ExprSafeAt * expr ) override {

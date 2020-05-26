@@ -2,6 +2,14 @@ require UnitTest
 
 require math
 
+[sideeffects]
+def take3(t:float3)
+    print("t={t}")
+
+[export]
+def indexFail(arr:Point3Array)
+    take3(arr[0])
+
 [export]
 def swizzleFail(battleAreaPoints:Point3Array)
     var pointStart : float2
