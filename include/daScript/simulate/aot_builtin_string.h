@@ -7,6 +7,9 @@ namespace das {
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context );
     vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args );
 
+    char * builtin_string_escape ( const char *str, Context * context );
+    char * builtin_string_unescape ( const char *str, Context * context );
+
     vec4f builtin_strdup ( Context &, SimNode_CallBase * call, vec4f * args );
 
     int32_t get_character_at ( const char * str, int32_t index, Context * context );

@@ -779,6 +779,29 @@ namespace das {
         }
     };
 
+    struct AstExprConstEnumerationAnnotation : AstExprConstAnnotation<ExprConstEnumeration> {
+        AstExprConstEnumerationAnnotation(ModuleLibrary & ml)
+            :  AstExprConstAnnotation<ExprConstEnumeration> ("ExprConstEnumeration", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
+            addField<DAS_BIND_MANAGED_FIELD(text)>("value","text");
+        }
+    };
+
+    struct AstExprConstBitfieldAnnotation : AstExprConstTAnnotation<ExprConstBitfield,Bitfield> {
+        AstExprConstBitfieldAnnotation(ModuleLibrary & ml)
+            :  AstExprConstTAnnotation<ExprConstBitfield,Bitfield> ("ExprConstBitfield", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(bitfieldType)>("bitfieldType");
+
+        }
+    };
+
+    struct AstExprConstStringAnnotation : AstExprConstAnnotation<ExprConstString> {
+        AstExprConstStringAnnotation(ModuleLibrary & ml)
+            :  AstExprConstAnnotation<ExprConstString> ("ExprConstString", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(text)>("value","text");
+        }
+    };
+
      // TYPE STUFF
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
@@ -790,7 +813,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(list)>("list");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("enumModule");
             addField<DAS_BIND_MANAGED_FIELD(external)>("external");
             addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
         }
@@ -1332,8 +1355,8 @@ namespace das {
             IMPL_ADAPT(ExprFakeContext);
             IMPL_ADAPT(ExprFakeLineInfo);
             IMPL_ADAPT(ExprConstPtr);
-            // IMPL_ADAPT(ExprConstEnumeration);
-            // IMPL_ADAPT(ExprConstBitfield);
+            IMPL_ADAPT(ExprConstEnumeration);
+            IMPL_ADAPT(ExprConstBitfield);
             IMPL_ADAPT(ExprConstInt8);
             IMPL_ADAPT(ExprConstInt16);
             IMPL_ADAPT(ExprConstInt64);
@@ -1355,7 +1378,7 @@ namespace das {
             IMPL_ADAPT(ExprConstFloat2);
             IMPL_ADAPT(ExprConstFloat3);
             IMPL_ADAPT(ExprConstFloat4);
-            // IMPL_ADAPT(ExprConstString);
+            IMPL_ADAPT(ExprConstString);
             IMPL_ADAPT(ExprConstDouble);
             IMPL_ADAPT(ExprMakeBlock);
             IMPL_ADAPT(ExprMakeGenerator);
@@ -1786,8 +1809,8 @@ namespace das {
         IMPL_BIND_EXPR(ExprFakeContext);
         IMPL_BIND_EXPR(ExprFakeLineInfo);
         IMPL_BIND_EXPR(ExprConstPtr);
-        // IMPL_BIND_EXPR(ExprConstEnumeration);
-        // IMPL_BIND_EXPR(ExprConstBitfield);
+        IMPL_BIND_EXPR(ExprConstEnumeration);
+        IMPL_BIND_EXPR(ExprConstBitfield);
         IMPL_BIND_EXPR(ExprConstInt8);
         IMPL_BIND_EXPR(ExprConstInt16);
         IMPL_BIND_EXPR(ExprConstInt64);
@@ -1809,7 +1832,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprConstFloat2);
         IMPL_BIND_EXPR(ExprConstFloat3);
         IMPL_BIND_EXPR(ExprConstFloat4);
-        // IMPL_BIND_EXPR(ExprConstString);
+        IMPL_BIND_EXPR(ExprConstString);
         IMPL_BIND_EXPR(ExprConstDouble);
         IMPL_BIND_EXPR(ExprMakeBlock);
         IMPL_BIND_EXPR(ExprMakeGenerator);
@@ -1857,6 +1880,10 @@ namespace das {
 
     char * ast_das_to_string ( Type bt, Context * context ) {
         return context->stringHeap.allocateString(das_to_string(bt));
+    }
+
+    char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context ) {
+        return context->stringHeap.allocateString(bft->findBitfieldName(value));
     }
 
     class Module_Ast : public Module {
@@ -1993,8 +2020,6 @@ namespace das {
             addAnnotation(make_smart<AstExprConstAnnotation<ExprFakeContext>>("ExprFakeContext",lib));
             addAnnotation(make_smart<AstExprConstAnnotation<ExprFakeLineInfo>>("ExprFakeLineInfo",lib));
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstPtr,void *>>("ExprConstPtr",lib));
-            // addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
-            // addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt8 ,int8_t>> ("ExprConstInt8",lib));
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt16,int16_t>>("ExprConstInt16",lib));
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt64,int64_t>>("ExprConstInt64",lib));
@@ -2017,10 +2042,12 @@ namespace das {
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat4 ,float4>>("ExprConstFloat4",lib));
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstDouble,double>> ("ExprConstDouble",lib));
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstBool,bool>> ("ExprConstBool",lib));
-            // addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
             addAnnotation(make_smart<AstExprMakeBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprMakeGeneratorAnnotation>(lib));
             addAnnotation(make_smart<AstExprLikeCallAnnotation<ExprMemZero>>("ExprMemZero",lib));
+            addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
@@ -2036,6 +2063,8 @@ namespace das {
                 SideEffects::none, "ast_describe_expression");
             addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "ast_describe_function",
                 SideEffects::none, "ast_describe_function");
+            addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "ast_find_bitfield_name",
+                SideEffects::none, "ast_find_bitfield_name");
             // type conversion functions
             addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "ast_das_to_string",
                 SideEffects::none, "ast_das_to_string");

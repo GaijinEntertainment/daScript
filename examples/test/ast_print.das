@@ -1,7 +1,7 @@
 options rtti = true
 // options log_infer_passes = true
 
-options log = true
+// options log = true
 
 require ast
 require rtti
@@ -611,6 +611,25 @@ class PrintVisitor : AstVisitor
 // fake line info
     def override preVisitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : void
         print("__lineinfo__")
+// string
+    def override preVisitExprConstString(expr:smart_ptr<ExprConstString>) : void
+        peek(expr.value) <| $(str)
+            print("\"{escape(str)}\"")
+// const enumeraiton
+    def override preVisitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : void
+        let enumModule = expr.enumType.enumModule
+        if enumModule!=null & !empty(enumModule.name)
+            print("{enumModule.name}::")
+        print("{expr.enumType.name} {expr.value}")
+// const bitfield
+    def override preVisitExprConstBitfield(expr:smart_ptr<ExprConstBitfield>) : void
+        var name : string
+        if expr.bitfieldType!=null & !empty(expr.bitfieldType.alias)
+            name = ast_find_bitfield_name(expr.bitfieldType,expr.value)
+        if !empty(name)
+            print("{expr.bitfieldType.alias} {name}")
+        else
+            print("bitfield({expr.value})")
 
 typedef
     Integer = int
@@ -763,6 +782,15 @@ def allExpr(arg:int)
     -- eop1
     // ExprMemZero
     memzero(eop1)
+    // ExprConstString
+    var cstr = "hello\nworld\n"
+    cstr += "\{..\}"
+    // ExprConstEnumeration
+    var enc = Type none
+    enc = Type tInt
+    // ExprConstBitfield
+    var bfc = ExprPrintFlags topLevel
+    bfc = ExprPrintFlags argLevel
 
 [export]
 def test

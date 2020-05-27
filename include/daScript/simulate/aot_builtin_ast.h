@@ -8,4 +8,6 @@ namespace das {
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context );
 
     char * ast_das_to_string ( Type bt, Context * context );
+
+    char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context );
 }

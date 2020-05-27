@@ -371,6 +371,19 @@ namespace das
         }
     }
 
+    char * builtin_string_escape ( const char *str, Context * context ) {
+        // TODO: optimize
+        return context->stringHeap.allocateString(escapeString(str));
+    }
+
+    char * builtin_string_unescape ( const char *str, Context * context ) {
+        // TODO: optimize
+        bool err = false;
+        auto estr = unescapeString(str, &err);
+        if ( err ) context->throw_error("invalid escape sequence");
+        return context->stringHeap.allocateString(escapeString(str));
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
@@ -429,6 +442,8 @@ namespace das
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
         addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", SideEffects::none, "fast_to_int");
         addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none, "fast_to_float");
+        addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape", SideEffects::none, "builtin_string_escape");
+        addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape", SideEffects::none, "builtin_string_unescape");
         // format
         addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format", SideEffects::none, "format<int32_t>");
         addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format", SideEffects::none, "format<uint32_t>");

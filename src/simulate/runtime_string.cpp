@@ -77,6 +77,8 @@ namespace das
                     case 't':   result += '\t';    break;
                     case 'u':   DAS_ASSERTF(0, "utf-8 characters not supported yet"); break;
                     case '\n':  break;  // skip LF
+                    case '{':   result += '{';    break;
+                    case '}':   result += '}';    break;
                     case '\r':  if ( str+1!=strEnd && str[1]=='\n' ) str++; break;  // skip CR LF or just CR
                     default:    result += *str; if ( error ) *error = true; break;  // invalid escape character
                 }
@@ -99,6 +101,8 @@ namespace das
                 case '\n':  result.append("\\n");   break;
                 case '\r':  result.append("\\r");   break;
                 case '\t':  result.append("\\t");   break;
+                case '{':   result.append("\\{");   break;
+                case '}':   result.append("\\}");   break;
                 default:    result.append(1, *str); break;
             }
         }
