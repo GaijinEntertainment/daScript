@@ -124,6 +124,30 @@ DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
 
 namespace das {
 
+    struct TagFunctionAnnotation : FunctionAnnotation {
+        TagFunctionAnnotation() : FunctionAnnotation("tag_function") {}
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &,
+                            const AnnotationArgumentList &, string & ) {
+            return true;
+        }
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &,
+                               const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & ) {
+            return true;
+        }
+        virtual bool apply ( ExprBlock *, ModuleGroup &,
+                            const AnnotationArgumentList &, string & err ) {
+            err = "not a block annotation";
+            return false;
+        }
+        virtual bool finalize ( ExprBlock *, ModuleGroup &,
+                               const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & err ) {
+            err = "not a block annotation";
+            return false;
+        }
+    };
+
     TypeDeclPtr makeExprGenFlagsFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprGenFlags";
@@ -1922,6 +1946,31 @@ namespace das {
         }
     }
 
+    void forEachFunctionTag ( Module * module, const char * tag, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
+        vec4f args[1];
+        const auto & fnbn = module->functions;
+        context->invokeEx(block, args, nullptr, [&](SimNode * code){
+            for ( auto & nv : fnbn ) {
+                const auto & fn = nv.second;
+                bool tagged = false;
+                for ( const auto & ann : fn->annotations ) {
+                    if ( ann->annotation->name == "tag_function" ) {
+                        for ( const auto & aarg : ann->arguments ) {
+                            if ( aarg.name==tag ) {
+                                tagged = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if ( tagged ) {
+                    args[0] = cast<FunctionPtr>::from(fn);
+                    code->eval(*context);
+                }
+            }
+        },lineInfo);
+    }
+
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<FunctionAnnotationAdapter>(name,(char *)pClass,info,context);
     }
@@ -2028,6 +2077,8 @@ namespace das {
             addAlias(makeExprReturnFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
+            // tags
+            addAnnotation(make_smart<TagFunctionAnnotation>());
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
             auto exa = make_smart<AstExprAnnotation<Expression>>("Expression",lib);
             addAnnotation(exa);
@@ -2156,6 +2207,8 @@ namespace das {
                 SideEffects::accessExternal, "thisModule");
             addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "ast_for_each_function",
                 SideEffects::accessExternal, "forEachFunction");
+            addExtern<DAS_BIND_FUN(forEachFunctionTag)>(*this, lib,  "ast_for_each_tag_function",
+                SideEffects::accessExternal, "forEachFunctionTag");
             addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "ast_visit",
                 SideEffects::accessExternal, "astVisit");
             // function annotation

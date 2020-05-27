@@ -47,6 +47,12 @@ namespace das
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->init = true;
             g_Program->needMacroModule = true;
+            auto blk = make_smart<ExprBlock>();
+            blk->at = func->at;
+            auto ifm = make_smart<ExprCall>(func->at,"is_compiling_macros");
+            auto ife = make_smart<ExprIfThenElse>(func->at,ifm,func->body,nullptr);
+            blk->list.push_back(ife);
+            func->body = blk;
             return true;
         };
     };

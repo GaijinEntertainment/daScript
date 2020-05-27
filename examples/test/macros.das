@@ -1,3 +1,5 @@
+options log = true
+
 module macros
 
 require ast
@@ -12,6 +14,7 @@ def get_hint ( lookup : HintLookup; id, defv : string; hint : uint )
         result = *res
     return result
 
+[tag_function(get_hint_macro)]
 def get_hint ( lookup : HintLookup; id, defv : string )
     let hint = hash(id)
     return get_hint(lookup,id,defv,hint)
@@ -29,14 +32,10 @@ class GetHintFnMacro : AstFunctionAnnotation
 
 [macro]
 def setup
-    if is_compiling_macros()
-        let hfnm = new GetHintFnMacro()
-        let ann <- make_function_annotation("hint_function", hfnm)
-        let this_module <- ast_this_module()
-        // add annotation to get_hit with 3 args
-        // todo: come up with easier way to look-up functions (by tag?)
-        ast_for_each_function(this_module, "get_hint") <| $ ( func )
-            if func.arguments.length == 3
-                add_function_annotation(func, ann)
-        add_function_annotation(this_module, ann)
+    let hfnm = new GetHintFnMacro()
+    let ann <- make_function_annotation("hint_function", hfnm)
+    let this_module <- ast_this_module()
+    ast_for_each_tag_function(this_module, "get_hint_macro") <| $ ( func )
+        add_function_annotation(func, ann)
+    add_function_annotation(this_module, ann)
 
