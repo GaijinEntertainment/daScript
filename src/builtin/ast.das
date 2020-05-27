@@ -51,15 +51,20 @@ def describe_bitfield(bf;merger:string = "")
 
 [unsafe]
 def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
-    static_if typeinfo(is_handle type<TT>)
-        if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
-            return reinterpret<smart_ptr<Expression>>(expr)
-        else
-            concept_assert(false, "not derived from ast::Expression")
-            return [[ExpressionPtr]]
+    if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
+        return reinterpret<smart_ptr<Expression>>(expr)
     else
-        concept_assert(false, "not a handled type, derived from ast::Expression")
+        concept_assert(false, "not derived from ast::Expression")
         return [[ExpressionPtr]]
+
+[unsafe]
+def push_back(var vec:dasvector`smart_ptr`Expression;expr:smart_ptr<auto(TT)>)
+    static_if typeinfo(fulltypename expr)=="smart_ptr<ast::ExpressionPtr>"
+        push(vec,value)
+    elif starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
+        push(vec, reinterpret<smart_ptr<Expression>>(expr))
+    else
+        concept_assert(false, "not derived from ast::Expression")
 
 def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
@@ -80,7 +85,9 @@ def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
         return [[smart_ptr<VisitorAdpater>]]
 
 class AstFunctionAnnotation
-    def abstract transform ( call : smart_ptr<ExprCall>; errors : das_string ) : ExpressionPtr
+    def abstract transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
+    def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+    def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
 
 class AstVisitor
 // program
@@ -440,4 +447,23 @@ class AstVisitor
 // fake line info
     def abstract preVisitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : void
     def abstract visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
+
+
+class MacroMacro : AstFunctionAnnotation
+    [unsafe] def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        ast_compiling_program().flags |= ProgramFlags needMacroModule
+        func.flags |= FunctionFlags init
+        var blk <- new [[ExprBlock() at=func.at]]
+        var ifm <- new [[ExprCall() at=func.at, name:="is_compiling_macros"]]
+        var ife <- new [[ExprIfThenElse() at=func.at, cond<-ExpressionPtr(ifm), if_true<-func.body]]
+        push_back(blk.list,ife)
+        func.body <- ExpressionPtr(blk)
+        return true
+
+[_macro]
+def setup
+    if is_compiling_macros()
+        let hfnm = new MacroMacro()
+        let ann <- make_function_annotation("macro", hfnm)
+        ast_this_module() |> add_function_annotation(ann)
 

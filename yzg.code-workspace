@@ -41,7 +41,11 @@
 			"set": "cpp",
 			"streambuf": "cpp",
 			"unordered_set": "cpp",
-			"xlocinfo": "cpp"
+			"xlocinfo": "cpp",
+			"xlocnum": "cpp",
+			"xloctime": "cpp",
+			"xstddef": "cpp",
+			"*.rh": "cpp"
 		}
 	}
 }

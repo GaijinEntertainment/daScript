@@ -773,7 +773,11 @@ namespace das {
     // new
         virtual void preVisit ( ExprNew * enew ) override {
             Visitor::preVisit(enew);
-            ss << "new " << enew->typeexpr->describe();
+            if ( enew->typeexpr ) {
+                ss << "new " << enew->typeexpr->describe();
+            } else {
+                ss << "new ???";
+            }
             if ( enew->initializer ) ss << "(";
         }
         virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg, bool last ) override {

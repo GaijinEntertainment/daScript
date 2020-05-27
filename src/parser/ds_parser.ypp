@@ -1913,7 +1913,7 @@ structure_name
                 pStruct->annotations.clear();
                 pStruct->genCtor = false;
             } else if ( structs.size()==0 ) {
-                das_yyerror("parent structure not found"+*$parent,tokAt(@parent),
+                das_yyerror("parent structure not found "+*$parent,tokAt(@parent),
                     CompilationError::structure_not_found);
             } else {
                 string candidates = g_Program->describeCandidates(structs);
@@ -2364,6 +2364,12 @@ make_struct_fields
     }
     |   make_struct_fields[msd] ',' NAME[fn] copy_or_move[com] expr[value] {
         auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),$com,false);
+        delete $fn;
+        ((MakeStruct *)$msd)->push_back(mfd);
+        $$ = $msd;
+    }
+    |   make_struct_fields[msd] ',' NAME[fn] CLONEEQU expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(@fn),*$fn,ExpressionPtr($value),false,true);
         delete $fn;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;

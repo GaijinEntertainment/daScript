@@ -2975,6 +2975,11 @@ namespace das {
             return Visitor::visitNewArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
+            if ( !expr->typeexpr ) {
+                error("new type did not infer", "", "",
+                    expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
             if ( expr->typeexpr && expr->typeexpr->isExprType() ) {
                 return Visitor::visit(expr);
             }

@@ -1,5 +1,3 @@
-options log = true
-
 module macros
 
 require ast
@@ -20,14 +18,13 @@ def get_hint ( lookup : HintLookup; id, defv : string )
     return get_hint(lookup,id,defv,hint)
 
 class GetHintFnMacro : AstFunctionAnnotation
-    [unsafe] def override transform ( call : smart_ptr<ExprCall>; errors : das_string ) : ExpressionPtr
+    [unsafe] def override transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
         if call.arguments[1].__rtti=="ExprConstString"
-            var newCall := call
             let arg2 = reinterpret<ExprConstString?>(call.arguments[1])
             let hint = hash("{arg2.value}")
             var mkc <- new [[ExprConstUInt() at=arg2.at, value=hint]]
-            push(newCall.arguments, ExpressionPtr(mkc))
-            return <- ExpressionPtr(newCall)
+            push_back(call.arguments, mkc)
+            return <- ExpressionPtr(call)
         return [[ExpressionPtr]]
 
 [macro]

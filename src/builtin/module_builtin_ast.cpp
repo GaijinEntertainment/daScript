@@ -24,6 +24,8 @@ MAKE_TYPE_FACTORY(InferHistory, Function::InferHistory)
 MAKE_TYPE_FACTORY(Variable,Variable)
 MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 MAKE_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
+MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
+MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
 
 MAKE_TYPE_FACTORY(ExprBlock,ExprBlock)
 MAKE_TYPE_FACTORY(ExprLet,ExprLet)
@@ -294,10 +296,10 @@ namespace das {
         }
     };
 
-    struct AstExprCallAnnotation : AstExprCallFuncAnnotation<ExprNew> {
+    struct AstExprCallAnnotation : AstExprCallFuncAnnotation<ExprCall> {
         AstExprCallAnnotation(ModuleLibrary & ml)
-            :  AstExprCallFuncAnnotation<ExprNew> ("ExprCall", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("doesNotNeedSp");
+            :  AstExprCallFuncAnnotation<ExprCall> ("ExprCall", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(doesNotNeedSp)>("doesNotNeedSp");
         }
     };
 
@@ -828,6 +830,18 @@ namespace das {
     };
 
      // TYPE STUFF
+
+    struct AstModuleLibraryAnnotation : ManagedStructureAnnotation<ModuleLibrary,false> {
+        AstModuleLibraryAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("ModuleLibrary", ml) {
+        }
+    };
+
+    struct AstModuleGroupAnnotation : ManagedStructureAnnotation<ModuleGroup,false> {
+        AstModuleGroupAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("ModuleGroup", ml) {
+        }
+    };
 
     struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
         AstEnumerationAnnotation(ModuleLibrary & ml)
@@ -1875,15 +1889,29 @@ namespace das {
         FunctionAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
         : FunctionAnnotation(n), classPtr(pClass), context(ctx) {
             fnTransformCall = adapt("transform",pClass,info);
+            fnApply = adapt("apply",pClass,info);
+            fnFinalize = adapt("finish",pClass,info);
         }
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &,
-                            const AnnotationArgumentList &, string & ) {
-            return true;
+        virtual bool apply ( const FunctionPtr & func, ModuleGroup & group,
+                            const AnnotationArgumentList & args, string & errors ) {
+            if ( fnApply ) {
+                return das_invoke_function<bool>::invoke<void *,FunctionPtr,
+                    ModuleGroup &,const AnnotationArgumentList &,string &>
+                        (context,fnApply,classPtr,func,group,args,errors);
+            } else {
+                return true;
+            }
         }
-        virtual bool finalize ( const FunctionPtr &, ModuleGroup &,
-                               const AnnotationArgumentList &,
-                               const AnnotationArgumentList &, string & ) {
-            return true;
+        virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group,
+                               const AnnotationArgumentList & args,
+                               const AnnotationArgumentList & progArgs, string & errors ) {
+            if ( fnFinalize ) {
+                return das_invoke_function<bool>::invoke<void *,FunctionPtr,
+                    ModuleGroup &,const AnnotationArgumentList &,const AnnotationArgumentList &,string &>
+                        (context,fnFinalize,classPtr,func,group,args,progArgs,errors);
+            } else {
+                return true;
+            }
         }
         virtual bool apply ( ExprBlock *, ModuleGroup &,
                             const AnnotationArgumentList &, string & err ) {
@@ -1910,6 +1938,8 @@ namespace das {
         Context *   context;
     protected:
         Func    fnTransformCall;
+        Func    fnApply;
+        Func    fnFinalize;
     };
 
     struct AstFunctionAnnotationAnnotation : ManagedStructureAnnotation<FunctionAnnotation,false> {
@@ -2002,6 +2032,16 @@ namespace das {
         return context->thisProgram;
     }
 
+    extern ProgramPtr g_Program;
+
+    Module * compileModule ( ) {
+        return g_Program->thisModule.get();
+    }
+
+    smart_ptr_raw<Program> compileProgram ( ) {
+        return g_Program;
+    }
+
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter ) {
         program->visit(*adapter);
     }
@@ -2079,6 +2119,9 @@ namespace das {
             addEnumeration(make_smart<EnumerationSideEffects>());
             // tags
             addAnnotation(make_smart<TagFunctionAnnotation>());
+            // modules
+            addAnnotation(make_smart<AstModuleLibraryAnnotation>(lib));
+            addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
             auto exa = make_smart<AstExprAnnotation<Expression>>("Expression",lib);
             addAnnotation(exa);
@@ -2205,6 +2248,10 @@ namespace das {
                 SideEffects::accessExternal, "thisProgram");
             addExtern<DAS_BIND_FUN(thisModule)>(*this, lib,  "ast_this_module",
                 SideEffects::accessExternal, "thisModule");
+            addExtern<DAS_BIND_FUN(compileProgram)>(*this, lib,  "ast_compiling_program",
+                SideEffects::accessExternal, "compileProgram");
+            addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "ast_compiling_module",
+                SideEffects::accessExternal, "compileModule");
             addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "ast_for_each_function",
                 SideEffects::accessExternal, "forEachFunction");
             addExtern<DAS_BIND_FUN(forEachFunctionTag)>(*this, lib,  "ast_for_each_tag_function",

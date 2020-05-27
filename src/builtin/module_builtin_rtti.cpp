@@ -89,8 +89,18 @@ namespace das {
         virtual bool canCopy() const override { return true; }
     };
 
+    TypeDeclPtr makeProgramFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ProgramFlags";
+        ft->argNames = { "failToCompile", "unsafe", "isCompiling",
+            "isSimulating", "isCompilingMacros", "needMacroModule"
+        };
+        return ft;
+    }
+
     struct ProgramAnnotation : ManagedStructureAnnotation <Program,false> {
         ProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Program", ml) {
+            addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
         }
     };
 
@@ -661,6 +671,8 @@ namespace das {
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();
+            // flags
+            addAlias(makeProgramFlags());
             // type annotations
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));

@@ -13,13 +13,13 @@ namespace das {
 
     template <typename TT, typename PP> struct typeName<smart_ptr<TT,PP>> {
         static string name() {
-            return "smart_ptr<" + typeName<TT>::name() + ">";
+            return "smart_ptr`" + typeName<TT>::name();
         }
     };
 
     template <typename FT, typename ST> struct typeName<pair<FT,ST>> {
         static string name() {
-            return "pair<" + typeName<FT>::name() + "," + typeName<ST>::name() + ">";
+            return "pair`" + typeName<FT>::name() + "`" + typeName<ST>::name();
         }
     };
 

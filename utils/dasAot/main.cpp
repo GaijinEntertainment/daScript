@@ -199,6 +199,10 @@ bool compile ( const string & fn, const string & cppFn ) {
 #endif
 
 int MAIN_FUNC_NAME(int argc, const char * argv[]) {
+    #ifdef _MSC_VER
+    _CrtSetReportMode(_CRT_ASSERT, 0);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    #endif
     if ( argc<3 ) {
         tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-j]\n";
         return -1;
