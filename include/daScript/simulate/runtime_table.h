@@ -33,8 +33,10 @@ namespace das
     class TableHash {
         Context *   context = nullptr;
         uint32_t    valueTypeSize = 0;
-        constexpr static uint32_t minCapacity = 8u;
-        constexpr static uint32_t minLookups = 4u;
+        enum {
+            minCapacity = 8,
+            minLookups = 4
+        };
     public:
         TableHash () = delete;
         TableHash ( const TableHash & ) = delete;
@@ -50,7 +52,7 @@ namespace das
 
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
             uint32_t desired = 32 - __builtin_clz(capacity-1);
-            return das::max(minLookups, desired * 6);
+            return das::max(uint32_t(minLookups), desired * 6);
         }
 
         __forceinline int find ( const Table & tab, KeyType key, uint32_t hash ) const {
@@ -139,7 +141,7 @@ namespace das
         }
 
         bool grow ( Table & tab ) {
-            uint32_t newCapacity = das::max(minCapacity, tab.capacity*2);
+            uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
         repeatIt:;
             Table newTab;
             uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));
