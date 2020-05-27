@@ -1329,8 +1329,8 @@ namespace das {
             IMPL_ADAPT(ExprBreak);
             IMPL_ADAPT(ExprContinue);
             IMPL_ADAPT(ExprConst);
-            // IMPL_ADAPT(ExprFakeContext);
-            // IMPL_ADAPT(ExprFakeLineInfo);
+            IMPL_ADAPT(ExprFakeContext);
+            IMPL_ADAPT(ExprFakeLineInfo);
             IMPL_ADAPT(ExprConstPtr);
             // IMPL_ADAPT(ExprConstEnumeration);
             // IMPL_ADAPT(ExprConstBitfield);
@@ -1783,8 +1783,8 @@ namespace das {
         IMPL_BIND_EXPR(ExprBreak);
         IMPL_BIND_EXPR(ExprContinue);
         IMPL_BIND_EXPR(ExprConst);
-        // IMPL_BIND_EXPR(ExprFakeContext);
-        // IMPL_BIND_EXPR(ExprFakeLineInfo);
+        IMPL_BIND_EXPR(ExprFakeContext);
+        IMPL_BIND_EXPR(ExprFakeLineInfo);
         IMPL_BIND_EXPR(ExprConstPtr);
         // IMPL_BIND_EXPR(ExprConstEnumeration);
         // IMPL_BIND_EXPR(ExprConstBitfield);
@@ -1990,8 +1990,8 @@ namespace das {
             addAnnotation(make_smart<AstExpressionAnnotation<ExprBreak>>("ExprBreak",lib));
             addAnnotation(make_smart<AstExpressionAnnotation<ExprContinue>>("ExprContinue",lib));
             addAnnotation(make_smart<AstExprConstAnnotation<ExprConst>>("ExprConst",lib));
-            //addAnnotation(make_smart<AstExprFakeContextAnnotation>(lib));
-            //addAnnotation(make_smart<AstExprFakeLineInfoAnnotation>(lib));
+            addAnnotation(make_smart<AstExprConstAnnotation<ExprFakeContext>>("ExprFakeContext",lib));
+            addAnnotation(make_smart<AstExprConstAnnotation<ExprFakeLineInfo>>("ExprFakeLineInfo",lib));
             addAnnotation(make_smart<AstExprConstTAnnotation<ExprConstPtr,void *>>("ExprConstPtr",lib));
             // addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
             // addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));

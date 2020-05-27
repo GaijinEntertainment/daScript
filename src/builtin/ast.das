@@ -429,4 +429,10 @@ class AstVisitor
 // const double
     def abstract preVisitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : void
     def abstract visitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : ExpressionPtr
+// fake context
+    def abstract preVisitExprFakeContext(expr:smart_ptr<ExprFakeContext>) : void
+    def abstract visitExprFakeContext(expr:smart_ptr<ExprFakeContext>) : ExpressionPtr
+// fake line info
+    def abstract preVisitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : void
+    def abstract visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
 

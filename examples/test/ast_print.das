@@ -605,6 +605,12 @@ class PrintVisitor : AstVisitor
 // const double
     def override preVisitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : void
         print("{expr.value}lf")
+// fake context
+    def override preVisitExprFakeContext(expr:smart_ptr<ExprFakeContext>) : void
+        print("__context__")
+// fake line info
+    def override preVisitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : void
+        print("__lineinfo__")
 
 typedef
     Integer = int
