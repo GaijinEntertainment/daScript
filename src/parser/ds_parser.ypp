@@ -1555,6 +1555,9 @@ struct_variable_declaration_list
             das_yyerror("abstract functions can't have annotations " + $func->getMangledName(),
                 $func->at, CompilationError::invalid_member_function);
             delete $annL;
+        } else if ( $func->result->baseType==Type::autoinfer ) {
+            das_yyerror("abstract functions must specify return type explicitly " + $func->getMangledName(),
+                $func->at, CompilationError::invalid_member_function);
         } else {
             auto varName = $func->name;
             $func->name = g_thisStructure->name + "`" + $func->name;

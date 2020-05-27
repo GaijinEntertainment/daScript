@@ -354,6 +354,25 @@ namespace das
         }
     };
 
+    template <typename TT, bool byValue = has_cast<TT>::value >
+    struct registerVectorFunctions;
+
+    template <typename TT>
+    struct registerVectorFunctions<TT,false> {
+        static void init ( Module * mod, const ModuleLibrary & lib ) {
+            addExtern<DAS_BIND_FUN(das_vector_push<TT>)>(*mod, lib, "push",
+                SideEffects::modifyArgument, "das_vector_push");
+        }
+    };
+
+    template <typename TT>
+    struct registerVectorFunctions<TT,true> {
+        static void init ( Module * mod, const ModuleLibrary & lib ) {
+            addExtern<DAS_BIND_FUN(das_vector_push_value<TT>)>(*mod, lib, "push",
+                SideEffects::modifyArgument, "das_vector_push_value");
+        }
+    };
+
     template <typename TT>
     struct typeFactory<vector<TT>> {
         using VT = vector<TT>;
@@ -363,7 +382,9 @@ namespace das
                 auto declT = makeType<TT>(library);
                 auto ann = make_smart<ManagedVectorAnnotation<VT>>(declN,const_cast<ModuleLibrary &>(library));
                 ann->cppName = "das::vector<" + describeCppType(declT) + ">";
-                library.front()->addAnnotation(ann);
+                auto mod = library.front();
+                mod->addAnnotation(ann);
+                registerVectorFunctions<TT>::init(mod,library);
             }
             return makeHandleType(library,declN.c_str());
         }

@@ -509,6 +509,7 @@ namespace das
             : ExprConstT(ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr)
             : ExprConstT(a,ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
+        bool isSmartPtr = false;
     };
 
     struct ExprConstInt : ExprConstT<int32_t,ExprConstInt> {

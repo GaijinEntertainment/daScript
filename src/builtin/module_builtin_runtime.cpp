@@ -40,6 +40,17 @@ namespace das
         };
     };
 
+    extern ProgramPtr g_Program;
+
+    struct MacroFunctionAnnotation : MarkFunctionAnnotation {
+        MacroFunctionAnnotation() : MarkFunctionAnnotation("macro") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->init = true;
+            g_Program->needMacroModule = true;
+            return true;
+        };
+    };
+
     struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeDerefFunctionAnnotation() : MarkFunctionAnnotation("unsafe_deref") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -561,12 +572,18 @@ namespace das
         return ctx->thisProgram->isCompiling || ctx->thisProgram->isSimulating;
     }
 
+    bool is_compiling_macros ( Context * ctx ) {
+        if ( !ctx->thisProgram ) return false;
+        return ctx->thisProgram->isCompilingMacros;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<PrivateFunctionAnnotation>());
+        addAnnotation(make_smart<MacroFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
         addAnnotation(make_smart<RunAtCompileTimeFunctionAnnotation>());
@@ -582,7 +599,10 @@ namespace das
         // typeinfo macros
         addTypeInfoMacro(make_smart<ClassInfoMacro>());
         // compile-time functions
-        addExtern<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling", SideEffects::accessExternal, "is_compiling");
+        addExtern<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling",
+            SideEffects::accessExternal, "is_compiling");
+        addExtern<DAS_BIND_FUN(is_compiling_macros)>(*this, lib, "is_compiling_macros",
+            SideEffects::accessExternal, "is_compiling_macros");
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_first");

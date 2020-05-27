@@ -86,6 +86,7 @@ namespace das {
             this->addField<DAS_BIND_MANAGED_FIELD(last_column)>("last_column");
             this->addField<DAS_BIND_MANAGED_FIELD(last_line)>("last_line");
         }
+        virtual bool canCopy() const override { return true; }
     };
 
     struct ProgramAnnotation : ManagedStructureAnnotation <Program,false> {

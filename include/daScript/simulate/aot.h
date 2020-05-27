@@ -1863,6 +1863,17 @@ namespace das {
         TableHash<TK> thh(context,sizeof(TV));
         return thh.erase(tab, key, hfn) != -1;
     }
+
+    template <typename TT>
+    void das_vector_push ( vector<TT> & vec, const TT & value ) {
+        vec.push_back(value);
+    }
+
+    template <typename TT>
+    void das_vector_push_value ( vector<TT> & vec, TT value ) {
+        vec.push_back(value);
+    }
+
 }
 
 #include "daScript/simulate/aot_builtin_string.h"

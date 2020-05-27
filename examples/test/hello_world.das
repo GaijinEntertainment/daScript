@@ -1,37 +1,16 @@
-options debugger = true
+options log = true
 
-require UnitTest
-
-// options log = true
-
-def funC(y:string)
-    var j = 13
-    j ++
-    stackwalk()
-    var q = y
-    q += " before {j}"
-    // stackwalk()
-    q += " after"
-
-def invBlock(z,blk)
-    invoke(blk,z)
-
-def funB(x:string)
-    if length(x) > 13
-        var brr <- [{int 1;2;3;4}]
-        push(brr,13)
-        return <- brr
-    else
-        var arr <- [{int 1;2;3;4}]
-        push(arr,length(x))
-        invBlock(x) <| $ (copyX : string)
-            funC("from B {copyX}")
-        return <- arr
-
-def funA(a:int;b:string)
-    funB("{a} is {b}")
+require macros
 
 [export]
 def test
-    funA(1,"one")
+    var hints <- [[HintLookup
+        tab <- {{
+            hash("one") => "one";
+            hash("two") => "two"
+        }}
+    ]]
+    let h1 = get_hint(hints, "one", "no hint")
+    let h2 = get_hint(hints, "three", "no hint")
+    print ( "h1 = {h1}\nh2 = {h2}\n")
     return true

@@ -134,8 +134,8 @@ namespace das {
                     verifyType(ptrType);
                 } else {
                     if ( decl->smartPtr ) {
-                        error("can't declare a void smart pointer, " + decl->describe(), "", "",
-                              ptrType->at,CompilationError::invalid_type);
+                        error("can't declare a void smart pointer", "", "",
+                              decl->at,CompilationError::invalid_type);
                     }
                 }
             } else if ( decl->baseType==Type::tIterator ) {
@@ -472,7 +472,7 @@ namespace das {
                 moduleName = "*";
                 return program->thisModule.get();
             } else if ( moduleName=="__" ) {
-                moduleName = "";
+                moduleName = program->thisModule->name;
                 return program->thisModule.get();
             } else if ( func ) {
                 if ( func->fromGeneric ) {
@@ -1278,10 +1278,10 @@ namespace das {
                               + decl.type->describe() + " = " + decl.init->type->describe(),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
                     } else if ( !decl.type->canCopy() && !decl.moveSemantics ) {
-                        error("this field can't be copied, use <- instead", "", "",
+                        error("this field can't be copied, use <- instead; " + decl.type->describe(), "", "",
                               decl.init->at, CompilationError::invalid_initialization_type );
                     } else if ( !decl.init->type->canCopy() && !decl.init->type->canMove() ) {
-                        error("this field can't be initialized at all",  "", "",
+                        error("this field can't be initialized at all; " + decl.init->type->describe(),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
                     } else if (decl.moveSemantics && decl.init->type->isConst()) {
                         error("can't move from a constant value " + decl.init->type->describe(), "", "",
@@ -1601,6 +1601,10 @@ namespace das {
                     c->type = make_smart<TypeDecl>(Type::tBitfield);
                 }
                 c->type->constant = true;
+            } else if ( c->baseType==Type::tPointer ) {
+                c->type = make_smart<TypeDecl>(c->baseType);
+                c->type->constant = true;
+                c->type->smartPtr = (static_cast<ExprConstPtr *>(c))->isSmartPtr;
             } else {
                 c->type = make_smart<TypeDecl>(c->baseType);
                 c->type->constant = true;
@@ -2847,7 +2851,7 @@ namespace das {
             auto cresT = cTF->firstType;
             auto resT = funT->firstType;
             if ( !cresT->isSameType(*resT,RefMatters::yes, ConstMatters::no, TemporaryMatters::no) ) {
-                if ( resT->isStructure() || (resT->isPointer() && resT->firstType->isStructure()) ) {
+                if ( resT->isStructure() || (resT->isPointer() && resT->firstType && resT->firstType->isStructure()) ) {
                     auto tryRes = castStruct(at, resT, cresT, upcast);
                     if ( tryRes ) {
                         funT->firstType = tryRes;
@@ -4995,6 +4999,8 @@ namespace das {
                         if ( aliasT->isCtorType() ) {
                             expr->name = das_to_string(aliasT->baseType);
                             reportAstChanged();
+                        } else {
+                            reportMissing(expr, types, "no matching functions or generics ", true);
                         }
                     } else {
                         reportMissing(expr, types, "no matching functions or generics ", true);
@@ -5053,6 +5059,13 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr).get();
+            /*
+            // NOTE: this should not be necessary, since infer function call suppose to report every time
+            if ( !expr->func ) {
+                error("unknwon function " + expr->name, "", "",
+                    expr->at, CompilationError::function_not_found);
+            }
+            */
             if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe && !expr->alwaysSafe ) {
                 error("unsafe call " + expr->name + " requires [unsafe]", "", "",
                     expr->at, CompilationError::unsafe);
@@ -5130,7 +5143,7 @@ namespace das {
                         decl->value->at, CompilationError::invalid_type);
                 }
                 if (!fieldType->canCopy() && !decl->moveSemantics) {
-                    error("this field can't be copied","","use <- instead",
+                    error("this field can't be copied; " + fieldType->describe(),"","use <- instead",
                         decl->at, CompilationError::invalid_type);
                 } else if (decl->moveSemantics && decl->value->type->isConst()) {
                     error("can't move from a constant value " + decl->value->type->describe(), "", "",
@@ -5216,7 +5229,7 @@ namespace das {
                                 decl->value->at, CompilationError::invalid_type );
                     }
                     if( !field->type->canCopy() && !decl->moveSemantics ) {
-                        error("this field can't be copied","","use <- instead",
+                        error("this field can't be copied; " + field->type->describe(),"","use <- instead",
                               decl->at, CompilationError::invalid_type );
                     } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + decl->value->type->describe(), "", "",
@@ -5238,7 +5251,7 @@ namespace das {
                                 decl->value->at, CompilationError::invalid_type );
                     }
                     if( !fldt->canCopy() && !decl->moveSemantics ) {
-                        error("this field can't be copied","","use <- instead",
+                        error("this field can't be copied; " + fldt->describe(),"","use <- instead",
                               decl->at, CompilationError::invalid_type );
                     } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + decl->value->type->describe(), "", "",
@@ -5431,6 +5444,15 @@ namespace das {
                 auto ews = Program::makeConst(expr->at, expr->type, v_zero());
                 ews->type = make_smart<TypeDecl>(*expr->type);
                 return ews;
+            } else if ( expr->type->isPointer() ) {
+                expr->type->ref = false;
+                reportAstChanged();
+                auto ews = make_smart<ExprConstPtr>(expr->at);
+                ews->type = make_smart<TypeDecl>(*expr->type);
+                ews->isSmartPtr = expr->type->smartPtr;
+                return ews;
+            } else if ( !expr->type->isRefType() ) {
+                expr->type->ref = true;
             }
             verifyType(expr->type);
             return Visitor::visit(expr);

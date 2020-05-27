@@ -289,11 +289,14 @@ namespace das {
     class FoldingVisitor : public VisitorMacro {
     public:
         FoldingVisitor(const ProgramPtr & prog)
-            : ctx(prog->getContextStackSize()) {
+            : ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {
             ctx.thisProgram = prog.get();
+            ctx.thisHelper = &helper;
+            helper.rtti = true;
         }
     protected:
         Context         ctx;
+        DebugInfoHelper helper;
     protected:
         vec4f eval ( Expression * expr, bool & failed );
         ExpressionPtr evalAndFold ( Expression * expr );

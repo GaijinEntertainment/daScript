@@ -367,6 +367,13 @@ namespace das {
                     requireModule[rqm.first] |= rqm.second;
                 }
             }
+            // macros
+            if ( program->thisModule->macroContext ) {
+                swap ( macroContext, program->thisModule->macroContext );
+                for ( auto & fna : program->thisModule->handleTypes ) {
+                    addAnnotation(fna.second);
+                }
+            }
             return true;
         } else {
             DAS_FATAL_LOG("builtin module did not parse %s\n", modName.c_str());

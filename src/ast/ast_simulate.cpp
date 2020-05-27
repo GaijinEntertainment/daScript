@@ -2406,6 +2406,13 @@ namespace das
         }
     }
 
+    void Program::makeMacroModule ( TextWriter & logs ) {
+        isCompilingMacros = true;
+        thisModule->macroContext = make_unique<Context>(getContextStackSize());
+        simulate(*thisModule->macroContext, logs);
+        isCompilingMacros = false;
+    }
+
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         isSimulating = true;
         context.thisProgram = this;

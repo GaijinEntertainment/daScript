@@ -327,7 +327,6 @@ namespace das {
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
-            DebugInfoHelper helper(ctx.debugInfo);
             auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
             auto sim = make_smart<ExprConstString>(expr->at, res);

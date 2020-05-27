@@ -728,6 +728,7 @@ namespace das
             };
         }
     public:
+        unique_ptr<Context>                         macroContext;
         das_safe_map<string, TypeDeclPtr>           aliasTypes;
         das_safe_map<string, AnnotationPtr>         handleTypes;
         das_safe_map<string, StructurePtr>          structures;
@@ -945,6 +946,7 @@ namespace das
         CursorInfo cursor ( const LineInfo & info );
         bool getOptimize() const;
         bool getDebugger() const;
+        void makeMacroModule( TextWriter & logs );
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
@@ -975,6 +977,8 @@ namespace das
                 bool    unsafe : 1;
                 bool    isCompiling : 1;
                 bool    isSimulating : 1;
+                bool    isCompilingMacros : 1;
+                bool    needMacroModule : 1;
             };
             uint32_t    flags = 0;
         };

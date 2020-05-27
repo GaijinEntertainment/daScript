@@ -254,11 +254,14 @@ namespace das {
                 }
             }
             sort(program->errors.begin(), program->errors.end());
+            program->isCompiling = false;
+            if ( program->needMacroModule ) {
+                program->makeMacroModule(logs);
+            }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << "\n";
             }
-            program->isCompiling = false;
             return program;
         }
     }

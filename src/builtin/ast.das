@@ -12,6 +12,7 @@ typedef
     FunctionPtr = smart_ptr<Function>
     VariablePtr = smart_ptr<Variable>
     MakeFieldDeclPtr = smart_ptr<MakeFieldDecl>
+    FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
 
 [unsafe]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -55,10 +56,18 @@ def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
             return reinterpret<smart_ptr<Expression>>(expr)
         else
             concept_assert(false, "not derived from ast::Expression")
-            return reinterpret<ExpressionPtr> null
+            return [[ExpressionPtr]]
     else
         concept_assert(false, "not a handled type, derived from ast::Expression")
-        return reinterpret<ExpressionPtr> null
+        return [[ExpressionPtr]]
+
+def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
+    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_function_annotation(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[FunctionAnnotationPtr]]
 
 [unsafe]
 def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
@@ -68,7 +77,10 @@ def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
         return make_visitor(classPtr, classInfo)
     else
         concept_assert(false,"can't make visitor of non-class")
-        return reinterpret<smart_ptr<VisitorAdapter>> null
+        return [[smart_ptr<VisitorAdpater>]]
+
+class AstFunctionAnnotation
+    def abstract transform ( call : smart_ptr<ExprCall>; errors : das_string ) : ExpressionPtr
 
 class AstVisitor
 // program

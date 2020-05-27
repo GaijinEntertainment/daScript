@@ -32,7 +32,16 @@
 			"xmemory": "cpp",
 			"xlocmon": "cpp",
 			"ios": "cpp",
-			"xiosbase": "cpp"
+			"xiosbase": "cpp",
+			"atomic": "cpp",
+			"exception": "cpp",
+			"istream": "cpp",
+			"iterator": "cpp",
+			"ostream": "cpp",
+			"set": "cpp",
+			"streambuf": "cpp",
+			"unordered_set": "cpp",
+			"xlocinfo": "cpp"
 		}
 	}
 }
