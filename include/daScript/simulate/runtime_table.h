@@ -28,6 +28,14 @@ namespace das
         }
     };
 
+    template <>
+    struct KeyCompare <const char *> {
+        __forceinline bool operator () ( const char * a, const char * b ) {
+            if ( a==b ) return true;
+            if ( !a || !b ) return false;
+            return strcmp(a,b)==0;
+        }
+    };
 
     template <typename KeyType>
     class TableHash {
