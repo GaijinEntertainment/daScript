@@ -24,6 +24,7 @@ MAKE_TYPE_FACTORY(InferHistory, Function::InferHistory)
 MAKE_TYPE_FACTORY(Variable,Variable)
 MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 MAKE_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
+MAKE_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
 MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
 
@@ -125,31 +126,6 @@ DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
 
 
 namespace das {
-
-    struct TagFunctionAnnotation : FunctionAnnotation {
-        TagFunctionAnnotation() : FunctionAnnotation("tag_function") {}
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &,
-                            const AnnotationArgumentList &, string & ) {
-            return true;
-        }
-        virtual bool finalize ( const FunctionPtr &, ModuleGroup &,
-                               const AnnotationArgumentList &,
-                               const AnnotationArgumentList &, string & ) {
-            return true;
-        }
-        virtual bool apply ( ExprBlock *, ModuleGroup &,
-                            const AnnotationArgumentList &, string & err ) {
-            err = "not a block annotation";
-            return false;
-        }
-        virtual bool finalize ( ExprBlock *, ModuleGroup &,
-                               const AnnotationArgumentList &,
-                               const AnnotationArgumentList &, string & err ) {
-            err = "not a block annotation";
-            return false;
-        }
-    };
-
     TypeDeclPtr makeExprGenFlagsFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprGenFlags";
@@ -1890,7 +1866,7 @@ namespace das {
         : FunctionAnnotation(n), classPtr(pClass), context(ctx) {
             fnTransformCall = adapt("transform",pClass,info);
             fnApply = adapt("apply",pClass,info);
-            fnFinalize = adapt("finish",pClass,info);
+            fnFinish = adapt("finish",pClass,info);
         }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) {
@@ -1905,10 +1881,10 @@ namespace das {
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) {
-            if ( fnFinalize ) {
+            if ( fnFinish ) {
                 return das_invoke_function<bool>::invoke<void *,FunctionPtr,
                     ModuleGroup &,const AnnotationArgumentList &,const AnnotationArgumentList &,string &>
-                        (context,fnFinalize,classPtr,func,group,args,progArgs,errors);
+                        (context,fnFinish,classPtr,func,group,args,progArgs,errors);
             } else {
                 return true;
             }
@@ -1939,7 +1915,7 @@ namespace das {
     protected:
         Func    fnTransformCall;
         Func    fnApply;
-        Func    fnFinalize;
+        Func    fnFinish;
     };
 
     struct AstFunctionAnnotationAnnotation : ManagedStructureAnnotation<FunctionAnnotation,false> {
@@ -1948,11 +1924,73 @@ namespace das {
         }
     };
 
+    struct StructureAnnotationAdapter : StructureAnnotation {
+        StructureAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : StructureAnnotation(n), classPtr(pClass), context(ctx) {
+            fnApply = adapt("apply",pClass,info);
+            fnFinish = adapt("finish",pClass,info);
+        }
+        virtual bool touch ( const StructurePtr & st, ModuleGroup & group,
+                            const AnnotationArgumentList & args, string & errors ) {
+            if ( fnApply ) {
+                return das_invoke_function<bool>::invoke<void *,StructurePtr,
+                    ModuleGroup &,const AnnotationArgumentList &,string &>
+                        (context,fnApply,classPtr,st,group,args,errors);
+            } else {
+                return true;
+            }
+        }
+        virtual bool look (const StructurePtr & st, ModuleGroup & group,
+            const AnnotationArgumentList & args, string & errors ) {
+            if ( fnFinish ) {
+                return das_invoke_function<bool>::invoke<void *,StructurePtr,
+                    ModuleGroup &,const AnnotationArgumentList &,string &>
+                        (context,fnFinish,classPtr,st,group,args,errors);
+            } else {
+                return true;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    protected:
+        Func    fnApply;
+        Func    fnFinish;
+    };
+
+    struct AstStructureAnnotationAnnotation : ManagedStructureAnnotation<StructureAnnotation,false> {
+        AstStructureAnnotationAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("StructureAnnotation", ml) {
+        }
+    };
 
     #include "ast.das.inc"
 
     smart_ptr<VisitorAdapter> makeVisitor ( void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<VisitorAdapter>((char *)pClass,info,context);
+    }
+
+    StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<StructureAnnotationAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr ann, Context * context ) {
+        if ( !module->addAnnotation(ann, true) ) {
+            context->throw_error_ex("can't add structure annotation %s to module %s",
+                ann->name.c_str(), module->name.c_str());
+        }
+    }
+
+    void addStructureStructureAnnotation ( smart_ptr_raw<Structure> st, StructureAnnotationPtr ann, Context * context ) {
+        string err;
+        ModuleGroup dummy;
+        if ( !ann->touch(st, dummy, AnnotationArgumentList(), err) ) {
+            context->throw_error_ex("annotation %s failed to apply to structure %s",
+                ann->name.c_str(), st->name.c_str());
+        }
+        auto annDecl = make_smart<AnnotationDeclaration>();
+        annDecl->annotation = ann;
+        st->annotations.push_back(annDecl);
     }
 
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
@@ -1976,33 +2014,15 @@ namespace das {
         }
     }
 
-    void forEachFunctionTag ( Module * module, const char * tag, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
-        vec4f args[1];
-        const auto & fnbn = module->functions;
-        context->invokeEx(block, args, nullptr, [&](SimNode * code){
-            for ( auto & nv : fnbn ) {
-                const auto & fn = nv.second;
-                bool tagged = false;
-                for ( const auto & ann : fn->annotations ) {
-                    if ( ann->annotation->name == "tag_function" ) {
-                        for ( const auto & aarg : ann->arguments ) {
-                            if ( aarg.name==tag ) {
-                                tagged = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if ( tagged ) {
-                    args[0] = cast<FunctionPtr>::from(fn);
-                    code->eval(*context);
-                }
-            }
-        },lineInfo);
-    }
-
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<FunctionAnnotationAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleFunction ( Module * module, FunctionPtr func, Context * context ) {
+        if ( !module->addFunction(func, true) ) {
+            context->throw_error_ex("can't add function s to module %s",
+                func->name.c_str(), module->name.c_str());
+        }
     }
 
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr ann, Context * context ) {
@@ -2024,7 +2044,10 @@ namespace das {
         func->annotations.push_back(annDecl);
     }
 
-    Module * thisModule ( Context * context ) {
+    Module * thisModule ( Context * context, LineInfoArg * lineinfo ) {
+        if ( !context->thisProgram ) {
+            context->throw_error_at(*lineinfo, "can't get this module past compilation");
+        }
         return context->thisProgram->thisModule.get();
     }
 
@@ -2117,8 +2140,6 @@ namespace das {
             addAlias(makeExprReturnFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
-            // tags
-            addAnnotation(make_smart<TagFunctionAnnotation>());
             // modules
             addAnnotation(make_smart<AstModuleLibraryAnnotation>(lib));
             addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
@@ -2244,19 +2265,17 @@ namespace das {
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
                 SideEffects::modifyExternal, "makeVisitor");
-            addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "ast_this_program",
+            addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "this_program",
                 SideEffects::accessExternal, "thisProgram");
-            addExtern<DAS_BIND_FUN(thisModule)>(*this, lib,  "ast_this_module",
+            addExtern<DAS_BIND_FUN(thisModule)>(*this, lib,  "this_module",
                 SideEffects::accessExternal, "thisModule");
-            addExtern<DAS_BIND_FUN(compileProgram)>(*this, lib,  "ast_compiling_program",
+            addExtern<DAS_BIND_FUN(compileProgram)>(*this, lib,  "compiling_program",
                 SideEffects::accessExternal, "compileProgram");
-            addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "ast_compiling_module",
+            addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "compiling_module",
                 SideEffects::accessExternal, "compileModule");
-            addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "ast_for_each_function",
+            addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "for_each_function",
                 SideEffects::accessExternal, "forEachFunction");
-            addExtern<DAS_BIND_FUN(forEachFunctionTag)>(*this, lib,  "ast_for_each_tag_function",
-                SideEffects::accessExternal, "forEachFunctionTag");
-            addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "ast_visit",
+            addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisit");
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
@@ -2264,20 +2283,30 @@ namespace das {
                 SideEffects::modifyExternal, "makeFunctionAnnotation");
             addExtern<DAS_BIND_FUN(addModuleFunctionAnnotation)>(*this, lib,  "add_function_annotation",
                 SideEffects::modifyExternal, "addModuleFunctionAnnotation");
+            addExtern<DAS_BIND_FUN(addModuleFunction)>(*this, lib,  "add_function",
+                SideEffects::modifyExternal, "addModuleFunction");
             addExtern<DAS_BIND_FUN(addFunctionFunctionAnnotation)>(*this, lib,  "add_function_annotation",
                 SideEffects::modifyExternal, "addFunctionFunctionAnnotation");
+            // structure annotation
+            addAnnotation(make_smart<AstStructureAnnotationAnnotation>(lib));
+            addExtern<DAS_BIND_FUN(makeStructureAnnotation)>(*this, lib,  "make_structure_annotation",
+                SideEffects::modifyExternal, "makeStructureAnnotation");
+            addExtern<DAS_BIND_FUN(addModuleStructureAnnotation)>(*this, lib,  "add_structure_annotation",
+                SideEffects::modifyExternal, "addModuleStructureAnnotation");
+            addExtern<DAS_BIND_FUN(addStructureStructureAnnotation)>(*this, lib,  "add_structure_annotation",
+                SideEffects::modifyExternal, "addStructureStructureAnnotation");
             // helper functions
-            addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "ast_describe_typedecl",
-                SideEffects::none, "ast_describe_typedecl");
-            addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "ast_describe_expression",
-                SideEffects::none, "ast_describe_expression");
-            addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "ast_describe_function",
-                SideEffects::none, "ast_describe_function");
-            addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "ast_find_bitfield_name",
-                SideEffects::none, "ast_find_bitfield_name");
+            addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
+                SideEffects::none, "describe_typedecl");
+            addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
+                SideEffects::none, "describe_expression");
+            addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
+                SideEffects::none, "describe_function");
+            addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
+                SideEffects::none, "find_bitfield_name");
             // type conversion functions
-            addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "ast_das_to_string",
-                SideEffects::none, "ast_das_to_string");
+            addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
+                SideEffects::none, "das_to_string");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready

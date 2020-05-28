@@ -1,5 +1,8 @@
+options log = true
+
 module macros
 
+// require limbo
 require ast
 require rtti
 
@@ -7,16 +10,13 @@ struct HintLookup
     tab : table<uint; string>
 
 def get_hint ( lookup : HintLookup; id, defv : string; hint : uint )
-    var result  = defv
-    find_if_exists(lookup.tab, hint) <| $ ( res : string? )
-        result = *res
-    return result
+    return lookup.tab ?[ hint ] ?? defv
 
-[tag_function(get_hint_macro)]
+[tag_function(get_hint_tag)]
 def get_hint ( lookup : HintLookup; id, defv : string )
-    let hint = hash(id)
-    return get_hint(lookup,id,defv,hint)
+    return get_hint(lookup,id,defv,hash(id))
 
+[tag_function_macro(tag="get_hint_tag")]
 class GetHintFnMacro : AstFunctionAnnotation
     [unsafe] def override transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
         if call.arguments[1].__rtti=="ExprConstString"
@@ -27,12 +27,4 @@ class GetHintFnMacro : AstFunctionAnnotation
             return <- ExpressionPtr(call)
         return [[ExpressionPtr]]
 
-[macro]
-def setup
-    let hfnm = new GetHintFnMacro()
-    let ann <- make_function_annotation("hint_function", hfnm)
-    let this_module <- ast_this_module()
-    ast_for_each_tag_function(this_module, "get_hint_macro") <| $ ( func )
-        add_function_annotation(func, ann)
-    add_function_annotation(this_module, ann)
 

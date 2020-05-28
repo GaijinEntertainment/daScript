@@ -1587,7 +1587,10 @@ struct_variable_declaration_list
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL] DAS_DEF[from] optional_override[ovr] function_declaration[func] {
         $func->atDecl = tokRangeAt(@from,@func);
-        if ( !g_thisStructure->isClass ) {
+        if ( !g_thisStructure ) {
+            das_yyerror("internal error. member function outside of class.",
+                $func->at, CompilationError::invalid_member_function);
+        } else if ( !g_thisStructure->isClass ) {
             das_yyerror("structure can't have member function",
                 $func->at, CompilationError::invalid_member_function);
         } else if ( $func->isGeneric() ) {
@@ -1919,23 +1922,19 @@ structure_name
                 string candidates = g_Program->describeCandidates(structs);
                 das_yyerror("too many options for "+*$parent + "\n" + candidates,tokAt(@parent),
                     CompilationError::structure_not_found);
-
             }
             delete $parent;
-        } else {
+        }
+        if ( !pStruct ) {
             pStruct = make_smart<Structure>(*$name);
         }
-        if ( pStruct ) {
-            if ( !g_Program->addStructure(pStruct) ) {
-                das_yyerror("structure is already defined "+*$name,tokAt(@name),
-                    CompilationError::structure_already_declared);
-                $$ = nullptr;
-            } else {
-                $$ = pStruct.get();
-                g_thisStructure = pStruct.get();
-            }
-        } else {
+        if ( !g_Program->addStructure(pStruct) ) {
+            das_yyerror("structure is already defined "+*$name,tokAt(@name),
+                CompilationError::structure_already_declared);
             $$ = nullptr;
+        } else {
+            $$ = pStruct.get();
+            g_thisStructure = pStruct.get();
         }
         delete $name;
     }

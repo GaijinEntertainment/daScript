@@ -79,3 +79,9 @@ def class_info ( cl ) : StructInfo const?
     else
         concept_assert(false,"not a class")
         return null
+
+[unsafe]
+def RttiValue_nothing
+    var t : RttiValue
+    set_variant_index(t, typeinfo(variant_index<nothing> t))
+    return t

@@ -1,6 +1,10 @@
-options log = true
+// options log = true
 
 require macros
+
+[tag_function (good,bad)]
+def ttt
+    return true
 
 [export]
 def test

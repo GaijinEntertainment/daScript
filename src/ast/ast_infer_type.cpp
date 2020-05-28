@@ -4013,7 +4013,7 @@ namespace das {
             if ( fnList.size() ) {
                 if ( verifyCloneFunc(fnList, expr->at) ) {
                     auto fn = fnList[0];
-                    string cloneName = (fn->module->name.empty() ? "_" : fn->module->name) + "::clone";
+                    string cloneName = "_::clone";
                     auto cloneFn = make_smart<ExprCall>(expr->at, cloneName);
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());

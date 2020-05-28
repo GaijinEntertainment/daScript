@@ -337,6 +337,7 @@ namespace das
         virtual bool look (const StructurePtr & st, ModuleGroup & libGroup,
             const AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
     };
+    typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 
     // annotated structure
     //  needs to override
