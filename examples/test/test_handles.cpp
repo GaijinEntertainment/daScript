@@ -418,56 +418,6 @@ struct TestFunctionAnnotation : FunctionAnnotation {
     }
 };
 
-class CheckEid2Macro : public VisitorMacro {
-public:
-    CheckEid2Macro ( Module * tm ) : VisitorMacro("CheckEid2") , thisModule(tm) {}
-protected:
-    virtual ExpressionPtr visit ( ExprCall * call ) override {
-        if ( call->name=="CheckEid2" && call->func->module==thisModule && call->arguments.size()==2 ) {
-            const auto & nameArg = call->arguments[0];
-            if ( nameArg->rtti_isStringConstant() ) {
-                // add 2nd argument, which is hash of the string
-                auto name = static_pointer_cast<ExprConstString>(nameArg)->getValue();
-                if (!name.empty()) {
-                    auto hv = hash_blockz32((uint8_t *)name.c_str());
-                    auto hvc = make_smart<ExprConstUInt>(nameArg->at, hv);
-                    call->arguments.insert(call->arguments.begin() + 1, hvc);
-                    reportFolding();
-                    return call;
-                } else {
-                    program->error("EID can't be an empty string", "", "",
-                        call->at, CompilationError::invalid_argument_type);
-                }
-            }
-        }
-        return VisitorMacro::visit(call);
-    }
-protected:
-    Module * thisModule;
-};
-
-class LintEidMacro : public LintMacro {
-public:
-    LintEidMacro ( Module * tm ) : LintMacro("LintEidMacro"), thisModule(tm) {}
-protected:
-    virtual ExpressionPtr visit ( ExprCall * call ) override {
-        if (    call->name=="CheckEid3"
-            &&  call->func->module==thisModule
-            &&  call->arguments.size()==2 ) {
-            if (call->arguments[0]->rtti_isStringConstant()) {
-                auto cst = static_pointer_cast<ExprConstString>(call->arguments[0]);
-                if (cst->getValue().empty()) {
-                    program->error("EID can't be an empty string", "", "",
-                        call->at, CompilationError::invalid_argument_type);
-                }
-            }
-        }
-        return LintMacro::visit(call);
-    }
-protected:
-    Module * thisModule;
-};
-
 struct EventRegistrator : StructureAnnotation {
     EventRegistrator() : StructureAnnotation("event") {}
     bool touch ( const StructurePtr & st, ModuleGroup & /*libGroup*/,
@@ -631,10 +581,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::modifyExternal, "CheckEidHint");
     addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid2",
         SideEffects::modifyExternal, "CheckEid");
-    macros.push_back(make_unique<CheckEid2Macro>(this));
     addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib, "CheckEid3",
         SideEffects::modifyExternal, "CheckEid");
-    lintMacros.push_back(make_unique<LintEidMacro>(this));
     // extra tests
     addExtern<DAS_BIND_FUN(start_effect)>(*this, lib, "start_effect",
         SideEffects::modifyExternal, "start_effect");

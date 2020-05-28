@@ -5700,15 +5700,15 @@ namespace das {
             anyMacrosDidWork = false;
             auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
                 for ( const auto & pm : mod->macros ) {
-                    this->visit(*pm);
+                    bool anyWork = pm->apply(this, mod);
                     if ( failed() ) {                       // if macro failed, we report it, and we are done
-                        error("macro " + mod->name + "::" + pm->macroName() + " failed", "", "", LineInfo());
+                        error("macro " + mod->name + "::" + pm->name + " failed", "", "", LineInfo());
                         return false;
                     }
-                    if ( pm->didAnything() ) {              // if macro did anything, we done
+                    if ( anyWork ) {                        // if macro did anything, we done
                         inferTypesNoMacro(logs);
                         if ( failed() ) {                   // if it failed to infer types after, we report it
-                            error("macro " + mod->name + "::" + pm->macroName() + " failed to infer", "", "", LineInfo());
+                            error("macro " + mod->name + "::" + pm->name + " failed to infer", "", "", LineInfo());
                             return false;
                         }
                         anyMacrosDidWork = true;            // if any work been done, we start over

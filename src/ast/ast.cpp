@@ -2416,12 +2416,11 @@ namespace das {
             last = false;
             auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
                 for ( const auto & pm : mod->optimizationMacros ) {
-                    this->visit(*pm);
+                    last |= pm->apply(this, mod);
                     if ( failed() ) {                       // if macro failed, we report it, and we are done
-                        error("optimization macro " + mod->name + "::" + pm->macroName() + " failed", "","",LineInfo());
+                        error("optimization macro " + mod->name + "::" + pm->name + " failed", "","",LineInfo());
                         return false;
                     }
-                    last |= pm->didAnything();
                 }
                 return true;
             };

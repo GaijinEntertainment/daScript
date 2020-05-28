@@ -421,7 +421,7 @@ namespace das {
         }
         libGroup.foreach([&](Module * mod) -> bool {
             for ( const auto & pm : mod->lintMacros ) {
-                this->visit(*pm);
+                pm->apply(this, mod);
             }
             return true;
         },"*");

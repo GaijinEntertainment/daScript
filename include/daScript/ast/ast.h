@@ -28,14 +28,8 @@ namespace das
     struct Expression;
     typedef smart_ptr<Expression> ExpressionPtr;
 
-    class LintMacro;
-    typedef unique_ptr<LintMacro> LintMacroPtr;
-
-    class VisitorMacro;
-    typedef unique_ptr<VisitorMacro> VisitorMacroPtr;
-
-    class OptimizationMacro;
-    typedef unique_ptr<OptimizationMacro> OptimizationMacroPtr;
+    struct PassMacro;
+    typedef unique_ptr<PassMacro> PassMacroPtr;
 
     struct AnnotationArgumentList;
 
@@ -745,9 +739,9 @@ namespace das
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint32_t, uint64_t>                 annotationData;
         das_map<Module *,bool>                      requireModule;      // visibility modules
-        vector<VisitorMacroPtr>                     macros;             // infer macros (hygenic)
-        vector<OptimizationMacroPtr>                optimizationMacros; // optimization macros (non-hygenic)
-        vector<LintMacroPtr>                        lintMacros;         // lint macros (read-only)
+        vector<PassMacroPtr>                        macros;             // infer macros
+        vector<PassMacroPtr>                        optimizationMacros; // optimization macros
+        vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
         string  name;
         bool    builtIn = false;
     private:
@@ -810,6 +804,13 @@ namespace das
         bool setUserData ( ModuleGroupUserData * data );
     protected:
         das_map<string,ModuleGroupUserDataPtr>  userData;
+    };
+
+
+    struct PassMacro : ptr_ref_count {
+        PassMacro ( const string na = "" ) : name(na) {}
+        virtual bool apply( Program *, Module * ) const { return false; }
+        string name;
     };
 
     class DebugInfoHelper : ptr_ref_count {

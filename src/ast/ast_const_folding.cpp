@@ -12,22 +12,18 @@ TODO:
 
 namespace das {
 
-    void LintMacro::preVisitProgram ( Program * prog ) {
+    void PassVisitor::preVisitProgram ( Program * prog ) {
         Visitor::preVisitProgram(prog);
         program = prog;
+        anyFolding = false;
     }
 
-    void LintMacro::visitProgram ( Program * prog ) {
+    void PassVisitor::visitProgram ( Program * prog ) {
         program = nullptr;
         Visitor::visitProgram(prog);
     }
 
-    void VisitorMacro::preVisitProgram ( Program * prog ) {
-        LintMacro::preVisitProgram(prog);
-        anyFolding = false;
-    }
-
-    void VisitorMacro::reportFolding() {
+    void PassVisitor::reportFolding() {
         anyFolding = true;
     }
 

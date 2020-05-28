@@ -11,7 +11,7 @@ namespace das {
     //  r2v(expr[index])    = expr@[index]
     //  r2v(a ? b : c)      = a ? r2v(b) : r2v(c)
     //  r2v(cast(x))        = cast(r2v(x))
-    class RefFolding : public VisitorMacro {
+    class RefFolding : public PassVisitor {
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if (expr->type->baseType == Type::tHandle) {
@@ -104,7 +104,7 @@ namespace das {
         }
     };
 
-    class BlockFolding : public VisitorMacro {
+    class BlockFolding : public PassVisitor {
     protected:
         das_set<int32_t> labels;
         bool allLabels = false;
@@ -220,7 +220,7 @@ namespace das {
         }
     };
 
-    class CondFolding : public VisitorMacro {
+    class CondFolding : public PassVisitor {
     protected:
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             // if (cond) return x; else return y; => (cond ? x : y)

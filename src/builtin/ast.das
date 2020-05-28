@@ -555,7 +555,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
     if fn == null
         fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
-        fn.flags |= FunctionFlags exports
+        fn.flags |= FunctionFlags init
         fn.result <- new [[TypeDecl() baseType=Type tVoid]]
         var blk <- new [[ExprBlock() at=at]]
         var iblk <- new [[ExprBlock() at=at]]
@@ -587,4 +587,3 @@ def setup
             make_structure_annotation("tag_structure",new TagStructureAnnotation()))
         this_module() |> add_structure_annotation(
             make_structure_annotation("tag_function_macro",new TagFunctionMacro()))
-

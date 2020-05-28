@@ -257,36 +257,18 @@ namespace das {
 #pragma clang diagnostic pop
 #endif
 
-    class LintMacro : public Visitor {
+    class PassVisitor : public Visitor {
     public:
-        LintMacro ( const string & na = "" ) : macName(na) {}
-        const string & macroName() const { return macName; }
-    protected:
         virtual void preVisitProgram ( Program * prog ) override;
         virtual void visitProgram ( Program * prog ) override;
-    private:
-        string  macName;
+        virtual void reportFolding();
+        __forceinline bool didAnything() const { return anyFolding; }
     protected:
+        bool        anyFolding = false;
         Program *   program = nullptr;
     };
 
-    class VisitorMacro : public LintMacro {
-    public:
-        VisitorMacro ( const string & na = "" ) : LintMacro(na) {}
-        bool didAnything () const { return anyFolding; }
-    protected:
-        virtual void reportFolding();
-        virtual void preVisitProgram ( Program * prog ) override;
-    private:
-        bool    anyFolding = false;
-    };
-
-    class OptimizationMacro : public VisitorMacro {
-    public:
-        OptimizationMacro ( const string & na = "" ) : VisitorMacro(na) {}
-    };
-
-    class FoldingVisitor : public VisitorMacro {
+    class FoldingVisitor : public PassVisitor {
     public:
         FoldingVisitor(const ProgramPtr & prog)
             : ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {

@@ -475,7 +475,7 @@ namespace das {
     };
 
 
-    class RemoveUnusedLocalVariables : public VisitorMacro {
+    class RemoveUnusedLocalVariables : public PassVisitor {
     protected:
     // ExprLet
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {

@@ -93,7 +93,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
     if fn == null
         fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
-        fn.flags |= FunctionFlags exports
+        fn.flags |= FunctionFlags init
         fn.result <- new [[TypeDecl() baseType=Type tVoid]]
         var blk <- new [[ExprBlock() at=at]]
         var iblk <- new [[ExprBlock() at=at]]
