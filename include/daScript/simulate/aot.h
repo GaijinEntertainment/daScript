@@ -201,6 +201,9 @@ namespace das {
         static __forceinline TT * cast ( const smart_ptr_raw<QQ> & expr ) {
             return reinterpret_cast<TT *>(expr.get());
         }
+        static __forceinline TT * cast ( void * expr ) {
+            return reinterpret_cast<TT *>(expr);
+        }
     };
 
     template <typename TT>
