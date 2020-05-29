@@ -129,6 +129,7 @@ namespace das {
         TypeAnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TypeAnnotation", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("annotationModule");
         }
     };
 

@@ -14,6 +14,7 @@ typedef
     MakeFieldDeclPtr = smart_ptr<MakeFieldDecl>
     FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
     StructureAnnotationPtr = smart_ptr<StructureAnnotation>
+    PassMacroPtr = smart_ptr<PassMacro>
 
 [unsafe]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -58,6 +59,21 @@ def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
         concept_assert(false, "not derived from ast::Expression")
         return [[ExpressionPtr]]
 
+def isExpression(t:TypeDeclPtr; top:bool=true) : bool
+    if t==null
+        return false
+    elif t.dim.length!=0
+        return false
+    elif t.baseType==Type tHandle
+        if "{t.annotation.annotationModule.name}" == "ast"
+            return starts_with("{t.annotation.name}","Expr")
+        else
+            return false
+    elif t.baseType==Type tPointer & top
+        return isExpression(t.firstType,false)
+    else
+        return false
+
 [unsafe]
 def push_back(var vec:dasvector`smart_ptr`Expression;expr:smart_ptr<auto(TT)>)
     static_if typeinfo(fulltypename expr)=="smart_ptr<ast::ExpressionPtr>"
@@ -101,6 +117,9 @@ class AstFunctionAnnotation
 class AstStructureAnnotation
     def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+
+class AstPassMacro
+    def abstract apply ( prog:ProgramPtr; mod:Module? ) : bool
 
 class AstVisitor
 // program
@@ -465,6 +484,7 @@ class AstVisitor
 // limbo
 ////////
 
+
 class MacroMacro : AstFunctionAnnotation
     [unsafe] def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         compiling_program().flags |= ProgramFlags needMacroModule
@@ -576,6 +596,38 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
             panic("expecting ife.if_true.ExprBlock")
         return reinterpret<ExprBlock?> ife.if_true
 
+def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_pass_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[PassMacroPtr]]
+
+// replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
+// if value is ast::Expr*
+class BetterRttiVisitor : AstVisitor
+    astChanged : bool = false
+    def override visitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+        if isExpression(expr.value.typeDecl)
+            astChanged = true
+            var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
+            var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
+            var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-ExpressionPtr(vdr), right<-ExpressionPtr(cna)]]
+            return ExpressionPtr(veq)
+        return ExpressionPtr(expr)
+
+class BetterRttiInExpr : AstPassMacro
+    visitor : BetterRttiVisitor?
+    adapter : smart_ptr<VisitorAdapter>
+    [unsafe] def BetterRttiInExpr
+        visitor <- new BetterRttiVisitor()
+        adapter <- make_visitor(*visitor)
+    def override apply ( prog:ProgramPtr; mod:Module? ) : bool
+        visitor.astChanged = false
+        visit(prog, adapter)
+        return visitor.astChanged
+
 [_macro]
 def setup
     if is_compiling_macros()
@@ -587,3 +639,5 @@ def setup
             make_structure_annotation("tag_structure",new TagStructureAnnotation()))
         this_module() |> add_structure_annotation(
             make_structure_annotation("tag_function_macro",new TagFunctionMacro()))
+        this_module() |> add_dirty_infer_macro(
+            make_pass_macro("better_rtti_in_expr", new BetterRttiInExpr()))

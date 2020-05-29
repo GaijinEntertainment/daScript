@@ -25,6 +25,7 @@ MAKE_TYPE_FACTORY(Variable,Variable)
 MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 MAKE_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
 MAKE_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
+MAKE_TYPE_FACTORY(PassMacro,PassMacro)
 MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
 
@@ -1963,11 +1964,51 @@ namespace das {
             : ManagedStructureAnnotation ("StructureAnnotation", ml) {
         }
     };
+    struct PassMacroAdapter : PassMacro {
+        PassMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : PassMacro(n), classPtr(pClass), context(ctx) {
+            fnApply = adapt("apply",pClass,info);
+        }
+        virtual bool apply ( Program * prog, Module * mod ) override {
+            if ( fnApply ) {
+                return das_invoke_function<bool>::invoke<void *,ProgramPtr,Module *>
+                        (context,fnApply,classPtr,prog,mod);
+            } else {
+                return false;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    protected:
+        Func    fnApply;
+    };
+
+    struct AstPassMacroAnnotation : ManagedStructureAnnotation<PassMacro,false> {
+        AstPassMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("PassMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
 
     #include "ast.das.inc"
 
     smart_ptr<VisitorAdapter> makeVisitor ( void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<VisitorAdapter>((char *)pClass,info,context);
+    }
+
+    PassMacroPtr makePassMacro ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<PassMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * context ) {
+        for ( auto & pm : module->inferMacros ) {
+            if ( pm->name==newM->name ) {
+                context->throw_error_ex("module %s already has dirty infer macro %s",
+                    pm->name.c_str(), newM->name.c_str());
+            }
+        }
+        module->inferMacros.push_back(newM);
     }
 
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
@@ -2094,6 +2135,10 @@ namespace das {
 
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context ) {
         return context->stringHeap.allocateString(bft->findBitfieldName(value));
+    }
+
+    ExpressionPtr clone_expression ( ExpressionPtr value ) {
+        return value->clone();
     }
 
     class Module_Ast : public Module {
@@ -2295,6 +2340,12 @@ namespace das {
                 SideEffects::modifyExternal, "addModuleStructureAnnotation");
             addExtern<DAS_BIND_FUN(addStructureStructureAnnotation)>(*this, lib,  "add_structure_annotation",
                 SideEffects::modifyExternal, "addStructureStructureAnnotation");
+            // pass macro
+            addAnnotation(make_smart<AstPassMacroAnnotation>(lib));
+            addExtern<DAS_BIND_FUN(makePassMacro)>(*this, lib,  "make_pass_macro",
+                SideEffects::modifyExternal, "makePassMacro");
+            addExtern<DAS_BIND_FUN(addModuleInferDirtyMacro)>(*this, lib,  "add_dirty_infer_macro",
+                SideEffects::modifyExternal, "addModuleInferDirtyMacro");
             // helper functions
             addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
                 SideEffects::none, "describe_typedecl");
@@ -2307,6 +2358,9 @@ namespace das {
             // type conversion functions
             addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
                 SideEffects::none, "das_to_string");
+            // expression
+            addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
+                SideEffects::none, "clone_expression");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready

@@ -1382,6 +1382,7 @@ namespace das {
         argV->at = func->at;
         argV->generated = true;
         argV->init = makeT;
+        argV->init_via_move = true;
         letS->variables.push_back(argV);
         block->list.push_back(letS);
         // call Foo`Foo(self,args)
@@ -1394,7 +1395,7 @@ namespace das {
         // return self
         auto selfV = make_smart<ExprVar>(baseClass->at,"self");
         auto returnDecl = make_smart<ExprReturn>(baseClass->at,selfV);
-        returnDecl->moveSemantics = !baseClass->canCopy();
+        returnDecl->moveSemantics = true;
         block->list.push_back(returnDecl);
         // and done
         func->body = block;

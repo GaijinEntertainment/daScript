@@ -420,8 +420,10 @@ namespace das {
             }
         }
         libGroup.foreach([&](Module * mod) -> bool {
-            for ( const auto & pm : mod->lintMacros ) {
-                pm->apply(this, mod);
+            if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule.get() ) {
+                for ( const auto & pm : mod->lintMacros ) {
+                    pm->apply(this, thisModule.get());
+                }
             }
             return true;
         },"*");

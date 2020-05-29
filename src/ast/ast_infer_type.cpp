@@ -4226,7 +4226,7 @@ namespace das {
                     setBlockCopyMoveFlags(block);
                 }
                 if ( block->moveOnReturn && !expr->moveSemantics ) {
-                    error("this type can't be copied","","use return <- instead",
+                    error("this type can't be copied; " + block->type->describe(),"","use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
                 }
             } else {
@@ -4242,7 +4242,7 @@ namespace das {
                 }
                 inferReturnType(func->result, expr);
                 if ( func->moveOnReturn && !expr->moveSemantics ) {
-                    error("this type can't be copied","","use return <- instead",
+                    error("this type can't be copied; " + func->result->describe(),"","use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
                 }
             }
@@ -5693,26 +5693,28 @@ namespace das {
     // run macros til any of them does work, then reinfer and restart (i.e. infer after each macro)
     void Program::inferTypes(TextWriter &logs, ModuleGroup & libGroup) {
         newLambdaIndex = 1;
-        inferTypesNoMacro(logs);
+        inferTypesDirty(logs);
         if ( failed() ) return;
         bool anyMacrosDidWork;
         do {
             anyMacrosDidWork = false;
             auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
-                for ( const auto & pm : mod->macros ) {
-                    bool anyWork = pm->apply(this, mod);
-                    if ( failed() ) {                       // if macro failed, we report it, and we are done
-                        error("macro " + mod->name + "::" + pm->name + " failed", "", "", LineInfo());
-                        return false;
-                    }
-                    if ( anyWork ) {                        // if macro did anything, we done
-                        inferTypesNoMacro(logs);
-                        if ( failed() ) {                   // if it failed to infer types after, we report it
-                            error("macro " + mod->name + "::" + pm->name + " failed to infer", "", "", LineInfo());
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule.get() ) {
+                    for ( const auto & pm : mod->macros ) {
+                        bool anyWork = pm->apply(this, thisModule.get());
+                        if ( failed() ) {                       // if macro failed, we report it, and we are done
+                            error("macro " + mod->name + "::" + pm->name + " failed", "", "", LineInfo());
                             return false;
                         }
-                        anyMacrosDidWork = true;            // if any work been done, we start over
-                        return false;
+                        if ( anyWork ) {                        // if macro did anything, we done
+                            inferTypesDirty(logs);
+                            if ( failed() ) {                   // if it failed to infer types after, we report it
+                                error("macro " + mod->name + "::" + pm->name + " failed to infer", "", "", LineInfo());
+                                return false;
+                            }
+                            anyMacrosDidWork = true;            // if any work been done, we start over
+                            return false;
+                        }
                     }
                 }
                 return true;
@@ -5724,7 +5726,7 @@ namespace das {
         } while ( !failed() && anyMacrosDidWork );
     }
 
-    void Program::inferTypesNoMacro(TextWriter & logs) {
+    void Program::inferTypesDirty(TextWriter & logs) {
         const bool log = options.getBoolOption("log_infer_passes",false);
         int pass = 0, maxPasses = 50;
         if (auto maxP = options.find("max_infer_passes", Type::tInt)) {
@@ -5741,6 +5743,17 @@ namespace das {
             for ( auto efn : context.extraFunctions ) {
                 addFunction(efn);
             }
+            bool anyMacrosDidWork = false;
+            auto modMacro = [&](Module * mod) -> bool {
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule.get() ) {
+                    for ( const auto & pm : mod->inferMacros ) {
+                        anyMacrosDidWork |= pm->apply(this, thisModule.get());
+                    }
+                }
+                return true;
+            };
+            Module::foreach(modMacro);
+            library.foreach(modMacro, "*");
             if ( log ) {
                 logs << "PASS " << pass << ":\n" << *this;
                 sort(errors.begin(), errors.end());
@@ -5748,8 +5761,8 @@ namespace das {
                     logs << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
             }
-            if ( context.finished() )
-                break;
+            if ( anyMacrosDidWork ) continue;
+            if ( context.finished() ) break;
         }
         if (pass == maxPasses) {
             error("type inference exceeded maximum allowed number of passes ("+to_string(maxPasses)+")\n"

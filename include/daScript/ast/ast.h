@@ -29,7 +29,7 @@ namespace das
     typedef smart_ptr<Expression> ExpressionPtr;
 
     struct PassMacro;
-    typedef unique_ptr<PassMacro> PassMacroPtr;
+    typedef smart_ptr<PassMacro> PassMacroPtr;
 
     struct AnnotationArgumentList;
 
@@ -739,7 +739,8 @@ namespace das
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint32_t, uint64_t>                 annotationData;
         das_map<Module *,bool>                      requireModule;      // visibility modules
-        vector<PassMacroPtr>                        macros;             // infer macros
+        vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
+        vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
         string  name;
@@ -809,7 +810,7 @@ namespace das
 
     struct PassMacro : ptr_ref_count {
         PassMacro ( const string na = "" ) : name(na) {}
-        virtual bool apply( Program *, Module * ) const { return false; }
+        virtual bool apply( Program *, Module * ) { return false; }
         string name;
     };
 
@@ -912,7 +913,7 @@ namespace das
         Module * addModule ( const string & name );
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
-        void inferTypesNoMacro(TextWriter & logs);
+        void inferTypesDirty(TextWriter & logs);
         void lint ( ModuleGroup & libGroup );
         void checkSideEffects();
         bool optimizationRefFolding();

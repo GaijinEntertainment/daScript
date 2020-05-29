@@ -368,12 +368,17 @@ namespace das {
                 }
             }
             // macros
-            if ( program->thisModule->macroContext ) {
-                swap ( macroContext, program->thisModule->macroContext );
-                for ( auto & fna : program->thisModule->handleTypes ) {
+            auto ptm = program->thisModule.get();
+            if ( ptm->macroContext ) {
+                swap ( macroContext, ptm->macroContext );
+                for ( auto & fna : ptm->handleTypes ) {
                     addAnnotation(fna.second);
                 }
             }
+            macros.insert(macros.end(), ptm->macros.begin(), ptm->macros.end());
+            inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());
+            optimizationMacros.insert(optimizationMacros.end(), ptm->optimizationMacros.begin(), ptm->optimizationMacros.end());
+            lintMacros.insert(lintMacros.end(), ptm->lintMacros.begin(), ptm->lintMacros.end());
             return true;
         } else {
             DAS_FATAL_LOG("builtin module did not parse %s\n", modName.c_str());

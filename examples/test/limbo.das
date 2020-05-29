@@ -1,3 +1,5 @@
+// options log_infer_passes = true
+
 module limbo
 
 require rtti
@@ -114,6 +116,38 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
             panic("expecting ife.if_true.ExprBlock")
         return reinterpret<ExprBlock?> ife.if_true
 
+def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_pass_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[PassMacroPtr]]
+
+// replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
+// if value is ast::Expr*
+class BetterRttiVisitor : AstVisitor
+    astChanged : bool = false
+    def override visitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+        if isExpression(expr.value.typeDecl)
+            astChanged = true
+            var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
+            var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
+            var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-ExpressionPtr(vdr), right<-ExpressionPtr(cna)]]
+            return ExpressionPtr(veq)
+        return ExpressionPtr(expr)
+
+class BetterRttiInExpr : AstPassMacro
+    visitor : BetterRttiVisitor?
+    adapter : smart_ptr<VisitorAdapter>
+    [unsafe] def BetterRttiInExpr
+        visitor <- new BetterRttiVisitor()
+        adapter <- make_visitor(*visitor)
+    def override apply ( prog:ProgramPtr; mod:Module? ) : bool
+        visitor.astChanged = false
+        visit(prog, adapter)
+        return visitor.astChanged
+
 [_macro]
 def setup
     if is_compiling_macros()
@@ -125,3 +159,6 @@ def setup
             make_structure_annotation("tag_structure",new TagStructureAnnotation()))
         this_module() |> add_structure_annotation(
             make_structure_annotation("tag_function_macro",new TagFunctionMacro()))
+        this_module() |> add_dirty_infer_macro(
+            make_pass_macro("better_rtti_in_expr", new BetterRttiInExpr()))
+

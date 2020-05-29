@@ -2415,11 +2415,13 @@ namespace das {
             // now, user macros
             last = false;
             auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
-                for ( const auto & pm : mod->optimizationMacros ) {
-                    last |= pm->apply(this, mod);
-                    if ( failed() ) {                       // if macro failed, we report it, and we are done
-                        error("optimization macro " + mod->name + "::" + pm->name + " failed", "","",LineInfo());
-                        return false;
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule.get() ) {
+                    for ( const auto & pm : mod->optimizationMacros ) {
+                        last |= pm->apply(this, thisModule.get());
+                        if ( failed() ) {                       // if macro failed, we report it, and we are done
+                            error("optimization macro " + mod->name + "::" + pm->name + " failed", "","",LineInfo());
+                            return false;
+                        }
                     }
                 }
                 return true;
