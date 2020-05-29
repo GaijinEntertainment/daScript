@@ -2,14 +2,52 @@
 
 #include "daScript/misc/network.h"
 
+#ifdef _WIN32
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#pragma comment (lib, "Ws2_32.lib")
+#pragma comment (lib, "Mswsock.lib")
+#pragma comment (lib, "AdvApi32.lib")
+
+#else
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <fcntl.h>
 
+#define closesocket close
+
+#endif
+
 namespace das {
 
-    bool set_socket_blocking ( int fd, bool blocking ) {
+#ifdef _WIN32
+    #define invalid_socket(x)   ((x)==socket_t(~0))
+#else
+    #define invalid_socket(x)   ((x)<0)
+#endif
+
+    bool Server::startup() {
+#ifdef _WIN32
+        WSADATA wsaData;
+        return WSAStartup(MAKEWORD(2,2), &wsaData)==0;
+#else
+        return true
+#endif
+    }
+
+    void Server::shutdown() {
+#ifdef _WIN32
+        WSACleanup();
+#endif
+    }
+
+    bool set_socket_blocking ( socket_t fd, bool blocking ) {
         if (fd < 0) return false;
 #ifdef _WIN32
         unsigned long mode = blocking ? 0 : 1;
@@ -26,26 +64,28 @@ namespace das {
     }
 
     void Server::init ( int port ) {
-        if ( !(server_fd = socket(AF_INET, SOCK_STREAM, 0)) ) {
-            onError("can't socket", server_fd);
+        server_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if ( !server_fd ) {
+            onError("can't socket", errno);
             return;
         }
         struct sockaddr_in address;
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = INADDR_ANY;
-        address.sin_port = htons( port );
-    	if ( bind(server_fd, (struct sockaddr *)&address,sizeof(address))<0 ) {
-            onError("can't bind", server_fd);
-            close(server_fd);
+        address.sin_port = htons(uint16_t(port) );
+    	if ( ::bind(server_fd, (struct sockaddr *)&address,sizeof(address))<0 ) {
+            onError("can't bind", errno);
+            closesocket(server_fd);
             return;
 	    }
     	if ( listen(server_fd, 3) < 0) {
-            onError("can't listen", server_fd);
-            close(server_fd);
+            onError("can't listen", errno);
+            closesocket(server_fd);
             return;
         }
         if ( !set_socket_blocking(server_fd,false) ) {
-            close(server_fd);
+            onError("can't set nbio", errno);
+            closesocket(server_fd);
             return;
         }
     }
@@ -74,49 +114,62 @@ namespace das {
             onError("can't send, not conencted", -1);
             return false;
         }
-        int res = send(client_fd, data, size, 0);
-        if ( res<0 ) {
-            res = errno;
-            onError ( "can't send", res);
-            close(client_fd);
-            client_fd = 0;
-            return false;
-        } else if ( res != size ) {
-            onError ( "can't send entire message", res);
-            close(client_fd);
-            client_fd = 0;
-            return false;
-        } else  {
-            return true;
+        int res = 0;
+        for ( ;; ) {
+            res = send(client_fd, data, size, 0);
+            if ( res>0 ) {
+                DAS_ASSERT(size>=res);
+                data += size;
+                size -= res;
+                if ( size==0 ) {
+                    return true;
+                }
+            } else {
+                res = errno;
+                if ( res!=EAGAIN && res!=EWOULDBLOCK ) {
+                    onError ( "can't send", res);
+                    closesocket(client_fd);
+                    client_fd = 0;
+                    return false;
+                }
+            }
         }
     }
 
     void Server::tick() {
-        if ( client_fd<=0 ) {
+        if ( client_fd==0 ) {
             struct sockaddr_in address;
             int addrlen = sizeof(address);
             client_fd = accept(server_fd, (struct sockaddr *)&address,(socklen_t*)&addrlen);
-            if ( client_fd>0 ) {
+            if ( !invalid_socket(client_fd) ) {
+                if ( !set_socket_blocking(client_fd,false) ) {
+                    onError("can't set client nbio", errno);
+                    closesocket(client_fd);
+                    client_fd = 0;
+                }
                 onLog("connection accepted");
                 onConnect();
+
+            } else {
+                client_fd = 0;
             }
         } else {
             char buffer[1025];
-            int res = recv(client_fd, buffer, 1024, MSG_DONTWAIT);
+            int res = recv(client_fd, buffer, 1024, 0);
             if ( res >0 ) {
                 buffer[res] = 0;
                 onData(buffer, res);
             } else if ( res==0 ) {
                 onLog("connection closed");
                 onDisconnect();
-                close(client_fd);
+                closesocket(client_fd);
                 client_fd = 0;
             } else if ( res<0 ) {
                 res = errno;
-                if ( res!=EAGAIN && res!=EWOULDBLOCK ) {
+                if ( res!=0 ) {
                     onError("connection closed on error", res);
                     onDisconnect();
-                    close(client_fd);
+                    closesocket(client_fd);
                     client_fd = 0;
                 }
             }
@@ -125,10 +178,10 @@ namespace das {
 
     Server::~Server() {
         if ( client_fd >0 ) {
-            close(client_fd);
+            closesocket(client_fd);
         }
         if ( server_fd ) {
-            close(server_fd);
+            closesocket(server_fd);
         }
     }
 

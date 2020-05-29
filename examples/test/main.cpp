@@ -360,14 +360,19 @@ bool debug_unit_test ( const string & fn, int CURSOR_X, int CURSOR_Y, bool useAo
     }
 }
 
-
-int main() {
-
+void socket_test() {
+    Server::startup();
     Server server;
     server.init();
     for ( ;; ) {
         server.tick();
     }
+    Server::shutdown();
+}
+
+int main() {
+
+    // socket_test();
 
     // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // _CrtSetBreakAlloc(6836533);
