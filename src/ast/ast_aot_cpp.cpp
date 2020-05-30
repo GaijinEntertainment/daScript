@@ -194,7 +194,7 @@ namespace das {
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
-                if ( type->structType->module->name.empty() ) {
+                if ( type->structType->module->name.empty() || !type->structType->module->builtIn ) {
                     stream << "struct " << type->structType->name;
                 } else {
                     stream << "struct " << aotModuleName(type->structType->module) << "::" << type->structType->name;

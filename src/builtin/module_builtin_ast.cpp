@@ -907,7 +907,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("structureModule");
             addField<DAS_BIND_MANAGED_FIELD(parent)>("parent");
             addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addFieldEx ( "flags", "flags", offsetof(Structure, flags), makeStructureFlags() );

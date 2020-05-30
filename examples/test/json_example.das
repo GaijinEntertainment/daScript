@@ -15,5 +15,12 @@ def test
                 if json == null
                     print("failed to parse, {error}\n")
                 else
+                    // macro test
+                    /*
+                    if json is _object
+                        print("object\n")
+                        (json as _object)["foo"] = new JsonValue("bar")
+                    */
                     print("{write_json(json)}\n")
+
     return true
