@@ -7,6 +7,8 @@ IF(MSVC)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
 ENDIF()
 
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
 FIND_XXD()
 FIND_FLEX_AND_BISON()
 
@@ -284,7 +286,7 @@ TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile 
 ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest)
 SETUP_CPP11(dasAot)
 
-MACRO(DAS_AOT input genList)
+MACRO(DAS_AOT input genList mainTarget)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
@@ -298,12 +300,18 @@ MACRO(DAS_AOT input genList)
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
         COMMAND dasAot ${input_src} ${out_src}
     )
+    set(custom_name ${mainTarget}_${input_name}_aot)
+    ADD_CUSTOM_TARGET(${custom_name}
+        ALL DEPENDS ${out_src}
+    )
+    SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
+    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
     list(APPEND ${genList} ${out_src})
 ENDMACRO()
 
-MACRO(DAS_AOT_DIR inFiles genList)
+MACRO(DAS_AOT_DIR inFiles genList mainTarget)
     FOREACH(inF ${inFiles})
-        DAS_AOT(${inF} ${genList})
+        DAS_AOT(${inF} ${genList} ${mainTarget})
     ENDFOREACH()
 ENDMACRO()
 
@@ -369,8 +377,9 @@ examples/pathTracer/toy_path_tracer.das
 )
 SOURCE_GROUP_FILES("source" PATH_TRACER_MAIN_SRC)
 
+add_custom_target(pathTracerAot)
 SET(PATH_TRACER_GEN_SRC)
-DAS_AOT(examples/pathTracer/toy_path_tracer.das PATH_TRACER_GEN_SRC)
+DAS_AOT(examples/pathTracer/toy_path_tracer.das PATH_TRACER_GEN_SRC pathTracerAot)
 SOURCE_GROUP_FILES("generated" PATH_TRACER_GEN_SRC)
 
 add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} ${PATH_TRACER_GEN_SRC})
@@ -381,6 +390,7 @@ ENDIF()
 ADD_DEPENDENCIES(pathTracer libDaScript libPathTracerHelper)
 TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC examples/pathTracer)
 SETUP_CPP11(pathTracer)
+add_dependencies(pathTracer pathTracerAot)
 
 # JSON Example
 
@@ -470,10 +480,11 @@ examples/test/unitTest.h
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
+add_custom_target(daScriptTestAot)
 SET(TEST_GENERATED_SRC)
-DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC)
-DAS_AOT("examples/test/aot_dummy.das" TEST_GENERATED_SRC)
-#DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC)
+#DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
+DAS_AOT("examples/test/aot_dummy.das" TEST_GENERATED_SRC daScriptTestAot)
+#DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC daScriptTestAot)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
@@ -482,6 +493,7 @@ TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest)
 ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest)
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
+add_dependencies(daScriptTest daScriptTestAot)
 
 # Profile module
 
@@ -510,8 +522,9 @@ examples/profile/test_profile.h
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
 
+add_custom_target(daScriptProfileAot)
 SET(PROFILE_GENERATED_SRC)
-DAS_AOT_DIR("${PROFILE_SRC}" PROFILE_GENERATED_SRC)
+DAS_AOT_DIR("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC})
@@ -519,3 +532,5 @@ TARGET_INCLUDE_DIRECTORIES(daScriptProfile PUBLIC examples/profile)
 TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
 ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)
+add_dependencies(daScriptProfile daScriptProfileAot)
+
