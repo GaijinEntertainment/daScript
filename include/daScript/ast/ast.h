@@ -459,8 +459,8 @@ namespace das
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
-        Type    baseType;
-        vec4f   value;
+        Type    baseType = Type::none;
+        vec4f   value = v_zero();
       };
 #ifdef _MSC_VER
 #pragma warning(pop)
