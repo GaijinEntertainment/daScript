@@ -196,10 +196,10 @@ def write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : in
                 first = false
             else
                 write(writer,",\n")
-            write(writer,repeat("\t",depth+1))
+            write_chars(writer,'\t',depth+1)
             write_value(writer, elem, depth+1)
         write(writer, "\n")
-        write(writer,repeat("\t",depth))
+        write_chars(writer,'\t',depth)
         write(writer, "]")
     elif jsv.value is _object
         write(writer, "\{\n")
@@ -209,13 +209,13 @@ def write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : in
                 first = false
             else
                 write(writer,",\n")
-            write(writer,repeat("\t",depth+1))
+            write_chars(writer,'\t',depth+1)
             write(writer, "\"")
             write(writer, escape(elemK))
             write(writer, "\" : ")
             write_value(writer, elemV, depth+1)
         write(writer, "\n")
-        write(writer,repeat("\t",depth))
+        write_chars(writer,'\t',depth)
         write(writer, "\}")
     elif jsv.value is _bool
         if jsv.value as _bool

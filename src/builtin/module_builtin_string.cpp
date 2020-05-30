@@ -274,6 +274,16 @@ namespace das
         writer.writeStr(buf, 1);
     }
 
+    void write_string_chars ( StringBuilderWriter & writer, int32_t ch, int32_t count ) {
+        if ( count <=0 ) return;
+        char buf[2];
+        buf[0] = char(ch);
+        buf[1] = 0;
+        while ( count -- ) {
+            writer.writeStr(buf, 1);
+        }
+    }
+
     char * to_string_char ( int ch, Context * context ) {
         auto st = context->stringHeap.allocateString(nullptr, 1);
         *st = char(ch);
@@ -404,6 +414,7 @@ namespace das
         addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
             SideEffects::modifyExternal, "builtin_write_string");
         addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::modifyExternal, "write_string_char");
+        addExtern<DAS_BIND_FUN(write_string_chars)>(*this, lib, "write_chars", SideEffects::modifyExternal, "write_string_chars");
         addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
