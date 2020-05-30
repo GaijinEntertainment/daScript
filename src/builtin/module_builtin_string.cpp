@@ -224,6 +224,18 @@ namespace das
         return ret;
     }
 
+    double string_to_double ( const char *str, Context * context ) {
+        char *endptr;
+        double ret = strtod(str, &endptr);
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if (endptr != str + strLen || strLen == 0)
+        {
+            context->throw_error("string-to-dobule conversion failed. String is not an dobule number");
+            return 0.f;
+        }
+        return ret;
+    }
+
     float fast_to_float ( const char *str ) {
         return str ? (float)atof(str) : 0.f;
     }
@@ -440,6 +452,7 @@ namespace das
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
         addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
+        addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double", SideEffects::none, "string_to_double");
         addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", SideEffects::none, "fast_to_int");
         addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none, "fast_to_float");
         addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape", SideEffects::none, "builtin_string_escape");

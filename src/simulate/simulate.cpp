@@ -364,9 +364,12 @@ namespace das
             (*body)->eval(context);
             { if ( context.stopFlags ) {
                 if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<totalLabels) {
-                    if ((body=list+labels[context.gotoLabel])>=list) {
+                    body=list+labels[context.gotoLabel];
+                    if ( body>=list && body<tail ) {
                         context.stopFlags &= ~EvalFlags::jumpToLabel;
                         goto loopbegin;
+                    } else {
+                        context.throw_error_at(debugInfo, "jump to label %i failed", context.gotoLabel);
                     }
                 }
                 goto loopend;

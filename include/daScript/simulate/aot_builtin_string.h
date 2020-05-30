@@ -35,6 +35,7 @@ namespace das {
     unsigned string_to_uint ( const char *str, Context * context );
     int string_to_int ( const char *str, Context * context );
     float string_to_float ( const char *str, Context * context );
+    double string_to_double ( const char *str, Context * context );
     float fast_to_float ( const char *str );
     int fast_to_int ( const char *str );
     char * to_das_string(const string & str, Context * ctx);

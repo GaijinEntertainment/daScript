@@ -359,6 +359,9 @@ void YYNEWLINE() {
         return BEGIN_STRING;
     }
 
+<normal>\'\\t\'                         das_yylval.i = 9; return INTEGER;
+<normal>\'\\n\'                         das_yylval.i = 10; return INTEGER;
+<normal>\'\\r\'                         das_yylval.i = 13; return INTEGER;
 <normal>\'.\'                           das_yylval.i = int32_t(yytext[1]); return INTEGER;
 
 <normal>[0-9]+(u|U)(l|L)                return sscanf(yytext, "%" SCNu64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
