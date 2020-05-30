@@ -75,6 +75,7 @@ namespace das
         virtual void close ( Context & context, char * value ) override;
         Array *     array;
         uint32_t    stride;
+        char *      data = nullptr;
         char *      array_end = nullptr;
     };
 

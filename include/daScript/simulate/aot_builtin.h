@@ -36,6 +36,7 @@ namespace das {
     bool builtin_iterator_first ( const Sequence & it, void * data, Context * context );
     bool builtin_iterator_next  ( const Sequence & it, void * data, Context * context );
     void builtin_iterator_close ( const Sequence & it, void * data, Context * context );
+    bool builtin_iterator_iterate ( const Sequence & it, void * data, Context * context );
     void builtin_iterator_delete ( const Sequence & it, Context * context );
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context );
@@ -44,6 +45,7 @@ namespace das {
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, Context * context );
     void builtin_make_nil_iterator ( Sequence & result, Context * context );
     vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * );
+    void builtin_make_string_iterator ( Sequence & result, char * str, Context * context );
 
     void resetProfiler( Context * context );
     void dumpProfileInfo( Context * context );

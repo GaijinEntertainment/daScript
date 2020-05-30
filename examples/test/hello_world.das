@@ -1,20 +1,13 @@
-// options log = true
+options log = true
 
-require macros
-
-[tag_function (good,bad)]
-def ttt
-    return true
-
-[export]
+[export, unsafe]
 def test
-    var hints <- [[HintLookup
-        tab <- {{
-            hash("one") => "one";
-            hash("two") => "two"
-        }}
-    ]]
-    let h1 = get_hint(hints, "one", "no hint")
-    let h2 = get_hint(hints, "three", "no hint")
-    print ( "h1 = {h1}\nh2 = {h2}\n")
+    var it <- each("123")
+    var ahead : int
+    while next(it, ahead)
+        print("val {ahead}\n")
+    var iaa = [[int 1;2;3]]
+    var it2 <- each(iaa)
+    while next(it2, ahead)
+        print("ref {ahead}\n")
     return true

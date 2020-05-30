@@ -196,10 +196,30 @@ def lock_forever ( var Tab : table<auto(keyT);auto(valT)> ) : table<keyT;valT> #
 
 // functional
 
+[unsafe]
+def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
+    static_if !typeinfo(can_copy type<TT>)
+        concept_assert(false, "requires type which can be copied")
+    static_elif typeinfo(is_ref type<TT>)
+        var pValue : TT - & ?
+        if _builtin_iterator_iterate(it, addr(pValue))
+            value = *pValue
+            return true
+        else
+            return false
+    else
+        return _builtin_iterator_iterate(it, addr(value))
+
 [generic]
 def each ( rng : range ) : iterator<int>
     var it : iterator<int>
     _builtin_make_range_iterator(it,rng)
+    return <- it
+
+[generic,unsafe_operation]
+def each ( str : string ) : iterator<int>
+    var it : iterator<int>
+    _builtin_make_string_iterator(it,str)
     return <- it
 
 [unsafe,unsafe_operation]

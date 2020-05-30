@@ -587,6 +587,7 @@ namespace das
         virtual bool next  ( Context & context, char * value ) = 0;
         virtual void close ( Context & context, char * value ) = 0;    // can't throw
         virtual void walk ( DataWalker & ) { }
+       bool isOpen = false;
     };
 
     struct PointerDimIterator : Iterator {

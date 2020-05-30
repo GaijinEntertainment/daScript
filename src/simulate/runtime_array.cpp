@@ -51,15 +51,15 @@ namespace das
     bool GoodArrayIterator::first ( Context & context, char * _value )  {
         char ** value = (char **) _value;
         array_lock(context, *array);
-        char * data    = array->data;
-        *value         = data;
-        array_end      = data + array->size * stride;
+        data = array->data;
+        *value = data;
+        array_end  = data + array->size * stride;
         return (bool) array->size;
     }
 
     bool GoodArrayIterator::next  ( Context &, char * _value )  {
         char ** value = (char **) _value;
-        char * data = *value + stride;
+        data += stride;
         *value = data;
         return data != array_end;
     }
@@ -93,9 +93,9 @@ namespace das
 
     bool FixedArrayIterator::next  ( Context & , char * _value )  {
         char ** value = (char **) _value;
-        char * dataV = *value + stride;
-        *value = dataV;
-        return dataV != fixed_array_end;
+        data += stride;
+        *value = data;
+        return data != fixed_array_end;
     }
 
     void FixedArrayIterator::close ( Context & context, char * _value )  {

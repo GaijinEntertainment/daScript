@@ -1815,6 +1815,7 @@ namespace das {
         template <typename TT>
         __forceinline bool first ( Context * __context__, TT & i ) {
             context = __context__;
+            that->isOpen = true;
             return that->first(*__context__, (char *)&i);
         }
         template <typename TT>

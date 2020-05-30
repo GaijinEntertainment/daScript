@@ -36,18 +36,19 @@ namespace das
     bool TableIterator::first ( Context & context, char * _value ) {
         char ** value = (char **)_value;
         table_lock(context, *(Table *)table);
+        data  = getData();
+        table_end = data + table->capacity * stride;
         size_t index = nextValid(0);
-        char * data    = getData();
-        *value         = data + index * stride;
-        table_end      = data + table->capacity * stride;
+        data += index * stride;
+        *value = data;
         return (bool) table->size;
     }
 
     bool TableIterator::next  ( Context &, char * _value ) {
         char ** value = (char **) _value;
-        char * data = *value;
         char * tableData = getData();
-        size_t index = nextValid((data-tableData)/stride+1);
+        size_t index = (data-tableData)/stride;
+        index = nextValid(index + 1);
         data = tableData + index * stride;
         *value = data;
         return data != table_end;

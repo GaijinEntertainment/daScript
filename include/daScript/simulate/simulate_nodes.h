@@ -2293,6 +2293,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             bool needLoop = true;
             SimNode ** __restrict tail = list + total;
             for ( int t=0; t!=totalCount; ++t ) {
+                sources[t]->isOpen = true;
                 needLoop = sources[t]->first(context, pi[t]) && needLoop;
                 if ( context.stopFlags ) goto loopend;
             }
@@ -2351,6 +2352,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources = cast<Iterator *>::to(ll);
             bool needLoop = true;
             SimNode ** __restrict tail = list + total;
+            sources->isOpen = true;
             needLoop = sources->first(context, pi) && needLoop;
             if ( context.stopFlags || !needLoop) goto loopend;
             for ( int i=0; !context.stopFlags; ++i ) {

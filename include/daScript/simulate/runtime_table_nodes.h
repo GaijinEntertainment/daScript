@@ -144,6 +144,7 @@ namespace das
         virtual char * getData () const = 0;
         const Table *   table;
         uint32_t        stride = 0;
+        char *          data;
         char *          table_end = nullptr;
     };
 

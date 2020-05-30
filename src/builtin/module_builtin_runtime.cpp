@@ -9,6 +9,7 @@
 #include "daScript/simulate/bin_serializer.h"
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_range.h"
+#include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 
 namespace das
@@ -363,22 +364,50 @@ namespace das
 
     bool builtin_iterator_first ( const Sequence & it, void * data, Context * context ) {
         if ( !it.iter ) context->throw_error("calling first on empty iterator");
+        else if ( it.iter->isOpen ) context->throw_error("calling first on already open iterator");
+        it.iter->isOpen = true;
         return it.iter->first(*context, (char *)data);
     }
 
     bool builtin_iterator_next ( const Sequence & it, void * data, Context * context ) {
         if ( !it.iter ) context->throw_error("calling next on empty iterator");
+        else if ( !it.iter->isOpen ) context->throw_error("calling next on a non-open iterator");
         return it.iter->next(*context, (char *)data);
     }
 
     void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
-        if ( it.iter ) it.iter->close(*context, (char *)&data);
-        ((Sequence&)it).iter = nullptr;
+        if ( it.iter ) {
+            it.iter->close(*context, (char *)&data);
+            ((Sequence&)it).iter = nullptr;
+        }
     }
 
     void builtin_iterator_delete ( const Sequence & it, Context * context ) {
         if ( it.iter ) it.iter->close(*context, nullptr);
         ((Sequence&)it).iter = nullptr;
+    }
+
+    bool builtin_iterator_iterate ( const Sequence & it, void * value, Context * context ) {
+        if ( !it.iter ) {
+            return false;
+        } else if ( !it.iter->isOpen) {
+            if ( !it.iter->first(*context, (char *)value) ) {
+                it.iter->close(*context, (char *)value);
+                ((Sequence&)it).iter = nullptr;
+                return false;
+            } else {
+                it.iter->isOpen = true;
+                return true;
+            }
+        } else {
+            if ( !it.iter->next(*context, (char *)value) ) {
+                it.iter->close(*context, (char *)value);
+                ((Sequence&)it).iter = nullptr;
+                return false;
+            } else {
+                return true;
+            }
+        }
     }
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
@@ -431,6 +460,12 @@ namespace das
         Sequence * seq = cast<Sequence *>::to(args[0]);
         seq->iter = (Iterator *) iter;
         return v_zero();
+    }
+
+    void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
+        char * iter = context->heap.allocate(sizeof(StringIterator));
+        new (iter) StringIterator(str);
+        result = { (Iterator *) iter };
     }
 
     struct NilIterator : Iterator {
@@ -612,6 +647,8 @@ namespace das
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_close");
         addExtern<DAS_BIND_FUN(builtin_iterator_delete)>(*this, lib, "_builtin_iterator_delete",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_delete");
+        addExtern<DAS_BIND_FUN(builtin_iterator_iterate)>(*this, lib, "_builtin_iterator_iterate",
+                                                        SideEffects::modifyArgumentAndExternal, "builtin_iterator_iterate");
         // make-iterator functions
         addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator");
@@ -619,6 +656,8 @@ namespace das
             SideEffects::modifyArgumentAndExternal, "builtin_make_fixed_array_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_range_iterator");
+        addExtern<DAS_BIND_FUN(builtin_make_string_iterator)>(*this, lib,  "_builtin_make_string_iterator",
+            SideEffects::modifyArgumentAndExternal, "builtin_make_string_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_nil_iterator");
         addExtern<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
