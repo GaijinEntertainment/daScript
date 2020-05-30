@@ -37,7 +37,7 @@ namespace das {
         WSADATA wsaData;
         return WSAStartup(MAKEWORD(2,2), &wsaData)==0;
 #else
-        return true
+        return true;
 #endif
     }
 
@@ -166,7 +166,7 @@ namespace das {
                 client_fd = 0;
             } else if ( res<0 ) {
                 res = errno;
-                if ( res!=0 ) {
+                if ( res!=EAGAIN && res!=EWOULDBLOCK ) {
                     onError("connection closed on error", res);
                     onDisconnect();
                     closesocket(client_fd);
