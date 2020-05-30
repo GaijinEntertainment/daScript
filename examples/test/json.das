@@ -30,6 +30,25 @@ let
     Token_string = typeinfo(variant_index<_string> type<Token>)
     Token_symbol = typeinfo(variant_index<_symbol> type<Token>)
 
+def JsonValue ( v : string )
+    return <- [[JsonValue value <- [[JsValue _string = v]]]]
+
+def JsonValue ( v : double )
+    return <- [[JsonValue value <- [[JsValue _number = v]]]]
+
+def JsonValue ( v : bool )
+    return <- [[JsonValue value <- [[JsValue _bool = v]]]]
+
+def JsonValue ( v : void? )
+    assert(v==null,"only null allowed")
+    return <- [[JsonValue value <- [[JsValue _null = v]]]]
+
+def JsonValue ( var v : table<string;JsonValue?> )
+    return <- [[JsonValue value <- [[JsValue _object <- v]]]]
+
+def JsonValue ( var v : array<JsonValue?> )
+    return <- [[JsonValue value <- [[JsValue _array <- v]]]]
+
 [unsafe, private]
 def lexer ( text : string )
     var stext = "{text}"
@@ -132,7 +151,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
             if empty(itv)
                 error = "unexpected eos"
                 return null
-            return  new [[JsonValue value <- [[JsValue _array <- arr]]]]
+            return new JsonValue(arr)
         elif sym == '{'
             var tab : table<string; JsonValue?>
             while !empty(itv)
@@ -159,18 +178,18 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
             if empty(itv)
                 error = "unexpected eos"
                 return null
-            return new [[JsonValue value <- [[JsValue _object <- tab]]]]
+            return new JsonValue(tab)
         else
             error = "unexpected symbol `{to_char(sym)}` aka ASCII {sym}"
             return null
     elif ahead is _string
-        return new [[JsonValue value <- [[JsValue _string = ahead as _string]]]]
+        return new JsonValue(ahead as _string)
     elif ahead is _number
-        return new [[JsonValue value <- [[JsValue _number = ahead as _number]]]]
+        return new JsonValue(ahead as _number)
     elif ahead is _bool
-        return new [[JsonValue value <- [[JsValue _bool = ahead as _bool]]]]
+        return new JsonValue(ahead as _bool)
     elif ahead is _null
-        return new [[JsonValue value <- [[JsValue _null = null]]]]
+        return new JsonValue(null)
     else
         panic("internal parsing error near {ahead}")
         return null
