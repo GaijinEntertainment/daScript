@@ -222,7 +222,17 @@ namespace das {
 
     class CondFolding : public PassVisitor {
     protected:
+        Function * func = nullptr;
+        virtual void preVisit ( Function * f ) override {
+            Visitor::preVisit(f);
+            func = f;
+        }
+        virtual FunctionPtr visit ( Function * f ) override {
+            func = nullptr;
+            return Visitor::visit(f);
+        }
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
+            // if ( func && func->generator ) return Visitor::visit(expr);
             // if (cond) return x; else return y; => (cond ? x : y)
             if (expr->if_false) {
                 smart_ptr<ExprReturn> lr, rr;
@@ -256,6 +266,7 @@ namespace das {
         }
         // ExprBlock
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            if ( func && func->generator ) return Visitor::visit(block);
             /*
             if ( cond )
                 ...
