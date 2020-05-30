@@ -166,7 +166,7 @@ namespace das {
                 client_fd = 0;
             } else if ( res<0 ) {
                 res = errno;
-                if ( res!=EAGAIN && res!=EWOULDBLOCK ) {
+                if ( res!=0 && res!=EAGAIN && res!=EWOULDBLOCK ) {
                     onError("connection closed on error", res);
                     onDisconnect();
                     closesocket(client_fd);
