@@ -13,7 +13,7 @@ namespace das {
             if ( expr->local || expr->argument || expr->block ) {
                 if ( expr->argument || (scope.find(var) != scope.end()) ) {
                     auto varT = var->type;
-                    if ( !varT || varT->isAuto() || varT->isAlias() ) {
+                    if ( !varT || varT->isAutoOrAlias() ) {
                         fail = true;
                         return;
                     }
@@ -144,7 +144,7 @@ namespace das {
                 }
             } else if ( decl->baseType==Type::tArray ) {
                 if ( auto arrayType = decl->firstType ) {
-                    if ( arrayType->isAlias() || arrayType->isAuto() ) {
+                    if ( arrayType->isAutoOrAlias() ) {
                         error("array type is not fully resolved, " + arrayType->describe(), "", "",
                               arrayType->at,CompilationError::invalid_array_type);
                     }
@@ -164,7 +164,7 @@ namespace das {
                 }
             } else if ( decl->baseType==Type::tTable ) {
                 if ( auto keyType = decl->firstType ) {
-                    if ( keyType->isAlias() || keyType->isAuto() ) {
+                    if ( keyType->isAutoOrAlias() ) {
                         error("table key is not fully resolved, " + keyType->describe(), "", "",
                               keyType->at,CompilationError::invalid_array_type);
                     }
@@ -179,7 +179,7 @@ namespace das {
                     verifyType(keyType);
                 }
                 if ( auto valueType = decl->secondType ) {
-                    if ( valueType->isAlias() || valueType->isAuto() ) {
+                    if ( valueType->isAutoOrAlias() ) {
                         error("table value is not fully resolved, " + valueType->describe(), "", "",
                               valueType->at,CompilationError::invalid_array_type);
                     }
@@ -254,32 +254,7 @@ namespace das {
             return nullptr;
         }
 
-        // type has all of it subtypes resolved
-        bool isFullyResolvedType(const TypeDeclPtr & ptr, das_set<const TypeDecl *> & all ) {
-            if (!ptr) return false;
-            if ( ptr->baseType==Type::tStructure || ptr->baseType==Type::tTuple || ptr->baseType==Type::tVariant ) {
-                auto thisType = ptr.get();
-                if ( all.find(thisType)!=all.end() ) return true;
-                all.insert(thisType);
-            }
-            if (ptr->baseType == Type::tStructure) {
-                for (auto & fld : ptr->structType->fields) {
-                    if (!isFullyResolvedType(fld.type,all) ) return false;
-                }
-            }
-            if (ptr->firstType && !isFullyResolvedType(ptr->firstType,all)) return false;
-            if (ptr->secondType && !isFullyResolvedType(ptr->secondType,all)) return false;
-            for (auto & argT : ptr->argTypes) {
-                if (argT && !isFullyResolvedType(argT,all)) return false;
-            }
-            return true;
-        }
-
-        bool isFullyResolvedType(const TypeDeclPtr & ptr) {
-            das_set<const TypeDecl *> all;
-            return isFullyResolvedType(ptr, all);
-        }
-
+        // WARNING: this is really really slow, use faster tests when u can isAutoOrAlias for one
         // type chain is fully resolved, and not aliased \ auto
         bool isFullySealedType(const TypeDeclPtr & ptr, das_set<const TypeDecl *> & all ) {
             if (!ptr) return false;
@@ -1230,7 +1205,7 @@ namespace das {
             }
             if ( decl.parentType ) {
                 auto pf = st->parent->findField(decl.name);
-                if ( !pf->type->isAuto() && !pf->type->isAlias() ) {
+                if ( !pf->type->isAutoOrAlias() ) {
                     decl.type = make_smart<TypeDecl>(*pf->type);
                     decl.parentType = false;
                     reportAstChanged();
@@ -1300,7 +1275,7 @@ namespace das {
             // TODO: verify. correct test is in fact the one bellow
             //  if ( isFullySealedType(decl.type) ) {
             // but the auto \ alias test may be sufficient
-            if ( !decl.type->isAuto() && !decl.type->isAlias() ) {
+            if ( !decl.type->isAutoOrAlias() ) {
                 int fieldAlignemnt = decl.type->getAlignOf();
                 int fa = fieldAlignemnt - 1;
                 if ( cppLayout ) {
@@ -1938,7 +1913,9 @@ namespace das {
                 auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
                 auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
                 if ( auto bT = block->makeBlockType() ) {
-                    if ( !isFullySealedType(bT) ) {
+                    // TODO: verify
+                    // if ( !isFullySealedType(bT) ) {
+                    if ( bT->isAutoOrAlias() ) {
                         error("can't infer generator block type",  "", "",
                             expr->at, CompilationError::invalid_block);
                     } else if ( !bT->firstType->isSimpleType(Type::tBool) ) {
@@ -2027,7 +2004,9 @@ namespace das {
         ExpressionPtr convertBlockToLambda ( ExprMakeBlock * expr ) {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
             if ( auto bT = block->makeBlockType() ) {
-                if ( !isFullySealedType(bT) ) {
+                // TODO: verify
+                // if ( !isFullySealedType(bT) ) {
+                if ( bT->isAutoOrAlias() ) {
                     error("can't infer lambda block type",  "", "",
                         expr->at, CompilationError::invalid_block);
                 } else {
@@ -2087,7 +2066,9 @@ namespace das {
             expr->type = block->makeBlockType();
             if ( expr->isLambda ) {
                 expr->type->baseType = Type::tLambda;
-                if ( isFullySealedType(expr->type) ) {
+                // TODO: verify
+                // if ( isFullySealedType(expr->type) ) {
+                if ( !expr->type->isAutoOrAlias() ) {
                     if ( auto btl = convertBlockToLambda(expr) ) {
                         return btl;
                     }
@@ -2129,7 +2110,7 @@ namespace das {
             // infer
             expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
             auto blockT = expr->arguments[0]->type;
-            if ( blockT->isAuto() || blockT->isAlias() ) {
+            if ( blockT->isAutoOrAlias() ) {
                 error("invoke argument not fully infered " + blockT->describe(),  "", "",
                     expr->at, CompilationError::invalid_argument_type);
                 return Visitor::visit(expr);
@@ -2270,8 +2251,8 @@ namespace das {
             if ( !expr->subexpr->type ) {
                 return Visitor::visit(expr);
             }
-            // verify
-            if ( !isFullyResolvedType(expr->typeexpr) ) {
+            // TODO: verify
+            if ( expr->typeexpr->isAutoOrAlias() ) {
                 error("is " + (expr->typeexpr ? expr->typeexpr->describe() : "...") + " can't be infered", "", "",
                       expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
@@ -2293,7 +2274,9 @@ namespace das {
                       expr->at, CompilationError::typeinfo_auto);
                 return Visitor::visit(expr);
             }
-            if ( !isFullySealedType(expr->typeexpr) ) {
+            // TODO: verify, is this even necessary now that we have tests above?
+            // if ( !isFullySealedType(expr->typeexpr) ) {
+            if ( expr->typeexpr->isAutoOrAlias() ) {
                 error("is " + (expr->typeexpr ? expr->typeexpr->describe() : "...") + " can't be fully infered", "", "",
                       expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
@@ -2319,7 +2302,7 @@ namespace das {
                 expr->typeexpr->ref = false;
             }
             // verify
-            if ( !isFullyResolvedType(expr->typeexpr) ) {
+            if ( !expr->typeexpr  ) {
                 error("typeinfo(" + (expr->typeexpr ? expr->typeexpr->describe() : "...") + ") can't be infered",  "", "",
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
@@ -2341,7 +2324,9 @@ namespace das {
                       expr->at, CompilationError::typeinfo_auto);
                 return Visitor::visit(expr);
             }
-            if ( !isFullySealedType(expr->typeexpr) ) {
+            // TODO: verify. is this even necessary with tests above?
+            // if ( !isFullySealedType(expr->typeexpr) ) {
+            if ( expr->typeexpr->isAutoOrAlias() ) {
                 error("typeinfo(" + (expr->typeexpr ? expr->typeexpr->describe() : "...") + ") can't be fully infered",  "", "",
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
@@ -2605,6 +2590,7 @@ namespace das {
                 } else if ( expr->trait=="offsetof" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         auto decl = expr->typeexpr->structType->findField(expr->subtrait);
+                        // NOTE: we do need to check if its fully sealed here
                         if ( isFullySealedType(expr->typeexpr) ) {
                             reportAstChanged();
                             return make_smart<ExprConstInt>(expr->at, decl->offset);
@@ -4142,7 +4128,7 @@ namespace das {
                     if (!expr->subexpr->type) {
                         error("subexpresion type is not resolved yet", "", "", expr->at);
                         return false;
-                    } else if (expr->subexpr->type->isAuto() || expr->subexpr->type->isAlias()) {
+                    } else if (expr->subexpr->type->isAutoOrAlias()) {
                         error("subexpresion type is not fully resolved yet", "", "", expr->at);
                         return true;
                     }
@@ -4624,7 +4610,7 @@ namespace das {
             if ( !var->type->isLocal() && !var->type->ref )
                 error("can't have local variable of type " + var->type->describe(), "", "",
                       var->at, CompilationError::invalid_variable_type);
-            if ( !var->type->isAuto() && !var->type->isAlias() ){
+            if ( !var->type->isAutoOrAlias() ){
                 if ( var->init && var->init->rtti_isCast() ) {
                     auto castExpr = static_pointer_cast<ExprCast>(var->init);
                     if ( castExpr->castType->isAuto() ) {
@@ -4704,7 +4690,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
             if ( expr->inScope ) {
                 for ( auto & var : expr->variables ) {
-                    if ( var->type->isExprType() || var->type->isAuto() || var->type->isAlias() ) {
+                    if ( var->type->isExprType() || var->type->isAutoOrAlias() ) {
                         error("type not ready yet", "", "", var->at);
                         return Visitor::visit(expr);
                     }
@@ -4728,7 +4714,9 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 for ( auto & var : expr->variables ) {
-                    if ( !isFullySealedType(var->type) ) {
+                    // TODO: verify
+                    // if ( !isFullySealedType(var->type) ) {
+                    if ( var->type->isAutoOrAlias() ) {
                         error("type not ready yet", "", "", var->at);
                         return Visitor::visit(expr);
                     }
@@ -4887,7 +4875,7 @@ namespace das {
                 // if its an auto or an alias
                 // we only allow it, if its a block or lambda
                 if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda ) {
-                    if ( ar->type->isAlias() || ar->type->isAuto() ) {
+                    if ( ar->type->isAutoOrAlias() ) {
                         return nullptr;
                     }
                 }
@@ -4971,7 +4959,7 @@ namespace das {
                             if ( arg->type->isAuto() ) {
                                 if ( arg->init ) {
                                     arg->init = arg->init->visit(*this);
-                                    if (arg->init->type && !arg->init->type->isAlias() && !arg->init->type->isAuto()) {
+                                    if (arg->init->type && !arg->init->type->isAutoOrAlias()) {
                                         arg->type = make_smart<TypeDecl>(*arg->init->type);
                                         continue;
                                     }
@@ -5484,7 +5472,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
             for ( auto & val : expr->values ) {
-                if ( !val->type || val->type->isAuto() || val->type->isAlias() ) {
+                if ( !val->type || val->type->isAutoOrAlias() ) {
                     error("not fully defined tuple element type", "", "",
                         expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
@@ -5578,7 +5566,7 @@ namespace das {
             }
             if ( !expr->recordType ) {
                 if ( index==0 ) {
-                    if ( init->type && !init->type->isAuto() && !init->type->isAlias() ) {
+                    if ( init->type && !init->type->isAutoOrAlias() ) {
                         // blah[] vs blah
                         TypeDeclPtr mkt;
                         if ( expr->makeType->dim.size() && !init->type->dim.size() ) {

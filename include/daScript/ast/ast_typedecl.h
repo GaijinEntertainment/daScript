@@ -115,6 +115,7 @@ namespace das {
         bool isAlias() const;
         void collectAliasList(vector<string> & aliases) const;
         bool isAuto() const;
+        bool isAutoOrAlias() const;
         bool isVectorType() const;
         bool isBitfield() const;
         bool isLocal() const;

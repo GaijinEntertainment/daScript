@@ -1222,6 +1222,47 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isAutoOrAlias() const {
+        // auto is auto.... or auto....?
+        // also dim[] is aito
+        for (auto di : dim) {
+            if (di == TypeDecl::dimAuto) {
+                return true;
+            }
+        }
+        if (baseType == Type::autoinfer) {
+            return true;
+        } if (baseType == Type::alias) {
+            return true;
+        } else  if (baseType == Type::tPointer) {
+            if (firstType)
+                return firstType->isAutoOrAlias();
+        } else  if (baseType == Type::tIterator) {
+            if (firstType)
+                return firstType->isAutoOrAlias();
+        } else if (baseType == Type::tArray) {
+            if (firstType)
+                return firstType->isAutoOrAlias();
+        } else if (baseType == Type::tTable) {
+            bool any = false;
+            if (firstType)
+                any |= firstType->isAutoOrAlias();
+            if (secondType)
+                any |= secondType->isAutoOrAlias();
+            return any;
+        } else if (baseType == Type::tBlock || baseType == Type::tFunction ||
+            baseType == Type::tLambda || baseType == Type::tTuple ||
+            baseType == Type::tVariant) {
+            bool any = false;
+            if (firstType)
+                any |= firstType->isAutoOrAlias();
+            for (auto& arg : argTypes)
+                any |= arg->isAutoOrAlias();
+            return any;
+        }
+        return false;
+    }
+
     bool TypeDecl::isFoldable() const {
         if ( dim.size() || ref )
             return false;
