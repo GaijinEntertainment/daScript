@@ -4555,7 +4555,8 @@ namespace das {
             Visitor::preVisit(expr);
             DAS_ASSERT(!scopes.empty());
             auto scope = scopes.back();
-            expr->visibility = expr->at;
+            expr->visibility.column = expr->atInit.last_column;
+            expr->visibility.line = expr->atInit.last_line;
             expr->visibility.last_column = scope->at.last_column;
             expr->visibility.last_line = scope->at.last_line;
         }

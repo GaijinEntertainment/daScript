@@ -384,12 +384,12 @@ namespace das
     }
 
     char * builtin_string_escape ( const char *str, Context * context ) {
-        // TODO: optimize
+        if ( !str ) return nullptr;
         return context->stringHeap.allocateString(escapeString(str));
     }
 
     char * builtin_string_unescape ( const char *str, Context * context ) {
-        // TODO: optimize
+        if ( !str ) return nullptr;
         bool err = false;
         auto estr = unescapeString(str, &err);
         if ( err ) context->throw_error("invalid escape sequence");
@@ -466,5 +466,7 @@ namespace das
         addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format", SideEffects::none, "format<double>");
         // queries
         addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha", SideEffects::none, "is_alpha");
+        addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space", SideEffects::none, "is_white_space");
+        addExtern<DAS_BIND_FUN(is_number)> (*this, lib, "is_number", SideEffects::none, "is_number");
     }
 }

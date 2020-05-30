@@ -729,6 +729,7 @@ namespace das
         virtual bool rtti_isLet() const override { return true; }
         vector<VariablePtr>     variables;
         LineInfo                visibility;
+        LineInfo                atInit;
         bool                    inScope = false;
     };
 

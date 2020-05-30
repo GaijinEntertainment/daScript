@@ -200,7 +200,7 @@ def lock_forever ( var Tab : table<auto(keyT);auto(valT)> ) : table<keyT;valT> #
 def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
     static_if !typeinfo(can_copy type<TT>)
         concept_assert(false, "requires type which can be copied")
-    static_elif typeinfo(is_ref type<TT>)
+    static_elif typeinfo(is_ref_value type<TT>)
         var pValue : TT - & ?
         if _builtin_iterator_iterate(it, addr(pValue))
             value = *pValue

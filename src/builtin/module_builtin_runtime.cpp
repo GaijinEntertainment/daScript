@@ -649,6 +649,8 @@ namespace das
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_delete");
         addExtern<DAS_BIND_FUN(builtin_iterator_iterate)>(*this, lib, "_builtin_iterator_iterate",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_iterate");
+        addExtern<DAS_BIND_FUN(builtin_iterator_empty)>(*this, lib, "empty",
+                                                        SideEffects::modifyArgumentAndExternal, "_builtin_iterator_empty");
         // make-iterator functions
         addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator");

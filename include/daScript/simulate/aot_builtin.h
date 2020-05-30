@@ -38,6 +38,7 @@ namespace das {
     void builtin_iterator_close ( const Sequence & it, void * data, Context * context );
     bool builtin_iterator_iterate ( const Sequence & it, void * data, Context * context );
     void builtin_iterator_delete ( const Sequence & it, Context * context );
+    __forceinline bool builtin_iterator_empty ( const Sequence & seq ) { return seq.iter==nullptr; }
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context );
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context );
