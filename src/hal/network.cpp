@@ -22,6 +22,10 @@
 
 #define closesocket close
 
+#ifdef __APPLE__
+#include <sys/errno.h>
+#endif
+
 #endif
 
 namespace das {
