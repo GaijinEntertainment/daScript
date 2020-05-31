@@ -363,7 +363,11 @@ int main() {
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
+#ifdef _MSC_VER
     #define    TEST_PATH "../../"
+#else
+    #define    TEST_PATH "../"
+#endif
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);

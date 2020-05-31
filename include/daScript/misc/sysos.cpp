@@ -20,6 +20,7 @@
     }
 #elif defined(__APPLE__) /* elif of: #elif defined(__linux__) */
     #include <mach-o/dyld.h>
+    #include <limits.h>
     namespace das {
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
             uint32_t pathNameSize = 0;
@@ -43,8 +44,8 @@
 
 namespace das {
     string getExecutableFileName ( void ) {
-        char buffer[_MAX_PATH];
-        return getExecutablePathName(buffer,_MAX_PATH) ? buffer : "";
+        char buffer[1024];
+        return getExecutablePathName(buffer,1024) ? buffer : "";
     }
 
     string get_prefix ( const string & req ) {
@@ -56,12 +57,25 @@ namespace das {
         }
     }
 
+    string get_suffix ( const string & req ) {
+        auto np = req.find_last_of("\\/");
+        if ( np != string::npos ) {
+            return req.substr(np+1);
+        } else {
+            return req;
+        }
+    }
+
     string getDasLibPath ( void ) {
         string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
         auto np = efp.find_last_of("\\/");
         if ( np != string::npos ) {
             auto ep = get_prefix(efp);  // remove file name
-            ep = get_prefix(ep);        // remove debug
+            auto suffix = get_suffix(ep);
+            if ( suffix != "bin" ) {
+                ep = get_prefix(ep);    // remove debug
+            }
+            DAS_ASSERT(get_suffix(ep)=="bin");
             ep = get_prefix(ep);        // remove bin
             return ep + "/daslib";
         } else {
