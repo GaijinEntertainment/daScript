@@ -363,7 +363,7 @@ int main() {
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || (defined(__APPLE__) && defined(__clang__))
     #define    TEST_PATH "../../"
 #else
     #define    TEST_PATH "../"
