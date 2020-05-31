@@ -194,7 +194,7 @@ namespace das {
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
-                if ( type->structType->module->name.empty() || !type->structType->module->builtIn ) {
+                if ( type->structType->module->name.empty() ) {
                     stream << "struct " << type->structType->name;
                 } else {
                     stream << "struct " << aotModuleName(type->structType->module) << "::" << type->structType->name;
@@ -925,6 +925,7 @@ namespace das {
             if ( that->cppLayout ) {
                 ss << "\n#if 0 // skipping structure " << that->name << " declaration due to CPP layout";
             }
+            ss << "namespace " << aotModuleName(that->module) << " {\n";
             ss << "\nstruct " << that->name;
             if (that->cppLayout && that->parent) {
                 ss << " : " << that->parent->name;
@@ -948,7 +949,7 @@ namespace das {
             Visitor::visitStructureField(var, decl, last);
         }
         virtual StructurePtr visit ( Structure * that ) override {
-            ss << "};\n";
+            ss << "};\n";   // structure
             if ( that->fields.size() ) {
                 ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
                 for ( auto & tf : that->fields ) {
@@ -956,6 +957,7 @@ namespace das {
                         << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
                 }
             }
+            ss << "}\n";    // namespace
             if ( that->cppLayout ) {
                 ss << "#endif // end of skipping structure " << that->name << " declaration due to CPP layout\n";
             }
@@ -2236,7 +2238,9 @@ namespace das {
                        << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
                        << "," << enew->type->dim.back();
                     if ( enew->initializer ) {
-                        ss << ">::make_and_init(__context__,[&](){ return ";
+                        ss  << ">::make_and_init(__context__,[&]()"
+                            // << " -> " << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                            << " { return ";
                         CallFunc_preVisit(enew);
                     } else {
                         ss << ">::make(__context__";
@@ -2261,7 +2265,9 @@ namespace das {
                     }
                     ss << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
                     if ( enew->initializer ) {
-                        ss << ">::make_and_init(__context__,[&](){ return ";
+                        ss  << ">::make_and_init(__context__,[&]()"
+                            // << " -> " << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                            << " { return ";
                         CallFunc_preVisit(enew);
                     } else {
                         ss << ">::make(__context__";
@@ -2643,7 +2649,7 @@ namespace das {
     // call
         bool isPolicyBasedCall ( ExprCall * call ) const {
             auto bif = static_cast<BuiltInFunction *>(call->func);
-            if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
+            if ( !call->arguments.size() && call->func->result->baseType==Type::tHandle ) {
                 // c-tor?
                 return false;
             } else if ( bif->policyBased ) {
@@ -2742,7 +2748,7 @@ namespace das {
                     ss << "((" << describeCppType(call->func->result) << ")(";  // c-cast const char * etc string casts to char * or char * const
                 }
                 auto bif = static_cast<BuiltInFunction *>(call->func);
-                if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
+                if ( !call->arguments.size() && call->func->result->baseType==Type::tHandle ) {
                     // c-tor?
                     ss << "/*c-tor*/ ";
                 } else if ( bif->policyBased ) {
@@ -2767,7 +2773,7 @@ namespace das {
                 }
             } else {
                 if ( isHybridCall(call->func) ) {
-                    ss << "das_invoke_function<" << describeCppType(call->type) << ">::invoke";
+                    ss << "das_invoke_function<" << describeCppType(call->func->result) << ">::invoke";
                     if ( call->func->result->isRefType() && !call->func->result->ref ) {
                         ss << "_cmres";
                     }
@@ -2817,7 +2823,7 @@ namespace das {
                     ss << "das_arg<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
                 }
             }
-            if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
+            if ( isPolicyBasedCall(call) && policyArgNeedCast(call->func->result, argType) ) {
                 ss << "cast<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::from(";
             }
         }
@@ -2827,7 +2833,7 @@ namespace das {
             });
             DAS_ASSERT(it != call->arguments.end());
             auto argType = (*it)->type;
-            if ( isPolicyBasedCall(call) && policyArgNeedCast(call->type, argType) ) {
+            if ( isPolicyBasedCall(call) && policyArgNeedCast(call->func->result, argType) ) {
                 ss << ")";
             }
             if ( call->func->interopFn ) {
@@ -2845,7 +2851,7 @@ namespace das {
             if ( call->func->interopFn ) {
                 ss << ")";
             }
-            if ( !call->arguments.size() && call->type->baseType==Type::tHandle ) {
+            if ( !call->arguments.size() && call->func->result->baseType==Type::tHandle ) {
                 // c-tor?
                 ss << "/*end-c-tor*/";
             } else if ( isPolicyBasedCall(call) ) {
@@ -3086,7 +3092,7 @@ namespace das {
                     aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
                 }
             }
-            aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
+            // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
             for ( auto & its : pm->structures ) {
                 auto ps = its.second.get();
                 if ( utm.useStructs.find(ps)!=utm.useStructs.end() ) {
@@ -3095,7 +3101,7 @@ namespace das {
                     aotVisitor.ss << "// unused structure " << ps->name << "\n";
                 }
             }
-            aotVisitor.ss << "\n}; // " << pm->name << "\n";
+            // aotVisitor.ss << "\n}; // " << pm->name << "\n";
         }
         // now to the main body
         visit(aotVisitor);

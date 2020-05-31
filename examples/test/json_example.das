@@ -2,6 +2,7 @@
 
 require fio
 require json
+require json_enh
 
 [export]
 def test
@@ -16,11 +17,9 @@ def test
                     print("failed to parse, {error}\n")
                 else
                     // macro test
-                    /*
                     if json is _object
                         print("object\n")
                         (json as _object)["foo"] = new JsonValue("bar")
-                    */
                     print("{write_json(json)}\n")
 
     return true
