@@ -59,6 +59,7 @@ namespace das
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
         string result;
+        result.reserve(input.size());
         for( ; str < strEnd; ++str ) {
             if ( *str=='\\' ) {
                 ++str;
@@ -92,6 +93,7 @@ namespace das
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
         string result;
+        result.reserve(input.size());
         for( ; str < strEnd; ++str ) {
             switch ( *str ) {
                 case '\"':  result.append("\\\"");  break;
