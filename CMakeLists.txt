@@ -45,7 +45,7 @@ project(uriparser
 
 # See https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 set(URIPARSER_SO_CURRENT    1)
-set(URIPARSER_SO_REVISION  26)
+set(URIPARSER_SO_REVISION  27)
 set(URIPARSER_SO_AGE        0)
 
 include(CheckCCompilerFlag)

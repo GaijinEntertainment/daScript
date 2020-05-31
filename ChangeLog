@@ -22,7 +22,7 @@ NOTE: uriparser is looking for help with a few things:
   * Added: CMake option URIPARSER_ENABLE_INSTALL to toggle installation of
       files, defaults to "ON" (GitHub #74, #75)
       Thanks to Scott Donelan for the patch!
-  * Soname: TODO
+  * Soname: 1:26:0
 
 2019-04-28 -- 0.9.3
 
