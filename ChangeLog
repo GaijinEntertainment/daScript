@@ -14,7 +14,7 @@ NOTE: uriparser is looking for help with a few things:
       Thanks to Scott Donelan for the patch!
   * Improved: Make -DURIPARSER_BUILD_TESTS=OFF unlock compilation without
       a C++ compiler; thanks to Fabrice Fontaine for the patch! (GitHub #69)
-  * Addded: Functions to make UriUri[AW] instances independent of the original
+  * Added: Functions to make UriUri[AW] instances independent of the original
       URI string (GitHub #77 and #78)
       New functions:
         uriMakeOwner[AW]
