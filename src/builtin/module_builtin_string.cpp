@@ -376,7 +376,7 @@ namespace das
             uint32_t size = sizeof(StringHeader) + length + 1;
             char* nstr = context->stringHeap.reallocate(hstr, size, size + 1);
             if (nstr != hstr) {
-                header = (StringHeader*)hstr;
+                header = (StringHeader*)nstr;
             }
             header->length = length + 1;
             nstr += sizeof(StringHeader);

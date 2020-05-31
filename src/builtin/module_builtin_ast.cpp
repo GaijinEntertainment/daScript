@@ -1137,16 +1137,18 @@ namespace das {
         }
     };
 
-    // TODO:
-    //  optimize multiple-adapt-calls
-    Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
+    char * adapt_field ( const char * fName, char * pClass, const StructInfo * info ) {
         for ( uint32_t i=0; i!=info->count; ++i ) {
-            if ( strcmp(info->fields[i]->name,funcName)==0 ) {
-                return *(Func *)(pClass + info->fields[i]->offset);
+            if ( strcmp(info->fields[i]->name,fName)==0 ) {
+                return pClass + info->fields[i]->offset;
             }
         }
         DAS_ASSERTF(0,"mapping %s not found. not fully implemented dervied class %s", funcName, info->name);
         return 0;
+    }
+
+    Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
+        return *(Func *)adapt_field(funcName, pClass, info);
     }
 
 #define FN_PREVISIT(WHAT)  fnPreVisit##WHAT

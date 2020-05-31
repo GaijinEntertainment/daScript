@@ -106,6 +106,7 @@ src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_functional.cpp
+src/builtin/module_builtin_network.cpp
 src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
@@ -117,6 +118,8 @@ src/builtin/functional.das.inc
 src/builtin/functional.das
 src/builtin/ast.das.inc
 src/builtin/ast.das
+src/builtin/network.das.inc
+src/builtin/network.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -125,6 +128,7 @@ XXD(src/builtin/fio.das)
 XXD(src/builtin/rtti.das)
 XXD(src/builtin/ast.das)
 XXD(src/builtin/functional.das)
+XXD(src/builtin/network.das)
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
@@ -482,9 +486,12 @@ SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 add_custom_target(daScriptTestAot)
 SET(TEST_GENERATED_SRC)
-DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
+#DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
 DAS_AOT("examples/test/aot_dummy.das" TEST_GENERATED_SRC daScriptTestAot)
+#DAS_AOT("examples/test/json_enh.das" TEST_GENERATED_SRC daScriptTestAot)
+#DAS_AOT("examples/test/json_example.das" TEST_GENERATED_SRC daScriptTestAot)
 #DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC daScriptTestAot)
+#DAS_AOT("examples/test/dict_pg.das" TEST_GENERATED_SRC daScriptTestAot)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}

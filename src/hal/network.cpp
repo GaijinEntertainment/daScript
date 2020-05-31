@@ -67,11 +67,11 @@ namespace das {
     Server::Server() {
     }
 
-    void Server::init ( int port ) {
+    bool Server::init ( int port ) {
         server_fd = socket(AF_INET, SOCK_STREAM, 0);
         if ( !server_fd ) {
             onError("can't socket", errno);
-            return;
+            return false;
         }
         struct sockaddr_in address;
         address.sin_family = AF_INET;
@@ -80,23 +80,24 @@ namespace das {
     	if ( ::bind(server_fd, (struct sockaddr *)&address,sizeof(address))<0 ) {
             onError("can't bind", errno);
             closesocket(server_fd);
-            return;
+            return false;
 	    }
     	if ( listen(server_fd, 3) < 0) {
             onError("can't listen", errno);
             closesocket(server_fd);
-            return;
+            return false;
         }
         if ( !set_socket_blocking(server_fd,false) ) {
             onError("can't set nbio", errno);
             closesocket(server_fd);
-            return;
+            return false;
         }
+        return true;
     }
 
     void Server::onData(char * buf, int size) {
-        printf("%s\n", buf);
-        send_msg(buf, size);
+        // printf("%s\n", buf);
+        // send_msg(buf, size);
     }
 
     void Server::onConnect() {
@@ -106,11 +107,11 @@ namespace das {
     }
 
     void Server::onError(const char * msg, int code) {
-        printf("server error %i - %s\n", code, msg);
+        // printf("server error %i - %s\n", code, msg);
     }
 
     void Server::onLog(const char * msg) {
-        printf("server log %s\n", msg);
+        // printf("server log %s\n", msg);
     }
 
     bool Server::send_msg ( char * data, int size ) {

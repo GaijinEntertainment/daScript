@@ -1012,6 +1012,10 @@ namespace das
     string getModuleName ( const string & nameWithDots );
     string getModuleFileName ( const string & nameWithDots );
 
+    // access function from class adapter
+    char * adapt_field ( const char * fName, char * pClass, const StructInfo * info );
+    Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
+
     // this one works for single module only
     ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, CodeOfPolicies policies = CodeOfPolicies() );
 

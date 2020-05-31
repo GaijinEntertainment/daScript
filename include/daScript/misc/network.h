@@ -11,11 +11,11 @@ namespace das {
         typedef int socket_t;
     #endif
 
-    class Server {
+    class Server : public ptr_ref_count {
     public:
         Server ();
         virtual ~Server();
-        void init( int port = 9000 );
+        bool init( int port = 9000 );
         bool is_open() const;
         bool is_connected() const;
         void tick();
