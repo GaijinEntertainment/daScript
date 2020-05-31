@@ -194,6 +194,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
         panic("internal parsing error near {ahead}")
         return null
 
+[export]
 def read_json ( text : string; var error : string& ) : JsonValue?
     return parse_value(lexer(text),error)
 
@@ -203,7 +204,7 @@ def write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : in
         write(writer, "null")
     elif jsv.value is _string
         write(writer, "\"")
-        write(writer, escape(jsv.value as _string))
+        write_escape_string(writer, jsv.value as _string)
         write(writer, "\"")
     elif jsv.value is _number
         write(writer, jsv.value as _number)
@@ -230,7 +231,7 @@ def write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : in
                 write(writer,",\n")
             write_chars(writer,'\t',depth+1)
             write(writer, "\"")
-            write(writer, escape(elemK))
+            write_escape_string(writer, elemK)
             write(writer, "\" : ")
             write_value(writer, elemV, depth+1)
         write(writer, "\n")

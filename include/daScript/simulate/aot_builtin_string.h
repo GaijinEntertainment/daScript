@@ -45,6 +45,7 @@ namespace das {
     char * to_string_char(int ch, Context * context);
     void write_string_char(StringBuilderWriter & writer, int32_t ch);
     void write_string_chars(StringBuilderWriter & writer, int32_t ch, int32_t count);
+    void write_escape_string ( StringBuilderWriter & writer, char * str );
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context );
     char * builtin_string_clone ( const char *str, Context * context );
     __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }

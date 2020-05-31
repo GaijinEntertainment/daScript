@@ -284,6 +284,12 @@ namespace das
         }
     }
 
+    void write_escape_string ( StringBuilderWriter & writer, char * str ) {
+        if ( !str ) return;
+        auto estr = escapeString(str);
+        writer.writeStr(estr.c_str(), estr.length());
+    }
+
     char * to_string_char ( int ch, Context * context ) {
         auto st = context->stringHeap.allocateString(nullptr, 1);
         *st = char(ch);
@@ -415,6 +421,7 @@ namespace das
             SideEffects::modifyExternal, "builtin_write_string");
         addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::modifyExternal, "write_string_char");
         addExtern<DAS_BIND_FUN(write_string_chars)>(*this, lib, "write_chars", SideEffects::modifyExternal, "write_string_chars");
+        addExtern<DAS_BIND_FUN(write_escape_string)>(*this, lib, "write_escape_string", SideEffects::modifyExternal, "write_escape_string");
         addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
         addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
