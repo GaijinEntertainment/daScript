@@ -11,11 +11,11 @@ namespace das {
             return int(data.size());
         }
     protected:
-        void append(const char * s, int l) {
+        __forceinline void append(const char * s, int l) {
             data.reserve(data.size() + l);
             data.insert(data.end(), s, s + l);
         }
-        char * allocate (int l) {
+        __forceinline char * allocate (int l) {
             data.resize(data.size() + l);
             return data.data() + data.size() - l;
         }
@@ -46,6 +46,13 @@ namespace das {
         StringWriter & writeStr(const char * st, size_t len) {
             this->append(st, int(len));
             this->output();
+            return *this;
+        }
+        StringWriter & writeChars(char ch, size_t len) {
+            if ( auto at = this->allocate(len) ) {
+                memset(at, ch, len);
+                this->output();
+            }
             return *this;
         }
         StringWriter & write(const char * stst) {
@@ -81,7 +88,7 @@ namespace das {
 
     class TextPrinter : public TextWriter {
     public:
-        virtual void output() {
+        virtual void output() override {
             int newPos = tellp();
             if (newPos != pos) {
                 string st(data.data() + pos, newPos - pos);
