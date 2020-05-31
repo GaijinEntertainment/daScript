@@ -55,7 +55,9 @@ namespace das {
         vector<FunctionPtr>     extraFunctions;
     protected:
         string generateNewLambdaName(const LineInfo & at) {
-            return "_lambda_" + to_string(at.line) + "_" + to_string(at.column)
+            string mod = ctx.thisProgram->thisModule->name;
+            if ( mod.empty() ) mod = "thismodule";
+            return "_lambda_" + mod + "_" + to_string(at.line) + "_" + to_string(at.column)
                 + "_" + to_string(program->newLambdaIndex++);
         }
         void pushVarStack() {

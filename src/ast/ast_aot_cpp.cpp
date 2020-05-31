@@ -341,6 +341,46 @@ namespace das {
         }
     };
 
+    class UseTypeMarker : public Visitor {
+    public:
+        das_set<Structure *>    useStructs;
+        das_set<Enumeration *>  useEnums;
+    protected:
+        virtual void preVisit ( TypeDecl * type ) override {
+            Visitor::preVisit(type);
+        }
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            mark(expr->type.get());
+        }
+        /*
+        virtual void preVisit ( ExprLet * expr ) override {
+
+        }
+        */
+        void mark ( TypeDecl * decl ) {
+            if ( !decl ) return;
+            if ( decl->baseType==Type::tStructure ) {
+                DAS_ASSERT(decl->structType);
+                if ( useStructs.find(decl->structType)==useStructs.end() ) {
+                    useStructs.insert(decl->structType);
+                    for ( auto & fld : decl->structType->fields ) {
+                        mark ( fld.type.get() );
+                    }
+                }
+            } else if ( decl->baseType==Type::tEnumeration ) {
+                DAS_ASSERT(decl->enumType);
+                useEnums.insert(decl->enumType);
+            } else {
+                if ( decl->firstType ) mark ( decl->firstType.get() );
+                if ( decl->secondType ) mark ( decl->secondType.get() );
+                for ( auto & arg : decl->argTypes ) {
+                    mark(arg.get());
+                }
+            }
+        }
+    };
+
     class AotDebugInfoHelper : public DebugInfoHelper {
     public:
         void writeDim ( TextWriter & ss, TypeInfo * info, const string & suffix = ""  ) const {
@@ -3032,16 +3072,28 @@ namespace das {
         visit(collector);
         CppAot aotVisitor(this,collector);
         // pre visit all enumerations and structures for each dependency
+        UseTypeMarker utm;
+        visit(utm);
         for ( auto & pm : library.modules ) {
             if ( pm == thisModule.get() ) {
                 continue;
             }
             for ( auto & ite : pm->enumerations ) {
-                visitEnumeration(aotVisitor, ite.second.get());
+                auto pe = ite.second.get();
+                if ( utm.useEnums.find(pe)!=utm.useEnums.end() ) {
+                    visitEnumeration(aotVisitor, pe);
+                } else {
+                    aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
+                }
             }
             aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
             for ( auto & its : pm->structures ) {
-                visitStructure(aotVisitor, its.second.get());
+                auto ps = its.second.get();
+                if ( utm.useStructs.find(ps)!=utm.useStructs.end() ) {
+                    visitStructure(aotVisitor, ps);
+                } else {
+                    aotVisitor.ss << "// unused structure " << ps->name << "\n";
+                }
             }
             aotVisitor.ss << "\n}; // " << pm->name << "\n";
         }
