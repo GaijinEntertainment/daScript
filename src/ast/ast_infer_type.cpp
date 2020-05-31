@@ -3415,6 +3415,26 @@ namespace das {
     // ExprAsVariant
         virtual ExpressionPtr visit(ExprAsVariant * expr) override {
             if (!expr->value->type) return Visitor::visit(expr);
+            // implement variant macros
+            ExpressionPtr substitute;
+            auto thisModule = ctx.thisProgram->thisModule.get();
+            auto modMacro = [&](Module * mod) -> bool {
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
+                    for ( const auto & pm : mod->variantMacros ) {
+                        if ( (substitute = pm->visitAs(ctx.thisProgram, thisModule, expr)) ) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+            Module::foreach(modMacro);
+            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( substitute ) {
+                reportAstChanged();
+                return substitute;
+            }
+            // regular infer
             auto valT = expr->value->type;
             if ( !valT->isGoodVariantType() ) {
                 error(" as " + expr->name + " only allowed for variants", "", "",
@@ -3438,6 +3458,26 @@ namespace das {
     // ExprSafeAsVariant
         virtual ExpressionPtr visit(ExprSafeAsVariant * expr) override {
             if (!expr->value->type) return Visitor::visit(expr);
+            // implement variant macros
+            ExpressionPtr substitute;
+            auto thisModule = ctx.thisProgram->thisModule.get();
+            auto modMacro = [&](Module * mod) -> bool {
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
+                    for ( const auto & pm : mod->variantMacros ) {
+                        if ( (substitute = pm->visitSafeAs(ctx.thisProgram, thisModule, expr)) ) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+            Module::foreach(modMacro);
+            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( substitute ) {
+                reportAstChanged();
+                return substitute;
+            }
+            // regular infer
             if ( !expr->value->type->isPointer() && func && !func->unsafe && !expr->alwaysSafe ) {
                 error("variant ?as on non-pointer requires [unsafe]", "", "",
                     expr->at,CompilationError::unsafe);
@@ -3470,6 +3510,26 @@ namespace das {
     // ExprIsVariant
         virtual ExpressionPtr visit(ExprIsVariant * expr) override {
             if (!expr->value->type) return Visitor::visit(expr);
+            // implement variant macros
+            ExpressionPtr substitute;
+            auto thisModule = ctx.thisProgram->thisModule.get();
+            auto modMacro = [&](Module * mod) -> bool {
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
+                    for ( const auto & pm : mod->variantMacros ) {
+                        if ( (substitute = pm->visitIs(ctx.thisProgram, thisModule, expr)) ) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+            Module::foreach(modMacro);
+            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( substitute ) {
+                reportAstChanged();
+                return substitute;
+            }
+            // regular infer
             auto valT = expr->value->type;
             if ( !valT->isGoodVariantType() ) {
                 error(" is " + expr->name + " only allowed for variants", "", "",

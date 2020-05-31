@@ -26,6 +26,7 @@ MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 MAKE_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
 MAKE_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
 MAKE_TYPE_FACTORY(PassMacro,PassMacro)
+MAKE_TYPE_FACTORY(VariantMacro,VariantMacro)
 MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
 
@@ -156,7 +157,7 @@ namespace das {
         void init() {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
+            this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl","type");
             this->template addField<DAS_BIND_MANAGED_FIELD(__rtti)>("__rtti");
             this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
             this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
@@ -907,7 +908,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("structureModule");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("structureModule","module");
             addField<DAS_BIND_MANAGED_FIELD(parent)>("parent");
             addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addFieldEx ( "flags", "flags", offsetof(Structure, flags), makeStructureFlags() );
@@ -1238,622 +1239,469 @@ namespace das {
 
 #define IMPL_VISIT_VOID(WHAT) IMPL_VISIT_VOID1(WHAT,WHAT)
 
-#define DECL_VISIT(WHAT) \
-    Func        FN_PREVISIT(WHAT); \
-    Func        FN_VISIT(WHAT);
-
 #define IMPL_ADAPT(WHAT) \
     FN_PREVISIT(WHAT) = adapt("preVisit" #WHAT,pClass,info); \
     FN_VISIT(WHAT) = adapt("visit" #WHAT,pClass,info);
 
 #define IMPL_BIND_EXPR(WHAT) \
-    virtual void preVisit ( WHAT * expr ) override \
+    void VisitorAdapter::preVisit ( WHAT * expr ) \
         { IMPL_PREVISIT(WHAT); } \
-    virtual ExpressionPtr visit ( WHAT * expr ) override \
+    ExpressionPtr VisitorAdapter::visit ( WHAT * expr ) \
         { IMPL_VISIT(WHAT); }
 
-    class VisitorAdapter : public Visitor {
-    public:
-        VisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx ) {
-            context = ctx;
-            classPtr = pClass;
-            // adapt
-            IMPL_ADAPT(Program);
-            FN_PREVISIT(ProgramBody) = adapt("preVisitProgramBody",pClass,info);
-            IMPL_ADAPT(TypeDecl);
-            IMPL_ADAPT(Expression);
-            IMPL_ADAPT(Alias);
-            IMPL_ADAPT(Enumeration);
-            IMPL_ADAPT(EnumerationValue);
-            IMPL_ADAPT(Structure);
-            IMPL_ADAPT(StructureField);
-            IMPL_ADAPT(Function);
-            IMPL_ADAPT(FunctionArgument);
-            IMPL_ADAPT(FunctionArgumentInit);
-            IMPL_ADAPT(FunctionBody);
-            IMPL_ADAPT(ExprBlock);
-            IMPL_ADAPT(ExprBlockArgument);
-            IMPL_ADAPT(ExprBlockArgumentInit);
-            IMPL_ADAPT(ExprBlockExpression);
-            IMPL_ADAPT(ExprBlockFinal);
-            IMPL_ADAPT(ExprBlockFinalExpression);
-            IMPL_ADAPT(ExprLet);
-            IMPL_ADAPT(ExprLetVariable);
-            IMPL_ADAPT(ExprLetVariableInit);
-            IMPL_ADAPT(GlobalLet);
-            IMPL_ADAPT(GlobalLetVariable);
-            IMPL_ADAPT(GlobalLetVariableInit);
-            IMPL_ADAPT(ExprStringBuilder);
-            IMPL_ADAPT(ExprStringBuilderElement);
-            IMPL_ADAPT(ExprNew);
-            IMPL_ADAPT(ExprNewArgument);
-            IMPL_ADAPT(ExprNamedCall);
-            IMPL_ADAPT(ExprNamedCallArgument);
-            IMPL_ADAPT(ExprCall);
-            IMPL_ADAPT(ExprCallArgument);
-            IMPL_ADAPT(ExprLooksLikeCall);
-            IMPL_ADAPT(ExprLooksLikeCallArgument);
-            IMPL_ADAPT(ExprNullCoalescing);
-            FN_PREVISIT(ExprNullCoalescingDefault) = adapt("preVisitExprNullCoalescingDefault",pClass,info);
-            IMPL_ADAPT(ExprAt);
-            FN_PREVISIT(ExprAtIndex) = adapt("preVisitExprAtIndex",pClass,info);
-            IMPL_ADAPT(ExprSafeAt);
-            FN_PREVISIT(ExprSafeAtIndex) = adapt("preVisitExprSafeAtIndex",pClass,info);
-            IMPL_ADAPT(ExprIs);
-            FN_PREVISIT(ExprIsType) = adapt("preVisitExprIsType",pClass,info);
-            IMPL_ADAPT(ExprOp2);
-            FN_PREVISIT(ExprOp2Right) = adapt("preVisitExprOp2Right",pClass,info);
-            IMPL_ADAPT(ExprOp3);
-            FN_PREVISIT(ExprOp3Left) = adapt("preVisitExprOp3Left",pClass,info);
-            FN_PREVISIT(ExprOp3Right) = adapt("preVisitExprOp3Right",pClass,info);
-            IMPL_ADAPT(ExprCopy);
-            FN_PREVISIT(ExprCopyRight) = adapt("preVisitExprCopyRight",pClass,info);
-            IMPL_ADAPT(ExprMove);
-            FN_PREVISIT(ExprMoveRight) = adapt("preVisitExprMoveRight",pClass,info);
-            IMPL_ADAPT(ExprClone);
-            FN_PREVISIT(ExprCloneRight) = adapt("preVisitExprCloneRight",pClass,info);
-            IMPL_ADAPT(ExprWith);
-            FN_PREVISIT(ExprWithBody) = adapt("preVisitExprWithBody",pClass,info);
-            IMPL_ADAPT(ExprWhile);
-            FN_PREVISIT(ExprWhileBody) = adapt("preVisitExprWhileBody",pClass,info);
-            IMPL_ADAPT(ExprTryCatch);
-            FN_PREVISIT(ExprTryCatchCatch) = adapt("preVisitExprTryCatchCatch",pClass,info);
-            IMPL_ADAPT(ExprIfThenElse);
-            FN_PREVISIT(ExprIfThenElseIfBlock) = adapt("preVisitExprIfThenElseIfBlock",pClass,info);
-            FN_PREVISIT(ExprIfThenElseElseBlock) = adapt("preVisitExprIfThenElseElseBlock",pClass,info);
-            IMPL_ADAPT(ExprFor);
-            IMPL_ADAPT(ExprForVariable);
-            IMPL_ADAPT(ExprForSource);
-            FN_PREVISIT(ExprForStack) = adapt("preVisitExprForStack",pClass,info);
-            FN_PREVISIT(ExprForBody) = adapt("preVisitExprForBody",pClass,info);
-            IMPL_ADAPT(ExprMakeVariant);
-            IMPL_ADAPT(ExprMakeVariantField);
-            IMPL_ADAPT(ExprMakeStruct);
-            IMPL_ADAPT(ExprMakeStructIndex);
-            IMPL_ADAPT(ExprMakeStructField);
-            IMPL_ADAPT(ExprMakeArray);
-            IMPL_ADAPT(ExprMakeArrayIndex);
-            IMPL_ADAPT(ExprMakeTuple);
-            IMPL_ADAPT(ExprMakeTupleIndex);
-            IMPL_ADAPT(ExprArrayComprehension);
-            FN_PREVISIT(ExprArrayComprehensionSubexpr) = adapt("preVisitExprArrayComprehensionSubexpr",pClass,info);
-            FN_PREVISIT(ExprArrayComprehensionWhere) = adapt("preVisitExprArrayComprehensionWhere",pClass,info);
-            IMPL_ADAPT(ExprTypeInfo);
-            IMPL_ADAPT(ExprLabel);
-            IMPL_ADAPT(ExprGoto);
-            IMPL_ADAPT(ExprRef2Value);
-            IMPL_ADAPT(ExprRef2Ptr);
-            IMPL_ADAPT(ExprPtr2Ref);
-            IMPL_ADAPT(ExprAddr);
-            IMPL_ADAPT(ExprAssert);
-            IMPL_ADAPT(ExprStaticAssert);
-            IMPL_ADAPT(ExprDebug);
-            IMPL_ADAPT(ExprInvoke);
-            IMPL_ADAPT(ExprErase);
-            IMPL_ADAPT(ExprFind);
-            IMPL_ADAPT(ExprKeyExists);
-            IMPL_ADAPT(ExprAscend);
-            IMPL_ADAPT(ExprCast);
-            IMPL_ADAPT(ExprDelete);
-            IMPL_ADAPT(ExprVar);
-            IMPL_ADAPT(ExprSwizzle);
-            IMPL_ADAPT(ExprField);
-            IMPL_ADAPT(ExprSafeField);
-            IMPL_ADAPT(ExprIsVariant);
-            IMPL_ADAPT(ExprAsVariant);
-            IMPL_ADAPT(ExprSafeAsVariant);
-            IMPL_ADAPT(ExprOp1);
-            IMPL_ADAPT(ExprReturn);
-            IMPL_ADAPT(ExprYield);
-            IMPL_ADAPT(ExprBreak);
-            IMPL_ADAPT(ExprContinue);
-            IMPL_ADAPT(ExprConst);
-            IMPL_ADAPT(ExprFakeContext);
-            IMPL_ADAPT(ExprFakeLineInfo);
-            IMPL_ADAPT(ExprConstPtr);
-            IMPL_ADAPT(ExprConstEnumeration);
-            IMPL_ADAPT(ExprConstBitfield);
-            IMPL_ADAPT(ExprConstInt8);
-            IMPL_ADAPT(ExprConstInt16);
-            IMPL_ADAPT(ExprConstInt64);
-            IMPL_ADAPT(ExprConstInt);
-            IMPL_ADAPT(ExprConstInt2);
-            IMPL_ADAPT(ExprConstInt3);
-            IMPL_ADAPT(ExprConstInt4);
-            IMPL_ADAPT(ExprConstUInt8);
-            IMPL_ADAPT(ExprConstUInt16);
-            IMPL_ADAPT(ExprConstUInt64);
-            IMPL_ADAPT(ExprConstUInt);
-            IMPL_ADAPT(ExprConstUInt2);
-            IMPL_ADAPT(ExprConstUInt3);
-            IMPL_ADAPT(ExprConstUInt4);
-            IMPL_ADAPT(ExprConstRange);
-            IMPL_ADAPT(ExprConstURange);
-            IMPL_ADAPT(ExprConstBool);
-            IMPL_ADAPT(ExprConstFloat);
-            IMPL_ADAPT(ExprConstFloat2);
-            IMPL_ADAPT(ExprConstFloat3);
-            IMPL_ADAPT(ExprConstFloat4);
-            IMPL_ADAPT(ExprConstString);
-            IMPL_ADAPT(ExprConstDouble);
-            IMPL_ADAPT(ExprMakeBlock);
-            IMPL_ADAPT(ExprMakeGenerator);
-            IMPL_ADAPT(ExprMemZero);
+    VisitorAdapter::VisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx ) {
+        context = ctx;
+        classPtr = pClass;
+        // adapt
+        IMPL_ADAPT(Program);
+        FN_PREVISIT(ProgramBody) = adapt("preVisitProgramBody",pClass,info);
+        IMPL_ADAPT(TypeDecl);
+        IMPL_ADAPT(Expression);
+        IMPL_ADAPT(Alias);
+        IMPL_ADAPT(Enumeration);
+        IMPL_ADAPT(EnumerationValue);
+        IMPL_ADAPT(Structure);
+        IMPL_ADAPT(StructureField);
+        IMPL_ADAPT(Function);
+        IMPL_ADAPT(FunctionArgument);
+        IMPL_ADAPT(FunctionArgumentInit);
+        IMPL_ADAPT(FunctionBody);
+        IMPL_ADAPT(ExprBlock);
+        IMPL_ADAPT(ExprBlockArgument);
+        IMPL_ADAPT(ExprBlockArgumentInit);
+        IMPL_ADAPT(ExprBlockExpression);
+        IMPL_ADAPT(ExprBlockFinal);
+        IMPL_ADAPT(ExprBlockFinalExpression);
+        IMPL_ADAPT(ExprLet);
+        IMPL_ADAPT(ExprLetVariable);
+        IMPL_ADAPT(ExprLetVariableInit);
+        IMPL_ADAPT(GlobalLet);
+        IMPL_ADAPT(GlobalLetVariable);
+        IMPL_ADAPT(GlobalLetVariableInit);
+        IMPL_ADAPT(ExprStringBuilder);
+        IMPL_ADAPT(ExprStringBuilderElement);
+        IMPL_ADAPT(ExprNew);
+        IMPL_ADAPT(ExprNewArgument);
+        IMPL_ADAPT(ExprNamedCall);
+        IMPL_ADAPT(ExprNamedCallArgument);
+        IMPL_ADAPT(ExprCall);
+        IMPL_ADAPT(ExprCallArgument);
+        IMPL_ADAPT(ExprLooksLikeCall);
+        IMPL_ADAPT(ExprLooksLikeCallArgument);
+        IMPL_ADAPT(ExprNullCoalescing);
+        FN_PREVISIT(ExprNullCoalescingDefault) = adapt("preVisitExprNullCoalescingDefault",pClass,info);
+        IMPL_ADAPT(ExprAt);
+        FN_PREVISIT(ExprAtIndex) = adapt("preVisitExprAtIndex",pClass,info);
+        IMPL_ADAPT(ExprSafeAt);
+        FN_PREVISIT(ExprSafeAtIndex) = adapt("preVisitExprSafeAtIndex",pClass,info);
+        IMPL_ADAPT(ExprIs);
+        FN_PREVISIT(ExprIsType) = adapt("preVisitExprIsType",pClass,info);
+        IMPL_ADAPT(ExprOp2);
+        FN_PREVISIT(ExprOp2Right) = adapt("preVisitExprOp2Right",pClass,info);
+        IMPL_ADAPT(ExprOp3);
+        FN_PREVISIT(ExprOp3Left) = adapt("preVisitExprOp3Left",pClass,info);
+        FN_PREVISIT(ExprOp3Right) = adapt("preVisitExprOp3Right",pClass,info);
+        IMPL_ADAPT(ExprCopy);
+        FN_PREVISIT(ExprCopyRight) = adapt("preVisitExprCopyRight",pClass,info);
+        IMPL_ADAPT(ExprMove);
+        FN_PREVISIT(ExprMoveRight) = adapt("preVisitExprMoveRight",pClass,info);
+        IMPL_ADAPT(ExprClone);
+        FN_PREVISIT(ExprCloneRight) = adapt("preVisitExprCloneRight",pClass,info);
+        IMPL_ADAPT(ExprWith);
+        FN_PREVISIT(ExprWithBody) = adapt("preVisitExprWithBody",pClass,info);
+        IMPL_ADAPT(ExprWhile);
+        FN_PREVISIT(ExprWhileBody) = adapt("preVisitExprWhileBody",pClass,info);
+        IMPL_ADAPT(ExprTryCatch);
+        FN_PREVISIT(ExprTryCatchCatch) = adapt("preVisitExprTryCatchCatch",pClass,info);
+        IMPL_ADAPT(ExprIfThenElse);
+        FN_PREVISIT(ExprIfThenElseIfBlock) = adapt("preVisitExprIfThenElseIfBlock",pClass,info);
+        FN_PREVISIT(ExprIfThenElseElseBlock) = adapt("preVisitExprIfThenElseElseBlock",pClass,info);
+        IMPL_ADAPT(ExprFor);
+        IMPL_ADAPT(ExprForVariable);
+        IMPL_ADAPT(ExprForSource);
+        FN_PREVISIT(ExprForStack) = adapt("preVisitExprForStack",pClass,info);
+        FN_PREVISIT(ExprForBody) = adapt("preVisitExprForBody",pClass,info);
+        IMPL_ADAPT(ExprMakeVariant);
+        IMPL_ADAPT(ExprMakeVariantField);
+        IMPL_ADAPT(ExprMakeStruct);
+        IMPL_ADAPT(ExprMakeStructIndex);
+        IMPL_ADAPT(ExprMakeStructField);
+        IMPL_ADAPT(ExprMakeArray);
+        IMPL_ADAPT(ExprMakeArrayIndex);
+        IMPL_ADAPT(ExprMakeTuple);
+        IMPL_ADAPT(ExprMakeTupleIndex);
+        IMPL_ADAPT(ExprArrayComprehension);
+        FN_PREVISIT(ExprArrayComprehensionSubexpr) = adapt("preVisitExprArrayComprehensionSubexpr",pClass,info);
+        FN_PREVISIT(ExprArrayComprehensionWhere) = adapt("preVisitExprArrayComprehensionWhere",pClass,info);
+        IMPL_ADAPT(ExprTypeInfo);
+        IMPL_ADAPT(ExprLabel);
+        IMPL_ADAPT(ExprGoto);
+        IMPL_ADAPT(ExprRef2Value);
+        IMPL_ADAPT(ExprRef2Ptr);
+        IMPL_ADAPT(ExprPtr2Ref);
+        IMPL_ADAPT(ExprAddr);
+        IMPL_ADAPT(ExprAssert);
+        IMPL_ADAPT(ExprStaticAssert);
+        IMPL_ADAPT(ExprDebug);
+        IMPL_ADAPT(ExprInvoke);
+        IMPL_ADAPT(ExprErase);
+        IMPL_ADAPT(ExprFind);
+        IMPL_ADAPT(ExprKeyExists);
+        IMPL_ADAPT(ExprAscend);
+        IMPL_ADAPT(ExprCast);
+        IMPL_ADAPT(ExprDelete);
+        IMPL_ADAPT(ExprVar);
+        IMPL_ADAPT(ExprSwizzle);
+        IMPL_ADAPT(ExprField);
+        IMPL_ADAPT(ExprSafeField);
+        IMPL_ADAPT(ExprIsVariant);
+        IMPL_ADAPT(ExprAsVariant);
+        IMPL_ADAPT(ExprSafeAsVariant);
+        IMPL_ADAPT(ExprOp1);
+        IMPL_ADAPT(ExprReturn);
+        IMPL_ADAPT(ExprYield);
+        IMPL_ADAPT(ExprBreak);
+        IMPL_ADAPT(ExprContinue);
+        IMPL_ADAPT(ExprConst);
+        IMPL_ADAPT(ExprFakeContext);
+        IMPL_ADAPT(ExprFakeLineInfo);
+        IMPL_ADAPT(ExprConstPtr);
+        IMPL_ADAPT(ExprConstEnumeration);
+        IMPL_ADAPT(ExprConstBitfield);
+        IMPL_ADAPT(ExprConstInt8);
+        IMPL_ADAPT(ExprConstInt16);
+        IMPL_ADAPT(ExprConstInt64);
+        IMPL_ADAPT(ExprConstInt);
+        IMPL_ADAPT(ExprConstInt2);
+        IMPL_ADAPT(ExprConstInt3);
+        IMPL_ADAPT(ExprConstInt4);
+        IMPL_ADAPT(ExprConstUInt8);
+        IMPL_ADAPT(ExprConstUInt16);
+        IMPL_ADAPT(ExprConstUInt64);
+        IMPL_ADAPT(ExprConstUInt);
+        IMPL_ADAPT(ExprConstUInt2);
+        IMPL_ADAPT(ExprConstUInt3);
+        IMPL_ADAPT(ExprConstUInt4);
+        IMPL_ADAPT(ExprConstRange);
+        IMPL_ADAPT(ExprConstURange);
+        IMPL_ADAPT(ExprConstBool);
+        IMPL_ADAPT(ExprConstFloat);
+        IMPL_ADAPT(ExprConstFloat2);
+        IMPL_ADAPT(ExprConstFloat3);
+        IMPL_ADAPT(ExprConstFloat4);
+        IMPL_ADAPT(ExprConstString);
+        IMPL_ADAPT(ExprConstDouble);
+        IMPL_ADAPT(ExprMakeBlock);
+        IMPL_ADAPT(ExprMakeGenerator);
+        IMPL_ADAPT(ExprMemZero);
+    }
+// whole program
+    void VisitorAdapter::preVisitProgram ( Program * expr )
+        { IMPL_PREVISIT(Program); }
+    void VisitorAdapter::visitProgram ( Program * expr )
+        { IMPL_VISIT_VOID(Program); }
+    void VisitorAdapter::preVisitProgramBody ( Program * expr )
+        { IMPL_PREVISIT1(ProgramBody,Program); }
+// type
+    void VisitorAdapter::preVisit ( TypeDecl * expr )
+        { IMPL_PREVISIT(TypeDecl); }
+    TypeDeclPtr VisitorAdapter::visit ( TypeDecl * expr )
+        { IMPL_VISIT(TypeDecl); }
+// alias
+    void VisitorAdapter::preVisitAlias ( TypeDecl * expr, const string & name )
+        { IMPL_PREVISIT2(Alias,TypeDecl,const string &,name); }
+    TypeDeclPtr VisitorAdapter::visitAlias ( TypeDecl * expr, const string & name )
+        { IMPL_VISIT2(Alias,TypeDecl,TypeDecl,expr,const string &,name); }
+// enumeration
+    void VisitorAdapter::preVisit ( Enumeration * expr )
+        { IMPL_PREVISIT(Enumeration); }
+    EnumerationPtr VisitorAdapter::visit ( Enumeration * expr )
+        { IMPL_VISIT(Enumeration); }
+    void VisitorAdapter::preVisitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last )
+        { IMPL_PREVISIT4(EnumerationValue,Enumeration,const string &,name,ExpressionPtr,value,bool,last); }
+    ExpressionPtr VisitorAdapter::visitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last )
+        { IMPL_VISIT4(EnumerationValue,Enumeration,Expression,value,const string &,name,ExpressionPtr,value,bool,last); }
+// structure
+    void VisitorAdapter::preVisit ( Structure * expr )
+        { IMPL_PREVISIT(Structure); }
+    void VisitorAdapter::preVisitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last )
+        { IMPL_PREVISIT3(StructureField,Structure,Structure::FieldDeclaration &,decl,bool,last); }
+    void VisitorAdapter::visitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last )  {
+        if ( FN_VISIT(StructureField) ) {
+            das_invoke_function<void>::invoke<void *,StructurePtr,Structure::FieldDeclaration&,bool>
+                (context,FN_VISIT(StructureField),classPtr,expr,decl,last);
         }
-    protected:
-        void *      classPtr;
-        Context *   context;
-    protected:
-        DECL_VISIT(Program);
-        Func FN_PREVISIT(ProgramBody);
-        DECL_VISIT(TypeDecl);
-        DECL_VISIT(Expression);
-        DECL_VISIT(Alias);
-        DECL_VISIT(Enumeration);
-        DECL_VISIT(EnumerationValue);
-        DECL_VISIT(Structure);
-        DECL_VISIT(StructureField);
-        DECL_VISIT(Function);
-        DECL_VISIT(FunctionArgument);
-        DECL_VISIT(FunctionArgumentInit);
-        DECL_VISIT(FunctionBody);
-        DECL_VISIT(ExprBlock);
-        DECL_VISIT(ExprBlockArgument);
-        DECL_VISIT(ExprBlockArgumentInit);
-        DECL_VISIT(ExprBlockExpression);
-        DECL_VISIT(ExprBlockFinal);
-        DECL_VISIT(ExprBlockFinalExpression);
-        DECL_VISIT(ExprLet);
-        DECL_VISIT(ExprLetVariable);
-        DECL_VISIT(ExprLetVariableInit);
-        DECL_VISIT(GlobalLet);
-        DECL_VISIT(GlobalLetVariable);
-        DECL_VISIT(GlobalLetVariableInit);
-        DECL_VISIT(ExprStringBuilder);
-        DECL_VISIT(ExprStringBuilderElement);
-        DECL_VISIT(ExprNew);
-        DECL_VISIT(ExprNewArgument);
-        DECL_VISIT(ExprNamedCall);
-        DECL_VISIT(ExprNamedCallArgument);
-        DECL_VISIT(ExprCall);
-        DECL_VISIT(ExprCallArgument);
-        DECL_VISIT(ExprLooksLikeCall);
-        DECL_VISIT(ExprLooksLikeCallArgument);
-        DECL_VISIT(ExprNullCoalescing);
-        Func FN_PREVISIT(ExprNullCoalescingDefault);
-        DECL_VISIT(ExprAt);
-        Func FN_PREVISIT(ExprAtIndex);
-        DECL_VISIT(ExprSafeAt);
-        Func FN_PREVISIT(ExprSafeAtIndex);
-        DECL_VISIT(ExprIs);
-        Func FN_PREVISIT(ExprIsType);
-        DECL_VISIT(ExprOp2);
-        Func FN_PREVISIT(ExprOp2Right);
-        DECL_VISIT(ExprOp3);
-        Func FN_PREVISIT(ExprOp3Left);
-        Func FN_PREVISIT(ExprOp3Right);
-        DECL_VISIT(ExprCopy);
-        Func FN_PREVISIT(ExprCopyRight);
-        DECL_VISIT(ExprMove);
-        Func FN_PREVISIT(ExprMoveRight);
-        DECL_VISIT(ExprClone);
-        Func FN_PREVISIT(ExprCloneRight);
-        DECL_VISIT(ExprWith);
-        Func FN_PREVISIT(ExprWithBody);
-        DECL_VISIT(ExprWhile);
-        Func FN_PREVISIT(ExprWhileBody);
-        DECL_VISIT(ExprTryCatch);
-        Func FN_PREVISIT(ExprTryCatchCatch);
-        DECL_VISIT(ExprIfThenElse);
-        Func FN_PREVISIT(ExprIfThenElseIfBlock);
-        Func FN_PREVISIT(ExprIfThenElseElseBlock);
-        DECL_VISIT(ExprFor);
-        DECL_VISIT(ExprForVariable);
-        DECL_VISIT(ExprForSource);
-        Func FN_PREVISIT(ExprForStack);
-        Func FN_PREVISIT(ExprForBody);
-        DECL_VISIT(ExprMakeVariant);
-        DECL_VISIT(ExprMakeVariantField);
-        DECL_VISIT(ExprMakeStruct);
-        DECL_VISIT(ExprMakeStructIndex);
-        DECL_VISIT(ExprMakeStructField);
-        DECL_VISIT(ExprMakeArray);
-        DECL_VISIT(ExprMakeArrayIndex);
-        DECL_VISIT(ExprMakeTuple);
-        DECL_VISIT(ExprMakeTupleIndex);
-        DECL_VISIT(ExprArrayComprehension);
-        Func FN_PREVISIT(ExprArrayComprehensionSubexpr);
-        Func FN_PREVISIT(ExprArrayComprehensionWhere);
-        DECL_VISIT(ExprTypeInfo);
-        DECL_VISIT(ExprLabel);
-        DECL_VISIT(ExprGoto);
-        DECL_VISIT(ExprRef2Value);
-        DECL_VISIT(ExprRef2Ptr);
-        DECL_VISIT(ExprPtr2Ref);
-        DECL_VISIT(ExprAddr);
-        DECL_VISIT(ExprAssert);
-        DECL_VISIT(ExprStaticAssert);
-        DECL_VISIT(ExprDebug);
-        DECL_VISIT(ExprInvoke);
-        DECL_VISIT(ExprErase);
-        DECL_VISIT(ExprFind);
-        DECL_VISIT(ExprKeyExists);
-        DECL_VISIT(ExprAscend);
-        DECL_VISIT(ExprCast);
-        DECL_VISIT(ExprDelete);
-        DECL_VISIT(ExprVar);
-        DECL_VISIT(ExprSwizzle);
-        DECL_VISIT(ExprField);
-        DECL_VISIT(ExprSafeField);
-        DECL_VISIT(ExprIsVariant);
-        DECL_VISIT(ExprAsVariant);
-        DECL_VISIT(ExprSafeAsVariant);
-        DECL_VISIT(ExprOp1);
-        DECL_VISIT(ExprReturn);
-        DECL_VISIT(ExprYield);
-        DECL_VISIT(ExprBreak);
-        DECL_VISIT(ExprContinue);
-        DECL_VISIT(ExprConst);
-        DECL_VISIT(ExprFakeContext);
-        DECL_VISIT(ExprFakeLineInfo);
-        DECL_VISIT(ExprConstPtr);
-        DECL_VISIT(ExprConstEnumeration);
-        DECL_VISIT(ExprConstBitfield);
-        DECL_VISIT(ExprConstInt8);
-        DECL_VISIT(ExprConstInt16);
-        DECL_VISIT(ExprConstInt64);
-        DECL_VISIT(ExprConstInt);
-        DECL_VISIT(ExprConstInt2);
-        DECL_VISIT(ExprConstInt3);
-        DECL_VISIT(ExprConstInt4);
-        DECL_VISIT(ExprConstUInt8);
-        DECL_VISIT(ExprConstUInt16);
-        DECL_VISIT(ExprConstUInt64);
-        DECL_VISIT(ExprConstUInt);
-        DECL_VISIT(ExprConstUInt2);
-        DECL_VISIT(ExprConstUInt3);
-        DECL_VISIT(ExprConstUInt4);
-        DECL_VISIT(ExprConstRange);
-        DECL_VISIT(ExprConstURange);
-        DECL_VISIT(ExprConstBool);
-        DECL_VISIT(ExprConstFloat);
-        DECL_VISIT(ExprConstFloat2);
-        DECL_VISIT(ExprConstFloat3);
-        DECL_VISIT(ExprConstFloat4);
-        DECL_VISIT(ExprConstString);
-        DECL_VISIT(ExprConstDouble);
-        DECL_VISIT(ExprMakeBlock);
-        DECL_VISIT(ExprMakeGenerator);
-        DECL_VISIT(ExprMemZero);
-    protected:
-    // whole program
-        virtual void preVisitProgram ( Program * expr ) override
-            { IMPL_PREVISIT(Program); }
-        virtual void visitProgram ( Program * expr ) override
-            { IMPL_VISIT_VOID(Program); }
-        virtual void preVisitProgramBody ( Program * expr ) override
-            { IMPL_PREVISIT1(ProgramBody,Program); }
-    // type
-        virtual void preVisit ( TypeDecl * expr ) override
-            { IMPL_PREVISIT(TypeDecl); }
-        virtual TypeDeclPtr visit ( TypeDecl * expr ) override
-            { IMPL_VISIT(TypeDecl); }
-    // alias
-        virtual void preVisitAlias ( TypeDecl * expr, const string & name ) override
-            { IMPL_PREVISIT2(Alias,TypeDecl,const string &,name); }
-        virtual TypeDeclPtr visitAlias ( TypeDecl * expr, const string & name ) override
-            { IMPL_VISIT2(Alias,TypeDecl,TypeDecl,expr,const string &,name); }
-    // enumeration
-        virtual void preVisit ( Enumeration * expr ) override
-            { IMPL_PREVISIT(Enumeration); }
-        virtual EnumerationPtr visit ( Enumeration * expr ) override
-            { IMPL_VISIT(Enumeration); }
-        virtual void preVisitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override
-            { IMPL_PREVISIT4(EnumerationValue,Enumeration,const string &,name,ExpressionPtr,value,bool,last); }
-        virtual ExpressionPtr visitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override
-            { IMPL_VISIT4(EnumerationValue,Enumeration,Expression,value,const string &,name,ExpressionPtr,value,bool,last); }
-    // structure
-        virtual void preVisit ( Structure * expr ) override
-            { IMPL_PREVISIT(Structure); }
-        virtual void preVisitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last ) override
-            { IMPL_PREVISIT3(StructureField,Structure,Structure::FieldDeclaration &,decl,bool,last); }
-        virtual void visitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last ) override {
-            if ( FN_VISIT(StructureField) ) {
-                das_invoke_function<void>::invoke<void *,StructurePtr,Structure::FieldDeclaration&,bool>
-                    (context,FN_VISIT(StructureField),classPtr,expr,decl,last);
-            }
+    }
+    StructurePtr VisitorAdapter::visit ( Structure * expr )
+        { IMPL_VISIT(Structure); }
+// function
+    void VisitorAdapter::preVisit ( Function * expr )
+        { IMPL_PREVISIT(Function); }
+    FunctionPtr VisitorAdapter::visit ( Function * expr )
+        { IMPL_VISIT(Function); }
+    void VisitorAdapter::preVisitArgument ( Function * expr, const VariablePtr & var, bool lastArg )
+        { IMPL_PREVISIT3(FunctionArgument,Function,VariablePtr,var,bool,lastArg); }
+    VariablePtr VisitorAdapter::visitArgument ( Function * expr, const VariablePtr & var, bool lastArg )
+        { IMPL_VISIT3(FunctionArgument,Function,Variable,var,VariablePtr,var,bool,lastArg); }
+    void VisitorAdapter::preVisitArgumentInit ( Function * expr, const VariablePtr & var, Expression * init )
+        { IMPL_PREVISIT3(FunctionArgument,Function,VariablePtr,var,ExpressionPtr,init); }
+    ExpressionPtr VisitorAdapter::visitArgumentInit ( Function * expr, const VariablePtr & var, Expression * init )
+        { IMPL_VISIT3(FunctionArgument,Function,Expression,init,VariablePtr,var,ExpressionPtr,init); }
+    void VisitorAdapter::preVisitFunctionBody ( Function * expr, Expression * that )
+        { IMPL_PREVISIT2(FunctionBody,Function,ExpressionPtr,that); }
+    ExpressionPtr VisitorAdapter::visitFunctionBody ( Function * expr, Expression * that )
+        { IMPL_VISIT2(FunctionBody,Function,Expression,that,ExpressionPtr,that); }
+// expression
+    void VisitorAdapter::preVisitExpression ( Expression * expr )
+        { IMPL_PREVISIT(Expression); }
+    ExpressionPtr VisitorAdapter::visitExpression ( Expression * expr )
+        { IMPL_VISIT(Expression); }
+// block
+    IMPL_BIND_EXPR(ExprBlock);
+    void VisitorAdapter::preVisitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg )
+        { IMPL_PREVISIT3(ExprBlockArgument,ExprBlock,VariablePtr,var,bool,lastArg); }
+    VariablePtr VisitorAdapter::visitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg )
+        { IMPL_VISIT3(ExprBlockArgument,ExprBlock,Variable,var,VariablePtr,var,bool,lastArg); }
+    void VisitorAdapter::preVisitBlockArgumentInit ( ExprBlock * expr, const VariablePtr & var, Expression * init )
+        { IMPL_PREVISIT3(ExprBlockArgumentInit,ExprBlock,VariablePtr,var,ExpressionPtr,init); }
+    ExpressionPtr VisitorAdapter::visitBlockArgumentInit ( ExprBlock * expr, const VariablePtr & var, Expression * init )
+        { IMPL_VISIT3(ExprBlockArgumentInit,ExprBlock,Expression,init,VariablePtr,var,ExpressionPtr,init); }
+    void VisitorAdapter::preVisitBlockExpression ( ExprBlock * expr, Expression * bexpr )
+        { IMPL_PREVISIT2(ExprBlockExpression,ExprBlock,ExpressionPtr,bexpr); }
+    ExpressionPtr VisitorAdapter::visitBlockExpression (  ExprBlock * expr, Expression * bexpr )
+        { IMPL_VISIT2(ExprBlockExpression,ExprBlock,Expression,bexpr,ExpressionPtr,bexpr); }
+    void VisitorAdapter::preVisitBlockFinal ( ExprBlock * expr )
+        { IMPL_PREVISIT1(ExprBlockFinal,ExprBlock); }
+    void VisitorAdapter::visitBlockFinal ( ExprBlock * expr )  {
+        if ( FN_VISIT(ExprBlockFinal) ) {
+            das_invoke_function<void>::invoke<void *,smart_ptr<ExprBlock>>
+                (context,FN_VISIT(ExprBlockFinal),classPtr,expr);
         }
-        virtual StructurePtr visit ( Structure * expr ) override
-            { IMPL_VISIT(Structure); }
-    // function
-        virtual void preVisit ( Function * expr ) override
-            { IMPL_PREVISIT(Function); }
-        virtual FunctionPtr visit ( Function * expr ) override
-            { IMPL_VISIT(Function); }
-        virtual void preVisitArgument ( Function * expr, const VariablePtr & var, bool lastArg ) override
-            { IMPL_PREVISIT3(FunctionArgument,Function,VariablePtr,var,bool,lastArg); }
-        virtual VariablePtr visitArgument ( Function * expr, const VariablePtr & var, bool lastArg ) override
-            { IMPL_VISIT3(FunctionArgument,Function,Variable,var,VariablePtr,var,bool,lastArg); }
-        virtual void preVisitArgumentInit ( Function * expr, const VariablePtr & var, Expression * init ) override
-            { IMPL_PREVISIT3(FunctionArgument,Function,VariablePtr,var,ExpressionPtr,init); }
-        virtual ExpressionPtr visitArgumentInit ( Function * expr, const VariablePtr & var, Expression * init ) override
-            { IMPL_VISIT3(FunctionArgument,Function,Expression,init,VariablePtr,var,ExpressionPtr,init); }
-        virtual void preVisitFunctionBody ( Function * expr, Expression * that ) override
-            { IMPL_PREVISIT2(FunctionBody,Function,ExpressionPtr,that); }
-        virtual ExpressionPtr visitFunctionBody ( Function * expr, Expression * that ) override
-            { IMPL_VISIT2(FunctionBody,Function,Expression,that,ExpressionPtr,that); }
-    // expression
-        virtual void preVisitExpression ( Expression * expr ) override
-            { IMPL_PREVISIT(Expression); }
-        virtual ExpressionPtr visitExpression ( Expression * expr ) override
-            { IMPL_VISIT(Expression); }
-    // block
-        IMPL_BIND_EXPR(ExprBlock);
-        virtual void preVisitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg ) override
-            { IMPL_PREVISIT3(ExprBlockArgument,ExprBlock,VariablePtr,var,bool,lastArg); }
-        virtual VariablePtr visitBlockArgument ( ExprBlock * expr, const VariablePtr & var, bool lastArg ) override
-            { IMPL_VISIT3(ExprBlockArgument,ExprBlock,Variable,var,VariablePtr,var,bool,lastArg); }
-        virtual void preVisitBlockArgumentInit ( ExprBlock * expr, const VariablePtr & var, Expression * init ) override
-            { IMPL_PREVISIT3(ExprBlockArgumentInit,ExprBlock,VariablePtr,var,ExpressionPtr,init); }
-        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * expr, const VariablePtr & var, Expression * init ) override
-            { IMPL_VISIT3(ExprBlockArgumentInit,ExprBlock,Expression,init,VariablePtr,var,ExpressionPtr,init); }
-        virtual void preVisitBlockExpression ( ExprBlock * expr, Expression * bexpr ) override
-            { IMPL_PREVISIT2(ExprBlockExpression,ExprBlock,ExpressionPtr,bexpr); }
-        virtual ExpressionPtr visitBlockExpression (  ExprBlock * expr, Expression * bexpr ) override
-            { IMPL_VISIT2(ExprBlockExpression,ExprBlock,Expression,bexpr,ExpressionPtr,bexpr); }
-        virtual void preVisitBlockFinal ( ExprBlock * expr ) override
-            { IMPL_PREVISIT1(ExprBlockFinal,ExprBlock); }
-        virtual void visitBlockFinal ( ExprBlock * expr ) override {
-            if ( FN_VISIT(ExprBlockFinal) ) {
-                das_invoke_function<void>::invoke<void *,smart_ptr<ExprBlock>>
-                    (context,FN_VISIT(ExprBlockFinal),classPtr,expr);
-            }
-        }
-        virtual void preVisitBlockFinalExpression ( ExprBlock * expr, Expression * bexpr ) override
-            { IMPL_PREVISIT2(ExprBlockFinalExpression,ExprBlock,ExpressionPtr,bexpr); }
-        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * expr, Expression * bexpr ) override
-            { IMPL_VISIT2(ExprBlockFinalExpression,ExprBlock,Expression,expr,ExpressionPtr,bexpr); }
-    // let
-        IMPL_BIND_EXPR(ExprLet);
-        virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override
-            { IMPL_PREVISIT3(ExprLetVariable,ExprLet,VariablePtr,var,bool,last); }
-        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override
-            { IMPL_VISIT3(ExprLetVariable,ExprLet,Variable,var,VariablePtr,var,bool,last); }
-        virtual void preVisitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override
-            { IMPL_PREVISIT3(ExprLetVariableInit,ExprLet,VariablePtr,var,ExpressionPtr,init); }
-        virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override
-            { IMPL_VISIT3(ExprLetVariableInit,ExprLet,Expression,init,VariablePtr,var,ExpressionPtr,init); }
-    // global let
-        virtual void preVisitGlobalLetBody ( Program * expr ) override
-            { IMPL_PREVISIT1(GlobalLet,Program); }
-        virtual void visitGlobalLetBody ( Program * expr ) override
-            { IMPL_VISIT_VOID1(GlobalLet,Program); }
-        virtual void preVisitGlobalLet ( const VariablePtr & expr ) override
-            { IMPL_PREVISIT1(GlobalLetVariable,Variable); }
-        virtual VariablePtr visitGlobalLet ( const VariablePtr & expr ) override
-            { IMPL_VISIT1(GlobalLetVariable,Variable,Variable,expr); }
-        virtual void preVisitGlobalLetInit ( const VariablePtr & expr, Expression * init ) override
-            { IMPL_PREVISIT2(GlobalLetVariableInit,Variable,ExpressionPtr,init); }
-        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & expr, Expression * init ) override
-            { IMPL_VISIT2(GlobalLetVariableInit,Variable,Expression,init,ExpressionPtr,init); }
-    // string builder
-        IMPL_BIND_EXPR(ExprStringBuilder);
-        virtual void preVisitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last ) override
-            { IMPL_PREVISIT3(ExprStringBuilderElement,ExprStringBuilder,ExpressionPtr,element,bool,last); }
-        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last ) override
-            { IMPL_VISIT3(ExprStringBuilderElement,ExprStringBuilder,Expression,element,ExpressionPtr,element,bool,last); }
-    // new
-        IMPL_BIND_EXPR(ExprNew);
-        virtual void preVisitNewArg ( ExprNew * expr, Expression * arg, bool last ) override
-            { IMPL_PREVISIT3(ExprNewArgument,ExprNew,ExpressionPtr,arg,bool,last); }
-        virtual ExpressionPtr visitNewArg ( ExprNew * expr, Expression * arg , bool last ) override
-            { IMPL_VISIT3(ExprNewArgument,ExprNew,Expression,arg,ExpressionPtr,arg,bool,last); }
-    // named call
-        IMPL_BIND_EXPR(ExprNamedCall);
-        virtual void preVisitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg, bool last ) override
-            { IMPL_PREVISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDeclPtr,arg,bool,last); }
-        virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg , bool last ) override
-            { IMPL_VISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDecl,arg,MakeFieldDeclPtr,arg,bool,last); }
-    // call
-        IMPL_BIND_EXPR(ExprCall);
-        virtual void preVisitCallArg ( ExprCall * expr, Expression * arg, bool last ) override
-            { IMPL_PREVISIT3(ExprCallArgument,ExprCall,ExpressionPtr,arg,bool,last); }
-        virtual ExpressionPtr visitCallArg ( ExprCall * expr, Expression * arg , bool last ) override
-            { IMPL_VISIT3(ExprCallArgument,ExprCall,Expression,arg,ExpressionPtr,arg,bool,last); }
-    // looks like call
-        IMPL_BIND_EXPR(ExprLooksLikeCall);
-        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg, bool last ) override
-            { IMPL_PREVISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,ExpressionPtr,arg,bool,last); }
-        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg , bool last ) override
-            { IMPL_VISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,Expression,arg,ExpressionPtr,arg,bool,last); }
-    // null coaelescing
-        IMPL_BIND_EXPR(ExprNullCoalescing);
-        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * expr, Expression * defval ) override
-            { IMPL_PREVISIT2(ExprNullCoalescingDefault,ExprNullCoalescing,ExpressionPtr, defval); }
-    // at
-        IMPL_BIND_EXPR(ExprAt);
-        virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override
-            { IMPL_PREVISIT2(ExprAtIndex,ExprAt,ExpressionPtr,index); }
-    // safe at
-        IMPL_BIND_EXPR(ExprSafeAt);
-        virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override
-            { IMPL_PREVISIT2(ExprSafeAtIndex,ExprSafeAt,ExpressionPtr,index); }
-    // is
-        IMPL_BIND_EXPR(ExprIs);
-        virtual void preVisitType ( ExprIs * expr, TypeDecl * typeDecl ) override
-            { IMPL_PREVISIT2(ExprIsType,ExprIs,TypeDeclPtr,typeDecl); }
-    // op2
-        IMPL_BIND_EXPR(ExprOp2);
-        virtual void preVisitRight ( ExprOp2 * expr, Expression * right ) override
-            { IMPL_PREVISIT2(ExprOp2Right,ExprOp2,ExpressionPtr,right); }
-    // op3
-        IMPL_BIND_EXPR(ExprOp3);
-        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) override
-            { IMPL_PREVISIT2(ExprOp3Left,ExprOp3,ExpressionPtr,left); }
-        virtual void preVisitRight ( ExprOp3 * expr, Expression * right ) override
-            { IMPL_PREVISIT2(ExprOp3Right,ExprOp3,ExpressionPtr,right); }
-    // copy
-        IMPL_BIND_EXPR(ExprCopy);
-        virtual void preVisitRight ( ExprCopy * expr, Expression * right ) override
-            { IMPL_PREVISIT2(ExprCopyRight,ExprCopy,ExpressionPtr,right); }
-    // move
-        IMPL_BIND_EXPR(ExprMove);
-        virtual void preVisitRight ( ExprMove * expr, Expression * right ) override
-            { IMPL_PREVISIT2(ExprMoveRight,ExprMove,ExpressionPtr,right); }
-    // clone
-        IMPL_BIND_EXPR(ExprClone);
-        virtual void preVisitRight ( ExprClone * expr, Expression * right ) override
-            { IMPL_PREVISIT2(ExprCloneRight,ExprClone,ExpressionPtr,right); }
-    // with
-        IMPL_BIND_EXPR(ExprWith);
-        virtual void preVisitWithBody ( ExprWith * expr, Expression * body ) override
-            { IMPL_PREVISIT2(ExprWithBody,ExprWith,ExpressionPtr,body); }
-    // while
-        IMPL_BIND_EXPR(ExprWhile);
-        virtual void preVisitWhileBody ( ExprWhile * expr, Expression * body ) override
-            { IMPL_PREVISIT2(ExprWhileBody,ExprWhile,ExpressionPtr,body); }
-    // try-catch
-        IMPL_BIND_EXPR(ExprTryCatch);
-        virtual void preVisitCatch ( ExprTryCatch * expr, Expression * body ) override
-            { IMPL_PREVISIT2(ExprTryCatchCatch,ExprTryCatch,ExpressionPtr,body); }
-    // if-then-else
-        IMPL_BIND_EXPR(ExprIfThenElse);
-        virtual void preVisitIfBlock ( ExprIfThenElse * expr, Expression * ifBlock ) override
-            { IMPL_PREVISIT2(ExprIfThenElseIfBlock,ExprIfThenElse,ExpressionPtr,ifBlock); }
-        virtual void preVisitElseBlock ( ExprIfThenElse * expr, Expression * elseBlock ) override
-            { IMPL_PREVISIT2(ExprIfThenElseElseBlock,ExprIfThenElse,ExpressionPtr,elseBlock); }
-    // for
-        IMPL_BIND_EXPR(ExprFor);
-        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override
-            { IMPL_PREVISIT3(ExprForVariable,ExprFor,VariablePtr,var,bool,last); }
-        virtual VariablePtr visitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override
-            { IMPL_VISIT3(ExprForVariable,ExprFor,Variable,var,VariablePtr,var,bool,last); }
-        virtual void preVisitForStack ( ExprFor * expr ) override
-            { IMPL_PREVISIT1(ExprForStack,ExprFor); }
-        virtual void preVisitForBody ( ExprFor * expr, Expression * body ) override
-            { IMPL_PREVISIT2(ExprForBody,ExprFor,ExpressionPtr,body); }
-        virtual void preVisitForSource ( ExprFor * expr, Expression * source, bool last ) override
-            { IMPL_PREVISIT3(ExprForSource,ExprFor,ExpressionPtr,source,bool,last); }
-        virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * source , bool last ) override
-            { IMPL_VISIT3(ExprForSource,ExprFor,Expression,source,ExpressionPtr,source,bool,last); }
-    // make variant
-        IMPL_BIND_EXPR(ExprMakeVariant);
-        virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override
-            { IMPL_PREVISIT4(ExprMakeVariantField,ExprMakeVariant,int,index,MakeFieldDeclPtr,decl,bool,last); }
-        virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last) override
-            { IMPL_VISIT4(ExprMakeVariantField,ExprMakeVariant,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
-    // make structure
-        IMPL_BIND_EXPR(ExprMakeStruct);
-        virtual void preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override
-            { IMPL_PREVISIT3(ExprMakeStructIndex,ExprMakeStruct,int,index,bool,last); }
-        virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override
-            { IMPL_VISIT_VOID3(ExprMakeStructIndex,ExprMakeStruct,int,index,bool,last); }
-        virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override
-             { IMPL_PREVISIT4(ExprMakeStructField,ExprMakeStruct,int,index,MakeFieldDeclPtr,decl,bool,last); }
-        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override
-            { IMPL_VISIT4(ExprMakeStructField,ExprMakeStruct,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
-    // make array
-        IMPL_BIND_EXPR(ExprMakeArray);
-        virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override
-            { IMPL_PREVISIT4(ExprMakeArrayIndex,ExprMakeArray,int,index,ExpressionPtr,init,bool,last); }
-        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override
-            { IMPL_VISIT4(ExprMakeArrayIndex,ExprMakeArray,Expression,init,int,index,ExpressionPtr,init,bool,last); }
-    // make tuple
-        IMPL_BIND_EXPR(ExprMakeTuple);
-        virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool last ) override
-            { IMPL_PREVISIT4(ExprMakeTupleIndex,ExprMakeTuple,int,index,ExpressionPtr,init,bool,last); }
-        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool last ) override
-            { IMPL_VISIT4(ExprMakeTupleIndex,ExprMakeTuple,Expression,init,int,index,ExpressionPtr,init,bool,last); }
-    // array comprehension
-        IMPL_BIND_EXPR(ExprArrayComprehension);
-        virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override
-            { IMPL_PREVISIT2(ExprArrayComprehensionSubexpr,ExprArrayComprehension,ExpressionPtr,subexpr); }
-        virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override
-            { IMPL_PREVISIT2(ExprArrayComprehensionWhere,ExprArrayComprehension,ExpressionPtr,where); }
-    // type info
-        IMPL_BIND_EXPR(ExprTypeInfo);
-    // all other expressions
-        IMPL_BIND_EXPR(ExprLabel);
-        IMPL_BIND_EXPR(ExprGoto);
-        IMPL_BIND_EXPR(ExprRef2Value);
-        IMPL_BIND_EXPR(ExprRef2Ptr);
-        IMPL_BIND_EXPR(ExprPtr2Ref);
-        IMPL_BIND_EXPR(ExprAddr);
-        IMPL_BIND_EXPR(ExprAssert);
-        IMPL_BIND_EXPR(ExprStaticAssert);
-        IMPL_BIND_EXPR(ExprDebug);
-        IMPL_BIND_EXPR(ExprInvoke);
-        IMPL_BIND_EXPR(ExprErase);
-        IMPL_BIND_EXPR(ExprFind);
-        IMPL_BIND_EXPR(ExprKeyExists);
-        IMPL_BIND_EXPR(ExprAscend);
-        IMPL_BIND_EXPR(ExprCast);
-        IMPL_BIND_EXPR(ExprDelete);
-        IMPL_BIND_EXPR(ExprVar);
-        IMPL_BIND_EXPR(ExprSwizzle);
-        IMPL_BIND_EXPR(ExprField);
-        IMPL_BIND_EXPR(ExprSafeField);
-        IMPL_BIND_EXPR(ExprIsVariant);
-        IMPL_BIND_EXPR(ExprAsVariant);
-        IMPL_BIND_EXPR(ExprSafeAsVariant);
-        IMPL_BIND_EXPR(ExprOp1);
-        IMPL_BIND_EXPR(ExprReturn);
-        IMPL_BIND_EXPR(ExprYield);
-        IMPL_BIND_EXPR(ExprBreak);
-        IMPL_BIND_EXPR(ExprContinue);
-        IMPL_BIND_EXPR(ExprConst);
-        IMPL_BIND_EXPR(ExprFakeContext);
-        IMPL_BIND_EXPR(ExprFakeLineInfo);
-        IMPL_BIND_EXPR(ExprConstPtr);
-        IMPL_BIND_EXPR(ExprConstEnumeration);
-        IMPL_BIND_EXPR(ExprConstBitfield);
-        IMPL_BIND_EXPR(ExprConstInt8);
-        IMPL_BIND_EXPR(ExprConstInt16);
-        IMPL_BIND_EXPR(ExprConstInt64);
-        IMPL_BIND_EXPR(ExprConstInt);
-        IMPL_BIND_EXPR(ExprConstInt2);
-        IMPL_BIND_EXPR(ExprConstInt3);
-        IMPL_BIND_EXPR(ExprConstInt4);
-        IMPL_BIND_EXPR(ExprConstUInt8);
-        IMPL_BIND_EXPR(ExprConstUInt16);
-        IMPL_BIND_EXPR(ExprConstUInt64);
-        IMPL_BIND_EXPR(ExprConstUInt);
-        IMPL_BIND_EXPR(ExprConstUInt2);
-        IMPL_BIND_EXPR(ExprConstUInt3);
-        IMPL_BIND_EXPR(ExprConstUInt4);
-        IMPL_BIND_EXPR(ExprConstRange);
-        IMPL_BIND_EXPR(ExprConstURange);
-        IMPL_BIND_EXPR(ExprConstBool);
-        IMPL_BIND_EXPR(ExprConstFloat);
-        IMPL_BIND_EXPR(ExprConstFloat2);
-        IMPL_BIND_EXPR(ExprConstFloat3);
-        IMPL_BIND_EXPR(ExprConstFloat4);
-        IMPL_BIND_EXPR(ExprConstString);
-        IMPL_BIND_EXPR(ExprConstDouble);
-        IMPL_BIND_EXPR(ExprMakeBlock);
-        IMPL_BIND_EXPR(ExprMakeGenerator);
-        IMPL_BIND_EXPR(ExprMemZero);
-    };
+    }
+    void VisitorAdapter::preVisitBlockFinalExpression ( ExprBlock * expr, Expression * bexpr )
+        { IMPL_PREVISIT2(ExprBlockFinalExpression,ExprBlock,ExpressionPtr,bexpr); }
+    ExpressionPtr VisitorAdapter::visitBlockFinalExpression (  ExprBlock * expr, Expression * bexpr )
+        { IMPL_VISIT2(ExprBlockFinalExpression,ExprBlock,Expression,expr,ExpressionPtr,bexpr); }
+// let
+    IMPL_BIND_EXPR(ExprLet);
+    void VisitorAdapter::preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last )
+        { IMPL_PREVISIT3(ExprLetVariable,ExprLet,VariablePtr,var,bool,last); }
+    VariablePtr VisitorAdapter::visitLet ( ExprLet * expr, const VariablePtr & var, bool last )
+        { IMPL_VISIT3(ExprLetVariable,ExprLet,Variable,var,VariablePtr,var,bool,last); }
+    void VisitorAdapter::preVisitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init )
+        { IMPL_PREVISIT3(ExprLetVariableInit,ExprLet,VariablePtr,var,ExpressionPtr,init); }
+    ExpressionPtr VisitorAdapter::visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init )
+        { IMPL_VISIT3(ExprLetVariableInit,ExprLet,Expression,init,VariablePtr,var,ExpressionPtr,init); }
+// global let
+    void VisitorAdapter::preVisitGlobalLetBody ( Program * expr )
+        { IMPL_PREVISIT1(GlobalLet,Program); }
+    void VisitorAdapter::visitGlobalLetBody ( Program * expr )
+        { IMPL_VISIT_VOID1(GlobalLet,Program); }
+    void VisitorAdapter::preVisitGlobalLet ( const VariablePtr & expr )
+        { IMPL_PREVISIT1(GlobalLetVariable,Variable); }
+    VariablePtr VisitorAdapter::visitGlobalLet ( const VariablePtr & expr )
+        { IMPL_VISIT1(GlobalLetVariable,Variable,Variable,expr); }
+    void VisitorAdapter::preVisitGlobalLetInit ( const VariablePtr & expr, Expression * init )
+        { IMPL_PREVISIT2(GlobalLetVariableInit,Variable,ExpressionPtr,init); }
+    ExpressionPtr VisitorAdapter::visitGlobalLetInit ( const VariablePtr & expr, Expression * init )
+        { IMPL_VISIT2(GlobalLetVariableInit,Variable,Expression,init,ExpressionPtr,init); }
+// string builder
+    IMPL_BIND_EXPR(ExprStringBuilder);
+    void VisitorAdapter::preVisitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last )
+        { IMPL_PREVISIT3(ExprStringBuilderElement,ExprStringBuilder,ExpressionPtr,element,bool,last); }
+    ExpressionPtr VisitorAdapter::visitStringBuilderElement ( ExprStringBuilder * expr, Expression * element, bool last )
+        { IMPL_VISIT3(ExprStringBuilderElement,ExprStringBuilder,Expression,element,ExpressionPtr,element,bool,last); }
+// new
+    IMPL_BIND_EXPR(ExprNew);
+    void VisitorAdapter::preVisitNewArg ( ExprNew * expr, Expression * arg, bool last )
+        { IMPL_PREVISIT3(ExprNewArgument,ExprNew,ExpressionPtr,arg,bool,last); }
+    ExpressionPtr VisitorAdapter::visitNewArg ( ExprNew * expr, Expression * arg , bool last )
+        { IMPL_VISIT3(ExprNewArgument,ExprNew,Expression,arg,ExpressionPtr,arg,bool,last); }
+// named call
+    IMPL_BIND_EXPR(ExprNamedCall);
+    void VisitorAdapter::preVisitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg, bool last )
+        { IMPL_PREVISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDeclPtr,arg,bool,last); }
+    MakeFieldDeclPtr VisitorAdapter::visitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg , bool last )
+        { IMPL_VISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDecl,arg,MakeFieldDeclPtr,arg,bool,last); }
+// call
+    IMPL_BIND_EXPR(ExprCall);
+    void VisitorAdapter::preVisitCallArg ( ExprCall * expr, Expression * arg, bool last )
+        { IMPL_PREVISIT3(ExprCallArgument,ExprCall,ExpressionPtr,arg,bool,last); }
+    ExpressionPtr VisitorAdapter::visitCallArg ( ExprCall * expr, Expression * arg , bool last )
+        { IMPL_VISIT3(ExprCallArgument,ExprCall,Expression,arg,ExpressionPtr,arg,bool,last); }
+// looks like call
+    IMPL_BIND_EXPR(ExprLooksLikeCall);
+    void VisitorAdapter::preVisitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg, bool last )
+        { IMPL_PREVISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,ExpressionPtr,arg,bool,last); }
+    ExpressionPtr VisitorAdapter::visitLooksLikeCallArg ( ExprLooksLikeCall * expr, Expression * arg , bool last )
+        { IMPL_VISIT3(ExprLooksLikeCallArgument,ExprLooksLikeCall,Expression,arg,ExpressionPtr,arg,bool,last); }
+// null coaelescing
+    IMPL_BIND_EXPR(ExprNullCoalescing);
+    void VisitorAdapter::preVisitNullCoaelescingDefault ( ExprNullCoalescing * expr, Expression * defval )
+        { IMPL_PREVISIT2(ExprNullCoalescingDefault,ExprNullCoalescing,ExpressionPtr, defval); }
+// at
+    IMPL_BIND_EXPR(ExprAt);
+    void VisitorAdapter::preVisitAtIndex ( ExprAt * expr, Expression * index )
+        { IMPL_PREVISIT2(ExprAtIndex,ExprAt,ExpressionPtr,index); }
+// safe at
+    IMPL_BIND_EXPR(ExprSafeAt);
+    void VisitorAdapter::preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index )
+        { IMPL_PREVISIT2(ExprSafeAtIndex,ExprSafeAt,ExpressionPtr,index); }
+// is
+    IMPL_BIND_EXPR(ExprIs);
+    void VisitorAdapter::preVisitType ( ExprIs * expr, TypeDecl * typeDecl )
+        { IMPL_PREVISIT2(ExprIsType,ExprIs,TypeDeclPtr,typeDecl); }
+// op2
+    IMPL_BIND_EXPR(ExprOp2);
+    void VisitorAdapter::preVisitRight ( ExprOp2 * expr, Expression * right )
+        { IMPL_PREVISIT2(ExprOp2Right,ExprOp2,ExpressionPtr,right); }
+// op3
+    IMPL_BIND_EXPR(ExprOp3);
+    void VisitorAdapter::preVisitLeft  ( ExprOp3 * expr, Expression * left )
+        { IMPL_PREVISIT2(ExprOp3Left,ExprOp3,ExpressionPtr,left); }
+    void VisitorAdapter::preVisitRight ( ExprOp3 * expr, Expression * right )
+        { IMPL_PREVISIT2(ExprOp3Right,ExprOp3,ExpressionPtr,right); }
+// copy
+    IMPL_BIND_EXPR(ExprCopy);
+    void VisitorAdapter::preVisitRight ( ExprCopy * expr, Expression * right )
+        { IMPL_PREVISIT2(ExprCopyRight,ExprCopy,ExpressionPtr,right); }
+// move
+    IMPL_BIND_EXPR(ExprMove);
+    void VisitorAdapter::preVisitRight ( ExprMove * expr, Expression * right )
+        { IMPL_PREVISIT2(ExprMoveRight,ExprMove,ExpressionPtr,right); }
+// clone
+    IMPL_BIND_EXPR(ExprClone);
+    void VisitorAdapter::preVisitRight ( ExprClone * expr, Expression * right )
+        { IMPL_PREVISIT2(ExprCloneRight,ExprClone,ExpressionPtr,right); }
+// with
+    IMPL_BIND_EXPR(ExprWith);
+    void VisitorAdapter::preVisitWithBody ( ExprWith * expr, Expression * body )
+        { IMPL_PREVISIT2(ExprWithBody,ExprWith,ExpressionPtr,body); }
+// while
+    IMPL_BIND_EXPR(ExprWhile);
+    void VisitorAdapter::preVisitWhileBody ( ExprWhile * expr, Expression * body )
+        { IMPL_PREVISIT2(ExprWhileBody,ExprWhile,ExpressionPtr,body); }
+// try-catch
+    IMPL_BIND_EXPR(ExprTryCatch);
+    void VisitorAdapter::preVisitCatch ( ExprTryCatch * expr, Expression * body )
+        { IMPL_PREVISIT2(ExprTryCatchCatch,ExprTryCatch,ExpressionPtr,body); }
+// if-then-else
+    IMPL_BIND_EXPR(ExprIfThenElse);
+    void VisitorAdapter::preVisitIfBlock ( ExprIfThenElse * expr, Expression * ifBlock )
+        { IMPL_PREVISIT2(ExprIfThenElseIfBlock,ExprIfThenElse,ExpressionPtr,ifBlock); }
+    void VisitorAdapter::preVisitElseBlock ( ExprIfThenElse * expr, Expression * elseBlock )
+        { IMPL_PREVISIT2(ExprIfThenElseElseBlock,ExprIfThenElse,ExpressionPtr,elseBlock); }
+// for
+    IMPL_BIND_EXPR(ExprFor);
+    void VisitorAdapter::preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last )
+        { IMPL_PREVISIT3(ExprForVariable,ExprFor,VariablePtr,var,bool,last); }
+    VariablePtr VisitorAdapter::visitFor ( ExprFor * expr, const VariablePtr & var, bool last )
+        { IMPL_VISIT3(ExprForVariable,ExprFor,Variable,var,VariablePtr,var,bool,last); }
+    void VisitorAdapter::preVisitForStack ( ExprFor * expr )
+        { IMPL_PREVISIT1(ExprForStack,ExprFor); }
+    void VisitorAdapter::preVisitForBody ( ExprFor * expr, Expression * body )
+        { IMPL_PREVISIT2(ExprForBody,ExprFor,ExpressionPtr,body); }
+    void VisitorAdapter::preVisitForSource ( ExprFor * expr, Expression * source, bool last )
+        { IMPL_PREVISIT3(ExprForSource,ExprFor,ExpressionPtr,source,bool,last); }
+    ExpressionPtr VisitorAdapter::VisitorAdapter::visitForSource ( ExprFor * expr, Expression * source , bool last )
+        { IMPL_VISIT3(ExprForSource,ExprFor,Expression,source,ExpressionPtr,source,bool,last); }
+// make variant
+    IMPL_BIND_EXPR(ExprMakeVariant);
+    void VisitorAdapter::preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last )
+        { IMPL_PREVISIT4(ExprMakeVariantField,ExprMakeVariant,int,index,MakeFieldDeclPtr,decl,bool,last); }
+    MakeFieldDeclPtr VisitorAdapter::visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last)
+        { IMPL_VISIT4(ExprMakeVariantField,ExprMakeVariant,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
+// make structure
+    IMPL_BIND_EXPR(ExprMakeStruct);
+    void VisitorAdapter::preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last )
+        { IMPL_PREVISIT3(ExprMakeStructIndex,ExprMakeStruct,int,index,bool,last); }
+    void VisitorAdapter::visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last )
+        { IMPL_VISIT_VOID3(ExprMakeStructIndex,ExprMakeStruct,int,index,bool,last); }
+    void VisitorAdapter::preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last )
+            { IMPL_PREVISIT4(ExprMakeStructField,ExprMakeStruct,int,index,MakeFieldDeclPtr,decl,bool,last); }
+    MakeFieldDeclPtr VisitorAdapter::visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last )
+        { IMPL_VISIT4(ExprMakeStructField,ExprMakeStruct,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
+// make array
+    IMPL_BIND_EXPR(ExprMakeArray);
+    void VisitorAdapter::preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last )
+        { IMPL_PREVISIT4(ExprMakeArrayIndex,ExprMakeArray,int,index,ExpressionPtr,init,bool,last); }
+    ExpressionPtr VisitorAdapter::visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last )
+        { IMPL_VISIT4(ExprMakeArrayIndex,ExprMakeArray,Expression,init,int,index,ExpressionPtr,init,bool,last); }
+// make tuple
+    IMPL_BIND_EXPR(ExprMakeTuple);
+    void VisitorAdapter::preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool last )
+        { IMPL_PREVISIT4(ExprMakeTupleIndex,ExprMakeTuple,int,index,ExpressionPtr,init,bool,last); }
+    ExpressionPtr VisitorAdapter::visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool last )
+        { IMPL_VISIT4(ExprMakeTupleIndex,ExprMakeTuple,Expression,init,int,index,ExpressionPtr,init,bool,last); }
+// array comprehension
+    IMPL_BIND_EXPR(ExprArrayComprehension);
+    void VisitorAdapter::preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr )
+        { IMPL_PREVISIT2(ExprArrayComprehensionSubexpr,ExprArrayComprehension,ExpressionPtr,subexpr); }
+    void VisitorAdapter::preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where )
+        { IMPL_PREVISIT2(ExprArrayComprehensionWhere,ExprArrayComprehension,ExpressionPtr,where); }
+// type info
+    IMPL_BIND_EXPR(ExprTypeInfo);
+// all other expressions
+    IMPL_BIND_EXPR(ExprLabel);
+    IMPL_BIND_EXPR(ExprGoto);
+    IMPL_BIND_EXPR(ExprRef2Value);
+    IMPL_BIND_EXPR(ExprRef2Ptr);
+    IMPL_BIND_EXPR(ExprPtr2Ref);
+    IMPL_BIND_EXPR(ExprAddr);
+    IMPL_BIND_EXPR(ExprAssert);
+    IMPL_BIND_EXPR(ExprStaticAssert);
+    IMPL_BIND_EXPR(ExprDebug);
+    IMPL_BIND_EXPR(ExprInvoke);
+    IMPL_BIND_EXPR(ExprErase);
+    IMPL_BIND_EXPR(ExprFind);
+    IMPL_BIND_EXPR(ExprKeyExists);
+    IMPL_BIND_EXPR(ExprAscend);
+    IMPL_BIND_EXPR(ExprCast);
+    IMPL_BIND_EXPR(ExprDelete);
+    IMPL_BIND_EXPR(ExprVar);
+    IMPL_BIND_EXPR(ExprSwizzle);
+    IMPL_BIND_EXPR(ExprField);
+    IMPL_BIND_EXPR(ExprSafeField);
+    IMPL_BIND_EXPR(ExprIsVariant);
+    IMPL_BIND_EXPR(ExprAsVariant);
+    IMPL_BIND_EXPR(ExprSafeAsVariant);
+    IMPL_BIND_EXPR(ExprOp1);
+    IMPL_BIND_EXPR(ExprReturn);
+    IMPL_BIND_EXPR(ExprYield);
+    IMPL_BIND_EXPR(ExprBreak);
+    IMPL_BIND_EXPR(ExprContinue);
+    IMPL_BIND_EXPR(ExprConst);
+    IMPL_BIND_EXPR(ExprFakeContext);
+    IMPL_BIND_EXPR(ExprFakeLineInfo);
+    IMPL_BIND_EXPR(ExprConstPtr);
+    IMPL_BIND_EXPR(ExprConstEnumeration);
+    IMPL_BIND_EXPR(ExprConstBitfield);
+    IMPL_BIND_EXPR(ExprConstInt8);
+    IMPL_BIND_EXPR(ExprConstInt16);
+    IMPL_BIND_EXPR(ExprConstInt64);
+    IMPL_BIND_EXPR(ExprConstInt);
+    IMPL_BIND_EXPR(ExprConstInt2);
+    IMPL_BIND_EXPR(ExprConstInt3);
+    IMPL_BIND_EXPR(ExprConstInt4);
+    IMPL_BIND_EXPR(ExprConstUInt8);
+    IMPL_BIND_EXPR(ExprConstUInt16);
+    IMPL_BIND_EXPR(ExprConstUInt64);
+    IMPL_BIND_EXPR(ExprConstUInt);
+    IMPL_BIND_EXPR(ExprConstUInt2);
+    IMPL_BIND_EXPR(ExprConstUInt3);
+    IMPL_BIND_EXPR(ExprConstUInt4);
+    IMPL_BIND_EXPR(ExprConstRange);
+    IMPL_BIND_EXPR(ExprConstURange);
+    IMPL_BIND_EXPR(ExprConstBool);
+    IMPL_BIND_EXPR(ExprConstFloat);
+    IMPL_BIND_EXPR(ExprConstFloat2);
+    IMPL_BIND_EXPR(ExprConstFloat3);
+    IMPL_BIND_EXPR(ExprConstFloat4);
+    IMPL_BIND_EXPR(ExprConstString);
+    IMPL_BIND_EXPR(ExprConstDouble);
+    IMPL_BIND_EXPR(ExprMakeBlock);
+    IMPL_BIND_EXPR(ExprMakeGenerator);
+    IMPL_BIND_EXPR(ExprMemZero);
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
@@ -1991,23 +1839,73 @@ namespace das {
         }
     };
 
+
+    struct VariantMacroAdapter : VariantMacro {
+        VariantMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : VariantMacro(n), classPtr(pClass), context(ctx) {
+            fnVisitIs = adapt("visitExprIsVariant",pClass,info);
+            fnVisitAs = adapt("visitExprAsVariant",pClass,info);
+            fnVisitSafeAs = adapt("visitExprSafeAsVariant",pClass,info);
+        }
+        virtual ExpressionPtr visitIs ( Program * prog, Module * mod, ExprIsVariant * expr ) override {
+            if ( fnVisitIs ) {
+                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprIsVariant>>
+                        (context,fnVisitIs,classPtr,prog,mod,expr);
+            } else {
+                return nullptr;
+            }
+        }
+        virtual ExpressionPtr visitAs ( Program * prog, Module * mod, ExprAsVariant * expr ) override {
+            if ( fnVisitAs ) {
+                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprAsVariant>>
+                        (context,fnVisitAs,classPtr,prog,mod,expr);
+            } else {
+                return nullptr;
+            }
+        }
+        virtual ExpressionPtr visitSafeAs ( Program * prog, Module * mod, ExprSafeAsVariant * expr ) override {
+            if ( fnVisitIs ) {
+                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprSafeAsVariant>>
+                        (context,fnVisitSafeAs,classPtr,prog,mod,expr);
+            } else {
+                return nullptr;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    protected:
+        Func        fnVisitIs;
+        Func        fnVisitAs;
+        Func        fnVisitSafeAs;
+    };
+
+    struct AstVariantMacroAnnotation : ManagedStructureAnnotation<VariantMacro,false> {
+        AstVariantMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("VariantMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
     #include "ast.das.inc"
 
-    smart_ptr<VisitorAdapter> makeVisitor ( void * pClass, const StructInfo * info, Context * context ) {
+    smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<VisitorAdapter>((char *)pClass,info,context);
     }
 
-    PassMacroPtr makePassMacro ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
+    PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<PassMacroAdapter>(name,(char *)pClass,info,context);
     }
 
-    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * context ) {
-        for ( auto & pm : module->inferMacros ) {
-            if ( pm->name==newM->name ) {
-                context->throw_error_ex("module %s already has dirty infer macro %s",
-                    pm->name.c_str(), newM->name.c_str());
-            }
-        }
+    VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<VariantMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * ) {
+        module->variantMacros.push_back(newM);
+    }
+
+    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * ) {
         module->inferMacros.push_back(newM);
     }
 
@@ -2135,10 +2033,6 @@ namespace das {
 
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context ) {
         return context->stringHeap.allocateString(bft->findBitfieldName(value));
-    }
-
-    ExpressionPtr clone_expression ( ExpressionPtr value ) {
-        return value->clone();
     }
 
     class Module_Ast : public Module {
@@ -2346,6 +2240,12 @@ namespace das {
                 SideEffects::modifyExternal, "makePassMacro");
             addExtern<DAS_BIND_FUN(addModuleInferDirtyMacro)>(*this, lib,  "add_dirty_infer_macro",
                 SideEffects::modifyExternal, "addModuleInferDirtyMacro");
+            // variant macro
+            addAnnotation(make_smart<AstVariantMacroAnnotation>(lib));
+            addExtern<DAS_BIND_FUN(makeVariantMacro)>(*this, lib,  "make_variant_macro",
+                SideEffects::modifyExternal, "makeVariantMacro");
+            addExtern<DAS_BIND_FUN(addModuleVariantMacro)>(*this, lib,  "add_variant_macro",
+                SideEffects::modifyExternal, "addModuleVariantMacro");
             // helper functions
             addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
                 SideEffects::none, "describe_typedecl");

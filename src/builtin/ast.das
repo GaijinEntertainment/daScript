@@ -15,6 +15,7 @@ typedef
     FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
     StructureAnnotationPtr = smart_ptr<StructureAnnotation>
     PassMacroPtr = smart_ptr<PassMacro>
+    VariantMacroPtr = smart_ptr<VariantMacro>
 
 [unsafe]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -120,6 +121,11 @@ class AstStructureAnnotation
 
 class AstPassMacro
     def abstract apply ( prog:ProgramPtr; mod:Module? ) : bool
+
+class AstVariantMacro
+    def abstract visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
+    def abstract visitExprAsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr
+    def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
 
 class AstVisitor
 // program
@@ -604,29 +610,24 @@ def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
         concept_assert(false,"expecting pointer to class")
         return [[PassMacroPtr]]
 
+def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_variant_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[VariantMacroPtr]]
+
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
 // if value is ast::Expr*
-class BetterRttiVisitor : AstVisitor
-    astChanged : bool = false
-    def override visitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+class BetterRttiVisitor : AstVariantMacro
+    def override visitExprIsVariant(prog:ProgramPtr; mod:Module?;expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
         if isExpression(expr.value.typeDecl)
-            astChanged = true
             var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
             var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
             var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-ExpressionPtr(vdr), right<-ExpressionPtr(cna)]]
             return ExpressionPtr(veq)
-        return ExpressionPtr(expr)
-
-class BetterRttiInExpr : AstPassMacro
-    visitor : BetterRttiVisitor?
-    adapter : smart_ptr<VisitorAdapter>
-    [unsafe] def BetterRttiInExpr
-        visitor <- new BetterRttiVisitor()
-        adapter <- make_visitor(*visitor)
-    def override apply ( prog:ProgramPtr; mod:Module? ) : bool
-        visitor.astChanged = false
-        visit(prog, adapter)
-        return visitor.astChanged
+        return [[ExpressionPtr]]
 
 [_macro]
 def setup
@@ -639,5 +640,5 @@ def setup
             make_structure_annotation("tag_structure",new TagStructureAnnotation()))
         this_module() |> add_structure_annotation(
             make_structure_annotation("tag_function_macro",new TagFunctionMacro()))
-        this_module() |> add_dirty_infer_macro(
-            make_pass_macro("better_rtti_in_expr", new BetterRttiInExpr()))
+        this_module() |> add_variant_macro(
+            make_variant_macro("better_rtti_in_expr", new BetterRttiVisitor()))

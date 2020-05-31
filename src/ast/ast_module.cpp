@@ -375,6 +375,7 @@ namespace das {
                     addAnnotation(fna.second);
                 }
             }
+            variantMacros.insert(variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
             macros.insert(macros.end(), ptm->macros.begin(), ptm->macros.end());
             inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());
             optimizationMacros.insert(optimizationMacros.end(), ptm->optimizationMacros.begin(), ptm->optimizationMacros.end());

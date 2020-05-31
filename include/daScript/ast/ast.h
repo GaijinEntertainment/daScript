@@ -31,6 +31,9 @@ namespace das
     struct PassMacro;
     typedef smart_ptr<PassMacro> PassMacroPtr;
 
+    struct VariantMacro;
+    typedef smart_ptr<VariantMacro> VariantMacroPtr;
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -743,6 +746,7 @@ namespace das
         vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
+        vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
         string  name;
         bool    builtIn = false;
     private:
@@ -811,6 +815,17 @@ namespace das
     struct PassMacro : ptr_ref_count {
         PassMacro ( const string na = "" ) : name(na) {}
         virtual bool apply( Program *, Module * ) { return false; }
+        string name;
+    };
+
+    struct ExprIsVariant;
+    struct ExprAsVariant;
+    struct ExprSafeAsVariant;
+    struct VariantMacro : ptr_ref_count {
+        VariantMacro ( const string na = "" ) : name(na) {}
+        virtual ExpressionPtr visitIs     (  Program *, Module *, ExprIsVariant * ) { return nullptr; }
+        virtual ExpressionPtr visitAs     (  Program *, Module *, ExprAsVariant * ) { return nullptr; }
+        virtual ExpressionPtr visitSafeAs (  Program *, Module *, ExprSafeAsVariant * ) { return nullptr; }
         string name;
     };
 
