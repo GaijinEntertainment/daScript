@@ -4,7 +4,7 @@
 // options log_cpp = true
 // options log_aot = true
 
-require functional
+require daslib/functional
 
 def is_even(x:int)
     return x % 2 == 0

@@ -1,3 +1,5 @@
+module json_enh
+
 require rtti
 require ast
 

@@ -13,10 +13,11 @@ namespace das {
 
     class FsFileAccess : public das::ModuleFileAccess {
     public:
-        FsFileAccess() : ModuleFileAccess() {}
-        FsFileAccess ( const string & pak, const FileAccessPtr & access )
-            : ModuleFileAccess (pak, access) {}
+        FsFileAccess();
+        FsFileAccess ( const string & pak, const FileAccessPtr & access );
         virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override;
+        virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
+        string daslibPath;
     };
 #endif
 }

@@ -1,9 +1,12 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/fs_file_info.h"
+#include "daScript/misc/sysos.h"
+#include "daScript/ast/ast.h"
 
 namespace das {
 #if !DAS_NO_FILEIO
+
     FsFileInfo::~FsFileInfo() {
         freeSourceData();
     }
@@ -34,11 +37,38 @@ namespace das {
         return nullptr;
     }
 
+    FsFileAccess::FsFileAccess()
+        : ModuleFileAccess() {
+        daslibPath = getDasLibPath();
+    }
+
+    FsFileAccess::FsFileAccess ( const string & pak, const FileAccessPtr & access )
+        : ModuleFileAccess (pak, access) {
+        daslibPath = getDasLibPath();
+    }
+
     das::FileInfo * FsFileAccess::getNewFileInfo(const das::string & fileName) {
         if ( auto info = getNewFsFileInfo(fileName) ) {
             return setFileInfo(fileName, move(info));
         }
         return nullptr;
+    }
+
+    ModuleInfo FsFileAccess::getModuleInfo ( const string & req, const string & from ) const {
+        if (!failed()) {
+            return ModuleFileAccess::getModuleInfo(req, from);
+        }
+        auto np = req.find_first_of("./");
+        if ( np != string::npos ) {
+            string top = req.substr(0,np);
+            if ( top == "daslib" ) {
+                ModuleInfo info;
+                info.moduleName = req.substr(np+1);
+                info.fileName = daslibPath + "/" + info.moduleName + ".das";
+                return info;
+            }
+        }
+        return FileAccess::getModuleInfo(req, from);
     }
 #endif
 }

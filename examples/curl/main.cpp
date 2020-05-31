@@ -59,7 +59,6 @@ int main() {
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
-    NEED_MODULE(Module_Functional);
     NEED_MODULE(Module_Curl);
     unit_test(TEST_PATH "examples/curl/curl.das");
     Module::Shutdown();

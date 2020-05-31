@@ -9,6 +9,8 @@ ENDIF()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+set(EXECUTABLE_OUTPUT_PATH  ${PROJECT_SOURCE_DIR}/bin/)
+
 FIND_XXD()
 FIND_FLEX_AND_BISON()
 
@@ -105,7 +107,6 @@ src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_fio.cpp
-src/builtin/module_builtin_functional.cpp
 src/builtin/module_builtin_network.cpp
 src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
@@ -114,8 +115,6 @@ src/builtin/fio.das.inc
 src/builtin/fio.das
 src/builtin/rtti.das.inc
 src/builtin/rtti.das
-src/builtin/functional.das.inc
-src/builtin/functional.das
 src/builtin/ast.das.inc
 src/builtin/ast.das
 src/builtin/network.das.inc
@@ -127,7 +126,6 @@ XXD(src/builtin/builtin.das)
 XXD(src/builtin/fio.das)
 XXD(src/builtin/rtti.das)
 XXD(src/builtin/ast.das)
-XXD(src/builtin/functional.das)
 XXD(src/builtin/network.das)
 
 SET(MISC_SRC
@@ -147,6 +145,8 @@ include/daScript/misc/memory_model.h
 include/daScript/misc/fnv.h
 include/daScript/misc/smart_ptr.h
 include/daScript/misc/free_list.h
+include/daScript/misc/sysos.h
+include/daScript/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 )
@@ -272,10 +272,17 @@ include/daScript/das_config.h
 )
 SOURCE_GROUP_FILES("main" MAIN_SRC)
 
+file(GLOB DAS_LIB_SRC
+"daslib/*.das"
+)
+list(SORT DAS_LIB_SRC)
+SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
+list(SORT DAS_LIB_SRC)
+
 include_directories(include)
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
-	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC})
+	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC})
 SETUP_CPP11(libDaScript)
 
 # AOT compiler
@@ -486,12 +493,9 @@ SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 add_custom_target(daScriptTestAot)
 SET(TEST_GENERATED_SRC)
-#DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
+DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
 DAS_AOT("examples/test/aot_dummy.das" TEST_GENERATED_SRC daScriptTestAot)
-#DAS_AOT("examples/test/json_enh.das" TEST_GENERATED_SRC daScriptTestAot)
-#DAS_AOT("examples/test/json_example.das" TEST_GENERATED_SRC daScriptTestAot)
 #DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC daScriptTestAot)
-#DAS_AOT("examples/test/dict_pg.das" TEST_GENERATED_SRC daScriptTestAot)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}

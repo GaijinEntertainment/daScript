@@ -1,6 +1,4 @@
-options indenting=4
-
-require functional
+module functional
 
 [private]
 def filter_any(var src:iterator<auto(TT)>; blk )

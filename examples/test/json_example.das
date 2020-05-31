@@ -1,8 +1,8 @@
 // options debugger=true
 
 require fio
-require json
-require json_enh
+require daslib/json
+require daslib/json_enh
 
 [export]
 def test

@@ -3,8 +3,6 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/fpe.h"
 
-#include "daScript/misc/network.h"
-
 #ifdef _MSC_VER
 #include <io.h>
 #else
@@ -360,29 +358,12 @@ bool debug_unit_test ( const string & fn, int CURSOR_X, int CURSOR_Y, bool useAo
     }
 }
 
-void socket_test() {
-    Server::startup();
-    Server server;
-    server.init();
-    for ( ;; ) {
-        server.tick();
-    }
-    Server::shutdown();
-}
-
 int main() {
-
-    // socket_test();
-
     // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
-#if defined(_MSC_VER) || (defined(__APPLE__) && !defined(__clang__))
-    #define    TEST_PATH "../"
-#else
-    #define TEST_PATH "../../"
-#endif
+    #define    TEST_PATH "../../"
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
@@ -391,7 +372,7 @@ int main() {
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_Random);
-    NEED_MODULE(Module_Functional);
+    NEED_MODULE(Module_Network);
 #if 0 // Debug this one test
     compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/smart_ptr.das",true);
     Module::Shutdown();
@@ -399,12 +380,15 @@ int main() {
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "examples/test/hello_world.das"
+    // #define TEST_NAME   "examples/test/hello_world.das"
+    // #define TEST_NAME   "examples/test/dict_pg.das"
+    // #define TEST_NAME   "examples/test/hint_macros.das"
+    #define TEST_NAME   "examples/test/json_example.das"
     // #define TEST_NAME   "examples/test/ast_print.das"
-    // #define TEST_NAME   "examples/test/unit_tests/reflection.das"
+    // #define TEST_NAME   "examples/test/unit_tests/fun.das"
     // debug_unit_test(TEST_PATH TEST_NAME,16,23,false);
-    unit_test(TEST_PATH TEST_NAME,false);
-    // unit_test(TEST_PATH TEST_NAME,true);
+    // unit_test(TEST_PATH TEST_NAME,false);
+    unit_test(TEST_PATH TEST_NAME,true);
     Module::Shutdown();
     getchar();
     return 0;

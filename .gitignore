@@ -8,6 +8,7 @@ tmtags
 **/_aot_generated
 
 build/
+bin/
 .vscode/
 
 
