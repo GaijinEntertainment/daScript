@@ -12,10 +12,25 @@ namespace das {
         char * c_str();
         int tellp() const;
     protected:
-        void reserve(int newSize);
-        void append(const char * s, int l);
-        char * allocate (int l);
-        virtual void output() {}
+        __forceinline void reserve(int newSize) {
+            if (newSize > dataCapacity) _reserve(newSize);
+        }
+        __forceinline void append(const char * s, int l) {
+            int newSize = dataSize + l;
+            reserve(newSize);
+            if (data) {
+                memcpy(data + dataSize, s, l);
+                dataSize += l;
+            }
+        }
+        __forceinline char * allocate (int l) {
+            reserve(dataSize + l);
+            if (!data) return nullptr;
+            dataSize += l;
+            return data + dataSize - l;
+        }
+        __forceinline void output() {}
+        void _reserve(int newSize);
     protected:
         StringAllocator * heap = nullptr;
         char *  data = nullptr;

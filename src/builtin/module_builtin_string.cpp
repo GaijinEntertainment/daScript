@@ -275,13 +275,7 @@ namespace das
     }
 
     void write_string_chars ( StringBuilderWriter & writer, int32_t ch, int32_t count ) {
-        if ( count <=0 ) return;
-        char buf[2];
-        buf[0] = char(ch);
-        buf[1] = 0;
-        while ( count -- ) {
-            writer.writeStr(buf, 1);
-        }
+        if ( count >0 ) writer.writeChars(ch, count);
     }
 
     void write_escape_string ( StringBuilderWriter & writer, char * str ) {

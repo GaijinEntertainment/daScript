@@ -19,51 +19,33 @@ namespace das {
         return int(dataSize);
     }
 
-    void HeapWriterPolicy::reserve(int newSize) {
-        if (newSize > dataCapacity) {
-            int newCapacity = newSize;
-            if ( newCapacity > int(heap->pageSize) ) {
-                // if we exceed page size, we go to double-or-nothing grow mode
-                // that way string heap pages stay without holes, but big pages get allocated less often
-                newCapacity = das::max(dataCapacity * 2, newSize);
-            }
-            if (data) {
-                char * oldDataBase = data - sizeof(StringHeader);
-                char * newDataBase = (char *)heap->reallocate(oldDataBase,
-                    dataCapacity + sizeof(StringHeader) + 1, newCapacity + sizeof(StringHeader) + 1);
-                if (newDataBase == nullptr) {
-                    data = nullptr;
-                    dataSize = 0;
-                    return;
-                } else if (oldDataBase != newDataBase) {
-                    data = newDataBase + sizeof(StringHeader);
-                }
-            } else {
-                data = (char *) heap->allocate(newCapacity + sizeof(StringHeader) + 1);
-                if (!data) {
-                    dataSize = 0;
-                    return;
-                }
-                data += sizeof(StringHeader);
-            }
-            dataCapacity = newCapacity;
+    void HeapWriterPolicy::_reserve(int newSize) {
+        int newCapacity = newSize;
+        if ( newCapacity > int(heap->pageSize) ) {
+            // if we exceed page size, we go to double-or-nothing grow mode
+            // that way string heap pages stay without holes, but big pages get allocated less often
+            newCapacity = das::max(dataCapacity * 2, newSize);
         }
-    }
-
-    void HeapWriterPolicy::append(const char * s, int l) {
-        int newSize = dataSize + l;
-        reserve(newSize);
         if (data) {
-            memcpy(data + dataSize, s, l);
-            dataSize += l;
+            char * oldDataBase = data - sizeof(StringHeader);
+            char * newDataBase = (char *)heap->reallocate(oldDataBase,
+                dataCapacity + sizeof(StringHeader) + 1, newCapacity + sizeof(StringHeader) + 1);
+            if (newDataBase == nullptr) {
+                data = nullptr;
+                dataSize = 0;
+                return;
+            } else if (oldDataBase != newDataBase) {
+                data = newDataBase + sizeof(StringHeader);
+            }
+        } else {
+            data = (char *) heap->allocate(newCapacity + sizeof(StringHeader) + 1);
+            if (!data) {
+                dataSize = 0;
+                return;
+            }
+            data += sizeof(StringHeader);
         }
-    }
-
-    char * HeapWriterPolicy::allocate (int l) {
-        reserve(dataSize + l);
-        if (!data) return nullptr;
-        dataSize += l;
-        return data + dataSize - l;
+        dataCapacity = newCapacity;
     }
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {
