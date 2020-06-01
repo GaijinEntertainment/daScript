@@ -19,7 +19,7 @@ def test
                     // macro test
                     if json is _object
                         print("object\n")
-                        (json as _object)["foo"] = new JsonValue("bar")
+                        (json as _object)["foo"] = JV("bar")
                     print("{write_json(json)}\n")
 
     return true

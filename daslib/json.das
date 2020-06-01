@@ -23,24 +23,30 @@ let
     Token_string = typeinfo(variant_index<_string> type<Token>)
     Token_symbol = typeinfo(variant_index<_symbol> type<Token>)
 
-def JsonValue ( v : string )
-    return <- [[JsonValue value <- [[JsValue _string = v]]]]
+[export]
+def JV ( v : string )
+    return new [[JsonValue value <- [[JsValue _string = v]]]]
 
-def JsonValue ( v : double )
-    return <- [[JsonValue value <- [[JsValue _number = v]]]]
+[export]
+def JV ( v : double )
+    return new [[JsonValue value <- [[JsValue _number = v]]]]
 
-def JsonValue ( v : bool )
-    return <- [[JsonValue value <- [[JsValue _bool = v]]]]
+[export]
+def JV ( v : bool )
+    return new [[JsonValue value <- [[JsValue _bool = v]]]]
 
-def JsonValue ( v : void? )
+[export]
+def JV ( v : void? )
     assert(v==null,"only null allowed")
-    return <- [[JsonValue value <- [[JsValue _null = v]]]]
+    return new [[JsonValue value <- [[JsValue _null = v]]]]
 
-def JsonValue ( var v : table<string;JsonValue?> )
-    return <- [[JsonValue value <- [[JsValue _object <- v]]]]
+[export]
+def JV ( var v : table<string;JsonValue?> )
+    return new [[JsonValue value <- [[JsValue _object <- v]]]]
 
-def JsonValue ( var v : array<JsonValue?> )
-    return <- [[JsonValue value <- [[JsValue _array <- v]]]]
+[export]
+def JV ( var v : array<JsonValue?> )
+    return new [[JsonValue value <- [[JsValue _array <- v]]]]
 
 [unsafe, private]
 def lexer ( text : string )
@@ -142,7 +148,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
                 if value == null
                     if error=="unexpected ]" & length(arr)==0
                         error = ""
-                        return new JsonValue(arr)
+                        return JV(arr)
                     return null
                 push(arr, value)
                 if !expect_token(itv, ahead, Token_symbol, error)
@@ -156,14 +162,14 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
             if empty(itv)
                 error = "unexpected eos"
                 return null
-            return new JsonValue(arr)
+            return JV(arr)
         elif sym == '{'
             var tab : table<string; JsonValue?>
             while !empty(itv)
                 if !expect_token(itv, ahead, Token_string, error)
                     if (ahead is _symbol) & (ahead as _symbol)=='}' & length(tab)==0
                         error = ""
-                        return new JsonValue(tab)
+                        return JV(tab)
                     return null
                 var key = ahead as _string
                 if !expect_symbol(itv, ahead, ':', error)
@@ -186,18 +192,18 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
             if empty(itv)
                 error = "unexpected eos"
                 return null
-            return new JsonValue(tab)
+            return JV(tab)
         else
             error = "unexpected symbol `{to_char(sym)}` aka ASCII {sym}"
             return null
     elif ahead is _string
-        return new JsonValue(ahead as _string)
+        return JV(ahead as _string)
     elif ahead is _number
-        return new JsonValue(ahead as _number)
+        return JV(ahead as _number)
     elif ahead is _bool
-        return new JsonValue(ahead as _bool)
+        return JV(ahead as _bool)
     elif ahead is _null
-        return new JsonValue(null)
+        return JV(null)
     else
         panic("internal parsing error near {ahead}")
         return null
