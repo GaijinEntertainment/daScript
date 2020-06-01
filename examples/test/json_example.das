@@ -6,7 +6,7 @@ require daslib/json_enh
 
 [export]
 def test
-    for jidx in range(1,5)
+    for jidx in range(1,6)
         let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
         fopen(fname, "r") <| $ ( f )
             fmap(f) <| $ ( data )
@@ -14,7 +14,7 @@ def test
                 var error = ""
                 var json = read_json(data, error)
                 if json == null
-                    print("failed to parse, {error}\n")
+                    panic("failed to parse, {error}\n")
                 else
                     // macro test
                     if json is _object

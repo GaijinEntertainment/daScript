@@ -49,7 +49,7 @@ namespace das {
             return *this;
         }
         StringWriter & writeChars(char ch, size_t len) {
-            if ( auto at = this->allocate(len) ) {
+            if ( auto at = this->allocate(int(len)) ) {
                 memset(at, ch, len);
                 this->output();
             }

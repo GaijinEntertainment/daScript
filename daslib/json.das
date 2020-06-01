@@ -67,6 +67,12 @@ def lexer ( text : string )
                 var str : string
                 while next(tin,ahead) & ahead!='"'
                     str = append(str, ahead)
+                    if ahead == '\\'
+                        if next(tin,ahead)
+                            str = append(str,ahead)
+                        else
+                            yield [[Token _error = "string escape sequence exceeds text"]]
+                            return false
                 if empty(tin)
                     yield [[Token _error = "string exceeds text"]]
                     return false

@@ -275,7 +275,7 @@ namespace das
     }
 
     void write_string_chars ( StringBuilderWriter & writer, int32_t ch, int32_t count ) {
-        if ( count >0 ) writer.writeChars(ch, count);
+        if ( count >0 ) writer.writeChars(char(ch), count);
     }
 
     void write_escape_string ( StringBuilderWriter & writer, char * str ) {
@@ -403,7 +403,7 @@ namespace das
         bool err = false;
         auto estr = unescapeString(str, &err);
         if ( err ) context->throw_error("invalid escape sequence");
-        return context->stringHeap.allocateString(escapeString(str));
+        return context->stringHeap.allocateString(estr);
     }
 
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
