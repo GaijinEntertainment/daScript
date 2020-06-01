@@ -1,0 +1,86 @@
+# Copyright (C) 2018 Sebastian Pipping <sebastian@pipping.org>
+# Licensed under the MIT license
+
+language: cpp
+dist: xenial
+
+addons:
+  apt:
+    sources:
+    # Clang 8:
+      - llvm-toolchain-xenial-8
+      - ubuntu-toolchain-r-test
+    packages:
+      - clang-8
+      - cmake
+      - lzip
+    # Documentation:
+      - doxygen
+      - graphviz
+      - qt4-dev-tools
+      - qtchooser
+
+script:
+  - set -e
+  - GTEST_VERSION=1.8.1
+    ; GTEST_PREFIX=~/.local/
+    ; wget https://github.com/google/googletest/archive/release-${GTEST_VERSION}.tar.gz
+    && tar xf release-${GTEST_VERSION}.tar.gz
+    && ( cd googletest-release-${GTEST_VERSION}/
+      && cmake
+          -DBUILD_SHARED_LIBS=ON
+          -DCVF_VERSION=${GTEST_VERSION}
+          -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}
+          .
+      && make
+      && make install )
+  - mkdir build
+  - pushd build
+  - compile_flags=(
+        -pipe
+
+        -O1
+        -g
+        -fsanitize=address
+        -fno-omit-frame-pointer
+
+        -Wall
+        -Wextra
+        -pedantic
+    )
+    && CFLAGS="${compile_flags[*]} -std=c89"
+    && CXXFLAGS="${compile_flags[*]} -std=c++98"
+    && LDFLAGS='-g -fsanitize=address'
+    && cmake_args=(
+        -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}
+
+        -Wdev
+        -Werror=dev
+        -Wdeprecated
+        -Werror=deprecated
+
+        -DCMAKE_C_COMPILER=clang-8
+        -DCMAKE_CXX_COMPILER=clang++-8
+        -DCMAKE_C_FLAGS="${CFLAGS}"
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS}"
+        -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}"
+        -DCMAKE_MODULE_LINKER_FLAGS="${LDFLAGS}"
+        -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}"
+    )
+    && cmake "${cmake_args[@]}" -DCMAKE_INSTALL_INCLUDEDIR=include123 ..  # -Werror would fail checks!
+  - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" all
+  - make VERBOSE=1 C_FLAGS="${CFLAGS} -fPIC -Werror" CXX_FLAGS="${CXXFLAGS} -Werror" test ARGS=--verbose
+  - cat Testing/Temporary/LastTest.log
+  - make install
+  - ./doc/release.sh
+  - make DESTDIR="${PWD}"/ROOT/ install
+  - find ROOT | sort
+  - popd
+  - pushd cmake/test_find_package
+  - cmake "${cmake_args[@]}" .
+  - make VERBOSE=1
+  - ./hello
+  - popd
+  - git fetch --tags --unshallow origin  # for "git describe" in make-distcheck.sh
+  - ./make-distcheck.sh -DCMAKE_INSTALL_PREFIX:PATH=${GTEST_PREFIX}  # without AddressSanitizer
+  - "! git status | fgrep -A100 'Untracked files:'  # works best at the very end"
