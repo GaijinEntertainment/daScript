@@ -12,8 +12,12 @@ namespace das {
 
     class ServerAdapter : public Server {
     public:
-        ServerAdapter(char * pClass, const StructInfo * info, Context * ctx )
-            : classPtr(pClass), context(ctx) {
+        ServerAdapter(char * pClass, const StructInfo * info, Context * ctx ) {
+            update(pClass,info,ctx);
+        }
+        void update ( char * pClass, const StructInfo * info, Context * ctx ) {
+            context = ctx;
+            classPtr = pClass;
             pServer = (void **) adapt_field("_server",pClass,info);
             if ( pServer ) *pServer = this;
             fnOnConnect = adapt("onConnect",pClass,info);
@@ -105,6 +109,12 @@ namespace das {
         server->tick();
     }
 
+    void server_restore ( smart_ptr_raw<Server> server, const void * pClass, const StructInfo * info, Context * context ) {
+        if ( !server ) context->throw_error("null server");
+        auto adapter = (ServerAdapter *) server.get();
+        adapter->update((char *)pClass,info,context);
+    }
+
     class Module_Network : public Module {
     public:
         Module_Network() : Module("network") {
@@ -128,6 +138,8 @@ namespace das {
                 SideEffects::modifyArgumentAndExternal, "server_tick");
             addExtern<DAS_BIND_FUN(server_send)>(*this, lib,  "server_send",
                 SideEffects::modifyArgumentAndExternal, "server_send");
+            addExtern<DAS_BIND_FUN(server_restore)>(*this, lib,  "server_restore",
+                SideEffects::modifyArgumentAndExternal, "server_restore");
             // add builtin module
             compileBuiltinModule("network.das",network_das,sizeof(network_das));
         }

@@ -12,6 +12,8 @@ class Server
         return server_init(_server,port)
     [unsafe] def restore ( var shared_orphan : smart_ptr<NetworkServer>& )
         _server <- shared_orphan
+        let classInfo = class_info(self)
+        server_restore(_server,addr(self),classInfo)
     [unsafe] def save ( var shared_orphan : smart_ptr<NetworkServer>& )
         shared_orphan <- _server
     def has_session : bool
