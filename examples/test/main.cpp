@@ -2,6 +2,7 @@
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/fpe.h"
+#include "daScript/misc/sysos.h"
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -363,11 +364,6 @@ int main() {
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
-#if defined(_MSC_VER) || (defined(__APPLE__) && defined(__clang__))
-    #define    TEST_PATH "../../"
-#else
-    #define    TEST_PATH "../"
-#endif
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
@@ -378,35 +374,35 @@ int main() {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
 #if 0 // Debug this one test
-    compilation_fail_test(TEST_PATH "examples/test/compilation_fail_tests/smart_ptr.das",true);
+    compilation_fail_test(getDasRoot() + "/examples/test/compilation_fail_tests/smart_ptr.das",true);
     Module::Shutdown();
     getchar();
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "examples/test/hello_world.das"
-    // #define TEST_NAME   "examples/test/dict_pg.das"
-    // #define TEST_NAME   "examples/test/hint_macros.das"
-    // #define TEST_NAME   "examples/test/json_example.das"
-    // #define TEST_NAME   "examples/test/ast_print.das"
-    // #define TEST_NAME   "examples/test/unit_tests/fun.das"
+    #define TEST_NAME   "/examples/test/hello_world.das"
+    // #define TEST_NAME   "/examples/test/dict_pg.das"
+    // #define TEST_NAME   "/examples/test/hint_macros.das"
+    // #define TEST_NAME   "/examples/test/json_example.das"
+    // #define TEST_NAME   "/examples/test/ast_print.das"
+    // #define TEST_NAME   "/examples/test/unit_tests/fun.das"
     // debug_unit_test(TEST_PATH TEST_NAME,16,23,false);
-    // unit_test(TEST_PATH TEST_NAME,false);
-    unit_test(TEST_PATH TEST_NAME,true);
+    unit_test(getDasRoot() +  TEST_NAME,false);
+    // unit_test(getDasRoot() +  TEST_NAME,true);
     Module::Shutdown();
     getchar();
     return 0;
 #endif
     uint64_t timeStamp = ref_time_ticks();
     bool ok = true;
-    ok = run_compilation_fail_tests(TEST_PATH "examples/test/compilation_fail_tests") && ok;
-    ok = run_unit_tests(TEST_PATH "examples/test/unit_tests") && ok;
-    ok = run_unit_tests(TEST_PATH "examples/test/optimizations") && ok;
-    ok = run_exception_tests(TEST_PATH "examples/test/runtime_errors") && ok;
-    ok = run_module_test(TEST_PATH "examples/test/module", "main.das", true) && ok;
-    ok = run_module_test(TEST_PATH "examples/test/module", "main_default.das", false) && ok;
-    ok = run_module_test(TEST_PATH "examples/test/module/alias", "main.das", true) && ok;
-    ok = run_module_test(TEST_PATH "examples/test/module/cdp", "main.das", true) && ok;
+    ok = run_compilation_fail_tests(getDasRoot() + "/examples/test/compilation_fail_tests") && ok;
+    ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests") && ok;
+    ok = run_unit_tests(getDasRoot() +  "/examples/test/optimizations") && ok;
+    ok = run_exception_tests(getDasRoot() +  "/examples/test/runtime_errors") && ok;
+    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main.das", true) && ok;
+    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main_default.das", false) && ok;
+    ok = run_module_test(getDasRoot() +  "/examples/test/module/alias", "main.das", true) && ok;
+    ok = run_module_test(getDasRoot() +  "/examples/test/module/cdp", "main.das", true) && ok;
     int usec = get_time_usec(timeStamp);
     tout << "TESTS " << (ok ? "PASSED " : "FAILED!!! ") << ((usec/1000)/1000.0) << "\n";
     // shutdown

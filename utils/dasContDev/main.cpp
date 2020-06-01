@@ -1,6 +1,7 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/misc/fpe.h"
+#include "daScript/misc/sysos.h"
 
 using namespace das;
 
@@ -90,12 +91,7 @@ int main(int argc, const char * argv[]) {
     }
     main_das = argv[1];
 #else
-#if defined(_MSC_VER) || (defined(__APPLE__) && defined(__clang__))
-    #define    TEST_PATH "../../"
-#else
-    #define    TEST_PATH "../"
-#endif
-    main_das = TEST_PATH "examples/test/telnet.das";
+    main_das = getDasRoot() + "/examples/test/telnet.das";
 #endif
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);

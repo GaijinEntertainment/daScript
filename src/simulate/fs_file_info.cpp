@@ -41,12 +41,12 @@ namespace das {
 
     FsFileAccess::FsFileAccess()
         : ModuleFileAccess() {
-        daslibPath = getDasLibPath();
+        daslibPath = getDasRoot() + "/daslib";
     }
 
     FsFileAccess::FsFileAccess ( const string & pak, const FileAccessPtr & access )
         : ModuleFileAccess (pak, access) {
-        daslibPath = getDasLibPath();
+         daslibPath = getDasRoot() + "/daslib";
     }
 
     das::FileInfo * FsFileAccess::getNewFileInfo(const das::string & fileName) {

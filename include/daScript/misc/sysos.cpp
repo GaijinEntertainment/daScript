@@ -66,20 +66,19 @@ namespace das {
         }
     }
 
-    string getDasLibPath ( void ) {
+    string getDasRoot ( void ) {
         string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
         auto np = efp.find_last_of("\\/");
         if ( np != string::npos ) {
-            auto ep = get_prefix(efp);  // remove file name
+            auto ep = get_prefix(efp);          // remove file name
             auto suffix = get_suffix(ep);
             if ( suffix != "bin" ) {
-                ep = get_prefix(ep);    // remove debug
+                ep = get_prefix(ep);            // remove debug
             }
             DAS_ASSERT(get_suffix(ep)=="bin");
-            ep = get_prefix(ep);        // remove bin
-            return ep + "/daslib";
+            return get_prefix(ep);              // remove bin
         } else {
-            return "../../daslib";
+            return "";
         }
     }
 }
