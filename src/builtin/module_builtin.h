@@ -6,6 +6,7 @@ namespace das {
     class Module_BuiltIn : public Module {
     public:
         Module_BuiltIn();
+        virtual ~Module_BuiltIn();
     protected:
         void addString(ModuleLibrary & lib);
         void addRuntime(ModuleLibrary & lib);

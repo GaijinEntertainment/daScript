@@ -10,12 +10,19 @@ class Server
             panic("can't make server")
     def init ( port : int ) : bool
         return server_init(_server,port)
+    [unsafe] def restore ( var shared_orphan : smart_ptr<NetworkServer>& )
+        _server <- shared_orphan
+    [unsafe] def save ( var shared_orphan : smart_ptr<NetworkServer>& )
+        shared_orphan <- _server
+    def has_session : bool
+        return _server != null
     def is_open : bool
         return server_is_open(_server)
     def is_connected : bool
         return server_is_connected(_server)
     def tick : void
-        server_tick(_server)
+        if _server != null
+            server_tick(_server)
     def send ( data : uint8?; size:int ) : bool
         return server_send(_server, data, size)
     def abstract onConnect : void

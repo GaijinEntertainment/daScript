@@ -89,4 +89,10 @@ namespace das {
     __forceinline bool nequ_sptr_ptr ( const smart_ptr_raw<void> & left, const void * right ) { return left.get() != right; }
     __forceinline bool equ_ptr_sptr ( const void * left, const smart_ptr_raw<void> & right ) { return left == right.get(); }
     __forceinline bool nequ_ptr_sptr ( const void * left, const smart_ptr_raw<void> & right ) { return left != right.get(); }
+
+    void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line );
+    void gc0_save_smart_ptr ( char * name, smart_ptr_raw<void> data, Context * context, LineInfoArg * line );
+    void * gc0_restore_ptr ( char * name, Context * context );
+    smart_ptr_raw<void> gc0_restore_smart_ptr ( char * name, Context * context );
+    void gc0_reset();
 }

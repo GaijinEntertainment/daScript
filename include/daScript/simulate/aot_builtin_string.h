@@ -21,6 +21,8 @@ namespace das {
     char* builtin_string_strip_right ( const char *str, Context * context );
     int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context );
     int builtin_string_find2 (const char *str, const char *substr);
+    int builtin_find_first_of ( const char * str, const char * substr, Context * context );
+    int builtin_find_first_char_of ( const char * str, int Ch, Context * context );
     int builtin_string_length ( const char *str, Context * context );
     char* builtin_string_slice1 ( const char *str, int start, int end, Context * context );
     char* builtin_string_slice2 ( const char *str, int start, Context * context );

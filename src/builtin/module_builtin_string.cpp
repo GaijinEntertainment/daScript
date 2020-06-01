@@ -406,6 +406,28 @@ namespace das
         return context->stringHeap.allocateString(estr);
     }
 
+    int builtin_find_first_of ( const char * str, const char * substr, Context * context ) {
+        uint32_t strlen = stringLengthSafe ( *context, str );
+        uint32_t substrlen = stringLengthSafe ( *context, str );
+        for ( uint32_t o=0; o!=strlen; ++o ) {
+            auto ch = str[o];
+            for ( uint32_t s=0; s!=substrlen; ++s ) {
+                if ( ch == substr[s] ) return int(o);
+            }
+        }
+        return -1;
+    }
+
+    int builtin_find_first_char_of ( const char * str, int Ch, Context * context ) {
+        uint32_t strlen = stringLengthSafe ( *context, str );
+        for ( uint32_t o=0; o!=strlen; ++o ) {
+            if ( str[o]==Ch ) {
+                return o;
+            }
+        }
+        return -1;
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
@@ -448,6 +470,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice2");
         addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", SideEffects::none, "builtin_string_find1");
         addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", SideEffects::none, "builtin_string_find2");
+        addExtern<DAS_BIND_FUN(builtin_find_first_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_of");
+        addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_char_of");
         addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
         addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
         addExtern<DAS_BIND_FUN(builtin_append_char)>(*this, lib, "append", SideEffects::modifyArgumentAndExternal, "builtin_append_char");

@@ -612,6 +612,47 @@ namespace das
         return ctx->thisProgram->isCompilingMacros;
     }
 
+    // static storage
+
+    das_hash_map<uint32_t, void*> g_static_storage;
+
+    void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line ) {
+        uint32_t hash = hash_function ( *context, name );
+        if ( g_static_storage.find(hash)!=g_static_storage.end() ) {
+            context->throw_error_at(*line, "gc0 already there %s (or hash collision)", name);
+        }
+        g_static_storage[hash] = data;
+    }
+
+    void gc0_save_smart_ptr ( char * name, smart_ptr_raw<void> data, Context * context, LineInfoArg * line ) {
+        gc0_save_ptr(name, data.get(), context, line);
+    }
+
+    void * gc0_restore_ptr ( char * name, Context * context ) {
+        uint32_t hash = hash_function ( *context, name );
+        auto it = g_static_storage.find(hash);
+        if ( it!=g_static_storage.end() ) {
+            void * res = it->second;
+            g_static_storage.erase(it);
+            return res;
+        } else {
+            return nullptr;
+        }
+    }
+
+    smart_ptr_raw<void> gc0_restore_smart_ptr ( char * name, Context * context ) {
+        return gc0_restore_ptr(name,context);
+    }
+
+    void gc0_reset() {
+        das_hash_map<uint32_t, void*> dummy;
+        swap ( g_static_storage, dummy );
+    }
+
+    Module_BuiltIn::~Module_BuiltIn() {
+        gc0_reset();
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
@@ -741,6 +782,12 @@ namespace das
         addExtern<DAS_BIND_FUN(nequ_ptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_ptr_sptr");
         addExtern<DAS_BIND_FUN(equ_sptr_ptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_ptr");
         addExtern<DAS_BIND_FUN(nequ_sptr_ptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_ptr");
+        // gc0
+        addExtern<DAS_BIND_FUN(gc0_save_ptr)>(*this, lib, "gc0_save_ptr", SideEffects::modifyExternal, "gc0_save_ptr");
+        addExtern<DAS_BIND_FUN(gc0_save_smart_ptr)>(*this, lib, "gc0_save_smart_ptr", SideEffects::modifyExternal, "gc0_save_smart_ptr");
+        addExtern<DAS_BIND_FUN(gc0_restore_ptr)>(*this, lib, "gc0_restore_ptr", SideEffects::accessExternal, "gc0_restore_ptr");
+        addExtern<DAS_BIND_FUN(gc0_restore_smart_ptr)>(*this, lib, "gc0_restore_smart_ptr", SideEffects::accessExternal, "gc0_restore_smart_ptr");
+        addExtern<DAS_BIND_FUN(gc0_reset)>(*this, lib, "gc0_reset", SideEffects::modifyExternal, "gc0_reset");
         // profile
         addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal, "builtin_profile");
         addString(lib);
