@@ -132,7 +132,7 @@ namespace das {
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases );
         Type getRangeBaseType() const;
-        const TypeDecl * findAlias ( const string & name, bool allowAuto = false ) const;
+        TypeDecl * findAlias ( const string & name, bool allowAuto = false );
         int findArgumentIndex(const string & name) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;

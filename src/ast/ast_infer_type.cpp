@@ -239,7 +239,7 @@ namespace das {
 
         // find type alias name, and resolve it to type
         // without one generic function
-        const TypeDecl * findFuncAlias ( const FunctionPtr & fptr, const string & name ) const {
+        TypeDeclPtr findFuncAlias ( const FunctionPtr & fptr, const string & name ) const {
             for ( auto & arg : fptr->arguments ) {
                 if ( auto aT = arg->type->findAlias(name,true) ) {
                     return aT;
@@ -253,7 +253,36 @@ namespace das {
                     return vT;
                 }
             }
-            return nullptr;
+            auto mtd = program->makeTypeDeclaration(LineInfo(),name);
+            return mtd->isAlias() ? nullptr : mtd;
+        }
+
+        // find type alias name, and resolve it to type
+        // within current context
+        TypeDeclPtr findAlias ( const string & name ) const {
+            if ( func ) {
+                for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
+                    auto & var = *it;
+                    if ( auto vT = var->type->findAlias(name) ) {
+                        return vT;
+                    }
+                }
+                for ( auto & arg : func->arguments ) {
+                    if ( auto aT = arg->type->findAlias(name) ) {
+                        return aT;
+                    }
+                }
+                if ( auto rT = func->result->findAlias(name,true) ) {
+                    return rT;
+                }
+            }
+            for ( auto & gvar : program->thisModule->globalsInOrder ) {
+                if ( auto vT = gvar->type->findAlias(name) ) {
+                    return vT;
+                }
+            }
+            auto mtd = program->makeTypeDeclaration(LineInfo(),name);
+            return mtd->isAlias() ? nullptr : mtd;
         }
 
         // WARNING: this is really really slow, use faster tests when u can isAutoOrAlias for one
@@ -280,33 +309,6 @@ namespace das {
         bool isFullySealedType(const TypeDeclPtr & ptr) {
             das_set<const TypeDecl *> all;
             return isFullySealedType(ptr, all);
-        }
-
-        // find type alias name, and resolve it to type
-        // within current context
-        const TypeDecl * findAlias ( const string & name ) const {
-            if ( func ) {
-                for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
-                    auto & var = *it;
-                    if ( auto vT = var->type->findAlias(name) ) {
-                        return vT;
-                    }
-                }
-                for ( auto & arg : func->arguments ) {
-                    if ( auto aT = arg->type->findAlias(name) ) {
-                        return aT;
-                    }
-                }
-                if ( auto rT = func->result->findAlias(name,true) ) {
-                    return rT;
-                }
-            }
-            for ( auto & gvar : program->thisModule->globalsInOrder ) {
-                if ( auto vT = gvar->type->findAlias(name) ) {
-                    return vT;
-                }
-            }
-            return nullptr;
         }
 
         // infer alias type
@@ -366,7 +368,7 @@ namespace das {
                     resT->secondType = inferAlias(decl->secondType,fptr,aliases);
                     if ( !resT->secondType ) return nullptr;
                 }
-            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
+            } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda || decl->baseType==Type::tBlock  ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     if ( auto infAT = inferAlias(declAT,fptr,aliases) ) {
@@ -377,6 +379,15 @@ namespace das {
                 }
                 resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                 if ( !resT->firstType ) return nullptr;
+            } else if ( decl->baseType==Type::tVariant || decl->baseType==Type::tTuple ) {
+                for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                    auto & declAT = decl->argTypes[iA];
+                    if ( auto infAT = inferAlias(declAT,fptr,aliases) ) {
+                        resT->argTypes[iA] = infAT;
+                    } else {
+                        return nullptr;
+                    }
+                }
             }
             return resT;
         }
@@ -433,7 +444,9 @@ namespace das {
                 if ( decl->secondType ) {
                     resT->secondType = inferPartialAliases(decl->secondType,fptr,aliases);
                 }
-            } else if ( decl->baseType==Type::tBlock || decl->baseType==Type::tFunction || decl->baseType==Type::tLambda ) {
+            } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda
+                || decl->baseType==Type::tBlock || decl->baseType==Type::tVariant ||
+                    decl->baseType==Type::tTuple ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     resT->argTypes[iA] = inferPartialAliases(declAT,fptr,aliases);
@@ -1107,6 +1120,25 @@ namespace das {
             if ( inferTypeExpr(type) ) {
                 reportAstChanged();
             }
+        }
+
+        virtual  TypeDeclPtr visitAlias ( TypeDecl * td, const string & ) override {
+            if ( td->isAlias() ) {
+                if ( auto ta = inferAlias(td) ) {
+                    if ( ta->isAutoOrAlias() ) {
+                        ta = inferAlias(td);
+                        error("kaboom. can't be infer " + td->describe(),  "", "",
+                            td->at, CompilationError::invalid_type);
+                        return td;
+                    }
+                    return ta;
+                } else {
+                    ta = inferAlias(td);
+                    error("can't be inferred " + td->describe(),  "", "",
+                        td->at, CompilationError::invalid_type);
+                }
+            }
+            return td;
         }
 
     // enumeration

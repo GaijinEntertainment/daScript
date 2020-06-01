@@ -1,15 +1,5 @@
 module json
 
-struct JsonValue {
-    value : variant<
-        _object : table<string; JsonValue?>;
-        _array  : array<JsonValue?>;
-        _string : string;
-        _number : double;
-        _bool   : bool;
-        _null   : void?>;
-}
-
 variant JsValue
     _object : table<string; JsonValue?>
     _array  : array<JsonValue?>
@@ -17,6 +7,9 @@ variant JsValue
     _number : double
     _bool   : bool
     _null   : void?
+
+struct JsonValue
+    value : JsValue
 
 variant Token
     _string : string

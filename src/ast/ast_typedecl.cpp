@@ -454,7 +454,7 @@ namespace das
         argNames = decl.argNames;
     }
 
-    const TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) const {
+    TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) {
         if (baseType == Type::alias) {
             return nullptr; // if it is another alias, can't find it
         } else if (baseType == Type::autoinfer && !allowAuto) {
