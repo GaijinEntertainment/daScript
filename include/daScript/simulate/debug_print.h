@@ -45,23 +45,30 @@ namespace das {
 
     template <typename Writer>
     struct DebugDataWalker : DataWalker {
+        using loop_point = pair<void *,uint32_t>;
         Writer & ss;
         PrintFlags flags;
-        vector<void *> visited;
-        vector<void *> visited_handles;
+        vector<loop_point> visited;
+        vector<loop_point> visited_handles;
         DebugDataWalker() = delete;
         DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
     // data structures
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
-            if ( find(visited.begin(),visited.end(),ps)==visited.end() ) {
+            auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                return t.first==ps && t.second==info->hash;
+            });
+            if ( it==visited.end() ) {
                 return true;
             } else {
                 ss << "~loop at 0x" << HEX << intptr_t(ps) << DEC << " " << info->name << "~";
                 return false;
             }
         }
-        virtual bool canVisitHandle ( char * ps, TypeInfo * ) override {
-            if ( find(visited_handles.begin(),visited_handles.end(),ps)==visited_handles.end() ) {
+        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                return t.first==ps && t.second==info->hash;
+            });
+            if ( it==visited.end() ) {
                 return true;
             } else {
                 ss  << "~handle loop at 0x" << HEX << intptr_t(ps) << DEC << "~";
@@ -69,7 +76,7 @@ namespace das {
             }
         }
         virtual void beforeStructure ( char * ps, StructInfo * info ) override {
-            visited.push_back(ps);
+            visited.emplace_back(make_pair(ps,info->hash));
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << info->name;
@@ -213,7 +220,7 @@ namespace das {
             }
         }
         virtual void beforeHandle ( char * ps, TypeInfo * ti ) override {
-            visited_handles.push_back(ps);
+            visited_handles.emplace_back(make_pair(ps,ti->hash));
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << "[[" << debug_type(ti) << " ";
             }
