@@ -162,6 +162,9 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
             var tab : table<string; JsonValue?>
             while !empty(itv)
                 if !expect_token(itv, ahead, Token_string, error)
+                    if (ahead is _symbol) & (ahead as _symbol)=='}' & length(tab)==0
+                        error = ""
+                        return new JsonValue(tab)
                     return null
                 var key = ahead as _string
                 if !expect_symbol(itv, ahead, ':', error)
@@ -228,21 +231,24 @@ def write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : in
         write_chars(writer,'\t',depth)
         write(writer, "]")
     elif jsv.value is _object
-        write(writer, "\{\n")
-        var first = true
-        for elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)
-            if first
-                first = false
-            else
-                write(writer,",\n")
-            write_chars(writer,'\t',depth+1)
-            write(writer, "\"")
-            write_escape_string(writer, elemK)
-            write(writer, "\" : ")
-            write_value(writer, elemV, depth+1)
-        write(writer, "\n")
-        write_chars(writer,'\t',depth)
-        write(writer, "\}")
+        if length(jsv.value as _object)==0
+            write(writer, "\{\}")
+        else
+            write(writer, "\{\n")
+            var first = true
+            for elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)
+                if first
+                    first = false
+                else
+                    write(writer,",\n")
+                write_chars(writer,'\t',depth+1)
+                write(writer, "\"")
+                write_escape_string(writer, elemK)
+                write(writer, "\" : ")
+                write_value(writer, elemV, depth+1)
+            write(writer, "\n")
+            write_chars(writer,'\t',depth)
+            write(writer, "\}")
     elif jsv.value is _bool
         if jsv.value as _bool
             write(writer, "true")

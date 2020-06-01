@@ -6,7 +6,7 @@ require daslib/json_enh
 
 [export]
 def test
-    for jidx in range(1,6)
+    for jidx in range(1,8)
         let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
         fopen(fname, "r") <| $ ( f )
             fmap(f) <| $ ( data )
