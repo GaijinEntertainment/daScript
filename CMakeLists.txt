@@ -331,6 +331,17 @@ SET(AOT_GENERATED_SRC)
 DAS_AOT("examples/test/aot_dummy.das" AOT_GENERATED_SRC dasAotStub)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 
+# MODULE - uri parser
+
+SET(MODULE_URIPARSE_MAIN_SRC
+src/uriparser/module_uriparser.h
+src/uriparser/module_uriparser.cpp
+)
+
+ADD_LIBRARY(libDasModuleUriparser ${MODULE_URIPARSE_MAIN_SRC})
+SETUP_CPP11(libDasModuleUriparser)
+ADD_DEPENDENCIES(libDasModuleUriparser libDaScript)
+
 # Continues development tool
 
 SET(DASCONTDEV_MAIN_SRC
@@ -463,8 +474,8 @@ SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest)
-ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest)
+TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser)
+ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser)
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)

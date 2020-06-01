@@ -373,6 +373,7 @@ int main() {
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
+    NEED_MODULE(Module_UriParser);
 #if 0 // Debug this one test
     compilation_fail_test(getDasRoot() + "/examples/test/compilation_fail_tests/smart_ptr.das",true);
     Module::Shutdown();
