@@ -382,7 +382,7 @@ add_dependencies(pathTracer pathTracerAot dasAotStub)
 # Stand alone command line compiler
 
 SET(DASCRIPT_MAIN_SRC
-examples/daScript/main.cpp
+utils/daScript/main.cpp
 )
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
