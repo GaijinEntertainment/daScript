@@ -331,6 +331,33 @@ SET(AOT_GENERATED_SRC)
 DAS_AOT("examples/test/aot_dummy.das" AOT_GENERATED_SRC dasAotStub)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 
+# libUriParser
+
+SET(URIPARSER_SRCS
+3rdparty/uriparser/src/UriCommon.c
+3rdparty/uriparser/src/UriCompare.c
+3rdparty/uriparser/src/UriEscape.c
+3rdparty/uriparser/src/UriFile.c
+3rdparty/uriparser/src/UriIp4.c
+3rdparty/uriparser/src/UriIp4Base.c
+3rdparty/uriparser/src/UriNormalize.c
+3rdparty/uriparser/src/UriNormalizeBase.c
+3rdparty/uriparser/src/UriParse.c
+3rdparty/uriparser/src/UriParseBase.c
+3rdparty/uriparser/src/UriQuery.c
+3rdparty/uriparser/src/UriRecompose.c
+3rdparty/uriparser/src/UriResolve.c
+3rdparty/uriparser/src/UriShorten.c
+)
+
+ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
+SETUP_CPP11(libUriParser)
+target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
+target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
+target_include_directories(libUriParser PUBLIC
+  ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+)
+
 # MODULE - uri parser
 
 SET(MODULE_URIPARSE_MAIN_SRC
@@ -340,7 +367,10 @@ src/uriparser/module_uriparser.cpp
 
 ADD_LIBRARY(libDasModuleUriparser ${MODULE_URIPARSE_MAIN_SRC})
 SETUP_CPP11(libDasModuleUriparser)
-ADD_DEPENDENCIES(libDasModuleUriparser libDaScript)
+target_include_directories(libDasModuleUriparser PUBLIC
+  ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+)
+ADD_DEPENDENCIES(libDasModuleUriparser libDaScript libUriParser)
 
 # Continues development tool
 
@@ -474,8 +504,8 @@ SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser)
-ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser)
+TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser libUriParser)
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)
