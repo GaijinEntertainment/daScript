@@ -26,6 +26,7 @@ namespace das {
             fseek(ff,0,SEEK_SET);
             char *source = (char *) das_aligned_alloc16(info->sourceLength+1);
             uint32_t bytesRead = uint32_t(fread(source, 1, info->sourceLength, ff));
+            fclose(ff);
             if (bytesRead == info->sourceLength) {
                 source[info->sourceLength] = 0;
                 info->source = source;
@@ -33,8 +34,9 @@ namespace das {
             } else {
                 return nullptr;
             }
+        } else {
+            return nullptr;
         }
-        return nullptr;
     }
 
     FsFileAccess::FsFileAccess()
