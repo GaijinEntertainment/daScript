@@ -344,36 +344,6 @@ ADD_DEPENDENCIES(dasContDev libDaScript libPathTracerHelper libDaScriptProfile l
 SETUP_CPP11(dasContDev)
 add_dependencies(dasContDev dasAotStub)
 
-# JSON
-
-SET(JSON_MAIN
-examples/json/json.cpp
-examples/json/json.das.inc
-examples/json/json.das
-)
-XXD(examples/json/json.das)
-
-ADD_LIBRARY(libDaScriptJson ${JSON_MAIN})
-SETUP_CPP11(libDaScriptJson)
-ADD_DEPENDENCIES(libDaScriptJson libDaScript)
-
-# CURL
-
-SET(CURL_MAIN_SRC
-examples/curl/main.cpp
-examples/curl/module_curl.cpp
-examples/curl/curl.das
-)
-
-FIND_PACKAGE(CURL)
-IF(CURL_FOUND)
-    add_executable(curlTest ${CURL_MAIN_SRC} )
-    TARGET_LINK_LIBRARIES(curlTest libDaScript ${CURL_LIBRARIES})
-    ADD_DEPENDENCIES(curlTest libDaScript)
-    TARGET_INCLUDE_DIRECTORIES(curlTest PUBLIC ${CURL_INCLUDE_DIR})
-    SETUP_CPP11(curlTest)
-ENDIF(CURL_FOUND)
-
 # PathTracer helper
 
 SET(PATH_TRACER_HELPER_MAIN_SRC
@@ -408,19 +378,6 @@ ADD_DEPENDENCIES(pathTracer libDaScript libPathTracerHelper)
 TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC examples/pathTracer)
 SETUP_CPP11(pathTracer)
 add_dependencies(pathTracer pathTracerAot dasAotStub)
-
-# JSON Example
-
-SET(JSON_MAIN_SRC
-examples/json/main.cpp
-examples/json/test.das
-examples/json/test_json.das
-)
-add_executable(jsonTest ${JSON_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(jsonTest libDaScript libDaScriptJson)
-ADD_DEPENDENCIES(jsonTest libDaScript libDaScriptJson)
-TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC json)
-SETUP_CPP11(jsonTest)
 
 # Stand alone command line compiler
 
