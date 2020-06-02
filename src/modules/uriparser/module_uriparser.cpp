@@ -19,7 +19,7 @@ char * uri_to_unix_file_name ( char * uristr, Context * context ) {
     if ( uriUriStringToUnixFilenameA(uristr, buf) == URI_SUCCESS ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
-    delete buf;
+    delete [] buf;
     return result;
 }
 
@@ -31,7 +31,7 @@ char * uri_to_windows_file_name ( char * uristr, Context * context ) {
     if ( uriUriStringToWindowsFilenameA(uristr, buf) == URI_SUCCESS ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
-    delete buf;
+    delete [] buf;
     return result;
 }
 
@@ -43,7 +43,7 @@ char * unix_file_name_to_uri ( char * uristr, Context * context ) {
     if ( uriUnixFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
-    delete buf;
+    delete [] buf;
     return result;
 }
 
@@ -55,7 +55,7 @@ char * windows_file_name_to_uri ( char * uristr, Context * context ) {
     if ( uriWindowsFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
-    delete buf;
+    delete [] buf;
     return result;
 }
 

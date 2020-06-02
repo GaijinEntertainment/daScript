@@ -309,23 +309,20 @@ namespace das
     void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context ) {
         if ( !str ) str = "";
         if ( !delim ) delim = "";
-        char * dstr = strdup(str);
-        char * ch = dstr;
-        vector<char *> tokens;
-        // if ( strchr(delim,*ch) ) tokens.push_back("");
+        vector<const char *> tokens;
+        vector<string> words;
+        const char * ch = str;
         while ( *ch ) {
+            const char * tok = ch;
+            while ( *ch && !strchr(delim,*ch) ) ch++;
+            words.push_back(string(tok,ch-tok));
+            if ( !*ch ) break;
             while ( *ch && strchr(delim,*ch) ) ch++;
-            if ( *ch ) {
-                char * tok = ch ++;
-                while ( *ch && !strchr(delim,*ch) ) ch ++;
-                if ( *ch==0 ) {
-                    tokens.push_back(tok);
-                    break;
-                } else {
-                    *ch ++ = 0;
-                    tokens.push_back(tok);
-                }
-            }
+            if ( !*ch ) words.push_back("");
+        }
+        tokens.reserve(words.size());
+        for ( auto & tok : words ) {
+            tokens.push_back(tok.c_str());
         }
         Array arr;
         arr.data = (char *) tokens.data();
@@ -334,7 +331,6 @@ namespace das
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(block, args, nullptr);
-        free(dstr);
     }
 
     char * builtin_string_clone ( const char *str, Context * context ) {
