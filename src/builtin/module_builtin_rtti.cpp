@@ -32,6 +32,137 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Program,Program)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Error,Error)
 
+DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
+        unspecified
+// lexer errors
+    ,   mismatching_parentheses
+    ,   mismatching_curly_bracers
+    ,   string_constant_exceeds_file
+    ,   string_constant_exceeds_line
+    ,   unexpected_close_comment
+    ,   integer_constant_out_of_range
+    ,   comment_contains_eof
+    ,   invalid_escape_sequence
+    ,   invalid_line_directive
+// parser errors
+    ,   syntax_error
+// semantic erros
+    ,   invalid_type
+    ,   invalid_return_type
+    ,   invalid_argument_type
+    ,   invalid_structure_field_type
+    ,   invalid_array_type
+    ,   invalid_table_type
+    ,   invalid_argument_count
+    ,   invalid_variable_type
+    ,   invalid_new_type
+    ,   invalid_index_type
+    ,   invalid_annotation
+    ,   invalid_swizzle_mask
+    ,   invalid_initialization_type
+    ,   invalid_with_type
+    ,   invalid_override
+    ,   invalid_name
+    ,   invalid_array_dimension
+    ,   invalid_iteration_source
+    ,   invalid_loop
+    ,   invalid_label
+    ,   invalid_enumeration
+    ,   invalid_option
+    ,   invalid_member_function
+
+    ,   function_already_declared
+    ,   argument_already_declared
+    ,   local_variable_already_declared
+    ,   global_variable_already_declared
+    ,   structure_field_already_declared
+    ,   structure_already_declared
+    ,   structure_already_has_initializer
+    ,   enumeration_already_declared
+    ,   enumeration_value_already_declared
+    ,   type_alias_already_declared
+    ,   field_already_initialized
+
+    ,   type_not_found
+    ,   structure_not_found
+    ,   operator_not_found
+    ,   function_not_found
+    ,   variable_not_found
+    ,   handle_not_found
+    ,   annotation_not_found
+    ,   enumeration_not_found
+    ,   enumeration_value_not_found
+    ,   type_alias_not_found
+    ,   bitfield_not_found
+
+    ,   cant_initialize
+
+    ,   cant_dereference
+    ,   cant_index
+    ,   cant_get_field
+    ,   cant_write_to_const
+    ,   cant_move_to_const
+    ,   cant_write_to_non_reference
+    ,   cant_copy
+    ,   cant_move
+    ,   cant_pass_temporary
+
+    ,   condition_must_be_bool
+    ,   condition_must_be_static
+
+    ,   cant_pipe
+
+    ,   invalid_block
+    ,   return_or_break_in_finally
+
+    ,   module_not_found
+    ,   module_already_has_a_name
+
+    ,   cant_new_handle
+    ,   bad_delete
+
+    ,   cant_infer_generic
+    ,   cant_infer_missing_initializer
+    ,   cant_infer_mismatching_restrictions
+
+    ,   invalid_cast
+    ,   incompatible_cast
+    ,   unsafe
+
+    ,   index_out_of_range
+
+    ,   expecting_return_value
+    ,   not_expecting_return_value
+    ,   invalid_return_semantics
+    ,   invalid_yield
+
+    ,   typeinfo_reference
+    ,   typeinfo_auto
+    ,   typeinfo_undefined
+    ,   typeinfo_dim
+    ,   typeinfo_macro_error
+// logic errors
+    ,   static_assert_failed
+    ,   run_failed
+    ,   annotation_failed
+    ,   concept_failed
+
+    ,   not_all_paths_return_value
+    ,   assert_with_side_effects
+    ,   only_fast_aot_no_cpp_name
+    ,   aot_side_effects
+    ,   no_global_heap
+    ,   no_global_variables
+    ,   unused_function_argument
+    ,   unsafe_function
+
+    ,   too_many_infer_passes
+
+// integration errors
+
+    ,   missing_node
+    )
+
 namespace das {
     template <>
     struct typeFactory<RttiValue> {
@@ -76,7 +207,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(extra)>("extra");
             addField<DAS_BIND_MANAGED_FIELD(fixme)>("fixme");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            // CompilationError    cerr;
+            addField<DAS_BIND_MANAGED_FIELD(cerr)>("cerr");
         }
     };
 
@@ -686,6 +817,8 @@ namespace das {
             lib.addBuiltInModule();
             // flags
             addAlias(makeProgramFlags());
+            // enums
+            addEnumeration(make_smart<EnumerationCompilationError>());
             // type annotations
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
