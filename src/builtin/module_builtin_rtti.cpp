@@ -31,6 +31,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationList,AnnotationList)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Program,Program)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Error,Error)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
 
 DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
         unspecified
@@ -198,6 +199,11 @@ namespace das {
     struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Module", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
+    struct FileAccessAnnotation : ManagedStructureAnnotation<FileAccess> {
+        FileAccessAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileAccess", ml) {
         }
     };
 
@@ -729,9 +735,9 @@ namespace das {
 
 #if !DAS_NO_FILEIO
 
-    void rtti_builtin_compile_file ( char * modName, const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
+    void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
         TextWriter issues;
-        auto access = make_smart<FsFileAccess>();
+        if ( !access ) access = make_smart<FsFileAccess>();
         ModuleGroup dummyLibGroup;
         auto program = compileDaScript(modName, access, issues, dummyLibGroup, true);
         if ( program ) {
@@ -760,7 +766,27 @@ namespace das {
         }
     }
 
+    smart_ptr<FileAccess> makeFileAccess( char * pak ) {
+        if ( pak ) {
+            return  make_smart<FsFileAccess>(pak, make_smart<FsFileAccess>());
+        } else {
+            return make_smart<FsFileAccess>();
+        }
+    }
+
+    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context ) {
+        if ( !str ) context->throw_error("can't introduce empty file");
+        uint32_t str_len = stringLengthSafe(*context, str);
+        auto fileInfo = make_unique<FileInfo>(str, str_len);
+        return access->setFileInfo(fname, move(fileInfo)) != nullptr;
+    }
+
 #else
+    smart_ptr<FileAccess> makeFileAccess( char * ) {
+        context->throw_error("not supported with DAS_NO_FILEIO");
+        return nullptr;
+    }
+
     void rtti_builtin_compile_file ( char *, const TBlock<void,bool,smart_ptr<Program>,const string> &, Context * context ) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
@@ -823,6 +849,7 @@ namespace das {
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
             addAnnotation(make_smart<ErrorAnnotation>(lib));
+            addAnnotation(make_smart<FileAccessAnnotation>(lib));
             addAnnotation(make_smart<ModuleAnnotation>(lib));
             addAnnotation(make_smart<ProgramAnnotation>(lib));
             addEnumeration(make_smart<EnumerationType>());
@@ -875,6 +902,10 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_builtin_compile");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
                 SideEffects::modifyExternal, "rtti_builtin_compile_file");
+            addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
+                SideEffects::modifyExternal, "makeFileAccess");
+            addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
+                SideEffects::modifyExternal, "introduceFile");
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "program_for_each_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_module");
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_registered_module)>(*this, lib, "program_for_each_registered_module",

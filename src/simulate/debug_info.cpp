@@ -495,7 +495,8 @@ namespace das
     }
 
     FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfoPtr && info ) {
-        if ( files.find(fileName)!=files.end() ) return nullptr;
+        // TODO: test. for now we need to allow replace
+        // if ( files.find(fileName)!=files.end() ) return nullptr;
         files[fileName] = move(info);
         auto ins = files.find(fileName);
         ins->second->name = (char *) ins->first.c_str();

@@ -2,6 +2,9 @@ options indenting=4
 
 require rtti
 
+typedef
+    FileAccessPtr = smart_ptr<FileAccess>
+
 def structure_for_each_annotation(st:StructInfo;subexpr:block<(ann:Annotation;args:AnnotationArguments):void>)
     rtti_builtin_structure_for_each_annotation(st,subexpr)
 
