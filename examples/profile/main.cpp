@@ -1,5 +1,6 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
+#include "daScript/misc/sysos.h"
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -146,7 +147,7 @@ int main(int argc, const char * argv[]) {
     NEED_MODULE(Module_TestProfile);
     NEED_MODULE(Module_Random);
 #if 0
-    const char * TEST_NAME = TEST_PATH "examples/profile/tests/aos.das";
+    const char * TEST_NAME = getDasRoot() +  "/examples/profile/tests/aos.das";
     tout << "\nINTERPRETED:\n";
     unit_test(TEST_NAME,false);
     tout << "\nAOT:\n";
@@ -157,9 +158,9 @@ int main(int argc, const char * argv[]) {
     // run tests
     if (argc == 1) {
         tout << "\nINTERPRETED:\n";
-        run_tests(TEST_PATH "examples/profile/tests", unit_test, false);
+        run_tests(getDasRoot() + "/examples/profile/tests", unit_test, false);
         tout << "\nAOT:\n";
-        run_tests(TEST_PATH "examples/profile/tests", unit_test, true);
+        run_tests(getDasRoot() + "/examples/profile/tests", unit_test, true);
     }
     for ( int i=1; i!=argc; ++i ) {
         string path=argv[i];
