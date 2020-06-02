@@ -5,11 +5,9 @@ options debugger = true
 typedef
     ReText = string
 
-
-// TODO: proper 'at', once available
-// this one won't allow past length(ch) onto 'asciiz' character
+[unsafe]
 def at(expr:ReText; offset:int) : int
-    return character_at(expr,offset)
+    return character_uat(expr,offset)
 
 let
     meta = "+-*.()[]|^"

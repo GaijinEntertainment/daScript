@@ -23,7 +23,7 @@ namespace das
         if ( uint32_t(index)>=strLen ) {
             context->throw_error_ex("string character index out of range, %u of %u", uint32_t(index), strLen);
         }
-        return str[index];
+        return ((uint8_t *)str)[index];
     }
 
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
@@ -452,6 +452,7 @@ namespace das
             SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
         // regular string
         addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at", SideEffects::none, "get_character_at");
+        addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat", SideEffects::none, "get_character_uat")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
         addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char", SideEffects::none, "to_string_char");
         addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with", SideEffects::none, "builtin_string_endswith");

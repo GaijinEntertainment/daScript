@@ -81,6 +81,8 @@ namespace das {
         return writer.c_str();
     }
 
+    __forceinline int32_t get_character_uat ( const char * str, int32_t index ) { return ((uint8_t *)str)[index]; }
+
     __forceinline bool is_alpha ( int32_t ch ) { return (ch>='a' && ch<='z') || (ch>='A' && ch<='Z'); }
     __forceinline bool is_white_space ( int32_t ch ) { return  ch==' ' || ch=='\n' || ch=='\r' || ch=='\t'; }
     __forceinline bool is_number ( int32_t ch ) { return (ch>='0' && ch<='9'); }
