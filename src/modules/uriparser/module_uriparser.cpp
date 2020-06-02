@@ -38,7 +38,7 @@ char * uri_to_windows_file_name ( char * uristr, Context * context ) {
 char * unix_file_name_to_uri ( char * uristr, Context * context ) {
     if ( !uristr ) return nullptr;
     int len = stringLength(*context,uristr);
-    auto buf = new char[len + 1];
+    auto buf = new char[len + 16];
     char * result = nullptr;
     if ( uriUnixFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
@@ -50,9 +50,35 @@ char * unix_file_name_to_uri ( char * uristr, Context * context ) {
 char * windows_file_name_to_uri ( char * uristr, Context * context ) {
     if ( !uristr ) return nullptr;
     int len = stringLength(*context,uristr);
-    auto buf = new char[len + 1];
+    auto buf = new char[len + 16];
     char * result = nullptr;
     if ( uriWindowsFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
+        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+    }
+    delete [] buf;
+    return result;
+}
+
+char * escape_uri ( char * uristr, bool spaceToPlus, bool normalizeBreaks, Context * context ) {
+    if ( !uristr ) return nullptr;
+    int len = stringLength(*context,uristr);
+    auto buf = new char[len*6];
+    char * result = nullptr;
+    if ( char * res = uriEscapeA(uristr, buf, spaceToPlus, normalizeBreaks) ) {
+        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+    }
+    delete [] buf;
+    return result;
+}
+
+char * unescape_uri ( char * uristr,Context * context ) {
+    if ( !uristr ) return nullptr;
+    int len = stringLength(*context,uristr);
+    char * buf = new char[len+1];
+    memcpy(buf, uristr, len);
+    buf[len] = 0;
+    char * result = nullptr;
+    if ( const char * res = uriUnescapeInPlaceA(buf) ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
@@ -84,7 +110,10 @@ public:
         addExtern<DAS_BIND_FUN(unix_file_name_to_uri)> (*this, lib, "file_name_to_uri",
             SideEffects::none, "unix_file_name_to_uri");
 #endif
-
+        addExtern<DAS_BIND_FUN(escape_uri)> (*this, lib, "escape_uri",
+            SideEffects::none, "escape_uri");
+        addExtern<DAS_BIND_FUN(unescape_uri)> (*this, lib, "unescape_uri",
+            SideEffects::none, "unescape_uri");
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"modules/uriparser/module_uriparser.h\"\n";
