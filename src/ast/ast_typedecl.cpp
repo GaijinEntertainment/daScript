@@ -540,7 +540,7 @@ namespace das
         } else if ( baseType==Type::tIterator ) {
             return true;
         } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
-            return false;
+            return true;
         } else {
             return false;
         }

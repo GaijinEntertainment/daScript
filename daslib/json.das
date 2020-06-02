@@ -76,6 +76,7 @@ def lexer ( text : string )
                     yield [[Token _error = "string exceeds text"]]
                     return false
                 yield [[Token _string = unescape(str)]]
+                delete str
                 next(tin, ahead)
             elif ahead=='+' | ahead=='-' | is_number(ahead)
                 var num : string
@@ -87,6 +88,7 @@ def lexer ( text : string )
                     while next(tin,ahead) & is_number(ahead)
                         num = append(num, ahead)
                 yield [[Token _number = double(num)]]
+                delete num
             elif is_alpha(ahead)
                 var name : string
                 name = append(name, ahead)
@@ -101,6 +103,7 @@ def lexer ( text : string )
                 else
                     yield [[Token _error = "invalid name {name}"]]
                     return false
+                delete name
             else
                 yield [[Token _error = "invalid character `{to_char(ahead)}` aka ASCII {ahead}"]]
                 return false

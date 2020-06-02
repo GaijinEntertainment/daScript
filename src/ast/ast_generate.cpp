@@ -1221,6 +1221,7 @@ namespace das {
         DAS_ASSERT(variantType->isVariant() && "can only finalize variant");
         auto fn = make_smart<Function>();
         fn->generated = true;
+        fn->unsafe = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
