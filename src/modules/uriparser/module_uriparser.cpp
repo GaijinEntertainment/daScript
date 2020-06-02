@@ -73,6 +73,18 @@ public:
             SideEffects::none, "unix_file_name_to_uri");
         addExtern<DAS_BIND_FUN(windows_file_name_to_uri)> (*this, lib, "windows_file_name_to_uri",
             SideEffects::none, "windows_file_name_to_uri");
+#ifdef _WIN32
+        addExtern<DAS_BIND_FUN(uri_to_windows_file_name)> (*this, lib, "uri_to_file_name",
+            SideEffects::none, "uri_to_windows_file_name");
+        addExtern<DAS_BIND_FUN(windows_file_name_to_uri)> (*this, lib, "file_name_to_uri",
+            SideEffects::none, "windows_file_name_to_uri");
+#else
+        addExtern<DAS_BIND_FUN(uri_to_unix_file_name)> (*this, lib, "uri_to_file_name",
+            SideEffects::none, "uri_to_unix_file_name");
+        addExtern<DAS_BIND_FUN(unix_file_name_to_uri)> (*this, lib, "file_name_to_uri",
+            SideEffects::none, "unix_file_name_to_uri");
+#endif
+
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"modules/uriparser/module_uriparser.h\"\n";
