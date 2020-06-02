@@ -229,7 +229,7 @@ namespace das {
     struct LineInfoAnnotation : ManagedStructureAnnotation<LineInfo,false> {
         LineInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LineInfo", ml) {
             this->addField<DAS_BIND_MANAGED_FIELD(fileInfo)>("fileInfo");
-            this->addField<DAS_BIND_MANAGED_FIELD(line)>("column");
+            this->addField<DAS_BIND_MANAGED_FIELD(column)>("column");
             this->addField<DAS_BIND_MANAGED_FIELD(line)>("line");
             this->addField<DAS_BIND_MANAGED_FIELD(last_column)>("last_column");
             this->addField<DAS_BIND_MANAGED_FIELD(last_line)>("last_line");
