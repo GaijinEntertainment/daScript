@@ -526,7 +526,7 @@ namespace das {
                 string istr = issues.str();
                 vec4f args[3] = {
                     cast<bool>::from(false),
-                    cast<char *>::from(nullptr),
+                    cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
                 context->invoke(block, args, nullptr);
@@ -748,7 +748,7 @@ namespace das {
                 string istr = issues.str();
                 vec4f args[3] = {
                     cast<bool>::from(false),
-                    cast<char *>::from(nullptr),
+                    cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
                 context->invoke(block, args, nullptr);
