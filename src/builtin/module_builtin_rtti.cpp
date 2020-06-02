@@ -30,6 +30,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationDeclaration,AnnotationDeclaration)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationList,AnnotationList)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Program,Program)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(Error,Error)
 
 namespace das {
     template <>
@@ -65,7 +66,17 @@ namespace das {
 
     struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Module", ml) {
-            this->addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
+    struct ErrorAnnotation : ManagedStructureAnnotation<Error,false> {
+        ErrorAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Error", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(what)>("what");
+            addField<DAS_BIND_MANAGED_FIELD(extra)>("extra");
+            addField<DAS_BIND_MANAGED_FIELD(fixme)>("fixme");
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+            // CompilationError    cerr;
         }
     };
 
@@ -101,6 +112,7 @@ namespace das {
     struct ProgramAnnotation : ManagedStructureAnnotation <Program,false> {
         ProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Program", ml) {
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
+            addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
         }
     };
 
@@ -677,6 +689,7 @@ namespace das {
             // type annotations
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
+            addAnnotation(make_smart<ErrorAnnotation>(lib));
             addAnnotation(make_smart<ModuleAnnotation>(lib));
             addAnnotation(make_smart<ProgramAnnotation>(lib));
             addEnumeration(make_smart<EnumerationType>());
