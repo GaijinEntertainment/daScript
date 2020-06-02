@@ -319,7 +319,7 @@
 %type <b>               kwd_let
 %type <b>               is_public_module
 %type <b>               optional_shared
-%type <b>               block_or_lambda
+%type <i>               block_or_lambda
 %type <b>               optional_ref
 
 %type <b>               if_or_static_if
@@ -1201,8 +1201,9 @@ block_or_simple_block
     ;
 
 block_or_lambda
-    :   '$'     { $$ = false;   /* block */  }
-    |   '@'     { $$ = true;    /* lambda */ }
+    :   '$'     { $$ = 0;   /* block */  }
+    |   '@'     { $$ = 1;   /* lambda */ }
+    |   '@' '@' { $$ = 2;   /* local function */ }
     ;
 
 expr_block
@@ -1213,7 +1214,7 @@ expr_block
     }
     |   block_or_lambda[bal] optional_annotation_list[annL] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
-        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block), $bal);
+        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block), $bal==1, $bal==2);
         ExprBlock * closure = (ExprBlock *) $block;
         closure->returnType = TypeDeclPtr($result);
         if ( $list ) {

@@ -745,12 +745,19 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeExprMakeBlockFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ExprMakeBlockFlags";
+        ft->argNames = { "isLambda", "isLocalFunction" };
+        return ft;
+    }
+
     struct AstExprMakeBlockAnnotation : AstExpressionAnnotation<ExprMakeBlock> {
         AstExprMakeBlockAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprMakeBlock> ("ExprMakeBlock", ml) {
             addField<DAS_BIND_MANAGED_FIELD(block)>("block");
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
-            addField<DAS_BIND_MANAGED_FIELD(isLambda)>("isLambda");
+            addFieldEx ( "mmFlags", "mmFlags", offsetof(ExprMakeBlock, mmFlags), makeExprMakeBlockFlags() );
         }
     };
 
@@ -2079,6 +2086,7 @@ namespace das {
             addAlias(makeExprSwizzleFieldFlags());
             addAlias(makeExprYieldFlags());
             addAlias(makeExprReturnFlags());
+            addAlias(makeExprMakeBlockFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
             // modules

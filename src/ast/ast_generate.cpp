@@ -435,6 +435,26 @@ namespace das {
         return pFunc;
     }
 
+    FunctionPtr generateLocalFunction ( const string & lambdaName, ExprBlock * block, bool isUnsafe ) {
+        auto lfn = lambdaName + "`function";
+        auto pFunc = make_smart<Function>();
+        pFunc->generated = true;
+        pFunc->at = pFunc->atDecl = block->at;
+        pFunc->name = lfn;
+        pFunc->unsafe = isUnsafe;
+        pFunc->body = block->clone();
+        auto wb = static_pointer_cast<ExprBlock>(pFunc->body);
+        wb->blockFlags = 0;
+        pFunc->result = make_smart<TypeDecl>(*block->type);
+        for ( auto & arg : block->arguments ) {
+            auto cA = arg->clone();
+            cA->marked_used = true;
+            pFunc->arguments.push_back(cA);
+        }
+        verifyGenerated(pFunc->body);
+        return pFunc;
+    }
+
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, bool needYield, bool isUnsafe ) {
         auto lfn = lambdaName + "`function";

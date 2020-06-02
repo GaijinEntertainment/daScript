@@ -176,6 +176,12 @@ namespace das {
                                         const StructurePtr & ls, bool needYield, bool isUnsafe );
 
     /*
+        local function, i.e.
+         def __localfunction_function_at_line_xxx(...block_args...)
+     */
+    FunctionPtr generateLocalFunction ( const string & lambdaName, ExprBlock * block,bool isUnsafe );
+
+    /*
         lambda finalizer, i.e.
          def __lambda_finalizer_at_line_xxx(THIS:__lambda_at_line_xxx)
             with THIS

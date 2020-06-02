@@ -60,6 +60,12 @@ namespace das {
             return "_lambda_" + mod + "_" + to_string(at.line) + "_" + to_string(at.column)
                 + "_" + to_string(program->newLambdaIndex++);
         }
+        string generateNewLocalFunctionName(const LineInfo & at) {
+            string mod = ctx.thisProgram->thisModule->name;
+            if ( mod.empty() ) mod = "thismodule";
+            return "_localfunction_" + mod + "_" + to_string(at.line) + "_" + to_string(at.column)
+                + "_" + to_string(program->newLambdaIndex++);
+        }
         void pushVarStack() {
             varStack.push_back(local.size());
         }
@@ -653,7 +659,7 @@ namespace das {
                 }
             }
             // match inferable block
-            if (inferBlock && passType->isAuto() && (passType->isGoodBlockType() || passType->isGoodLambdaType())) {
+            if (inferBlock && passType->isAuto() && (passType->isGoodBlockType() || passType->isGoodLambdaType() || passType->isGoodFunctionType())) {
                 return TypeDecl::inferGenericType(passType, argType) != nullptr;
             }
             // compare types which don't need inference
@@ -2087,6 +2093,29 @@ namespace das {
             }
             return nullptr;
         }
+        ExpressionPtr convertBlockToLocalFunction ( ExprMakeBlock * expr ) {
+            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            if ( auto bT = block->makeBlockType() ) {
+                // TODO: verify
+                // if ( !isFullySealedType(bT) ) {
+                if ( bT->isAutoOrAlias() ) {
+                    error("can't infer local function block type",  "", "",
+                        expr->at, CompilationError::invalid_block);
+                } else {
+                    bool isUnsafe = func ? func->unsafe : false;
+                    string lname = generateNewLocalFunctionName(block->at);
+                    auto pFn = generateLocalFunction(lname, block.get(), isUnsafe);
+                    if ( program->addFunction(pFn) ) {
+                        reportAstChanged();
+                        return make_smart<ExprAddr>(expr->at, lname + "`function");
+                    } else {
+                        error("local function name mismatch",  "", "",
+                            expr->at, CompilationError::invalid_block);
+                    }
+                }
+            }
+            return nullptr;
+        }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
             // can only infer block type, if all argument types are infered
@@ -2104,6 +2133,13 @@ namespace das {
                 // if ( isFullySealedType(expr->type) ) {
                 if ( !expr->type->isAutoOrAlias() ) {
                     if ( auto btl = convertBlockToLambda(expr) ) {
+                        return btl;
+                    }
+                }
+            } else if ( expr->isLocalFunction ) {
+                expr->type->baseType = Type::tFunction;
+                if ( !expr->type->isAutoOrAlias() ) {
+                    if ( auto btl = convertBlockToLocalFunction(expr) ) {
                         return btl;
                     }
                 }
@@ -4969,7 +5005,7 @@ namespace das {
                 }
                 // if its an auto or an alias
                 // we only allow it, if its a block or lambda
-                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda ) {
+                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda && ar->type->baseType!=Type::tFunction ) {
                     if ( ar->type->isAutoOrAlias() ) {
                         return nullptr;
                     }
@@ -5108,7 +5144,7 @@ namespace das {
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
-                    if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType()) ) {
+                    if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) ) {
                         DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
                         auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                         auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
