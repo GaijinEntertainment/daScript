@@ -51,6 +51,15 @@ def JV ( var v : array<JsonValue?> )
 [unsafe, private]
 def lexer ( text : string )
     var stext = clone_string(text)
+    return <- _lexer(stext)
+
+[unsafe, private]
+def lexer ( text : array<uint8> )
+    var stext = string(text)
+    return <- _lexer(stext)
+
+[unsafe, private]
+def _lexer ( var stext : string )
     return <- generator<Token>() <| $()
         var tin <- each(stext)
         var ahead : int = ' '
@@ -228,6 +237,13 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
 
 [export,unsafe]
 def read_json ( text : string; var error : string& ) : JsonValue?
+    var lex <- lexer(text)
+    let res = parse_value(lex,error)
+    delete lex
+    return res
+
+[export,unsafe]
+def read_json ( text : array<uint8>; var error : string& ) : JsonValue?
     var lex <- lexer(text)
     let res = parse_value(lex,error)
     delete lex
