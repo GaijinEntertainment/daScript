@@ -2733,7 +2733,8 @@ namespace das {
                     if ( verifyFinalizeFunc(fnList, expr->at) ) {
                         reportAstChanged();
                         auto fn = fnList[0];
-                        string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
+                        // string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
+                        string finalizeName = "_::finalize";
                         auto finalizeFn = make_smart<ExprCall>(expr->at, finalizeName);
                         finalizeFn->arguments.push_back(expr->subexpr->clone());
                         return ExpressionPtr(finalizeFn);
