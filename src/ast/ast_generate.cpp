@@ -412,13 +412,14 @@ namespace das {
                 bbl->list.push_back(subexpr->clone());
             }
             fb->list.push_back(with);
-        } else {
-            auto THISA = make_smart<ExprVar>(block->at, "__this");    // delete * this
-            auto THISAP = make_smart<ExprPtr2Ref>(block->at, THISA);
-            auto delit = make_smart<ExprDelete>(block->at, THISAP);
-            fb->list.push_back(delit);
         }
-        auto THISA1 = make_smart<ExprVar>(block->at, "__this");    // delete this
+        // delete * this
+        auto THISA = make_smart<ExprVar>(block->at, "__this");
+        auto THISAP = make_smart<ExprPtr2Ref>(block->at, THISA);
+        auto delit = make_smart<ExprDelete>(block->at, THISAP);
+        fb->list.push_back(delit);
+        // delete this
+        auto THISA1 = make_smart<ExprVar>(block->at, "__this");
         auto delit1 = make_smart<ExprDelete>(block->at, THISA1);
         delit1->native = true;
         delit1->alwaysSafe = true;

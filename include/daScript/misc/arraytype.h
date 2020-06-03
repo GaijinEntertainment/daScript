@@ -84,6 +84,7 @@ namespace das
         union {
             struct {
                 bool    shared : 1;
+                bool    hopeless : 1;   // needs to be deleted without fuss (exceptions)
             };
             uint32_t    flags;
         };

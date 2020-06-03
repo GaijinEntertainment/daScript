@@ -4854,6 +4854,16 @@ namespace das {
                 }
                 auto blk = replaceGeneratorLet(expr, func, scopes.back());
                 scopes.back()->needCollapse = true;
+                // need to update finalizer
+                vector<FunctionPtr> finFuncs = getFinalizeFunc ( func->arguments[0]->type );
+                if ( finFuncs.size()==1 ) {
+                    auto finFunc = finFuncs.back();
+                    auto stype = func->arguments[0]->type->structType;
+                    auto lname = stype->name;
+                    auto newFinalizer = generateStructureFinalizer(stype);
+                    finFunc->body = newFinalizer->body;
+                }
+                // ---
                 reportAstChanged();
                 return blk;
             }

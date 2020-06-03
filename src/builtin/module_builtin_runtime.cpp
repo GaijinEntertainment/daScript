@@ -362,6 +362,10 @@ namespace das
         table_unlock(*context, const_cast<Table&>(arr));
     }
 
+    void builtin_table_clear_lock ( const Table & arr, Context * ) {
+        const_cast<Table&>(arr).hopeless = 0;
+    }
+
     bool builtin_iterator_first ( const Sequence & it, void * data, Context * context ) {
         if ( !it.iter ) context->throw_error("calling first on empty iterator");
         else if ( it.iter->isOpen ) context->throw_error("calling first on already open iterator");
@@ -540,26 +544,36 @@ namespace das
 
     void builtin_array_free ( Array & dim, int szt, Context * __context__ ) {
         if ( dim.data ) {
-            if ( !dim.lock ) {
+            if ( !dim.lock || dim.hopeless ) {
                 uint32_t oldSize = dim.capacity*szt;
                 __context__->heap.free(dim.data, oldSize);
             } else {
                 __context__->throw_error("can't delete locked array");
             }
+            if ( dim.hopeless ) {
+                memset ( &dim, 0, sizeof(Array) );
+                dim.hopeless = true;
+            } else {
+                memset ( &dim, 0, sizeof(Array) );
+            }
         }
-        memset ( &dim, 0, sizeof(Array) );
     }
 
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ ) {
         if ( tab.data ) {
-            if ( !tab.lock ) {
+            if ( !tab.lock || tab.hopeless ) {
                 uint32_t oldSize = tab.capacity*(szk+szv+sizeof(uint32_t));
                 __context__->heap.free(tab.data, oldSize);
             } else {
                 __context__->throw_error("can't delete locked table");
             }
+            if ( tab.hopeless ) {
+                memset ( &tab, 0, sizeof(Table) );
+                tab.hopeless = true;
+            } else {
+                memset ( &tab, 0, sizeof(Table) );
+            }
         }
-        memset ( &tab, 0, sizeof(Table) );
     }
 
     void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
@@ -759,6 +773,8 @@ namespace das
                                                     SideEffects::modifyArgumentAndExternal, "builtin_table_lock");
         addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock",
                                                       SideEffects::modifyArgumentAndExternal, "builtin_table_unlock");
+        addExtern<DAS_BIND_FUN(builtin_table_clear_lock)>(*this, lib, "__builtin_table_clear_lock",
+                                                      SideEffects::modifyArgumentAndExternal, "builtin_table_clear_lock");
         addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys",
                                                     SideEffects::modifyArgumentAndExternal, "builtin_table_keys");
         addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",

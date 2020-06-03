@@ -11,13 +11,13 @@ namespace das
     }
 
     void table_lock ( Context & context, Table & arr ) {
-        if ( arr.shared ) return;
+        if ( arr.shared || arr.hopeless ) return;
         arr.lock ++;
         if ( arr.lock==0 ) context.throw_error("table lock overflow");
     }
 
     void table_unlock ( Context & context, Table & arr ) {
-        if ( arr.shared ) return;
+        if ( arr.shared || arr.hopeless ) return;
         if ( arr.lock==0 ) context.throw_error("table lock underflow");
         arr.lock --;
     }

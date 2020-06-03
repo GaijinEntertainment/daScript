@@ -116,6 +116,8 @@ def cycle(var src:iterator<auto(TT)>)
                 for x in arr
                     yield x
             return false
+        finally
+            __builtin_array_clear_lock(arr)
     else
         return <- generator<TT &> () <| $ ()
             var arr : array<TT -&>
@@ -126,6 +128,8 @@ def cycle(var src:iterator<auto(TT)>)
                 for x in arr
                     yield x
             return false
+        finally
+            __builtin_array_clear_lock(arr)
 
 def islice( var src : iterator<auto(TT)>; start,stop : int )
     static_if !typeinfo(is_ref_type type<TT>)

@@ -10,13 +10,13 @@ namespace das
     }
 
     void array_lock ( Context & context, Array & arr ) {
-        if ( arr.shared ) return;
+        if ( arr.shared || arr.hopeless ) return;
         arr.lock ++;
         if ( arr.lock==0 ) context.throw_error("array lock overflow");
     }
 
     void array_unlock ( Context & context, Array & arr ) {
-        if ( arr.shared ) return;
+        if ( arr.shared || arr.hopeless ) return;
         if ( arr.lock==0 ) context.throw_error("array lock underflow");
         arr.lock --;
     }
