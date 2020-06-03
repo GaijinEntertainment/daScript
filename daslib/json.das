@@ -211,9 +211,12 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
         panic("internal parsing error near {ahead}")
         return null
 
-[export]
+[export,unsafe]
 def read_json ( text : string; var error : string& ) : JsonValue?
-    return parse_value(lexer(text),error)
+    var lex <- lexer(text)
+    let res = parse_value(lex,error)
+    delete lex
+    return res
 
 [private] // note - we use StringBuilderWriter for performance reasons here
 def write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : int )

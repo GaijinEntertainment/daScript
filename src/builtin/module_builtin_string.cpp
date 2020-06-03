@@ -365,7 +365,7 @@ namespace das
             str[0] = (char) Ch;
             str[1] = 0;
             return str;
-        } else if ( context->stringHeap.isOwnPtrQnD(str) ) {
+        } else if ( context->stringHeap.isOwnPtr(str) ) {
             char* hstr = str - sizeof(StringHeader);
             StringHeader* header = (StringHeader*)hstr;
             uint32_t length = header->length;
@@ -373,6 +373,7 @@ namespace das
             char* nstr = context->stringHeap.reallocate(hstr, size, size + 1);
             if (nstr != hstr) {
                 header = (StringHeader*)nstr;
+                context->stringHeap.free(hstr, size);
             }
             header->length = length + 1;
             nstr += sizeof(StringHeader);
