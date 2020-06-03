@@ -380,10 +380,9 @@ namespace das
             if (nstr != hstr) {
                 header = (StringHeader*)nstr;
 #if DAS_TRACK_ALLOCATIONS
-            if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
-            header->tracking_id = g_tracker_string ++;
+                if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
+                header->tracking_id = g_tracker_string ++;
 #endif
-                context->stringHeap.free(hstr, size);
             }
             header->length = length + 1;
             nstr += sizeof(StringHeader);
@@ -482,7 +481,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_char_of");
         addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
         addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
-        addExtern<DAS_BIND_FUN(builtin_append_char)>(*this, lib, "append", SideEffects::modifyArgumentAndExternal, "builtin_append_char");
+        addExtern<DAS_BIND_FUN(builtin_append_char)>(*this, lib, "append",
+            SideEffects::modifyArgumentAndExternal, "builtin_append_char")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
         addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
         addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");

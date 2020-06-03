@@ -360,9 +360,7 @@ bool debug_unit_test ( const string & fn, int CURSOR_X, int CURSOR_Y, bool useAo
 }
 
 int main() {
-
-    // das_track_string_breakpoint(188);
-
+    // das_track_string_breakpoint(189);
     // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
@@ -383,7 +381,7 @@ int main() {
     getchar();
     return 0;
 #endif
-#if 1 // Debug this one test
+#if 0 // Debug this one test
     // #define TEST_NAME   "/examples/test/hello_world.das"
     // #define TEST_NAME   "/examples/test/regex_lite.das"
     // #define TEST_NAME   "/examples/test/dict_pg.das"

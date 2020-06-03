@@ -47,7 +47,6 @@ namespace das {
                 if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
                 header->tracking_id = g_tracker_string ++;
 #endif
-                // heap->free(oldDataBase, dataCapacity + sizeof(StringHeader) + 1);
             }
         } else {
             data = (char *) heap->allocate(newCapacity + sizeof(StringHeader) + 1);

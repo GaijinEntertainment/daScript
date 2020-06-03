@@ -50,7 +50,7 @@ def JV ( var v : array<JsonValue?> )
 
 [unsafe, private]
 def lexer ( text : string )
-    var stext = "{text}"
+    var stext = clone_string(text)
     return <- generator<Token>() <| $()
         var tin <- each(stext)
         var ahead : int = ' '
@@ -65,18 +65,28 @@ def lexer ( text : string )
             elif ahead=='"'
                 var str : string
                 while next(tin,ahead) & ahead!='"'
-                    str = append(str, ahead)
                     if ahead == '\\'
                         if next(tin,ahead)
+                            if ahead=='b'
+                                ahead = '\b'
+                            elif ahead=='f'
+                                ahead = '\f'
+                            elif ahead=='n'
+                                ahead = '\n'
+                            elif ahead=='r'
+                                ahead = '\r'
+                            elif ahead=='t'
+                                ahead = '\t'
                             str = append(str,ahead)
                         else
                             yield [[Token _error = "string escape sequence exceeds text"]]
                             return false
+                    else
+                        str = append(str, ahead)
                 if empty(tin)
                     yield [[Token _error = "string exceeds text"]]
                     return false
-                yield [[Token _string = unescape(str)]]
-                delete str
+                yield [[Token _string = str]]
                 next(tin, ahead)
             elif ahead=='+' | ahead=='-' | is_number(ahead)
                 var num : string
@@ -108,6 +118,8 @@ def lexer ( text : string )
                 yield [[Token _error = "invalid character `{to_char(ahead)}` aka ASCII {ahead}"]]
                 return false
         return false
+    finally
+        delete stext
 
 [private]
 def expect_token ( var itv : iterator<Token>; var ahead : Token; vindex : int; var error : string & ) : bool

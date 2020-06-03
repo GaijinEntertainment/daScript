@@ -532,7 +532,7 @@ namespace das
         } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             return true;
         } else if ( baseType==Type::tString ) {
-            return true;
+            return false;
         } else if ( baseType==Type::tStructure ) {
             return true;
         } else if ( baseType==Type::tLambda ) {

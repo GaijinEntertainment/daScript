@@ -4,7 +4,7 @@
 #include "daScript/misc/fnv.h"
 
 #ifndef DAS_TRACK_ALLOCATIONS
-#define DAS_TRACK_ALLOCATIONS   1
+#define DAS_TRACK_ALLOCATIONS   0
 #endif
 
 namespace das {

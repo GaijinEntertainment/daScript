@@ -9,10 +9,12 @@ namespace das {
             if ( offset + size > pageSize ) return -1u;
             offset += size;
             total += size;
+            // DAS_ASSERT(total <= pageSize );
             return offset - size;
         }
         __forceinline void free ( uint32_t loc, uint32_t size ) {
             if ( loc + size == offset ) offset -= size;
+            // DAS_ASSERT(total >= size);
             total -= size;
             if ( total==0 ) offset = 0;
         }
@@ -21,6 +23,7 @@ namespace das {
             if ( loc + nsize > pageSize ) return false;
             offset = offset - size + nsize;
             total = total - size + nsize;
+            // DAS_ASSERT(total <= pageSize );
             if ( total==0 ) offset = 0;
             return true;
         }
