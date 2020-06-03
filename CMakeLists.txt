@@ -196,8 +196,8 @@ src/hal/performance_time.cpp
 include/daScript/misc/performance_time.h
 src/hal/debug_break.cpp
 src/hal/project_specific.cpp
-src/hal/network.cpp
 include/daScript/misc/network.h
+src/misc/network.cpp
 src/simulate/hash.cpp
 src/simulate/debug_info.cpp
 src/simulate/runtime_string.cpp
