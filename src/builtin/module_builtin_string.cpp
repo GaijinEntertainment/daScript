@@ -7,10 +7,9 @@
 
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/string_writer.h"
+#include "daScript/misc/debug_break.h"
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
-
-extern void os_debug_break();
 
 namespace das
 {

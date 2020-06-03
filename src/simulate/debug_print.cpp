@@ -2,8 +2,7 @@
 
 #include "daScript/simulate/debug_print.h"
 #include "daScript/misc/fpe.h"
-
-extern void os_debug_break();
+#include "daScript/misc/debug_break.h"
 
 namespace das {
 

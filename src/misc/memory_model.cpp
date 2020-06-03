@@ -1,8 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/memory_model.h"
-
-extern void os_debug_break();
+#include "daScript/misc/debug_break.h"
 
 namespace das {
 

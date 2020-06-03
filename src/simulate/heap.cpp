@@ -2,8 +2,7 @@
 
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/heap.h"
-
-extern void os_debug_break();
+#include "daScript/misc/debug_break.h"
 
 namespace das {
 

@@ -5,13 +5,12 @@
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/misc/fpe.h"
+#include "daScript/misc/debug_break.h"
 
 #include <stdarg.h>
 
 // this is here for the default implementation of to_out and to_err
 #include <setjmp.h>
-
-extern void os_debug_break();
 
 namespace das
 {

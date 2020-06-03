@@ -100,7 +100,7 @@ namespace das {
     int32_t rtti_getDimTypeInfo(const TypeInfo & ti, int32_t index, Context * context);
     int32_t rtti_getDimVarInfo(const VarInfo & ti, int32_t index, Context * context);
 
-    smart_ptr<FileAccess> makeFileAccess( char * pak );
+    smart_ptr<FileAccess> makeFileAccess( char * pak, Context * context );
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context );
     void rtti_builtin_compile(char * modName, char * str, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
     void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);

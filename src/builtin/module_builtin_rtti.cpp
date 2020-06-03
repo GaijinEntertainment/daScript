@@ -766,7 +766,7 @@ namespace das {
         }
     }
 
-    smart_ptr<FileAccess> makeFileAccess( char * pak ) {
+    smart_ptr<FileAccess> makeFileAccess( char * pak, Context * ) {
         if ( pak ) {
             return  make_smart<FsFileAccess>(pak, make_smart<FsFileAccess>());
         } else {
@@ -782,12 +782,12 @@ namespace das {
     }
 
 #else
-    smart_ptr<FileAccess> makeFileAccess( char * ) {
+    smart_ptr<FileAccess> makeFileAccess( char *, Context * context ) {
         context->throw_error("not supported with DAS_NO_FILEIO");
         return nullptr;
     }
 
-    void rtti_builtin_compile_file ( char *, const TBlock<void,bool,smart_ptr<Program>,const string> &, Context * context ) {
+    void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
 #endif
