@@ -1150,7 +1150,7 @@ namespace das {
                 return pClass + info->fields[i]->offset;
             }
         }
-        DAS_ASSERTF(0,"mapping %s not found. not fully implemented dervied class %s", funcName, info->name);
+        DAS_ASSERTF(0,"mapping %s not found. not fully implemented dervied class %s", fName, info->name);
         return 0;
     }
 

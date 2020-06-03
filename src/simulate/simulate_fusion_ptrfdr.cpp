@@ -95,7 +95,7 @@ namespace das {
         INLINE auto compute(Context & context) { \
             DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
-            if ( !prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
+            if ( !prv || !*prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
             return *((RCTYPE *)((*prv) + offset)); \
         } \
         DAS_NODE(TYPE,RCTYPE); \
