@@ -903,7 +903,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "StructureFlags";
         ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
-            "generated", "persistent" };
+            "generated", "persistent", "isLambda" };
         return ft;
     }
 

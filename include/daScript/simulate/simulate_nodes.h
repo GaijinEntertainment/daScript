@@ -188,12 +188,13 @@ namespace das {
 
     // Delete structures
     struct SimNode_DeleteStructPtr : SimNode_Delete {
-        SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss, bool ps )
-            : SimNode_Delete(a,s,t), structSize(ss), persistent(ps) {}
+        SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss, bool ps, bool isL )
+            : SimNode_Delete(a,s,t), structSize(ss), persistent(ps), isLambda(isL) {}
         virtual vec4f eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
         uint32_t    structSize;
         bool        persistent;
+        bool        isLambda;
     };
 
     // Delete lambda

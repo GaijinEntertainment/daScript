@@ -3,10 +3,6 @@
 #include "daScript/misc/memory_model.h"
 #include "daScript/misc/fnv.h"
 
-#ifndef DAS_TRACK_ALLOCATIONS
-#define DAS_TRACK_ALLOCATIONS   0
-#endif
-
 namespace das {
 
     class StackAllocator {
@@ -128,6 +124,7 @@ namespace das {
         virtual uint32_t growPages(uint32_t pages) const override {
             return customGrow ? customGrow(pages) : pages * 2;
         }
+        virtual void reportAllocations();
     public:
         function<int(int)>  customGrow;
     };
@@ -175,7 +172,7 @@ namespace das {
         void freeString ( char * text, uint32_t length );
         void setIntern ( bool on );
         bool isIntern() const { return needIntern; }
-        void reportAllocations();
+        void reportAllocations() override;
         virtual void reset() override;
         virtual void sweep() override;
         void forEachString ( function<void (const char *)> && fn );

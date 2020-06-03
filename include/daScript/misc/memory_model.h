@@ -2,6 +2,12 @@
 
 namespace das {
 
+#if DAS_TRACK_ALLOCATIONS
+    extern uint64_t    g_tracker;
+    extern uint64_t    g_breakpoint;
+    void das_track_breakpoint ( uint64_t id );
+#endif
+
     #define DAS_PAGE_GC_MASK    0x80000000
 
     struct Page {
@@ -133,5 +139,9 @@ namespace das {
         uint32_t                initialSize = 0;
         vector<Book>            shelf;
         das_hash_map<void *,uint32_t>bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
+#if DAS_TRACK_ALLOCATIONS
+        das_hash_map<void *,uint64_t>bigStuffId;
+#endif
+
     };
 }

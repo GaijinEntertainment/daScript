@@ -354,6 +354,10 @@ namespace das
         context->stringHeap.reportAllocations();
     }
 
+    void heap_report ( Context * context ) {
+        context->heap.reportAllocations();
+    }
+
     void builtin_table_lock ( const Table & arr, Context * context ) {
         table_lock(*context, const_cast<Table&>(arr));
     }
@@ -753,9 +757,13 @@ namespace das
         shc->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
                 SideEffects::modifyExternal, "string_heap_report");
+       addExtern<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",
+                SideEffects::modifyExternal, "heap_report");
         // binary serializer
-        addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",SideEffects::modifyArgumentAndExternal, "_builtin_binary_load");
-        addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",SideEffects::modifyExternal, "_builtin_binary_save");
+        addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",
+            SideEffects::modifyArgumentAndExternal, "_builtin_binary_load");
+        addInterop<_builtin_binary_save,void,const vec4f,const Block &>(*this, lib, "_builtin_binary_save",
+            SideEffects::modifyExternal, "_builtin_binary_save");
         // function-like expresions
         addCall<ExprAssert>         ("assert",false);
         addCall<ExprAssert>         ("verify",true);

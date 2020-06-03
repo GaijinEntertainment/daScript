@@ -1160,13 +1160,14 @@ namespace das
             if ( subexpr->type->firstType->baseType==Type::tStructure ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
                 bool persistent = subexpr->type->firstType->structType->persistent;
-                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, persistent);
+                bool isLambda = subexpr->type->firstType->structType->isLambda;
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, persistent, isLambda);
             } else if ( subexpr->type->firstType->baseType==Type::tTuple ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
-                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, false);
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, false, false);
             } else if ( subexpr->type->firstType->baseType==Type::tVariant ) {
                 auto structSize = subexpr->type->firstType->getSizeOf();
-                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, false);
+                return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, false, false);
             } else {
                 auto ann = subexpr->type->firstType->annotation;
                 assert(ann->canDeletePtr() && "has to be able to delete ptr");

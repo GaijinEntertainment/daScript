@@ -2,7 +2,18 @@
 
 #include "daScript/misc/memory_model.h"
 
+extern void os_debug_break();
+
 namespace das {
+
+#if DAS_TRACK_ALLOCATIONS
+    uint64_t    g_tracker = 0;
+    uint64_t    g_breakpoint= -1ul;
+
+    void das_track_breakpoint ( uint64_t id ) {
+        g_breakpoint = id;
+    }
+#endif
 
     void Book::reset() {
         totalSize = totalFree = pageSize * totalPages;
@@ -45,6 +56,9 @@ namespace das {
             das_aligned_free16(itb.first);
         }
         bigStuff.clear();
+#if DAS_TRACK_ALLOCATIONS
+        bigStuffId.clear();
+#endif
     }
 
     void MemoryModel::setInitialSize ( uint32_t size ) {
@@ -63,6 +77,10 @@ namespace das {
         if ( size > pageSize ) {
             char * ptr = (char *) das_aligned_alloc16(size);
             bigStuff[ptr] = size;
+#if DAS_TRACK_ALLOCATIONS
+            if ( g_tracker==g_breakpoint ) os_debug_break();
+            bigStuffId[ptr] = g_tracker ++;
+#endif
             return ptr;
         } else {
             for ( auto & book : shelf ) {
@@ -92,6 +110,9 @@ namespace das {
             das_aligned_free16(itb->first);
             bigStuff.erase(itb);
             totalAllocated -= size;
+#if DAS_TRACK_ALLOCATIONS
+            bigStuffId.erase(ptr);
+#endif
             return true;
         }
         return false;
@@ -119,6 +140,9 @@ namespace das {
     }
 
     void MemoryModel::reset() {
+#if DAS_TRACK_ALLOCATIONS
+        bigStuffId.clear();
+#endif
         for ( auto & itb : bigStuff ) {
             das_aligned_free16(itb.first);
         }

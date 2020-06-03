@@ -173,5 +173,9 @@ inline void das_aligned_free16(void *ptr) {
 }
 #endif
 
+#ifndef DAS_TRACK_ALLOCATIONS
+#define DAS_TRACK_ALLOCATIONS   1
+#endif
+
 #include "daScript/misc/smart_ptr.h"
 

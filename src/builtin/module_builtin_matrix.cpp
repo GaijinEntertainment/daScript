@@ -137,7 +137,7 @@ namespace das {
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
             uint32_t ms = uint32_t(sizeof(ThisMatrix));
-            return context.code->makeNode<SimNode_DeleteStructPtr>(at,sube,count,ms, false);
+            return context.code->makeNode<SimNode_DeleteStructPtr>(at,sube,count,ms, false, false);
         }
         virtual SimNode * simulateSafeGetField ( const string & na, Context & context,
                                                 const LineInfo & at, const ExpressionPtr & value ) const override {

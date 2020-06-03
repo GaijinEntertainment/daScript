@@ -1,6 +1,8 @@
 // options debugger=true
 // options log = true
 
+options heap_page=0
+
 require fio
 require daslib/json
 require daslib/json_enh
@@ -8,7 +10,8 @@ require daslib/json_enh
 [export,unsafe]
 def test
     for jidx in range(1,8)
-        let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
+        // let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
+        let fname = "/Users/borisbatkin/Work/yzg/examples/test/json/{jidx}.json"
         fopen(fname, "r") <| $ ( f )
             fmap(f) <| $ ( data )
                 print ( "\n{fname}\n" )
@@ -26,7 +29,7 @@ def test
                     print("before delete {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
                     delete json
                     print("before collect  {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
-                    // string_heap_report()
+                    heap_report()
                     string_heap_collect()
                     print("after collect {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
     print("allocated {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")

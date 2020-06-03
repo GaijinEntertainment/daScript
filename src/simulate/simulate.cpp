@@ -105,6 +105,8 @@ namespace das
             if ( *pStruct ) {
                 if ( persistent ) {
                     das_aligned_free16(*pStruct);
+                } else if ( isLambda ) {
+                    context.heap.free(*pStruct - 16, structSize + 16);
                 } else {
                     context.heap.free(*pStruct, structSize);
                 }

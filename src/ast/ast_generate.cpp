@@ -508,6 +508,7 @@ namespace das {
         auto lsn = lambdaName;
         auto pStruct = make_smart<Structure>(lsn);
         pStruct->generated = true;
+        pStruct->isLambda = true;
         pStruct->at = block->at;
         auto btd = block->makeBlockType();
         btd->baseType = Type::tFunction;

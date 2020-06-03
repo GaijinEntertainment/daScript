@@ -2179,6 +2179,9 @@ namespace das {
             } else if ( subt->isPointer() && subft->baseType==Type::tStructure &&
                        subft->structType->persistent ) {
                 ss << "das_delete_persistent<";
+            } else if ( subt->isPointer() && subft->baseType==Type::tStructure &&
+                       subft->structType->isLambda ) {
+                ss << "das_delete_lambda_struct<";
             } else {
                 ss << "das_delete<";
             }
