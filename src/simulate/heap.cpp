@@ -3,7 +3,18 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/heap.h"
 
+extern void os_debug_break();
+
 namespace das {
+
+#if DAS_TRACK_ALLOCATIONS
+    uint64_t    g_tracker_string = 0;
+    uint64_t    g_breakpoint_string = -1ul;
+
+    void das_track_string_breakpoint ( uint64_t id ) {
+        g_breakpoint_string = id;
+    }
+#endif
 
     char * HeapAllocator::allocateName ( const string & name ) {
         if (!name.empty()) {
@@ -58,6 +69,10 @@ namespace das {
                 StringHeader * header = (StringHeader *) str;
                 header->length = length;
                 header->hash = 0;
+#if DAS_TRACK_ALLOCATIONS
+                if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
+                header->tracking_id = g_tracker_string ++;
+#endif
                 str += sizeof(StringHeader);
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
@@ -139,8 +154,13 @@ namespace das {
                         char * ch = book.data + i*book.pageSize + dofs;
                         auto header = (StringHeader *) ch;
                         ch += sizeof(StringHeader);
+#if DAS_TRACK_ALLOCATIONS
+                        tout << "\t\t" << header->length << "\t" << HEX << header->hash << DEC
+                            << "\t" << header->tracking_id << "\t" << presentStr(buf,ch,32) << "\n";
+#else
                         tout << "\t\t" << header->length << "\t" << HEX << header->hash << DEC
                             << "\t" << presentStr(buf,ch,32) << "\n";
+#endif
                         uint32_t bytes = sizeof(StringHeader) + header->length + 1;
                         bytes = (bytes + alignMask) & ~alignMask;
                         dofs += bytes;

@@ -3,6 +3,8 @@
 #include "daScript/simulate/debug_print.h"
 #include "daScript/misc/fpe.h"
 
+extern void os_debug_break();
+
 namespace das {
 
     char * HeapWriterPolicy::c_str() {
@@ -11,6 +13,10 @@ namespace das {
         data[dataSize] = 0;
         sh->hash = 0;
         sh->length = dataSize;
+#if DAS_TRACK_ALLOCATIONS
+        if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
+        sh->tracking_id = g_tracker_string ++;
+#endif
         heap->recognize(data);
         return data;
     }
@@ -36,6 +42,12 @@ namespace das {
                 return;
             } else if (oldDataBase != newDataBase) {
                 data = newDataBase + sizeof(StringHeader);
+#if DAS_TRACK_ALLOCATIONS
+                StringHeader * header = (StringHeader *) newDataBase;
+                if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
+                header->tracking_id = g_tracker_string ++;
+#endif
+                // heap->free(oldDataBase, dataCapacity + sizeof(StringHeader) + 1);
             }
         } else {
             data = (char *) heap->allocate(newCapacity + sizeof(StringHeader) + 1);
@@ -43,6 +55,11 @@ namespace das {
                 dataSize = 0;
                 return;
             }
+#if DAS_TRACK_ALLOCATIONS
+            StringHeader * header = (StringHeader *) data;
+            if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
+            header->tracking_id = g_tracker_string ++;
+#endif
             data += sizeof(StringHeader);
         }
         dataCapacity = newCapacity;

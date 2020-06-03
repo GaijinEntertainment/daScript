@@ -10,6 +10,8 @@
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
+extern void os_debug_break();
+
 namespace das
 {
     struct StringBuilderWriterAnnotation : ManagedStructureAnnotation <StringBuilderWriter,false> {
@@ -361,6 +363,10 @@ namespace das
             StringHeader* header = (StringHeader *) context->stringHeap.allocate(sizeof(StringHeader) + 2);
             header->length = 1;
             header->hash = 0;
+#if DAS_TRACK_ALLOCATIONS
+            if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
+            header->tracking_id = g_tracker_string ++;
+#endif
             str = (char*)(header + 1);
             str[0] = (char) Ch;
             str[1] = 0;
@@ -373,6 +379,10 @@ namespace das
             char* nstr = context->stringHeap.reallocate(hstr, size, size + 1);
             if (nstr != hstr) {
                 header = (StringHeader*)nstr;
+#if DAS_TRACK_ALLOCATIONS
+            if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
+            header->tracking_id = g_tracker_string ++;
+#endif
                 context->stringHeap.free(hstr, size);
             }
             header->length = length + 1;

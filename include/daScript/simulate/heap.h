@@ -3,6 +3,10 @@
 #include "daScript/misc/memory_model.h"
 #include "daScript/misc/fnv.h"
 
+#ifndef DAS_TRACK_ALLOCATIONS
+#define DAS_TRACK_ALLOCATIONS   1
+#endif
+
 namespace das {
 
     class StackAllocator {
@@ -131,8 +135,19 @@ namespace das {
     struct StringHeader {
         uint32_t    hash;
         uint32_t    length;
+#if DAS_TRACK_ALLOCATIONS
+        uint64_t    tracking_id;
+#endif
     };
+#if !DAS_TRACK_ALLOCATIONS
     static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
+#endif
+
+#if DAS_TRACK_ALLOCATIONS
+    extern uint64_t    g_tracker_string;
+    extern uint64_t    g_breakpoint_string;
+    void das_track_string_breakpoint ( uint64_t id );
+#endif
 
     struct StrEqPred {
         __forceinline bool operator()(const char * a, const char * b) const {
