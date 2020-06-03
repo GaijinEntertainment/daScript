@@ -31,6 +31,7 @@ namespace das {
         }
         __forceinline void output() {}
         void _reserve(int newSize);
+        void _resize(int newCapacity);
     protected:
         StringAllocator * heap = nullptr;
         char *  data = nullptr;

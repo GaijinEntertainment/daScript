@@ -9,9 +9,7 @@ namespace das {
     char * HeapWriterPolicy::c_str() {
         if (!data) return nullptr;
         if ( dataCapacity > int(heap->pageSize) ) {
-            int newCapacity = dataSize;
-            data = heap->reallocate(data, dataCapacity + sizeof(StringHeader) + 1, newCapacity + sizeof(StringHeader) + 1);
-            dataCapacity = newCapacity;
+            _resize(dataSize);
         }
         auto sh = ((StringHeader *)data) - 1;
         data[dataSize] = 0;
@@ -29,13 +27,7 @@ namespace das {
         return int(dataSize);
     }
 
-    void HeapWriterPolicy::_reserve(int newSize) {
-        int newCapacity = newSize;
-        if ( newCapacity > int(heap->pageSize) ) {
-            // if we exceed page size, we go to double-or-nothing grow mode
-            // that way string heap pages stay without holes, but big pages get allocated less often
-            newCapacity = das::max(dataCapacity * 2, newSize);
-        }
+    void HeapWriterPolicy::_resize(int newCapacity) {
         if (data) {
             char * oldDataBase = data - sizeof(StringHeader);
             char * newDataBase = (char *)heap->reallocate(oldDataBase,
@@ -66,6 +58,21 @@ namespace das {
             data += sizeof(StringHeader);
         }
         dataCapacity = newCapacity;
+        // temporary header, so that GC does not crash if we call before doing '.c_str()'
+        auto sh = ((StringHeader *)data) - 1;
+        data[dataSize] = 0;
+        sh->hash = 0;
+        sh->length = newCapacity;
+    }
+
+    void HeapWriterPolicy::_reserve(int newSize) {
+        int newCapacity = newSize;
+        if ( newCapacity > int(heap->pageSize) ) {
+            // if we exceed page size, we go to double-or-nothing grow mode
+            // that way string heap pages stay without holes, but big pages get allocated less often
+            newCapacity = das::max(dataCapacity * 2, newSize);
+        }
+        _resize(newCapacity);
     }
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags ) {

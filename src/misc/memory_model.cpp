@@ -133,7 +133,7 @@ namespace das {
             }
         }
         char * nptr = allocate(nsize);
-        memcpy ( nptr, ptr, size );
+        memcpy ( nptr, ptr, das::min(size,nsize) );
         free(ptr, size);
         return nptr;
     }

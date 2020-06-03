@@ -67,4 +67,9 @@ multi line string"
         assert(ch==chAt)
         index ++
     assert(count==2)
+    // check if builder does its jo, and deletes
+    var zzs = build_string() <| $ ( writer )
+        for zzx in range(0,100500)
+            write(writer,zzx)
+    delete zzs
     return true
