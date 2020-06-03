@@ -1,5 +1,5 @@
 
-options log = true
+//options log = true
 //options log_stack = true
 //options log_nodes = true
 //options fusion = false
@@ -33,6 +33,10 @@ struct ReNode
 variant MaybeReNode
     value   : ReNode?
     nothing : void?
+
+/*
+    Parser
+*/
 
 let
     log_enabled = false
@@ -369,7 +373,145 @@ def re_parse ( expr:ReText ) : ReNode?
         return null
     return ore as value
 
-def debug_re ( node: ReNode?; tab:int = 1 )
+/*
+    matching
+*/
+
+def re_match_char ( str:ReText; offset:int; text:string; len:int ) : int
+    for Ch,Ofs in text,range(offset,offset+len)
+        if at(str,Ofs) != Ch
+            return -1
+    return offset + len
+
+def re_match_single_char ( str:ReText; offset:int; sc:int ) : int
+    let Ch = at(str,offset)
+    if Ch != sc
+        return -1
+    return offset + 1
+
+def re_match_range ( str:ReText; offset:int; sub:range ) : int
+    let Ch = at(str,offset)
+    if Ch<sub.x | Ch>sub.y
+        return -1
+    return offset + 1
+
+def re_match_union ( str:ReText; offset:int; node:ReNode? ) : int
+    let left = re_match(str,offset,node.left)
+    if left != -1
+        return left
+    let right = re_match(str,offset,node.right)
+    if right != -1
+        return right
+    return -1
+
+def re_match_set ( str:ReText; offset:int; node:ReNode? ) : int
+    if eos(str,offset)
+        return -1
+    for sub in node.all
+        let any = re_match(str, offset, sub)
+        if any != -1
+            return any
+    return -1
+
+def re_match_negative_set ( str:ReText; offset:int; node:ReNode? ) : int
+    if eos(str,offset)
+        return -1
+    for sub in node.all
+        if re_match(str, offset, sub) != -1
+            return -1
+    return offset + 1
+
+def re_match_any ( str:ReText; offset:int ) : int
+    if eos(str,offset)
+        return -1
+    return offset + 1
+
+def re_match_concat ( str:ReText; offset:int; node:ReNode? ) : int
+    if eos(str,offset)
+        return -1
+    let oleft = re_match(str,offset,node.left)
+    if oleft == -1
+        return -1
+    let oright = re_match(str,oleft,node.right)
+    if oright == -1
+        return -1
+    return oright
+
+def re_match_eos ( str:ReText; offset:int ) : int
+    if eos(str,offset)
+        return offset
+    return -1
+
+def re_match_plus ( str:ReText; offset:int; node:ReNode? ) : int
+    var osym = re_match(str, offset, node.left)
+    if osym == -1
+        return -1
+    var ofs = osym
+    while osym != -1
+        ofs = osym
+        osym = re_match(str, ofs, node.left)
+    return ofs
+
+def re_match_star ( str:ReText; offset:int; node:ReNode? ) : int
+    var ofs = offset
+    var osym = re_match(str, offset, node.left)
+    while osym != -1
+        ofs = osym
+        osym = re_match(str, ofs, node.left)
+    return ofs
+
+def re_match_group ( str:ReText; offset:int; node:ReNode? ) : int
+    let osub = re_match(str,offset,node.left)
+    if osub==-1
+        return -1
+    // todo: return group last match
+    return osub
+
+def re_match ( str:ReText; offset:int; node:ReNode? ) : int
+    if node.op==ReOp Char
+        let len = length(node.text)
+        if len == 1
+            let sc = at(node.text,0)
+            return re_match_single_char(str,offset,sc)
+        else
+            return re_match_char(str,offset,node.text,len)
+    elif node.op==ReOp Range
+        var sub : range
+        sub.x = at(node.left.text,0)
+        sub.y = at(node.right.text,0)
+        return re_match_range(str,offset,sub)
+    elif node.op==ReOp Union
+        return re_match_union(str,offset,node)
+    elif node.op==ReOp Set
+        return re_match_set(str,offset,node)
+    elif node.op==ReOp NegativeSet
+        return re_match_negative_set(str,offset,node)
+    elif node.op==ReOp Any
+        return re_match_any(str,offset)
+    elif node.op==ReOp Eos
+        return re_match_eos(str,offset)
+    elif node.op==ReOp Concat
+        return re_match_concat(str,offset,node)
+    elif node.op==ReOp Plus
+        return re_match_plus(str,offset,node)
+    elif node.op==ReOp Star
+        return re_match_star(str,offset,node)
+    elif node.op==ReOp Group
+        return re_match_group(str,offset,node)
+    else
+        panic("unsupported {node.op}")
+    return -1
+
+def regex_match ( str:ReText; node:ReNode? ) : int
+    if empty(str)
+        return -1
+    return re_match(str,0,node)
+
+/*
+    printer
+*/
+
+def debug_re ( node: ReNode?; tab:int )
     if node==null
         print("null")
     elif node.op==ReOp Char
@@ -381,47 +523,40 @@ def debug_re ( node: ReNode?; tab:int = 1 )
         debug_re(node.right,tab)
         print(")")
     elif node.op==ReOp Set
-        print("(Set\n")
+        print("(Set")
         for subs in node.all
-            print("{repeat("\t",tab)}")
+            print("\n{repeat("\t",tab)}")
             debug_re(subs,tab+1)
-            print("\n")
-        print(")")
+        print("\n{repeat("\t",tab-1)})")
     elif node.op==ReOp NegativeSet
-        print("(Negative-Set\n")
-        var first = true
+        print("(Negative-Set")
         for subs in node.all
-            if first
-                first = false
-            else
-                print("\n")
-            print("{repeat("\t",tab)}")
+            print("\n{repeat("\t",tab)}")
             debug_re(subs,tab+1)
-        print(")")
+        print("\n{repeat("\t",tab-1)})")
     elif node.op==ReOp Any
         print("(Any)")
     elif node.op==ReOp Eos
         print("(Eos)")
     elif node.op==ReOp Group
         print("(Group ")
-        debug_re(node.left)
+        debug_re(node.left,tab+1)
         print(")")
     elif node.op==ReOp Plus
         print("(Plus ")
-        debug_re(node.left)
+        debug_re(node.left,tab)
         print(")")
     elif node.op==ReOp Star
         print("(Star ")
-        debug_re(node.left)
+        debug_re(node.left,tab)
         print(")")
     elif node.op==ReOp Concat
         print("(Contact\n")
         print("{repeat("\t",tab)}")
         debug_re(node.left,tab+1)
-        print("\n")
-        print("{repeat("\t",tab)}")
+        print("\n{repeat("\t",tab)}")
         debug_re(node.right,tab+1)
-        print(")")
+        print("\n{repeat("\t",tab-1)})")
     elif node.op==ReOp Union
         print("(Union\n")
         print("{repeat("\t",tab)}")
@@ -429,15 +564,48 @@ def debug_re ( node: ReNode?; tab:int = 1 )
         print("\n")
         print("{repeat("\t",tab)}")
         debug_re(node.right,tab+1)
-        print(")")
+        print("\n{repeat("\t",tab-1)})")
     else
         panic("unsupported op")
 
+
+def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
+    print("testing {reg}\n")
+    let res = re_parse(reg)
+    if res==null
+        print("failed to compile\n")
+    print("re is:\n")
+    debug_re(res,1)
+    print("\n")
+    var failed = false
+    for m in matches
+        let ma = regex_match(m, res)
+        print("matching `{m}` -> {ma} {ma==-1 ? "failed" : "ok"}\n")
+        failed |= ma==-1
+    for m in nonmatches
+        let ma = regex_match(m, res)
+        print("matching `{m}` -> {ma} {ma!=-1 ? "failed" : "ok"}\n")
+        failed |= ma!=-1
+    print("{failed ? "failed" : "ok"}\n\n")
+    assert(!failed)
+
 [export,unsafe]
 def test
-    let sample = "[A-Z\\]]" // ([0-9]*)"
-    let res = re_parse(sample)
-    // print("res = {res}\n")
-    debug_re(res)
-    print("\n")
+    // character
+    test_re("a", [{string[] "a"}], [{string ""; "b"; "ba"}])
+    // union
+    test_re("cat|dog", [{string "cat";"dog";"cats"}], [{string "at";" cat";"doog"}])
+    // set & negatvie set
+    test_re("[0-9a-zA-Z_]",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
+    test_re("[^0-9a-zA-Z_]",[{string "#";"*"}],[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}])
+    // any, concat
+    test_re("cat.", [{string "catt";"cats"}], [{string "cat";" cat"}])
+    // eos
+    test_re("cat$", [{string[] "cat"}], [{string "cattt";" cat"}])
+    // +
+    test_re("ab+", [{string "ab";"abb";"abbbc"}], [{string "a";" ab"; "bbb"}])
+    test_re("(cat)+",[{string "cat";"catcat"}], [{string "dog";"caat"}])
+    // *
+    test_re("ab*", [{string "a";"ab";"abb";"abbbc"}], [{string " ab"; "bbb"}])
+    test_re("a(cat)*",[{string "a";"acat";"acatcat"}], [{string "dog";"caat";"cat"}])
     return true

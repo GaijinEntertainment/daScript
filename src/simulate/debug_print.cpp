@@ -8,6 +8,11 @@ namespace das {
 
     char * HeapWriterPolicy::c_str() {
         if (!data) return nullptr;
+        if ( dataCapacity > int(heap->pageSize) ) {
+            int newCapacity = dataSize;
+            data = heap->reallocate(data, dataCapacity + sizeof(StringHeader) + 1, newCapacity + sizeof(StringHeader) + 1);
+            dataCapacity = newCapacity;
+        }
         auto sh = ((StringHeader *)data) - 1;
         data[dataSize] = 0;
         sh->hash = 0;
