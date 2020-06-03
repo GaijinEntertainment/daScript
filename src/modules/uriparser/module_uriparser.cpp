@@ -64,7 +64,7 @@ char * escape_uri ( char * uristr, bool spaceToPlus, bool normalizeBreaks, Conte
     int len = stringLength(*context,uristr);
     auto buf = new char[len*6];
     char * result = nullptr;
-    if ( char * res = uriEscapeA(uristr, buf, spaceToPlus, normalizeBreaks) ) {
+    if ( uriEscapeA(uristr, buf, spaceToPlus, normalizeBreaks) ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
@@ -78,7 +78,7 @@ char * unescape_uri ( char * uristr,Context * context ) {
     memcpy(buf, uristr, len);
     buf[len] = 0;
     char * result = nullptr;
-    if ( const char * res = uriUnescapeInPlaceA(buf) ) {
+    if ( uriUnescapeInPlaceA(buf) ) {
         result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
