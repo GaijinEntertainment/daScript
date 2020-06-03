@@ -10,8 +10,8 @@ require daslib/json_enh
 [export,unsafe]
 def test
     for jidx in range(1,8)
-        // let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
-        let fname = "/Users/borisbatkin/Work/yzg/examples/test/json/{jidx}.json"
+        let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
+        // let fname = "/Users/borisbatkin/Work/yzg/examples/test/json/{jidx}.json"
         fopen(fname, "r") <| $ ( f )
             fmap(f) <| $ ( data )
                 print ( "\n{fname}\n" )

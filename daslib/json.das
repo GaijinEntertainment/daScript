@@ -90,21 +90,22 @@ def lexer ( text : string )
                 clear(str)
                 next(tin, ahead)
             elif ahead=='+' | ahead=='-' | is_number(ahead)
-                var num : string
-                num = append(num, ahead)
+                push(str,uint8(ahead))
                 while next(tin,ahead) & is_number(ahead)
-                    num = append(num, ahead)
+                    push(str,uint8(ahead))
                 if !empty(tin) & ahead=='.'
-                    num = append(num,ahead)
+                    push(str,uint8(ahead))
                     while next(tin,ahead) & is_number(ahead)
-                        num = append(num, ahead)
+                        push(str,uint8(ahead))
+                var num = string(str)
                 yield [[Token _number = double(num)]]
+                clear(str)
                 delete num
             elif is_alpha(ahead)
-                var name : string
-                name = append(name, ahead)
+                push(str,uint8(ahead))
                 while next(tin,ahead) & is_alpha(ahead)
-                    name = append(name, ahead)
+                    push(str,uint8(ahead))
+                var name = string(str)
                 if name == "true"
                     yield [[Token _bool=true]]
                 elif name == "false"
@@ -115,6 +116,7 @@ def lexer ( text : string )
                     yield [[Token _error = "invalid name {name}"]]
                     return false
                 delete name
+                clear(str)
             else
                 yield [[Token _error = "invalid character `{to_char(ahead)}` aka ASCII {ahead}"]]
                 return false
