@@ -1039,7 +1039,10 @@ namespace das {
     };
 
     template <typename TT>
-    struct das_delete_lambda_struct {
+    struct das_delete_lambda_struct;
+
+    template <typename TT>
+    struct das_delete_lambda_struct<TT *> {
         static __forceinline void clear ( Context * __context__, TT * ptr ) {
             __context__->heap.free(((char *)ptr)-16, sizeof(TT)+16);
         }

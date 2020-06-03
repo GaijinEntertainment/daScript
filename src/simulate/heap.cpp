@@ -167,7 +167,7 @@ namespace das {
                 tout << "\t" << header->length << "\t" << HEX << header->hash << DEC
                     << "\t" << eeid << "\n";
 #else
-                tout << "\t" << header->length << "\t" << HEX << header->hash << DEC  < "\n";
+                tout << "\t" << header->length << "\t" << HEX << header->hash << DEC  << "\n";
 #endif
             }
         }

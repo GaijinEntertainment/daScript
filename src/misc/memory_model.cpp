@@ -122,12 +122,12 @@ namespace das {
         if ( !ptr ) return allocate(nsize);
         size = (size + alignMask) & ~alignMask;
         nsize = (nsize + alignMask) & ~alignMask;
-        totalAllocated = totalAllocated - size + nsize;
-        maxAllocated = das::max(maxAllocated, totalAllocated);
         if ( size<pageSize && nsize<pageSize ) {
             for ( auto & book : shelf ) {
                 if ( book.isOwnPtr(ptr) ) {
                     if ( auto nptr = book.reallocate(ptr, size, nsize) ) {
+                        totalAllocated = totalAllocated - size + nsize;
+                        maxAllocated = das::max(maxAllocated, totalAllocated);
                         return nptr;
                     }
                 }

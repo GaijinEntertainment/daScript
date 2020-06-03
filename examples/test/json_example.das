@@ -1,7 +1,7 @@
 // options debugger=true
 // options log = true
 
-options heap_page=0
+// options heap_page=0
 
 require fio
 require daslib/json
