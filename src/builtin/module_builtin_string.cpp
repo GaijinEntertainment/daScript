@@ -434,6 +434,11 @@ namespace das
         return -1;
     }
 
+    char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context ) {
+        if ( !bytes.size ) return nullptr;
+        return context->stringHeap.allocateString(bytes.data, bytes.size);
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
@@ -450,6 +455,7 @@ namespace das
         addExtern<DAS_BIND_FUN(format_and_write<uint64_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint64_t>");
         addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<float>");
         addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<double>");
+        addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string", SideEffects::none, "builtin_string_from_array");
         // dup
         auto bsd = addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
                                                           SideEffects::modifyArgumentAndExternal, "builtin_strdup");

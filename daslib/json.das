@@ -54,6 +54,7 @@ def lexer ( text : string )
     return <- generator<Token>() <| $()
         var tin <- each(stext)
         var ahead : int = ' '
+        var str : array<uint8>
         while !empty(tin)
             while is_white_space(ahead) & next(tin,ahead)
                 pass
@@ -63,7 +64,6 @@ def lexer ( text : string )
                 yield [[Token _symbol=ahead]]
                 next(tin, ahead)
             elif ahead=='"'
-                var str : string
                 while next(tin,ahead) & ahead!='"'
                     if ahead == '\\'
                         if next(tin,ahead)
@@ -77,16 +77,17 @@ def lexer ( text : string )
                                 ahead = '\r'
                             elif ahead=='t'
                                 ahead = '\t'
-                            str = append(str,ahead)
+                            push(str,uint8(ahead))
                         else
                             yield [[Token _error = "string escape sequence exceeds text"]]
                             return false
                     else
-                        str = append(str, ahead)
+                        push(str,uint8(ahead))
                 if empty(tin)
                     yield [[Token _error = "string exceeds text"]]
                     return false
-                yield [[Token _string = str]]
+                yield [[Token _string = string(str)]]
+                clear(str)
                 next(tin, ahead)
             elif ahead=='+' | ahead=='-' | is_number(ahead)
                 var num : string
