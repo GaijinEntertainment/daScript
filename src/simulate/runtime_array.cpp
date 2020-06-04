@@ -26,6 +26,7 @@ namespace das
         if ( arr.capacity >= newCapacity ) return;
         auto newData = (char *)context.heap.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
         if ( !newData ) context.throw_error("out of linear allocator memory");
+        context.heap.mark_comment(newData, "array");
         if ( newData != arr.data ) {
             // memcpy(newData, arr.data, arr.capacity);
             arr.data = newData;

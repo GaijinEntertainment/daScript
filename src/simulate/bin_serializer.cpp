@@ -41,6 +41,7 @@ namespace das {
             if ( bytesWritten + size > bytesAllocated ) {
                 uint32_t newSize = das::max ( bytesAllocated + bytesGrow, bytesWritten + size );
                 bytesAt = context->heap.reallocate(bytesAt, bytesAllocated, newSize);
+                context->heap.mark_comment(bytesAt, "binary serializer write");
                 bytesAllocated = newSize;
             }
             DEBUG_BIN_DATA("writing %i bytes at %i\n", size, bytesWritten );
