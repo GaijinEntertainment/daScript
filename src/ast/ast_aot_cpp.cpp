@@ -756,12 +756,26 @@ namespace das {
             }
             return block;
         }
+        ExprBlock * getFinalBlock () const {
+            for ( auto it = stack.rbegin(); it!=stack.rend(); ++it ) {
+                auto blk = *it;
+                if ( blk->finalList.size() ) return blk;
+                if ( blk->isClosure ) return nullptr;
+            }
+            return nullptr;
+        }
+        ExprBlock * getTopBlock () const {
+            for ( auto it = stack.rbegin(); it!=stack.rend(); ++it ) {
+                auto blk = *it;
+                if ( blk->isClosure ) return blk;
+            }
+            return stack.front();
+        }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            if (stack.back()->finalList.size()) {    // only move from the block with finally
-                ExprBlock * block = getCurrentBlock();
-                DAS_ASSERT(block && "internal error. let expression without block");
-                variables[block].push_back(var.get());
+            if ( auto bfinal = getFinalBlock() ) {
+                bfinal = getTopBlock();
+                variables[bfinal].push_back(var.get());
                 moved.insert(var.get());
             }
             renameVariable(var.get());
@@ -1108,7 +1122,10 @@ namespace das {
             for ( auto & var : vars ) {
                 ss << string(tab,'\t');
                 describeVarLocalCppType(ss, var->type);
-                ss << " " << collector.getVarName(var) << ";\n";
+                auto vname = collector.getVarName(var);
+                ss  << " " << vname << "; "
+                    << "memset(&" << vname << ",0,sizeof(" << vname << "));"
+                    << "\n";
             }
             // pre-declare locals
             auto & temps = collector.localTemps[block];

@@ -232,6 +232,7 @@ namespace das {
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
+            block->stackVarTop = allocateStack(0);
             if ( inStruct ) return;
             if ( block->isClosure ) {
                 blocks.push_back(block);
@@ -248,6 +249,7 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            block->stackVarBottom = allocateStack(0);
             if ( inStruct ) {
                 return Visitor::visit(block);
             }

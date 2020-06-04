@@ -1499,6 +1499,16 @@ namespace das
     SimNode * ExprBlock::simulate (Context & context) const {
         das_map<int32_t,uint32_t> ofsmap;
         vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
+        // we memzero block's stack memory, if there is a finally section
+        // bad scenario we fight is ( in scope X ; return ; in scope Y )
+        if ( finalList.size() ) {
+            uint32_t blockDataSize = stackVarBottom - stackVarTop;
+            if ( blockDataSize ) {
+                SimNode * fakeVar = context.code->makeNode<SimNode_GetLocal>(at, stackVarTop);
+                SimNode * memZ = context.code->makeNode<SimNode_MemZero>(at, fakeVar, blockDataSize );
+                simlist.insert( simlist.begin(), memZ );
+            }
+        }
         // TODO: what if list size is 0?
         if ( simlist.size()!=1 || isClosure || finalList.size() ) {
             SimNode_Block * block;
