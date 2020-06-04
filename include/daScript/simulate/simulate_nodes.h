@@ -1640,6 +1640,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap.allocate(bytes);
+                context.heap.mark_comment(ptr, "new");
+                context.heap.mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes);
             }
@@ -1666,6 +1668,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap.allocate(bytes + (typeInfo ? 16 : 0));
+                context.heap.mark_comment(ptr, "new [[ ]]");
+                context.heap.mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
             }
@@ -1701,6 +1705,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap.allocate(bytes + (typeInfo ? 16 : 0));
+                context.heap.mark_comment(ptr, "new [[ ]]");
+                context.heap.mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
             }
@@ -1761,6 +1767,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap.allocate(bytes);
+                context.heap.mark_comment(ptr, "new with initializer");
+                context.heap.mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes);
             }

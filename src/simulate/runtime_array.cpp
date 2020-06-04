@@ -78,6 +78,8 @@ namespace das
         vec4f ll = source->eval(context);
         Array * arr = cast<Array *>::to(ll);
         char * iter = context.heap.allocate(sizeof(GoodArrayIterator));
+        context.heap.mark_comment(iter,"array<> iterator");
+        context.heap.mark_location(iter,&debugInfo);
         new (iter) GoodArrayIterator(arr, stride);
         return cast<char *>::from(iter);
     }
@@ -111,6 +113,8 @@ namespace das
         vec4f ll = source->eval(context);
         char * data = cast<char *>::to(ll);
         char * iter = context.heap.allocate(sizeof(FixedArrayIterator));
+        context.heap.mark_comment(iter,"fixed array iterator");
+        context.heap.mark_location(iter,&debugInfo);
         new (iter) FixedArrayIterator(data, size, stride);
         return cast<char *>::from(iter);
     }

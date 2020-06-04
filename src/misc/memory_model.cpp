@@ -57,6 +57,8 @@ namespace das {
         bigStuff.clear();
 #if DAS_TRACK_ALLOCATIONS
         bigStuffId.clear();
+        bigStuffAt.clear();
+        bigStuffComment.clear();
 #endif
     }
 
@@ -111,6 +113,8 @@ namespace das {
             totalAllocated -= size;
 #if DAS_TRACK_ALLOCATIONS
             bigStuffId.erase(ptr);
+            bigStuffAt.erase(ptr);
+            bigStuffComment.erase(ptr);
 #endif
             return true;
         }

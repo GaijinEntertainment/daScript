@@ -328,6 +328,8 @@ namespace das
         vec4f ll = source->eval(context);
         char * str = cast<char *>::to(ll);
         char * iter = context.heap.allocate(sizeof(StringIterator));
+        context.heap.mark_comment(iter,"string iterator");
+        context.heap.mark_location(iter,&debugInfo);
         new (iter) StringIterator(str);
         return cast<char *>::from(iter);
     }

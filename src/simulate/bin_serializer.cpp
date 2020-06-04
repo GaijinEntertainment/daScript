@@ -116,9 +116,10 @@ namespace das {
             if ( reading ) {
                 uint32_t length = 0;
                 load ( length );
-                data = (char *) context->heap.allocate(length + 1);
-                read ( data, length );
-                data[length] = 0;
+                char * temp = new char[length+1];
+                read ( temp, length );
+                data = (char *) context->stringHeap.allocateString(temp,length);
+                delete [] temp;
             } else {
                 uint32_t length = stringLengthSafe(*context, data);
                 save ( length );
@@ -227,6 +228,7 @@ namespace das {
                 DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");
                 uint32_t size = getTypeSize(info) + 16;
                 char * ptr = context->heap.allocate(size);
+                context->heap.mark_comment(ptr, "lambda (via bin serializer)");
                 memset ( ptr, 0, size );
                 *((TypeInfo **)ptr) = info;
                 ptr += 16;

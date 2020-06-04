@@ -10,6 +10,8 @@ namespace das {
 
     #define DAS_PAGE_GC_MASK    0x80000000
 
+    struct LineInfo;
+
     struct Page {
         __forceinline uint32_t allocate ( uint32_t size, uint32_t pageSize ) {
             if ( offset + size > pageSize ) return -1u;
@@ -140,8 +142,15 @@ namespace das {
         vector<Book>            shelf;
         das_hash_map<void *,uint32_t>bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
 #if DAS_TRACK_ALLOCATIONS
-        das_hash_map<void *,uint64_t>bigStuffId;
-#endif
+        das_hash_map<void *,uint64_t> bigStuffId;
+        das_hash_map<void *,LineInfo *> bigStuffAt;
+        das_hash_map<void *,const char *> bigStuffComment;
 
+        __forceinline void mark_location ( void * ptr, LineInfo * at ) { bigStuffAt[ptr] = at; }
+        __forceinline void mark_comment ( void * ptr, const char * what ) { bigStuffComment[ptr] = what; }
+#else
+        __forceinline void mark_location ( void *, LineInfo * ) {}
+        __forceinline void mark_comment ( void *, const char * ) {}
+#endif
     };
 }

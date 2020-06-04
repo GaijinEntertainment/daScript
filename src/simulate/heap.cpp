@@ -140,7 +140,6 @@ namespace das {
 
     void HeapAllocator::reportAllocations() {
         TextPrinter tout;
-        char buf[33];
         for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
             auto & book = shelf[bi];
             tout << "book " << int(bi) << ": " << book.totalPages << " pages, " << book.pageSize << " bytes each\n";
@@ -156,17 +155,22 @@ namespace das {
         if ( !bigStuff.empty() ) {
             tout << "big stuff:\n";
             for ( auto it : bigStuff ) {
-                char * ch = (char *)it.first;
-                auto header = (StringHeader *) ch;
-                ch += sizeof(StringHeader);
-                strncpy(buf,ch,32);
-                buf[32] = 0;
 #if DAS_TRACK_ALLOCATIONS
                 uint64_t eeid = bigStuffId[it.first];
-                tout << "\t" << header->length << "\t" << HEX << header->hash << DEC
-                    << "\t" << eeid << "\n";
+                tout << "\t" << it.second << "\t0x" << HEX << intptr_t(it.first) << DEC
+                    << "\t" << eeid;
+                auto itComment = bigStuffComment.find(it.first);
+                if ( itComment != bigStuffComment.end() ) {
+                    tout << "\t" << itComment->second;
+                }
+                auto itLoc = bigStuffAt.find(it.first);
+                if ( itLoc != bigStuffAt.end() ) {
+                    tout << "\t" << itLoc->second->describe();
+                }
+                tout << "\n";
 #else
-                tout << "\t" << header->length << "\t" << HEX << header->hash << DEC  << "\n";
+                tout << "\t" << it.second << "\t0x" << HEX << intptr_t(it.first) << DEC
+                    << "\n";
 #endif
             }
         }

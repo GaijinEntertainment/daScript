@@ -420,18 +420,21 @@ namespace das
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
         char * iter = context->heap.allocate(sizeof(GoodArrayIterator));
+        context->heap.mark_comment(iter, "array<> iterator");
         new (iter) GoodArrayIterator((Array *)&arr, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
         char * iter = context->heap.allocate(sizeof(FixedArrayIterator));
+        context->heap.mark_comment(iter, "fixed array iterator");
         new (iter) FixedArrayIterator((char *)data, size, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
         char * iter = context->heap.allocate(sizeof(RangeIterator));
+        context->heap.mark_comment(iter, "range iterator");
         new (iter) RangeIterator(rng);
         result = { (Iterator *) iter };
     }
@@ -452,14 +455,17 @@ namespace das
         switch ( tinfo->type ) {
         case Type::tEnumeration:
             iter = context.heap.allocate(sizeof(EnumIterator<int32_t>));
+            context.heap.mark_comment(iter, "enum iterator");
             new (iter) EnumIterator<int32_t>(einfo);
             break;
         case Type::tEnumeration8:
             iter = context.heap.allocate(sizeof(EnumIterator<int8_t>));
+            context.heap.mark_comment(iter, "enum8 iterator");
             new (iter) EnumIterator<int8_t>(einfo);
             break;
         case Type::tEnumeration16:
             iter = context.heap.allocate(sizeof(EnumIterator<int16_t>));
+            context.heap.mark_comment(iter, "enum16 iterator");
             new (iter) EnumIterator<int16_t>(einfo);
             break;
         default:
@@ -472,6 +478,7 @@ namespace das
 
     void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
         char * iter = context->heap.allocate(sizeof(StringIterator));
+        context->heap.mark_comment(iter, "string iterator");
         new (iter) StringIterator(str);
         result = { (Iterator *) iter };
     }
@@ -486,6 +493,7 @@ namespace das
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
         char * iter = context->heap.allocate(sizeof(NilIterator));
+        context->heap.mark_comment(iter, "nil iterator");
         new (iter) NilIterator();
         result = { (Iterator *) iter };
     }
@@ -534,6 +542,7 @@ namespace das
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, Context * context ) {
         char * iter = context->heap.allocate(sizeof(LambdaIterator));
+        context->heap.mark_comment(iter, "lambda iterator");
         new (iter) LambdaIterator(*context, lambda);
         result = { (Iterator *) iter };
     }
