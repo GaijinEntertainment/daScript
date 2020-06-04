@@ -2391,6 +2391,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
             char * iter = context.heap.allocate(sizeof(IterT));
+            context.heap.mark_comment(iter,"any iterator");
+            context.heap.mark_location(iter,&debugInfo);
             new (iter) IterT(array);
             return cast<char *>::from(iter);
         }
