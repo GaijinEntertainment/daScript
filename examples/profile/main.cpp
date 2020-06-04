@@ -134,13 +134,14 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool aot), 
     return ok;
 }
 
-int main(int argc, const char * argv[]) {
+int main( int argc, char * argv[] ) {
+    if ( argc>2 ) {
+        tout << "daScriptTest [pathToDasRoot]\n";
+        return -1;
+    }  else if ( argc==2 ) {
+        setDasRoot(argv[1]);
+    }
   _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
-#ifdef _MSC_VER
-    #define    TEST_PATH "../"
-#else
-    #define TEST_PATH "../../"
-#endif
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);

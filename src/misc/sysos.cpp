@@ -66,19 +66,28 @@ namespace das {
         }
     }
 
+    string g_dasRoot;
+
+    void setDasRoot ( const string & dr ) {
+        g_dasRoot = dr;
+    }
+
     string getDasRoot ( void ) {
-        string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
-        auto np = efp.find_last_of("\\/");
-        if ( np != string::npos ) {
-            auto ep = get_prefix(efp);          // remove file name
-            auto suffix = get_suffix(ep);
-            if ( suffix != "bin" ) {
-                ep = get_prefix(ep);            // remove debug
+        if ( g_dasRoot.empty() ) {
+            string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
+            auto np = efp.find_last_of("\\/");
+            if ( np != string::npos ) {
+                auto ep = get_prefix(efp);          // remove file name
+                auto suffix = get_suffix(ep);
+                if ( suffix != "bin" ) {
+                    ep = get_prefix(ep);            // remove debug
+                }
+                DAS_ASSERT(get_suffix(ep)=="bin");
+                g_dasRoot = get_prefix(ep);         // remove bin
+            } else {
+                g_dasRoot = ".";
             }
-            DAS_ASSERT(get_suffix(ep)=="bin");
-            return get_prefix(ep);              // remove bin
-        } else {
-            return "";
         }
+        return g_dasRoot;
     }
 }

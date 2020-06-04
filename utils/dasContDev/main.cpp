@@ -84,15 +84,11 @@ int main(int argc, const char * argv[]) {
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
     string main_das;
-#if 1
     if ( argc!=2 ) {
         tout << "dasContDev [script.das]\n";
         return -1;
     }
     main_das = argv[1];
-#else
-    main_das = getDasRoot() + "/examples/test/telnet.das";
-#endif
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Rtti);
