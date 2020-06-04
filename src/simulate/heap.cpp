@@ -173,6 +173,28 @@ namespace das {
                     << "\n";
 #endif
             }
+#if DAS_TRACK_ALLOCATIONS
+            das_safe_map<LineInfo,int64_t> bytesPerLocation;
+            for ( const auto & ppl : bigStuffAt) {
+                auto ptr = ppl.first;
+                auto bytes = bigStuff[ptr];
+                bytesPerLocation[*(ppl.second)] += bytes;
+            }
+            if ( !bytesPerLocation.empty() ) {
+                vector<pair<int64_t,LineInfo>> bplv;
+                bplv.reserve(bytesPerLocation.size());
+                for ( const auto & bpl : bytesPerLocation ) {
+                    bplv.emplace_back(make_pair(bpl.second,bpl.first));
+                }
+                sort(bplv.begin(), bplv.end(), [&]( auto a, auto b){
+                    return a.first > b.first;
+                });
+                tout << "bytes per location:\n";
+                for ( const auto & bpl : bplv ) {
+                    tout << bpl.first << "\t" << bpl.second.describe() << "\n";
+                }
+            }
+#endif
         }
     }
 
