@@ -438,9 +438,18 @@ namespace das
         return context->stringHeap.allocateString(bytes.data, bytes.size);
     }
 
+    void delete_string ( char * & str, Context * context ) {
+        if ( !str ) return;
+        uint32_t len = stringLengthSafe(*context, str);
+        context->stringHeap.freeString(str, len);
+        str = nullptr;
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
+            SideEffects::modifyExternal,"delete_string")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
             SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
         addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",

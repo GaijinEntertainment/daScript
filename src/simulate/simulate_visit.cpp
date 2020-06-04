@@ -922,13 +922,5 @@ namespace das {
         V_SUB(subexpr);
         V_END();
     }
-
-    SimNode * SimNode_DeleteString::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(DeleteString);
-        V_ARG(total);
-        V_SUB(subexpr);
-        V_END();
-    }
 }
 

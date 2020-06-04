@@ -3,6 +3,7 @@
 #include "daScript/ast/ast_typefactory.h"
 
 namespace das {
+    void delete_string ( char * & str, Context * context );
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context );
     vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args );

@@ -109,7 +109,7 @@ def _lexer ( var stext : string )
                 var num = string(str)
                 yield [[Token _number = double(num)]]
                 clear(str)
-                delete num
+                delete_string(num)
             elif is_alpha(ahead)
                 push(str,uint8(ahead))
                 while next(tin,ahead) & is_alpha(ahead)
@@ -124,14 +124,14 @@ def _lexer ( var stext : string )
                 else
                     yield [[Token _error = "invalid name {name}"]]
                     return false
-                delete name
+                delete_string(name)
                 clear(str)
             else
                 yield [[Token _error = "invalid character `{to_char(ahead)}` aka ASCII {ahead}"]]
                 return false
         return false
     finally
-        delete stext
+        delete_string(stext)
 
 [private]
 def expect_token ( var itv : iterator<Token>; var ahead : Token; vindex : int; var error : string & ) : bool

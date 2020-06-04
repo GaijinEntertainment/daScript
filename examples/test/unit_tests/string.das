@@ -2,7 +2,7 @@
 
 // options logCpp=true
 
-[export]
+[export,unsafe]
 def test:bool
     let s:string = "hello, world!"
     assert(to_upper(s) == "HELLO, WORLD!")
@@ -71,5 +71,5 @@ multi line string"
     var zzs = build_string() <| $ ( writer )
         for zzx in range(0,100500)
             write(writer,zzx)
-    delete zzs
+    delete_string(zzs)
     return true

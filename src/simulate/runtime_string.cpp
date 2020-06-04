@@ -285,21 +285,6 @@ namespace das
         return cast<char *>::from(pStr);
     }
 
-    vec4f SimNode_DeleteString::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        char ** str = (char**)(subexpr->evalPtr(context));
-        str = str + total - 1;
-        for ( uint32_t i=0; i!=total; ++i, str-- ) {
-            char * string = *str;
-            if ( string ) {
-                const uint32_t size = stringLengthSafe(context, string);
-                context.stringHeap.freeString(string, size);
-                *str = nullptr;
-            }
-        }
-        return v_zero();
-    }
-
     // string iteration
 
     bool StringIterator::first ( Context &, char * _value )  {

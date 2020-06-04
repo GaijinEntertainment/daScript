@@ -1187,8 +1187,6 @@ namespace das
                                            at, CompilationError::missing_node );
             }
             return resN;
-        } else if ( subexpr->type->baseType==Type::tString ) {
-            return context.code->makeNode<SimNode_DeleteString>(at, sube, total);
         } else if ( subexpr->type->baseType==Type::tLambda ) {
             return context.code->makeNode<SimNode_DeleteLambda>(at, sube, total);
         } else {

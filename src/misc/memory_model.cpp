@@ -211,6 +211,7 @@ namespace das {
                 totalAllocated += it->second;
                 ++ it;
             } else {
+                das_aligned_free16(it->first);
                 it = bigStuff.erase(it);
             }
         }

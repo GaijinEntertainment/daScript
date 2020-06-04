@@ -86,7 +86,7 @@ def test_delete_string()
     let w0 = heap_bytes_allocated()
     var a = "{deref(getPtr())}"
     // assert(a=="0")
-    delete a
+    delete_string(a)
     let w1 = heap_bytes_allocated()
     assert(w0==w1)
     assert(a=="")
@@ -95,7 +95,8 @@ def test_delete_string()
 def test_delete_string_array()
     let w0 = heap_bytes_allocated()
     var a = [[string[3] "{deref(getPtr())}_1"; "{deref(getPtr())}_2"; "{deref(getPtr())}_3"]]
-    delete a
+    for AA in a
+        delete_string(AA)
     let w1 = heap_bytes_allocated()
     assert(w0==w1)
 
