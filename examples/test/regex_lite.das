@@ -47,28 +47,29 @@ variant MaybeReNode
 */
 
 let
-    log_enabled = false
+    log_parse_enabled = false
+    log_match_enabled = false
     range_check_enabled = false
 
 var
     trace_tab = 0
 
 def trace(msg:string; offset:int)
-    static_if log_enabled
+    static_if log_parse_enabled
         print("{repeat(" ",trace_tab)}{offset}: {msg}\n")
         trace_tab ++
 
 def note(msg:string; offset:int)
-    static_if log_enabled
+    static_if log_parse_enabled
         print("{repeat(" ",trace_tab)}{offset}: {msg}\n")
 
 def trace_backtrack()
-    static_if log_enabled
+    static_if log_parse_enabled
         trace_tab --
         print("{repeat(" ",trace_tab)}backtrack\n")
 
 def trace_value(value : ReNode?)
-    static_if log_enabled
+    static_if log_parse_enabled
         if value==null
             panic("trace_value null?")
         trace_tab --
@@ -428,113 +429,139 @@ def re_compile( var re:Regex; expr:string ) : bool
     matching
 */
 
-def re_match_char ( str:ReText; offset:int; node:ReNode? ) : int
+def re_match_char ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match char {offset}\n")
     let len = length(node.text)
     for Ch,Ofs in node.text,range(offset,offset+len)
         if at(str,Ofs) != Ch
             return -1
     return offset + len
 
-def re_match_union ( str:ReText; offset:int; node:ReNode? ) : int
+def re_match_union ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match union {offset}\n")
     for sub in node.all
-        let osub = re_match(str,offset,sub)
+        let osub = re_match(regex,sub,str,offset)
         if osub != -1
             return osub
     return -1
 
-def re_match_set ( str:ReText; offset:int; node:ReNode? ) : int
+def re_match_set ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match set {offset}\n")
     let ch = at(str,offset)
     if (node.cset[ch>>5] & uint(1 << (ch & 31))) == 0u
         return -1
     return offset + 1
 
-def re_match_negative_set ( str:ReText; offset:int; node:ReNode? ) : int
+def re_match_negative_set ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match negative set {offset}\n")
     let ch = at(str,offset)
     if (node.cset[ch>>5] & uint(1 << (ch & 31))) != 0u
         return -1
     return offset + 1
 
-def re_match_any ( str:ReText; offset:int ) : int
+def re_match_any ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match any {offset}\n")
     if at(str,offset)==0
         return -1
     return offset + 1
 
-def re_match_concat ( str:ReText; offset:int; node:ReNode? ) : int
+def re_match_concat ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match concat {offset}\n")
     var ofs = offset
     for sub in node.all
-        let osub = re_match(str,ofs,sub)
+        let osub = re_match(regex,sub,str,ofs)
         if osub == -1
             return -1
         ofs = osub
     return ofs
 
-def re_match_eos ( str:ReText; offset:int ) : int
+def re_match_eos ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match eos {offset}\n")
     if at(str,offset)==0
         return offset
     return -1
 
-def re_match_question ( str:ReText; offset:int; node:ReNode? ) : int
-    var osym = re_match(str, offset, node.subexpr)
+def re_match_question ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match question {offset}\n")
+    var osym = re_match(regex,node.subexpr,str,offset)
     if osym == -1
         return offset
     return osym
 
-def re_match_plus ( str:ReText; offset:int; node:ReNode? ) : int
-    var osym = re_match(str, offset, node.subexpr)
+def re_match_plus ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match plus {offset}\n")
+    var osym = re_match(regex,node.subexpr,str,offset)
     if osym == -1
         return -1
     var ofs = osym
     while osym != -1
         ofs = osym
-        osym = re_match(str, ofs, node.subexpr)
+        osym = re_match(regex,node.subexpr,str,ofs)
     return ofs
 
-def re_match_star ( str:ReText; offset:int; node:ReNode? ) : int
+def re_match_star ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match star {offset}\n")
     var ofs = offset
-    var osym = re_match(str, offset, node.subexpr)
+    var osym = re_match(regex,node.subexpr,str,offset)
     while osym != -1
         ofs = osym
-        osym = re_match(str, ofs, node.subexpr)
+        osym = re_match(regex,node.subexpr,str,ofs)
     return ofs
 
-def re_match_group ( str:ReText; offset:int; node:ReNode? ) : int
-    let osub = re_match(str,offset,node.subexpr)
+def re_match_group ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
+    if log_match_enabled
+        print("match group {offset}\n")
+    let osub = re_match(regex,node.subexpr,str,offset)
     if osub==-1
         return -1
-    // todo: return group last match
+    regex.groups[node.index]._0 = range(offset,osub)
     return osub
 
-def re_match ( str:ReText; offset:int; node:ReNode? ) : int
+def re_match ( var regex:Regex; node:ReNode?;  str:ReText; offset:int ) : int
     if node.op==ReOp Char
-        return re_match_char(str,offset,node)
+        return re_match_char(regex,node,str,offset)
     elif node.op==ReOp Union
-        return re_match_union(str,offset,node)
+        return re_match_union(regex,node,str,offset)
     elif node.op==ReOp Set
-        return re_match_set(str,offset,node)
+        return re_match_set(regex,node,str,offset)
     elif node.op==ReOp NegativeSet
-        return re_match_negative_set(str,offset,node)
+        return re_match_negative_set(regex,node,str,offset)
     elif node.op==ReOp Any
-        return re_match_any(str,offset)
+        return re_match_any(regex,node,str,offset)
     elif node.op==ReOp Eos
-        return re_match_eos(str,offset)
+        return re_match_eos(regex,node,str,offset)
     elif node.op==ReOp Concat
-        return re_match_concat(str,offset,node)
+        return re_match_concat(regex,node,str,offset)
     elif node.op==ReOp Plus
-        return re_match_plus(str,offset,node)
+        return re_match_plus(regex,node,str,offset)
     elif node.op==ReOp Star
-        return re_match_star(str,offset,node)
+        return re_match_star(regex,node,str,offset)
     elif node.op==ReOp Question
-        return re_match_question(str,offset,node)
+        return re_match_question(regex,node,str,offset)
     elif node.op==ReOp Group
-        return re_match_group(str,offset,node)
+        return re_match_group(regex,node,str,offset)
     else
         panic("unsupported {node.op}")
     return -1
 
-def regex_match ( regex:Regex; str:ReText ) : int
+def regex_match ( var regex:Regex; str:ReText ) : int
     if empty(str)
         return -1
-    return re_match(str,0,regex.root)
+    return re_match(regex,regex.root,str,0)
+
+def regex_group ( regex:Regex; index:int; match:string )
+    let sub_range = regex.groups[index]._0
+    return slice(match, sub_range.x, sub_range.y)
 
 /*
     printer
@@ -542,6 +569,11 @@ def regex_match ( regex:Regex; str:ReText ) : int
 
 def debug_re ( regex:Regex )
     debug_re(regex.root,1)
+    print("\n")
+    if length(regex.groups) != 0
+        print("groups:")
+        for g in regex.groups
+            print("\t{g._1}\n")
 
 def debug_re ( node: ReNode?; tab:int )
     if node==null
@@ -606,7 +638,6 @@ def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
         assert(false)
     print("re is:\n")
     debug_re(regex)
-    print("\n")
     var failed = false
     for m in matches
         let ma = regex_match(regex, m)
@@ -618,6 +649,31 @@ def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
         failed |= ma!=-1
     print("{failed ? "failed" : "ok"}\n\n")
     assert(!failed)
+
+def test_group ( reg:string; match:string; groups:array<string>)
+    print("testing groups is {reg}\n")
+    var regex : Regex
+    if !re_compile(regex, reg)
+        print("failed to compile\n")
+        assert(false)
+    print("re is:\n")
+    debug_re(regex)
+    if length(regex.groups)==0
+        print("has no groups\n")
+        assert(false)
+    let ma = regex_match(regex, match)
+    assert(ma!=-1,"failed to match\n")
+    let tot = length(regex.groups)
+    assert(tot==length(groups),"group count mismatch")
+    var failed = false
+    for x in range(0,tot)
+        let grp = regex_group(regex,x,match)
+        let cgrp = groups[x]
+        if grp != cgrp
+            print("failed, expecting {x}={cgrp}, got {grp}")
+            failed = true
+    assert(!failed)
+
 
 [export,unsafe]
 def test
@@ -645,4 +701,7 @@ def test
     // ?
     test_re("ab?", [{string "a";"ab";"abb"}], [{string "b";" ab"; "bbb"}])
     test_re("(cat)?x",[{string "catx";"x"}], [{string "dog";"caat"}])
+    // gropus
+    test_group ( "i have a (cat|dog)", "i have a cat.", [{string[] "cat"}])
+    test_group ( "(this|that) is a (book|table|car)", "that is a table", [{string "that";"table"}])
     return true
