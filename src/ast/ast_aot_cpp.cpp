@@ -353,11 +353,14 @@ namespace das {
             Visitor::preVisitExpression(expr);
             mark(expr->type.get());
         }
-        /*
-        virtual void preVisit ( ExprLet * expr ) override {
-
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn,var,lastArg);
+            mark(var->type.get());
         }
-        */
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitBlockArgument(block,var,lastArg);
+            mark(var->type.get());
+        }
         void mark ( TypeDecl * decl ) {
             if ( !decl ) return;
             if ( decl->baseType==Type::tStructure ) {
