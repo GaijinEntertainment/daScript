@@ -32,9 +32,11 @@ struct ReNode
     all     : array<ReNode?>
     subexpr : ReNode?
     cset    : CharSet
+    index   : int
 
 struct Regex
     root    : ReNode?
+    groups  : array<tuple<range;string>>
 
 variant MaybeReNode
     value   : ReNode?
@@ -402,6 +404,26 @@ def re_parse ( expr:ReText ) : ReNode?
         return null
     return ore as value
 
+def visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> )
+    invoke(blk,node)
+    for x in node.all
+        visit_top_down(x, blk)
+    if node.subexpr!=null
+        visit_top_down(node.subexpr, blk)
+
+def re_assign_groups ( var re:Regex; node:ReNode? )
+    visit_top_down(re.root) <| $ ( var node )
+        if node.op == ReOp Group
+            node.index = length(re.groups)
+            push(re.groups, [[auto range(0,0),"{node.index}"]])
+
+
+def re_compile( var re:Regex; expr:string ) : bool
+    re.root = re_parse(expr)
+    if re.root != null
+        re_assign_groups(re, re.root)
+    return re.root != null
+
 /*
     matching
 */
@@ -509,14 +531,17 @@ def re_match ( str:ReText; offset:int; node:ReNode? ) : int
         panic("unsupported {node.op}")
     return -1
 
-def regex_match ( str:ReText; node:ReNode? ) : int
+def regex_match ( regex:Regex; str:ReText ) : int
     if empty(str)
         return -1
-    return re_match(str,0,node)
+    return re_match(str,0,regex.root)
 
 /*
     printer
 */
+
+def debug_re ( regex:Regex )
+    debug_re(regex.root,1)
 
 def debug_re ( node: ReNode?; tab:int )
     if node==null
@@ -575,19 +600,20 @@ def debug_re ( node: ReNode?; tab:int )
 
 def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
     print("testing {reg}\n")
-    let res = re_parse(reg)
-    if res==null
+    var regex : Regex
+    if !re_compile(regex, reg)
         print("failed to compile\n")
+        assert(false)
     print("re is:\n")
-    debug_re(res,1)
+    debug_re(regex)
     print("\n")
     var failed = false
     for m in matches
-        let ma = regex_match(m, res)
+        let ma = regex_match(regex, m)
         print("matching `{m}` -> {ma} {ma==-1 ? "failed" : "ok"}\n")
         failed |= ma==-1
     for m in nonmatches
-        let ma = regex_match(m, res)
+        let ma = regex_match(regex, m)
         print("matching `{m}` -> {ma} {ma!=-1 ? "failed" : "ok"}\n")
         failed |= ma!=-1
     print("{failed ? "failed" : "ok"}\n\n")
