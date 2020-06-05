@@ -9,7 +9,7 @@
             return GetModuleFileNameA(NULL, pathName, (DWORD)pathNameCapacity);
         }
     }
-#elif defined(__linux__) /* elif of: #if defined(_WIN32) */
+#elif defined(__linux__)
     #include <unistd.h>
     namespace das {
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
@@ -18,7 +18,7 @@
             return pathNameSize;
         }
     }
-#elif defined(__APPLE__) /* elif of: #elif defined(__linux__) */
+#elif defined(__APPLE__)
     #include <mach-o/dyld.h>
     #include <limits.h>
     namespace das {
@@ -38,9 +38,14 @@
             return 0;
         }
     }
-#else /* else of: #elif defined(__APPLE__) */
-    #error provide your own implementation
-#endif /* end of: #if defined(_WIN32) */
+#else
+    namespace das {
+        size_t getExecutablePathName(char*, size_t) {
+            DAS_FATAL_LOG("platforms without getExecutablePathName should not use default getDasRoot");
+            DAS_FATAL_ERROR;
+        }
+    }
+#endif
 
 namespace das {
     string getExecutableFileName ( void ) {
