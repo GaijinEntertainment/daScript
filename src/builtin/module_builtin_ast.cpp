@@ -1714,7 +1714,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprMakeGenerator);
     IMPL_BIND_EXPR(ExprMemZero);
 
-    struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false> {
+    struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VisitorAdapter", ml) {
         }
@@ -1778,7 +1778,7 @@ namespace das {
         Func    fnFinish;
     };
 
-    struct AstFunctionAnnotationAnnotation : ManagedStructureAnnotation<FunctionAnnotation,false> {
+    struct AstFunctionAnnotationAnnotation : ManagedStructureAnnotation<FunctionAnnotation,false,true> {
         AstFunctionAnnotationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("FunctionAnnotation", ml) {
         }
@@ -1818,7 +1818,7 @@ namespace das {
         Func    fnFinish;
     };
 
-    struct AstStructureAnnotationAnnotation : ManagedStructureAnnotation<StructureAnnotation,false> {
+    struct AstStructureAnnotationAnnotation : ManagedStructureAnnotation<StructureAnnotation,false,true> {
         AstStructureAnnotationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("StructureAnnotation", ml) {
         }
@@ -1843,13 +1843,12 @@ namespace das {
         Func    fnApply;
     };
 
-    struct AstPassMacroAnnotation : ManagedStructureAnnotation<PassMacro,false> {
+    struct AstPassMacroAnnotation : ManagedStructureAnnotation<PassMacro,false,true> {
         AstPassMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("PassMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
-
 
     struct VariantMacroAdapter : VariantMacro {
         VariantMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
@@ -1891,7 +1890,7 @@ namespace das {
         Func        fnVisitSafeAs;
     };
 
-    struct AstVariantMacroAnnotation : ManagedStructureAnnotation<VariantMacro,false> {
+    struct AstVariantMacroAnnotation : ManagedStructureAnnotation<VariantMacro,false,true> {
         AstVariantMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VariantMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");

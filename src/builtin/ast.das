@@ -562,6 +562,7 @@ def setup_tag_annotation(name,tag:string; classPtr)
     let ann <- make_function_annotation(name, classPtr)
     apply_tag_annotation(tag, ann)
     this_module() |> add_function_annotation(ann)
+    delete ann
 
 [unsafe]
 def find_unique_function ( mod : Module?; name : string )
@@ -629,16 +630,29 @@ class BetterRttiVisitor : AstVariantMacro
             return ExpressionPtr(veq)
         return [[ExpressionPtr]]
 
+[unsafe]
+def add_new_function_annotation ( name:string; someClassPtr )
+    var ann <- make_function_annotation(name, someClassPtr)
+    this_module() |> add_function_annotation(ann)
+    delete ann
+
+[unsafe]
+def add_new_structure_annotation ( name:string; someClassPtr )
+    var ann <- make_structure_annotation(name, someClassPtr)
+    this_module() |> add_structure_annotation(ann)
+    delete ann
+
+[unsafe]
+def add_new_variant_macro ( name:string; someClassPtr )
+    var ann <- make_variant_macro(name, someClassPtr)
+    this_module() |> add_variant_macro(ann)
+    delete ann
+
 [_macro]
 def setup
     if is_compiling_macros()
-        this_module() |> add_function_annotation(
-            make_function_annotation("macro", new MacroMacro()))
-        this_module() |> add_function_annotation(
-            make_function_annotation("tag_function",new TagFunctionAnnotation()))
-        this_module() |> add_structure_annotation(
-            make_structure_annotation("tag_structure",new TagStructureAnnotation()))
-        this_module() |> add_structure_annotation(
-            make_structure_annotation("tag_function_macro",new TagFunctionMacro()))
-        this_module() |> add_variant_macro(
-            make_variant_macro("better_rtti_in_expr", new BetterRttiVisitor()))
+        add_new_function_annotation("macro", new MacroMacro())
+        add_new_function_annotation("tag_function",new TagFunctionAnnotation())
+        add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
+        add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())
+        add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())

@@ -63,7 +63,7 @@ namespace das
     template <typename OT>
     struct ManagedStructureAlignofAuto<OT, true> {static constexpr size_t alignment = sizeof(void*); } ;//we use due to MSVC inability to work with abstarct classes
 
-    template <typename OT, bool canNewAndDelete = true>
+    template <typename OT, bool canNew = true, bool canDelete = canNew>
     struct ManagedStructureAnnotation ;
 
     struct BasicStructureAnnotation : TypeAnnotation {
@@ -109,7 +109,7 @@ namespace das
     };
 
     template <typename OT>
-    struct ManagedStructureAnnotation<OT,false> : BasicStructureAnnotation {
+    struct ManagedStructureAnnotation<OT,false,false> : BasicStructureAnnotation {
         typedef OT ManagedType;
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
             : BasicStructureAnnotation(n,cpn,&ml) { }
@@ -153,11 +153,37 @@ namespace das
     };
 
     template <typename OT>
-    struct ManagedStructureAnnotation<OT,true> : public ManagedStructureAnnotation<OT,false> {
+    struct ManagedStructureAnnotation<OT, true, false> : public ManagedStructureAnnotation<OT, false, false> {
+        typedef OT ManagedType;
+        enum { is_smart = is_base_of<ptr_ref_count, OT>::value };
+        ManagedStructureAnnotation(const string& n, ModuleLibrary& ml, const string& cpn = "")
+            : ManagedStructureAnnotation<OT, false,false>(n, ml, cpn) { }
+        virtual bool canNew() const override { return true; }
+        virtual string getSmartAnnotationCloneFunction() const override { return "smart_ptr_clone"; }
+        virtual SimNode* simulateGetNew(Context& context, const LineInfo& at) const override {
+            return context.code->makeNode<SimNode_NewHandle<ManagedType, is_smart>>(at);
+        }
+    };
+
+    template <typename OT>
+    struct ManagedStructureAnnotation<OT, false, true> : public ManagedStructureAnnotation<OT, false, false> {
+        typedef OT ManagedType;
+        enum { is_smart = is_base_of<ptr_ref_count, OT>::value };
+        ManagedStructureAnnotation(const string& n, ModuleLibrary& ml, const string& cpn = "")
+            : ManagedStructureAnnotation<OT, false,false>(n, ml, cpn) { }
+        virtual bool canDeletePtr() const override { return true; }
+        virtual string getSmartAnnotationCloneFunction() const override { return "smart_ptr_clone"; }
+        virtual SimNode* simulateDeletePtr(Context& context, const LineInfo& at, SimNode* sube, uint32_t count) const override {
+            return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType, is_smart>>(at, sube, count);
+        }
+    };
+
+    template <typename OT>
+    struct ManagedStructureAnnotation<OT,true,true> : public ManagedStructureAnnotation<OT,false,false> {
         typedef OT ManagedType;
         enum { is_smart = is_base_of<ptr_ref_count,OT>::value };
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
-            : ManagedStructureAnnotation<OT,false>(n,ml,cpn) { }
+            : ManagedStructureAnnotation<OT,false,false>(n,ml,cpn) { }
         virtual bool canNew() const override { return true; }
         virtual bool canDeletePtr() const override { return true; }
         virtual string getSmartAnnotationCloneFunction () const override { return "smart_ptr_clone"; }

@@ -36,5 +36,4 @@ class BetterJsonMacro : AstVariantMacro
 [_macro]
 def setup
     if is_compiling_macros()
-        this_module() |> add_variant_macro(
-            make_variant_macro("better_json", new BetterJsonMacro()))
+        add_new_variant_macro("better_json", new BetterJsonMacro())

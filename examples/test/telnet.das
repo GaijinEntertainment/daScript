@@ -43,8 +43,8 @@ class TelnetServer : Server
                         self->restart()
                     else
                         print("restart request ignored, not running from dasContDev\n")
-                delete current_string
-                delete new_msg
+                delete_string(current_string)
+                delete_string(new_msg)
             else
                 current_string = append(current_string,ch)
 

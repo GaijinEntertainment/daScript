@@ -381,8 +381,8 @@ utils/dasContDev/main.cpp
 SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
 add_executable(dasContDev ${DASCONTDEV_MAIN_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(dasContDev libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
-ADD_DEPENDENCIES(dasContDev libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
+TARGET_LINK_LIBRARIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
 SETUP_CPP11(dasContDev)
 add_dependencies(dasContDev dasAotStub)
 
@@ -429,8 +429,8 @@ utils/daScript/main.cpp
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 add_executable(daScript ${DASCRIPT_MAIN_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScript libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
-ADD_DEPENDENCIES(daScript libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
+TARGET_LINK_LIBRARIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
 SETUP_CPP11(daScript)
 add_dependencies(daScript dasAotStub)
 
