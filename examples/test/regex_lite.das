@@ -18,6 +18,7 @@ enum ReOp
     Group
     Plus
     Star
+    Question
     Concat
     Union
 
@@ -345,47 +346,23 @@ def re_re(expr:ReText; offset:int) : MaybeReNode
     return maybe(last)
 
 // <basic-RE>	::=	<star> | <plus> | <elementary-RE>
-// todo: optimize
+// <star>	::=	<elementary-RE> "*"
+// <plus>	::=	<elementary-RE> "+"
 def re_basic(expr:ReText; offset:int) : MaybeReNode
     trace("re_basic",offset)
     if eos(expr,offset)
         return nada()
-    var ostar = re_star(expr,offset)
-    if ostar is value
-        return ostar
-    var oplus = re_plus(expr,offset)
-    if oplus is value
-        return oplus
     var oelem = re_elementary(expr,offset)
-    if oelem is value
-        return oelem
-    return nada()
-
-// <star>	::=	<elementary-RE> "*"
-def re_star(expr:ReText; offset:int) : MaybeReNode
-    trace("re_star",offset)
-    if eos(expr,offset)
+    if oelem is nothing
         return nada()
-    var oel = re_elementary(expr,offset)
-    if oel is nothing
-        return nada()
-    if at(expr,next(oel))!='*'
-        delete oel
-        return nada()
-    return maybe(new [[ReNode op=ReOp Star, left=oel as value, at=range(offset,next(oel)+1)]])
-
-// <plus>	::=	<elementary-RE> "+"
-def re_plus(expr:ReText; offset:int) : MaybeReNode
-    trace("re_plus",offset)
-    if eos(expr,offset)
-        return nada()
-    var oel = re_elementary(expr,offset)
-    if oel is nothing
-        return nada()
-    if at(expr,next(oel))!='+'
-        delete oel
-        return nada()
-    return maybe(new [[ReNode op=ReOp Plus, left=oel as value, at=range(offset,next(oel)+1)]])
+    let ch = at(expr,next(oelem))
+    if ch=='*'
+        return maybe(new [[ReNode op=ReOp Star, left=oelem as value, at=range(offset,next(oelem)+1)]])
+    elif ch=='+'
+        return maybe(new [[ReNode op=ReOp Plus, left=oelem as value, at=range(offset,next(oelem)+1)]])
+    elif ch=='?'
+        return maybe(new [[ReNode op=ReOp Question, left=oelem as value, at=range(offset,next(oelem)+1)]])
+    return oelem
 
 def re_parse ( expr:ReText ) : ReNode?
     var ore = re_re(expr, 0)
@@ -450,6 +427,12 @@ def re_match_eos ( str:ReText; offset:int ) : int
         return offset
     return -1
 
+def re_match_question ( str:ReText; offset:int; node:ReNode? ) : int
+    var osym = re_match(str, offset, node.left)
+    if osym == -1
+        return offset
+    return osym
+
 def re_match_plus ( str:ReText; offset:int; node:ReNode? ) : int
     var osym = re_match(str, offset, node.left)
     if osym == -1
@@ -494,6 +477,8 @@ def re_match ( str:ReText; offset:int; node:ReNode? ) : int
         return re_match_plus(str,offset,node)
     elif node.op==ReOp Star
         return re_match_star(str,offset,node)
+    elif node.op==ReOp Question
+        return re_match_question(str,offset,node)
     elif node.op==ReOp Group
         return re_match_group(str,offset,node)
     else
@@ -540,6 +525,10 @@ def debug_re ( node: ReNode?; tab:int )
         print(")")
     elif node.op==ReOp Star
         print("(Star ")
+        debug_re(node.left,tab)
+        print(")")
+    elif node.op==ReOp Question
+        print("(Question ")
         debug_re(node.left,tab)
         print(")")
     elif node.op==ReOp Concat
@@ -602,4 +591,7 @@ def test
     // *
     test_re("ab*", [{string "a";"ab";"abb";"abbbc"}], [{string " ab"; "bbb"}])
     test_re("a(cat)*",[{string "a";"acat";"acatcat"}], [{string "dog";"caat";"cat"}])
+    // ?
+    test_re("ab?", [{string "a";"ab";"abb"}], [{string "b";" ab"; "bbb"}])
+    test_re("(cat)?x",[{string "catx";"x"}], [{string "dog";"caat"}])
     return true
