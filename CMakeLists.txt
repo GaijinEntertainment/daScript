@@ -381,8 +381,8 @@ utils/dasContDev/main.cpp
 SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
 add_executable(dasContDev ${DASCONTDEV_MAIN_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
-ADD_DEPENDENCIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
+TARGET_LINK_LIBRARIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
 SETUP_CPP11(dasContDev)
 add_dependencies(dasContDev dasAotStub)
 
@@ -429,8 +429,8 @@ utils/daScript/main.cpp
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 add_executable(daScript ${DASCRIPT_MAIN_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
-ADD_DEPENDENCIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDasModuleUriparser libUriParser)
+TARGET_LINK_LIBRARIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
 SETUP_CPP11(daScript)
 add_dependencies(daScript dasAotStub)
 
@@ -505,8 +505,8 @@ SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser libUriParser)
-ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDasModuleUriparser libUriParser)
+TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)

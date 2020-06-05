@@ -235,9 +235,6 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
-    NEED_MODULE(Module_PathTracerHelper);
-    NEED_MODULE(Module_TestProfile);
-    NEED_MODULE(Module_UnitTest);
     require_project_specific_modules();
     bool compiled = compile(argv[1], argv[2]);
     Module::Shutdown();
