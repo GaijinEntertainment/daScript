@@ -8,6 +8,7 @@
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/string_writer.h"
 #include "daScript/misc/debug_break.h"
+#include "daScript/misc/sysos.h"
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
@@ -438,6 +439,10 @@ namespace das
         return context->stringHeap.allocateString(bytes.data, bytes.size);
     }
 
+    char * builtin_das_root ( Context * context ) {
+        return context->stringHeap.allocateString(getDasRoot());
+    }
+
     void delete_string ( char * & str, Context * context ) {
         if ( !str ) return;
         uint32_t len = stringLengthSafe(*context, str);
@@ -448,6 +453,8 @@ namespace das
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
+            SideEffects::accessExternal,"builtin_das_root");
         addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
             SideEffects::modifyExternal,"delete_string")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
