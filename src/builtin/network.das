@@ -1,3 +1,5 @@
+options indenting=4
+
 require network
 
 require rtti
