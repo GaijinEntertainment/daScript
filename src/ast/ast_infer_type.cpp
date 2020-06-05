@@ -287,7 +287,7 @@ namespace das {
                     return vT;
                 }
             }
-            auto mtd = program->makeTypeDeclaration(LineInfo(),name);
+            TypeDeclPtr mtd = program->makeTypeDeclaration(LineInfo(),name);
             return mtd->isAlias() ? nullptr : mtd;
         }
 
