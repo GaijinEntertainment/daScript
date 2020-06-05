@@ -54,7 +54,7 @@ namespace das
 
     const char * rts_null = "";
 
-    string unescapeString ( const string & input, bool * error ) {
+    string unescapeString ( const string & input, bool * error, bool ) {
         if ( error ) *error = false;
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
@@ -89,7 +89,7 @@ namespace das
         return result;
     }
 
-    string escapeString ( const string & input ) {
+    string escapeString ( const string & input, bool das_escape ) {
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
         string result;
@@ -103,8 +103,8 @@ namespace das
                 case '\n':  result.append("\\n");   break;
                 case '\r':  result.append("\\r");   break;
                 case '\t':  result.append("\\t");   break;
-                case '{':   result.append("\\{");   break;
-                case '}':   result.append("\\}");   break;
+                case '{':   if (das_escape) result.append("\\{"); else result.append("{");  break;
+                case '}':   if (das_escape) result.append("\\}"); else result.append("}");  break;
                 default:    result.append(1, *str); break;
             }
         }

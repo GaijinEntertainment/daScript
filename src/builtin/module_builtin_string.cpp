@@ -281,7 +281,7 @@ namespace das
 
     void write_escape_string ( StringBuilderWriter & writer, char * str ) {
         if ( !str ) return;
-        auto estr = escapeString(str);
+        auto estr = escapeString(str,false);
         writer.writeStr(estr.c_str(), estr.length());
     }
 
@@ -400,13 +400,13 @@ namespace das
 
     char * builtin_string_escape ( const char *str, Context * context ) {
         if ( !str ) return nullptr;
-        return context->stringHeap.allocateString(escapeString(str));
+        return context->stringHeap.allocateString(escapeString(str,false));
     }
 
     char * builtin_string_unescape ( const char *str, Context * context ) {
         if ( !str ) return nullptr;
         bool err = false;
-        auto estr = unescapeString(str, &err);
+        auto estr = unescapeString(str, &err, false);
         if ( err ) context->throw_error("invalid escape sequence");
         return context->stringHeap.allocateString(estr);
     }

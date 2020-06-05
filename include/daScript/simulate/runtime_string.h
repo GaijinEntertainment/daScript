@@ -7,8 +7,8 @@ namespace das
 {
     class Context;
 
-    string unescapeString ( const string & input, bool * error );
-    string escapeString ( const string & input );
+    string unescapeString ( const string & input, bool * error, bool das_escape = true );
+    string escapeString ( const string & input, bool das_escape = true );
     string to_string_ex ( double dnum );
     string to_string_ex ( float dnum );
     string reportError ( const struct LineInfo & li, const string & message, const string & extra,
