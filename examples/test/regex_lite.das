@@ -27,6 +27,7 @@ typedef
 
 struct ReNode
     op      : ReOp
+    fun     : function< (var regex:Regex; node:ReNode?; str:ReText; offset:int) : int >
     at      : range
     text    : string
     all     : array<ReNode?>
@@ -412,22 +413,42 @@ def visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> )
     if node.subexpr!=null
         visit_top_down(node.subexpr, blk)
 
-def re_assign_groups ( var re:Regex; node:ReNode? )
+def re_assign_groups ( var re:Regex )
     visit_top_down(re.root) <| $ ( var node )
         if node.op == ReOp Group
             node.index = length(re.groups)
             push(re.groups, [[auto range(0,0),"{node.index}"]])
 
-
-def re_compile( var re:Regex; expr:string ) : bool
-    re.root = re_parse(expr)
-    if re.root != null
-        re_assign_groups(re, re.root)
-    return re.root != null
-
 /*
     matching
 */
+
+def re_assign_match_functions ( var re:Regex )
+    visit_top_down(re.root) <| $ ( var node )
+        if node.op==ReOp Char
+            node.fun = @@re_match_char
+        elif node.op==ReOp Union
+            node.fun = @@re_match_union
+        elif node.op==ReOp Set
+            node.fun = @@re_match_set
+        elif node.op==ReOp NegativeSet
+            node.fun = @@re_match_negative_set
+        elif node.op==ReOp Any
+            node.fun = @@re_match_any
+        elif node.op==ReOp Eos
+            node.fun = @@re_match_eos
+        elif node.op==ReOp Concat
+            node.fun = @@re_match_concat
+        elif node.op==ReOp Plus
+            node.fun = @@re_match_plus
+        elif node.op==ReOp Star
+            node.fun = @@re_match_star
+        elif node.op==ReOp Question
+            node.fun = @@re_match_question
+        elif node.op==ReOp Group
+            node.fun = @@re_match_group
+        else
+            panic("unsupported {node.op}")
 
 def re_match_char ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : int
     if log_match_enabled
@@ -528,31 +549,18 @@ def re_match_group ( var regex:Regex; node:ReNode?; str:ReText; offset:int ) : i
     return osub
 
 def re_match ( var regex:Regex; node:ReNode?;  str:ReText; offset:int ) : int
-    if node.op==ReOp Char
-        return re_match_char(regex,node,str,offset)
-    elif node.op==ReOp Union
-        return re_match_union(regex,node,str,offset)
-    elif node.op==ReOp Set
-        return re_match_set(regex,node,str,offset)
-    elif node.op==ReOp NegativeSet
-        return re_match_negative_set(regex,node,str,offset)
-    elif node.op==ReOp Any
-        return re_match_any(regex,node,str,offset)
-    elif node.op==ReOp Eos
-        return re_match_eos(regex,node,str,offset)
-    elif node.op==ReOp Concat
-        return re_match_concat(regex,node,str,offset)
-    elif node.op==ReOp Plus
-        return re_match_plus(regex,node,str,offset)
-    elif node.op==ReOp Star
-        return re_match_star(regex,node,str,offset)
-    elif node.op==ReOp Question
-        return re_match_question(regex,node,str,offset)
-    elif node.op==ReOp Group
-        return re_match_group(regex,node,str,offset)
-    else
-        panic("unsupported {node.op}")
-    return -1
+    return invoke(node.fun, regex, node, str, offset)
+
+/*
+    top level API
+*/
+
+def regex_compile( var re:Regex; expr:string ) : bool
+    re.root = re_parse(expr)
+    if re.root != null
+        re_assign_groups(re)
+        re_assign_match_functions(re)
+    return re.root != null
 
 def regex_match ( var regex:Regex; str:ReText ) : int
     if empty(str)
@@ -629,11 +637,14 @@ def debug_re ( node: ReNode?; tab:int )
     else
         panic("unsupported op")
 
+/*
+    tests
+*/
 
 def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
     print("testing {reg}\n")
     var regex : Regex
-    if !re_compile(regex, reg)
+    if !regex_compile(regex, reg)
         print("failed to compile\n")
         assert(false)
     print("re is:\n")
@@ -653,7 +664,7 @@ def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
 def test_group ( reg:string; match:string; groups:array<string>)
     print("testing groups is {reg}\n")
     var regex : Regex
-    if !re_compile(regex, reg)
+    if !regex_compile(regex, reg)
         print("failed to compile\n")
         assert(false)
     print("re is:\n")
