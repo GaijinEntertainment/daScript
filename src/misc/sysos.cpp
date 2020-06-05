@@ -43,6 +43,7 @@
         size_t getExecutablePathName(char*, size_t) {
             DAS_FATAL_LOG("platforms without getExecutablePathName should not use default getDasRoot");
             DAS_FATAL_ERROR;
+            return 0;
         }
     }
 #endif
