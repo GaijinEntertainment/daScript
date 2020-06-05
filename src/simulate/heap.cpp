@@ -154,9 +154,15 @@ namespace das {
         }
         if ( !bigStuff.empty() ) {
             tout << "big stuff:\n";
-            for ( auto it : bigStuff ) {
 #if DAS_TRACK_ALLOCATIONS
-                uint64_t eeid = bigStuffId[it.first];
+            tout << "size\tpointer\t\tid\n";
+#else
+            tout << "size\tpointern";
+#endif
+            for ( const auto & it : bigStuff ) {
+#if DAS_TRACK_ALLOCATIONS
+                auto itId = bigStuffId.find(it.first);
+                uint64_t eeid = itId==bigStuffId.end() ? 0 : itId->second;
                 tout << "\t" << it.second << "\t0x" << HEX << intptr_t(it.first) << DEC
                     << "\t" << eeid;
                 auto itComment = bigStuffComment.find(it.first);

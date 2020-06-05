@@ -321,6 +321,9 @@ namespace das
             // fill prologue
             auto aa = abiArg;
             abiArg = args;
+#if DAS_SANITIZER
+            memset(stack.sp(), 0xcd, fn->stackSize);
+#endif
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)stack.sp();
             pp->info = fn->debugInfo;
@@ -358,13 +361,16 @@ namespace das
                 // fill prologue
                 auto aa = abiArg;
                 abiArg = args;
-    #if DAS_ENABLE_STACK_WALK
+#if DAS_SANITIZER
+                memset(stack.sp(), 0xcd, fn->stackSize);
+#endif
+#if DAS_ENABLE_STACK_WALK
                 Prologue * pp = (Prologue *)stack.sp();
                 pp->info = fn->debugInfo;
                 pp->arguments = args;
                 pp->cmres = nullptr;
                 pp->line = line;
-    #endif
+#endif
                 // CALL
                 fn->code->eval(*this);
                 stopFlags = 0;
@@ -388,6 +394,9 @@ namespace das
             // fill prologue
             auto aa = abiArg; auto acm = abiCMRES;
             abiArg = args; abiCMRES = cmres;
+#if DAS_SANITIZER
+            memset(stack.sp(), 0xcd, fn->stackSize);
+#endif
 #if DAS_ENABLE_STACK_WALK
             Prologue * pp = (Prologue *)stack.sp();
             pp->info = fn->debugInfo;
@@ -473,13 +482,16 @@ namespace das
             // fill prologue
             auto aa = abiArg; auto acm = cmres;
             abiArg = args;  abiCMRES = cmres;
-    #if DAS_ENABLE_STACK_WALK
+#if DAS_SANITIZER
+            memset(stack.sp(), 0xcd, fn->stackSize);
+#endif
+#if DAS_ENABLE_STACK_WALK
             Prologue * pp           = (Prologue *) stack.sp();
             pp->info                = fn->debugInfo;
             pp->arguments           = args;
             pp->cmres               = cmres;
             pp->line                = line;
-    #endif
+#endif
             // CALL
             when(fn->code);
             stopFlags = 0;

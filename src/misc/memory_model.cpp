@@ -55,10 +55,11 @@ namespace das {
             das_aligned_free16(itb.first);
         }
         bigStuff.clear();
-#if DAS_TRACK_ALLOCATIONS
-        bigStuffId.clear();
-        bigStuffAt.clear();
-        bigStuffComment.clear();
+#if DAS_SANITIZER
+        for ( auto & itb : deletedBigStuff ) {
+            das_aligned_free16(itb.first);
+        }
+        deletedBigStuff.clear();
 #endif
     }
 
@@ -102,13 +103,26 @@ namespace das {
             if ( book.isOwnPtr(ptr) ) {
                 book.free(ptr, size);
                 totalAllocated -= size;
+#if DAS_SANITIZER
+                memset(ptr, 0xcd, size);
+#endif
                 return true;
             }
         }
+#if DAS_SANITIZER
+        auto itd = deletedBigStuff.find(ptr);
+        if ( itd!= deletedBigStuff.end() ) {
+            os_debug_break();
+        }
+#endif
         auto itb = bigStuff.find(ptr);
         if ( itb!=bigStuff.end() ) {
             DAS_ASSERTF(itb->second==size, "free size mismatch, %u allocated vs %u freed", itb->second, size );
+#if DAS_SANITIZER
+            deletedBigStuff[itb->first] = itb->second;
+#else
             das_aligned_free16(itb->first);
+#endif
             bigStuff.erase(itb);
             totalAllocated -= size;
 #if DAS_TRACK_ALLOCATIONS
@@ -118,6 +132,7 @@ namespace das {
 #endif
             return true;
         }
+        DAS_ASSERTF(0, "we are trying to delete pointer, which we did not allocate");
         return false;
     }
 
@@ -138,18 +153,34 @@ namespace das {
         }
         char * nptr = allocate(nsize);
         memcpy ( nptr, ptr, das::min(size,nsize) );
+#if DAS_TRACK_ALLOCATIONS
+        auto pAt = bigStuffAt.find(ptr);
+        if ( pAt != bigStuffAt.end() ) {
+            bigStuffAt[nptr] = pAt->second;
+        }
+        auto pCm = bigStuffComment.find(ptr);
+        if ( pCm != bigStuffComment.end() ) {
+            bigStuffComment[nptr] = pCm->second;
+        }
+#endif
         free(ptr, size);
         return nptr;
     }
 
     void MemoryModel::reset() {
-#if DAS_TRACK_ALLOCATIONS
-        bigStuffId.clear();
-#endif
         for ( auto & itb : bigStuff ) {
+#if DAS_SANITIZER
+            deletedBigStuff[itb.first] = itb.second;
+#else
             das_aligned_free16(itb.first);
+#endif
         }
         bigStuff.clear();
+#if DAS_TRACK_ALLOCATIONS
+        bigStuffId.clear();
+        bigStuffAt.clear();
+        bigStuffComment.clear();
+#endif
         if ( shelf.size()!=1 ) {
             uint32_t pages = pagesTotal();
             if ( pages ) {

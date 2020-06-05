@@ -140,12 +140,14 @@ namespace das {
         uint32_t                initial_page_count = 16;
         uint32_t                initialSize = 0;
         vector<Book>            shelf;
-        das_hash_map<void *,uint32_t>bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
+        das_hash_map<void *,uint32_t> bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
+#if DAS_SANITIZER
+        das_hash_map<void *,uint32_t> deletedBigStuff;
+#endif
 #if DAS_TRACK_ALLOCATIONS
         das_hash_map<void *,uint64_t> bigStuffId;
         das_hash_map<void *,LineInfo *> bigStuffAt;
         das_hash_map<void *,const char *> bigStuffComment;
-
         __forceinline void mark_location ( void * ptr, LineInfo * at ) { bigStuffAt[ptr] = at; }
         __forceinline void mark_comment ( void * ptr, const char * what ) { bigStuffComment[ptr] = what; }
 #else
