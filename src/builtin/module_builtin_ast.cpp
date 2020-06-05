@@ -1157,7 +1157,8 @@ namespace das {
     }
 
     Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
-        return *(Func *)adapt_field(funcName, pClass, info);
+        char * field = adapt_field(funcName, pClass, info);
+        return field ? *(Func*)field : Func(0);
     }
 
 #define FN_PREVISIT(WHAT)  fnPreVisit##WHAT

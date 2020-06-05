@@ -52,7 +52,6 @@ namespace das {
     }
 
     bool set_socket_blocking ( socket_t fd, bool blocking ) {
-        if (fd < 0) return false;
 #ifdef _WIN32
         unsigned long mode = blocking ? 0 : 1;
         return (ioctlsocket(fd, FIONBIO, &mode) == 0) ? true : false;
@@ -169,7 +168,7 @@ namespace das {
                 onDisconnect();
                 closesocket(client_fd);
                 client_fd = 0;
-            } else if ( res<0 ) {
+            } else { // res<0
                 res = errno;
                 if ( res!=0 && res!=EAGAIN && res!=EWOULDBLOCK ) {
                     onError("connection closed on error", res);
