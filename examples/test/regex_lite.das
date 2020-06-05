@@ -11,7 +11,6 @@ typedef
 
 enum ReOp
     Char
-    Range
     Set
     NegativeSet
     Any
@@ -22,6 +21,9 @@ enum ReOp
     Concat
     Union
 
+typedef
+    CharSet = uint[8]
+
 struct ReNode
     op      : ReOp
     at      : range
@@ -29,6 +31,7 @@ struct ReNode
     all     : array<ReNode?>
     left    : ReNode?
     right   : ReNode?
+    cset    : CharSet
 
 variant MaybeReNode
     value   : ReNode?
@@ -99,11 +102,43 @@ def next(re:MaybeReNode)
         panic("expecting value")
     return (re as value).at.y
 
+def set_or_char(var cset:CharSet; ch:int)
+    cset[ch>>5] |= uint(1 << (ch & 31))
+
+def set_or_range(var cset:CharSet; bits:range)
+    for ch in range(bits.x,bits.y+1)
+        cset[ch>>5] |= uint(1 << (ch & 31))
+
+def set_invert(var cset:CharSet)
+    for x in cset
+        x ^= 0xffffffff
+
+def set_or_set(var cset:CharSet; eset:CharSet)
+    for x,y in cset,eset
+        x |= y
+
+def set_meta(var cset:CharSet; che:int)
+    if che=='w'
+        set_or_range(cset,range('a','z'))
+        set_or_range(cset,range('A','Z'))
+        set_or_range(cset,range('0','9'))
+        set_or_char(cset,'_')
+    elif che=='W'
+        var eset:CharSet
+        set_meta(eset,'w')
+        set_or_set(cset,eset)
+    else
+        set_or_char(cset,che)
+
 let
     meta = "\\+-*.()[]|^"
+    meta_set = "wW"
 
 def is_meta_character(ch:int) : bool
     return find_first_of(meta,ch) != -1
+
+def is_set_character(ch:int) : bool
+    return find_first_of(meta_set,ch) != -1
 
 // <char>	::=	any non metacharacter | "\" metacharacter
 def re_char (expr : ReText; offset:int) : MaybeReNode
@@ -111,62 +146,55 @@ def re_char (expr : ReText; offset:int) : MaybeReNode
     if eos(expr,offset)
         return nada()
     let ch = at(expr,offset)
-    if !is_meta_character(ch)
-        return maybe(new [[ReNode op=ReOp Char, text=to_char(ch), at=range(offset,offset+1)]])
-    if ch != '\\'
+    if ch == '\\'
+        let ech = at(expr,offset+1)
+        if ech==0
+            note("syntax error, expecting meta", offset+1)
+            return nada()
+        if is_set_character(ech)
+            var cset : CharSet
+            set_meta(cset,ech)
+            return maybe(new [[ReNode op=ReOp Set, cset=cset, at=range(offset,offset+2)]])
+        return maybe(new [[ReNode op=ReOp Char, text=to_char(ech), at=range(offset,offset+2)]])
+    elif is_meta_character(ch)
         return nada()
-    if eos(expr,offset+1)
-        return nada()
-    let ech = at(expr,offset+1)
-    return maybe(new [[ReNode op=ReOp Char, text=to_char(ech), at=range(offset,offset+2)]])
-
-// <range>	::=	<char> "-" <char>
-def re_range(expr:ReText; offset:int) : MaybeReNode
-    trace("re_range",offset)
-    if eos(expr,offset)
-        return nada()
-    var omin = re_char(expr,offset)
-    if omin is nothing
-        return nada()
-    if at(expr,next(omin))!='-'
-        delete omin
-        return nada()
-    let omax = re_char(expr,next(omin)+1)
-    if omax is nothing
-        delete omin
-        return nada()
-    return maybe(new [[ReNode op=ReOp Range, left=omin as value, right=omax as value, at=range(offset,next(omax))]])
-
-// <set-item>	::=	<range> | <char>
-// todo: optimize
-def re_set_item(expr:ReText; offset:int) : MaybeReNode
-    trace("re_set_item",offset)
-    if eos(expr,offset)
-        return nada()
-    var orange = re_range(expr,offset)
-    if orange is value
-        return orange
-    return re_char(expr, offset)
+    return maybe(new [[ReNode op=ReOp Char, text=to_char(ch), at=range(offset,offset+1)]])
 
 // <set-items>	::=	<set-item> | <set-item> <set-items>
+// <set-item>	::=	<range> | <char>
+// <range>	::=	<char> "-" <char>
+// <char>	::=	any non metacharacter | "\" metacharacter
 def re_set_items(expr:ReText; offset:int) : MaybeReNode
     trace("re_set_items",offset)
     if eos(expr,offset)
         return nada()
-    var items : array<ReNode?>
+    var cset : CharSet
     var iofs = offset
     while !eos(expr,iofs)
-        note("trying next set item",iofs)
-        let oitem = re_set_item(expr,iofs)
-        if oitem is nothing
+        let ch = at(expr,iofs)
+        if ch == ']'
             break
-        push(items,oitem as value)
-        iofs = next(oitem)
-    note("finished with set items [{items}]",iofs)
-    if length(items)==0
-        delete items
-        return nada()
-    return maybe(new [[ReNode op=ReOp Set, all<-items, at=range(offset,iofs)]])
+        elif ch=='\\'
+            let che = at(expr,iofs+1)
+            if che==0
+                note("syntax error, expecting meta", iofs)
+                return nada()
+            set_meta(cset,che)
+            iofs += 2
+        elif at(expr,iofs+1)=='-'
+            let che = at(expr,iofs+2)
+            if che==0
+                note("syntax error, expecting range", iofs+1)
+                return nada()
+            elif ch > che
+                note("syntax error, character range out of order", iofs)
+                return nada()
+            set_or_range(cset,range(ch,che))
+            iofs += 3
+        else
+            set_or_char(cset,ch)
+            iofs += 1
+    return maybe(new [[ReNode op=ReOp Set, cset=cset, at=range(offset,iofs)]])
 
 // <positive-set>	::=	"[" <set-items> "]"
 def re_positive_set(expr:ReText; offset:int) : MaybeReNode
@@ -213,12 +241,12 @@ def re_set(expr:ReText; offset:int) : MaybeReNode
     trace("re_set",offset)
     if eos(expr,offset)
         return nada()
-    var opos = re_positive_set(expr,offset)
-    if opos is value
-        return opos
     var oneg = re_negative_set(expr,offset)
     if oneg is value
         return oneg
+    var opos = re_positive_set(expr,offset)
+    if opos is value
+        return opos
     return nada()
 
 // <any>	::=	"."
@@ -246,11 +274,9 @@ def re_group(expr:ReText; offset:int) : MaybeReNode
         return nada()
     if at(expr,offset)!='('
         return nada()
-    note("-----> in_group",offset)
     var ore = re_re(expr,offset+1)
     if ore is nothing
         return nada()
-    note("-----> before )",offset)
     if at(expr,next(ore))!=')'
         delete ore
         return nada()
@@ -300,9 +326,7 @@ def re_re(expr:ReText; offset:int) : MaybeReNode
     var cofs = offset
     var last : ReNode?
     while !eos(expr,cofs)
-        note("?",cofs)
         if at(expr,cofs)=='|'
-            note("union",offset)
             if last == null
                 note("syntax error, nada | union", cofs)
                 return nada()
@@ -377,23 +401,12 @@ def re_parse ( expr:ReText ) : ReNode?
     matching
 */
 
-def re_match_char ( str:ReText; offset:int; text:string; len:int ) : int
-    for Ch,Ofs in text,range(offset,offset+len)
+def re_match_char ( str:ReText; offset:int; node:ReNode? ) : int
+    let len = length(node.text)
+    for Ch,Ofs in node.text,range(offset,offset+len)
         if at(str,Ofs) != Ch
             return -1
     return offset + len
-
-def re_match_single_char ( str:ReText; offset:int; sc:int ) : int
-    let Ch = at(str,offset)
-    if Ch != sc
-        return -1
-    return offset + 1
-
-def re_match_range ( str:ReText; offset:int; sub:range ) : int
-    let Ch = at(str,offset)
-    if Ch<sub.x | Ch>sub.y
-        return -1
-    return offset + 1
 
 def re_match_union ( str:ReText; offset:int; node:ReNode? ) : int
     let left = re_match(str,offset,node.left)
@@ -405,20 +418,15 @@ def re_match_union ( str:ReText; offset:int; node:ReNode? ) : int
     return -1
 
 def re_match_set ( str:ReText; offset:int; node:ReNode? ) : int
-    if eos(str,offset)
+    let ch = at(str,offset)
+    if (node.cset[ch>>5] & uint(1 << (ch & 31))) == 0u
         return -1
-    for sub in node.all
-        let any = re_match(str, offset, sub)
-        if any != -1
-            return any
-    return -1
+    return offset + 1
 
 def re_match_negative_set ( str:ReText; offset:int; node:ReNode? ) : int
-    if eos(str,offset)
+    let ch = at(str,offset)
+    if (node.cset[ch>>5] & uint(1 << (ch & 31))) != 0u
         return -1
-    for sub in node.all
-        if re_match(str, offset, sub) != -1
-            return -1
     return offset + 1
 
 def re_match_any ( str:ReText; offset:int ) : int
@@ -469,17 +477,7 @@ def re_match_group ( str:ReText; offset:int; node:ReNode? ) : int
 
 def re_match ( str:ReText; offset:int; node:ReNode? ) : int
     if node.op==ReOp Char
-        let len = length(node.text)
-        if len == 1
-            let sc = at(node.text,0)
-            return re_match_single_char(str,offset,sc)
-        else
-            return re_match_char(str,offset,node.text,len)
-    elif node.op==ReOp Range
-        var sub : range
-        sub.x = at(node.left.text,0)
-        sub.y = at(node.right.text,0)
-        return re_match_range(str,offset,sub)
+        return re_match_char(str,offset,node)
     elif node.op==ReOp Union
         return re_match_union(str,offset,node)
     elif node.op==ReOp Set
@@ -516,24 +514,18 @@ def debug_re ( node: ReNode?; tab:int )
         print("null")
     elif node.op==ReOp Char
         print("(Char `{node.text}`)")
-    elif node.op==ReOp Range
-        print("(Range ")
-        debug_re(node.left,tab)
-        print(" ")
-        debug_re(node.right,tab)
-        print(")")
     elif node.op==ReOp Set
-        print("(Set")
-        for subs in node.all
-            print("\n{repeat("\t",tab)}")
-            debug_re(subs,tab+1)
-        print("\n{repeat("\t",tab-1)})")
+        print("(Set ")
+        for x in range(0,256)
+            if (node.cset[x>>5] & uint(1<<(x & 31))) != 0u
+                print("{to_char(x)}")
+        print(")")
     elif node.op==ReOp NegativeSet
-        print("(Negative-Set")
-        for subs in node.all
-            print("\n{repeat("\t",tab)}")
-            debug_re(subs,tab+1)
-        print("\n{repeat("\t",tab-1)})")
+        print("(Negative-Set ")
+        for x in range(0,256)
+            if (node.cset[x>>5] & uint(1<<(x & 31))) != 0u
+                print("{to_char(x)}")
+        print(")")
     elif node.op==ReOp Any
         print("(Any)")
     elif node.op==ReOp Eos
@@ -591,12 +583,14 @@ def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
 
 [export,unsafe]
 def test
-    // character
+     // character
     test_re("a", [{string[] "a"}], [{string ""; "b"; "ba"}])
     // union
     test_re("cat|dog", [{string "cat";"dog";"cats"}], [{string "at";" cat";"doog"}])
     // set & negatvie set
     test_re("[0-9a-zA-Z_]",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
+    test_re("[\\w]",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
+    test_re("\\w",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
     test_re("[^0-9a-zA-Z_]",[{string "#";"*"}],[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}])
     // any, concat
     test_re("cat.", [{string "catt";"cats"}], [{string "cat";" cat"}])
