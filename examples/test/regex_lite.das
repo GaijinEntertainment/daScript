@@ -30,9 +30,11 @@ struct ReNode
     at      : range
     text    : string
     all     : array<ReNode?>
-    left    : ReNode?
-    right   : ReNode?
+    subexpr : ReNode?
     cset    : CharSet
+
+struct Regex
+    root    : ReNode?
 
 variant MaybeReNode
     value   : ReNode?
@@ -281,7 +283,7 @@ def re_group(expr:ReText; offset:int) : MaybeReNode
     if at(expr,next(ore))!=')'
         delete ore
         return nada()
-    return maybe(new [[ReNode op=ReOp Group, left=ore as value, at=range(offset,next(ore)+1)]])
+    return maybe(new [[ReNode op=ReOp Group, subexpr=ore as value, at=range(offset,next(ore)+1)]])
 
 // <elementary-RE>	::=	<group> | <any> | <eos> | <set> | <char>
 def re_elementary(expr:ReText; offset:int) : MaybeReNode
@@ -305,16 +307,42 @@ def re_elementary(expr:ReText; offset:int) : MaybeReNode
         return ochr
     return nada()
 
-def concat(var left,right:ReNode?)
+def mk_concat(var left,right:ReNode?)
     if left == null
         return right
-    elif left.op==ReOp Char & right.op==ReOp Char
-        left.text += right.text
+    elif left.op==ReOp Char & right.op==ReOp Char   // concat(char(x),char(y)) = char(xy)
         left.at.y = right.at.y
+        left.text += right.text
         delete right
         return left
+    elif left.op==ReOp Concat
+        left.at.y = right.at.y
+        if right.op==ReOp Concat                    // concat(concat(x),concat(y)) = concat(xy)
+            for x in right.all
+                push(left.all,x)
+            delete right
+        else                                        // concat(concat(x),y) = concat(xy)
+            push(left.all,right)
+        return left
     else
-        return new [[ReNode op=ReOp Concat, left=left, right=right, at=range(left.at.x,right.at.y)]]
+        return new [[ReNode op=ReOp Concat, all <- [{ReNode? left; right}], at=range(left.at.x,right.at.y)]]
+
+def mk_union(var left,right:ReNode?) : ReNode?
+    if left.op==ReOp Union
+        left.at.y = right.at.y
+        if right.op==ReOp Union                    // union(union(x),union(y)) = union(xy)
+            for x in right.all
+                push(left.all,x)
+            delete right
+        else                                       // union(union(x),y) = union(xy)
+            push(left.all,right)
+        return left
+    elif right.op==ReOp Union
+        right.at.x = left.at.x
+        push(right.all,left)                      // union(x,union(y)) = union(xy)
+        return right
+    else
+        return new [[ReNode op=ReOp Union, all <- [{ReNode? left; right}], at=range(left.at.x,right.at.y)]]
 
 // <RE>	::=	<union> | <simple-RE>
 // <union>	::=	<RE> "|" <simple-RE>
@@ -331,17 +359,17 @@ def re_re(expr:ReText; offset:int) : MaybeReNode
             if last == null
                 note("syntax error, nada | union", cofs)
                 return nada()
-            let oright = re_re(expr,cofs+1)
+            var oright = re_re(expr,cofs+1)
             if oright is nothing
                 note("syntax error, re | nada", cofs+1)
                 return nada()
-            last = new [[ReNode op=ReOp Union, left=last, right=oright as value, at=range(last.at.x,next(oright))]]
-            cofs = next(oright)
+            last = mk_union(last,oright as value)
+            cofs = last.at.y
         else
             var onext = re_basic(expr, cofs)
             if onext is nothing
                 return last==null? nada() : maybe(last)
-            last = concat(last,onext as value)
+            last = mk_concat(last,onext as value)
             cofs = last.at.y
     return maybe(last)
 
@@ -357,11 +385,11 @@ def re_basic(expr:ReText; offset:int) : MaybeReNode
         return nada()
     let ch = at(expr,next(oelem))
     if ch=='*'
-        return maybe(new [[ReNode op=ReOp Star, left=oelem as value, at=range(offset,next(oelem)+1)]])
+        return maybe(new [[ReNode op=ReOp Star, subexpr=oelem as value, at=range(offset,next(oelem)+1)]])
     elif ch=='+'
-        return maybe(new [[ReNode op=ReOp Plus, left=oelem as value, at=range(offset,next(oelem)+1)]])
+        return maybe(new [[ReNode op=ReOp Plus, subexpr=oelem as value, at=range(offset,next(oelem)+1)]])
     elif ch=='?'
-        return maybe(new [[ReNode op=ReOp Question, left=oelem as value, at=range(offset,next(oelem)+1)]])
+        return maybe(new [[ReNode op=ReOp Question, subexpr=oelem as value, at=range(offset,next(oelem)+1)]])
     return oelem
 
 def re_parse ( expr:ReText ) : ReNode?
@@ -386,12 +414,10 @@ def re_match_char ( str:ReText; offset:int; node:ReNode? ) : int
     return offset + len
 
 def re_match_union ( str:ReText; offset:int; node:ReNode? ) : int
-    let left = re_match(str,offset,node.left)
-    if left != -1
-        return left
-    let right = re_match(str,offset,node.right)
-    if right != -1
-        return right
+    for sub in node.all
+        let osub = re_match(str,offset,sub)
+        if osub != -1
+            return osub
     return -1
 
 def re_match_set ( str:ReText; offset:int; node:ReNode? ) : int
@@ -407,52 +433,50 @@ def re_match_negative_set ( str:ReText; offset:int; node:ReNode? ) : int
     return offset + 1
 
 def re_match_any ( str:ReText; offset:int ) : int
-    if eos(str,offset)
+    if at(str,offset)==0
         return -1
     return offset + 1
 
 def re_match_concat ( str:ReText; offset:int; node:ReNode? ) : int
-    if eos(str,offset)
-        return -1
-    let oleft = re_match(str,offset,node.left)
-    if oleft == -1
-        return -1
-    let oright = re_match(str,oleft,node.right)
-    if oright == -1
-        return -1
-    return oright
+    var ofs = offset
+    for sub in node.all
+        let osub = re_match(str,ofs,sub)
+        if osub == -1
+            return -1
+        ofs = osub
+    return ofs
 
 def re_match_eos ( str:ReText; offset:int ) : int
-    if eos(str,offset)
+    if at(str,offset)==0
         return offset
     return -1
 
 def re_match_question ( str:ReText; offset:int; node:ReNode? ) : int
-    var osym = re_match(str, offset, node.left)
+    var osym = re_match(str, offset, node.subexpr)
     if osym == -1
         return offset
     return osym
 
 def re_match_plus ( str:ReText; offset:int; node:ReNode? ) : int
-    var osym = re_match(str, offset, node.left)
+    var osym = re_match(str, offset, node.subexpr)
     if osym == -1
         return -1
     var ofs = osym
     while osym != -1
         ofs = osym
-        osym = re_match(str, ofs, node.left)
+        osym = re_match(str, ofs, node.subexpr)
     return ofs
 
 def re_match_star ( str:ReText; offset:int; node:ReNode? ) : int
     var ofs = offset
-    var osym = re_match(str, offset, node.left)
+    var osym = re_match(str, offset, node.subexpr)
     while osym != -1
         ofs = osym
-        osym = re_match(str, ofs, node.left)
+        osym = re_match(str, ofs, node.subexpr)
     return ofs
 
 def re_match_group ( str:ReText; offset:int; node:ReNode? ) : int
-    let osub = re_match(str,offset,node.left)
+    let osub = re_match(str,offset,node.subexpr)
     if osub==-1
         return -1
     // todo: return group last match
@@ -517,35 +541,34 @@ def debug_re ( node: ReNode?; tab:int )
         print("(Eos)")
     elif node.op==ReOp Group
         print("(Group ")
-        debug_re(node.left,tab+1)
+        debug_re(node.subexpr,tab+1)
         print(")")
     elif node.op==ReOp Plus
         print("(Plus ")
-        debug_re(node.left,tab)
+        debug_re(node.subexpr,tab)
         print(")")
     elif node.op==ReOp Star
         print("(Star ")
-        debug_re(node.left,tab)
+        debug_re(node.subexpr,tab)
         print(")")
     elif node.op==ReOp Question
         print("(Question ")
-        debug_re(node.left,tab)
+        debug_re(node.subexpr,tab)
         print(")")
     elif node.op==ReOp Concat
         print("(Contact\n")
-        print("{repeat("\t",tab)}")
-        debug_re(node.left,tab+1)
-        print("\n{repeat("\t",tab)}")
-        debug_re(node.right,tab+1)
-        print("\n{repeat("\t",tab-1)})")
+        for sub in node.all
+            print("{repeat("\t",tab)}")
+            debug_re(sub,tab+1)
+            print("\n")
+        print("{repeat("\t",tab-1)})")
     elif node.op==ReOp Union
         print("(Union\n")
-        print("{repeat("\t",tab)}")
-        debug_re(node.left,tab+1)
-        print("\n")
-        print("{repeat("\t",tab)}")
-        debug_re(node.right,tab+1)
-        print("\n{repeat("\t",tab-1)})")
+        for sub in node.all
+            print("{repeat("\t",tab)}")
+            debug_re(sub,tab+1)
+            print("\n")
+        print("{repeat("\t",tab-1)})")
     else
         panic("unsupported op")
 
@@ -576,6 +599,7 @@ def test
     test_re("a", [{string[] "a"}], [{string ""; "b"; "ba"}])
     // union
     test_re("cat|dog", [{string "cat";"dog";"cats"}], [{string "at";" cat";"doog"}])
+    test_re("cat|dog|bat", [{string "cat";"dog";"cats";"bats"}], [{string "at";" cat";"doog";"at"}])
     // set & negatvie set
     test_re("[0-9a-zA-Z_]",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
     test_re("[\\w]",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
@@ -583,6 +607,7 @@ def test
     test_re("[^0-9a-zA-Z_]",[{string "#";"*"}],[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}])
     // any, concat
     test_re("cat.", [{string "catt";"cats"}], [{string "cat";" cat"}])
+    test_re("(cat)(dog)(bat)", [{string[] "catdogbat"}], [{string "cat";" cat"; "catdog"; "dogbat"}])
     // eos
     test_re("cat$", [{string[] "cat"}], [{string "cattt";" cat"}])
     // +
