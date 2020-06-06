@@ -79,7 +79,7 @@ namespace das {
     void SimNode_CallBase::visitCall ( SimVisitor & vis ) {
         if ( fnPtr ) {
             vis.arg(fnPtr->name,"fnPtr");
-            vis.arg(fnIndex, "fnIndex");
+            vis.arg(Func(fnIndex+1), "fnIndex");
         }
         if ( cmresEval ) {
             V_SUB(cmresEval);

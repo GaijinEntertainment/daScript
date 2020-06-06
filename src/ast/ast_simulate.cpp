@@ -2653,7 +2653,7 @@ namespace das
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
             if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
-                fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code);
+                fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
             }
         }
 

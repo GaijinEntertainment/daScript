@@ -18,6 +18,10 @@ namespace das {
 #endif
 
     struct SimFnHashVisitor :  SimVisitor {
+        Context * context = nullptr;
+        SimFnHashVisitor ( Context * ctx )
+            : context(ctx) {
+        }
         // 64 bit FNV1a
         const uint64_t fnv_prime = 1099511628211ul;
         uint64_t offset_basis = 14695981039346656037ul;
@@ -47,6 +51,11 @@ namespace das {
         virtual void sp ( uint32_t stackTop,  const char * op ) override {
             write(&stackTop, sizeof(stackTop));
             write(op);
+        }
+        virtual void arg ( Func fun,  const char * argN ) override {
+            SimFunction * simFun = context->getFunction(fun.index - 1);
+            write(simFun->mangledName);
+            write(argN);
         }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             write(&argV,sizeof(argV));
@@ -85,24 +94,22 @@ namespace das {
         }
     };
 
-    uint64_t getSemanticHash ( SimNode * node ) {
+    uint64_t getSemanticHash ( SimNode * node, Context * context ) {
         debug_hash("\n");
-        SimFnHashVisitor hashV;
+        SimFnHashVisitor hashV(context);
         node->visit(hashV);
         debug_hash("\n");
         return hashV.getHash();
     }
 
-    uint64_t getFunctionHash ( Function * fun, SimNode * node ) {
+    uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context ) {
         debug_hash("\n%s\n", fun->name.c_str());
-        SimFnHashVisitor hashV;
+        SimFnHashVisitor hashV(context);
         // append return type and result type
         string resT = fun->result->describe();
-        debug_hash(" [resT = %s] \n", resT.c_str());
         hashV.write(resT.c_str(), uint32_t(resT.length()));
         for ( auto & arg : fun->arguments ) {
             string argT = arg->type->describe();
-            debug_hash(" [argT = %s] \n", argT.c_str());
             hashV.write(argT.c_str(), uint32_t(argT.length()));
         }
         // append code

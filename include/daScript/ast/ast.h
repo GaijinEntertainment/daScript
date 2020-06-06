@@ -594,7 +594,7 @@ namespace das
         uint64_t aotHash = 0;
     };
 
-    uint64_t getFunctionHash ( Function * fun, SimNode * node );
+    uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
 
     uint64_t getFunctionAotHash ( const Function * fun );
     uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );

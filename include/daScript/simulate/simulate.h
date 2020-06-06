@@ -165,13 +165,14 @@ namespace das
         virtual void arg ( float /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( double /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( bool /* argV */,  const char * /* argN */  ) { }
+        virtual void arg ( Func /* fun */,  const char * /* argN */ ) { }
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * );
         virtual SimNode * sub ( SimNode * node, const char * /* opN */ = "subexpr" ) { return node->visit(*this); }
         virtual SimNode * visit ( SimNode * node ) { return node; }
     };
 
     void printSimNode ( TextWriter & ss, SimNode * node );
-    uint64_t getSemanticHash ( SimNode * node );
+    uint64_t getSemanticHash ( SimNode * node, Context * context );
 
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;

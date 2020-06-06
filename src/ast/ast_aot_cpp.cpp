@@ -3012,7 +3012,7 @@ namespace das {
             hash = (hash ^ globalVariables[i].offset) * fnv_prime;
             hash = (hash ^ globalVariables[i].size) * fnv_prime;
             if ( globalVariables[i].init ) {
-                hash = (hash ^ getSemanticHash(globalVariables[i].init)) * fnv_prime;
+                hash = (hash ^ getSemanticHash(globalVariables[i].init,this)) * fnv_prime;
             }
         }
         return hash;
@@ -3080,7 +3080,7 @@ namespace das {
                 if (pfun->index < 0 || !pfun->used)
                     continue;
                 SimFunction * fn = context.getFunction(fni);
-                pfun->hash = getFunctionHash(pfun.get(), fn->code);
+                pfun->hash = getFunctionHash(pfun.get(), fn->code, &context);
                 fni++;
             }
         }

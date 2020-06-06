@@ -28,7 +28,7 @@ namespace das {
             }
             if ( fnPtr ) {
                 vis.arg(fnPtr->name,"fnPtr");
-                vis.arg(fnIndex, "fnIndex");
+                vis.arg(Func(fnIndex+1), "fnIndex");
             }
             if ( cmresEval ) {
                 V_SUB(cmresEval);

@@ -40,6 +40,11 @@ namespace das {
                 ss << "_TT<(" << typeSize << ")>";
             }
         }
+        virtual void arg ( Func argV,  const char * argN ) override {
+            SimVisitor::arg(argV,argN);
+            crlf();
+            ss << "@@" << argV.index;
+        }
         virtual void sp ( uint32_t stackTop, const char * name ) override {
             SimVisitor::sp(stackTop,name);
             crlf();
