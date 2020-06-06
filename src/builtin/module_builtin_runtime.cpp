@@ -346,8 +346,8 @@ namespace das
         return (int32_t) context->stringHeap.shelf.size();
     }
 
-    void string_heap_collect ( Context * context ) {
-        context->collectStringHeap();
+    void string_heap_collect ( Context * context, LineInfoArg * info ) {
+        context->collectStringHeap(info);
     }
 
     void string_heap_report ( Context * context ) {

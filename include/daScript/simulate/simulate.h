@@ -506,7 +506,7 @@ namespace das
         }
 
         void relocateCode();
-        void collectStringHeap();
+        void collectStringHeap(LineInfo * at);
 
         uint64_t getSharedMemorySize() const;
         uint64_t getUniqueMemorySize() const;

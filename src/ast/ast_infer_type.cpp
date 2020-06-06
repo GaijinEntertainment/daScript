@@ -4686,6 +4686,7 @@ namespace das {
             Visitor::preVisit(expr);
             DAS_ASSERT(!scopes.empty());
             auto scope = scopes.back();
+            expr->visibility.fileInfo = expr->at.fileInfo;
             expr->visibility.column = expr->atInit.last_column;
             expr->visibility.line = expr->atInit.last_line;
             expr->visibility.last_column = scope->at.last_column;
