@@ -17,7 +17,7 @@ typedef
 struct ReNode
     op      : ReOp
     id      : int
-    fun2    : function< (var regex:Regex; var node,node2:ReNode?; str:string; offset:int) : int >
+    fun2    : function< (var regex:Regex; var node:ReNode?; str:string; offset:int) : int >
     at      : range
     text    : string
     all     : array<ReNode?>
@@ -492,6 +492,11 @@ def re_assign_match_functions ( var re:Regex )
         elif node.op==ReOp Concat
             node.fun2 = @@re_match2_concat
         elif node.op==ReOp Plus
+            if node.subexpr.op==ReOp Set
+                node.cset = node.subexpr.cset
+                node.fun2 = @@re_match2_plus_set
+            else
+                node.fun2 = @@re_match2_plus
             node.fun2 = @@re_match2_plus
         elif node.op==ReOp Star
             node.fun2 = @@re_match2_star
@@ -502,175 +507,216 @@ def re_assign_match_functions ( var re:Regex )
         else
             panic("unsupported {node.op}")
 
-[private]
-def re_match2_single_char ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match single char `{node.text}` {offset}\n")
-    if at(node.text,0) != at(str,offset)
+    if character_uat(node.text,0) != character_uat(str,offset)
         return -1
     node.tail = offset + 1
+    var node2 = node.next
     if node2!=null
-        return re_match(regex,node2,str,offset+1)
+        return invoke(node2.fun2,regex,node2,str,offset+1)
     else
         return offset+1
 
-[private]
-def re_match2_char ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_char ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match char `{node.text}` {offset}\n")
     let len = length(node.text)
     for Ch,Ofs in node.text,range(offset,offset+len)
-        if at(str,Ofs) != Ch
+        if character_uat(str,Ofs) != Ch
             return -1
     node.tail = offset + len
+    var node2 = node.next
     if node2!=null
-        return re_match(regex,node2,str,offset+len)
+        return invoke(node2.fun2,regex,node2,str,offset+len)
     else
         return offset+len
 
-[private]
-def re_match2_union ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_union ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match union {offset}\n")
     for sub in node.all
-        let osub = re_match(regex,sub,str,offset)
+        let osub = invoke(sub.fun2,regex,sub,str,offset)
         if osub != -1
             node.tail = sub.tail
             return osub
     return -1
 
-[private]
-def re_match2_set ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_set ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match2 set {offset}\n")
-    let ch = at(str,offset)
-    if (node.cset[ch>>5] & uint(1 << (ch & 31))) == 0u
+    let ch = character_uat(str,offset)
+    if !is_char_in_set(ch,node.cset)
         return -1
     node.tail = offset + 1
+    var node2 = node.next
     if node2!=null
-        return re_match(regex, node2, str, offset+1)
+        return invoke(node2.fun2,regex, node2, str, offset+1)
     else
         return offset + 1
 
-
-[private]
-def re_match2_negative_set ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_negative_set ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match negative set {offset}\n")
-    let ch = at(str,offset)
-    if (node.cset[ch>>5] & uint(1 << (ch & 31))) != 0u
+    let ch = character_uat(str,offset)
+    if is_char_in_set(ch,node.cset)
         return -1
     node.tail = offset + 1
+    var node2 = node.next
     if node2!=null
-        return re_match(regex, node2, str, offset+1)
+        return invoke(node2.fun2,regex, node2, str, offset+1)
     else
         return offset + 1
 
-[private]
-def re_match2_any ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_any ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match2 any {offset}\n")
-    if at(str,offset)==0
+    if character_uat(str,offset)==0
         return -1
     node.tail = offset + 1
+    var node2 = node.next
     if node2!=null
-        return re_match(regex, node2, str, offset+1)
+        return invoke(node2.fun2,regex, node2, str, offset+1)
     else
         return offset + 1
 
-[private]
-def re_match2_concat ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_concat ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match2 concat {offset}\n")
-    let oleft = re_match(regex, node.left, str, offset)
+    var left = node.left
+    let oleft = invoke(left.fun2, regex, left, str, offset)
     if oleft == -1
         return -1
     node.tail = node.right.tail
     return oleft
 
-
-[private]
-def re_match2_eos ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_eos ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match eos {offset}\n")
-    if at(str,offset)!=0
+    if character_uat(str,offset)!=0
         return -1
     node.tail = offset
+    var node2 = node.next
     if node2!=null
-        return re_match(regex, node2, str, offset)
+        return invoke(node2.fun2,regex, node2, str, offset)
     else
         return offset
 
-[private]
-def re_match2_question ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_question ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match question {offset}\n")
-    var osym = re_match(regex,node.subexpr,str,offset)
+    var nsub = node.subexpr
+    var osym = invoke(nsub.fun2,regex,nsub,str,offset)
     if osym == -1
         osym = offset
     node.tail = osym
+    var node2 = node.next
     if node2!=null
-        return re_match(regex,node2,str,osym)
+        return invoke(node2.fun2,regex,node2,str,osym)
     else
         return osym
 
-[private]
-def re_match2_plus ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_plus ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match2 plus {offset}\n")
-    var osym = re_match(regex,node.subexpr,str,offset)
+    var nsub = node.subexpr
+    var osym = invoke(nsub.fun2,regex,nsub,str,offset)
     if osym == -1
         return -1
     var ofs = osym
+    var node2 = node.next
     if node2!=null
         while osym != -1
             node.tail = osym
-            var otail = re_match(regex,node2,str,osym)
+            var otail = invoke(node2.fun2,regex,node2,str,osym)
             if otail != -1
                 return otail
-            osym = re_match(regex,node.subexpr,str,osym)
+            osym = invoke(nsub.fun2,regex,nsub,str,osym)
         return -1
     else
         while osym != -1
             ofs = osym
-            osym = re_match(regex,node.subexpr,str,ofs)
+            osym = invoke(nsub.fun2,regex,nsub,str,ofs)
         node.tail = ofs
         return ofs
 
-[private]
-def re_match2_star ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
+    if log_match_enabled
+        print("match2 plus {offset}\n")
+    panic("oi")
+    var nsub = node.subexpr
+    let ch = character_uat(str,offset)
+    if !is_char_in_set(ch,node.cset)
+        return -1
+    var ofs = offset + 1
+    var osym = ofs
+    var node2 = node.next
+    if node2!=null
+        while osym != -1
+            node.tail = osym
+            var otail = invoke(node2.fun2,regex,node2,str,osym)
+            if otail != -1
+                return otail
+            let che = character_uat(str,osym)
+            if !is_char_in_set(ch,node.cset)
+                return -1
+            osym++
+        return -1
+    else
+        while osym != -1
+            ofs = osym
+            let che = character_uat(str,osym)
+            if !is_char_in_set(ch,node.cset)
+                break
+            osym++
+        node.tail = ofs
+        return ofs
+
+[private,unsafe]
+def re_match2_star ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match2 plus {offset}\n")
     var ofs = offset
+    var node2 = node.next
+    var nsub = node.subexpr
     if node2!=null
         while ofs != -1
             node.tail = ofs
-            let oany = re_match(regex,node2,str,ofs)
+            let oany = invoke(node2.fun2,regex,node2,str,ofs)
             if oany != -1
                 return oany
-            ofs = re_match(regex,node.subexpr,str,ofs)
+            ofs = invoke(nsub.fun2,regex,nsub,str,ofs)
         return -1
     else
         var osym = ofs
         while osym != -1
             ofs = osym
-            osym = re_match(regex,node.subexpr,str,ofs)
+            osym = invoke(nsub.fun2,regex,nsub,str,ofs)
         node.tail = ofs
         return ofs
 
-[private]
-def re_match2_group ( var regex:Regex; var node,node2:ReNode?; str:string; offset:int ) : int
+[private,unsafe]
+def re_match2_group ( var regex:Regex; var node:ReNode?; str:string; offset:int ) : int
     if log_match_enabled
         print("match2 group {offset}\n")
-    let osub = re_match(regex,node.subexpr,str,offset)
+    var nsub = node.subexpr
+    let osub = invoke(nsub.fun2,regex,nsub,str,offset)
     if osub==-1
         return -1
     regex.groups[node.index]._0 = range(offset,node.subexpr.tail)
     return osub
-
-[private]
-def re_match ( var regex:Regex; var node:ReNode?;  str:string; offset:int ) : int
-    return invoke(node.fun2, regex, node, node.next, str, offset)
 
 /*
     top level API
@@ -689,18 +735,20 @@ def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
         return -1
     if log_match_enabled
         print("matching with `{str}` at {offset}\n")
-    return re_match(regex,regex.root,str,offset)
+    return invoke(regex.root.fun2,regex,regex.root,str,offset)
 
 def regex_group ( regex:Regex; index:int; match:string )
     let sub_range = regex.groups[index]._0
     return slice(match, sub_range.x, sub_range.y)
 
+[unsafe]
 def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     if empty(str)
         return
     var offset = 0
-    while at(str,offset) != 0
-        let om = re_match(regex,regex.root,str,offset)
+    var root = regex.root
+    while character_uat(str,offset) != 0
+        let om = invoke(root.fun2,regex,root,str,offset)
         if om != -1
             if !invoke(blk,range(offset,om))
                 break

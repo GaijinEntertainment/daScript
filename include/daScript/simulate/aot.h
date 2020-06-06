@@ -519,6 +519,10 @@ namespace das {
         }
     };
 
+    __forceinline bool is_char_in_set ( int32_t ch, const TDim<uint32_t,8> & bitset ) {
+        return bitset[ch>>5] & (1u<<uint32_t(ch));
+    }
+
     template <typename TT, uint32_t size>
     struct das_cast< TDim<TT,size> > {
         template <typename QQ>

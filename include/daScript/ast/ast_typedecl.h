@@ -358,6 +358,18 @@ namespace das {
         }
     };
 
+    template <typename TT, uint32_t size>
+    struct TDim;
+
+    template <typename TT, uint32_t size>
+    struct typeFactory<TDim<TT,size>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT>::make(lib);
+            t->dim.push_back(size);
+            return t;
+        }
+    };
+
     template <typename TK, typename TV>
     struct TTable;
 
