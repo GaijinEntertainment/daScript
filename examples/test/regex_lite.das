@@ -3,10 +3,8 @@ require fio
 
 [export,unsafe]
 def test
-/*
     test_regex()
-    return true
-*/
+    // return true
 
     var r1:Regex // email
     if !regex_compile(r1,"[\\w\\.+-]+@[\\w\\.-]+\\.[\\w\\.-]+")
@@ -37,7 +35,7 @@ def test
             print("can't open ")
     return true
 
-
+[unsafe]
 def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
     print("testing {reg}\n")
     var regex : Regex
@@ -57,7 +55,9 @@ def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
         failed |= ma!=-1
     print("{failed ? "failed" : "ok"}\n\n")
     assert(!failed)
+    delete regex
 
+[unsafe]
 def test_group ( reg:string; match:string; groups:array<string>)
     print("testing groups is {reg}\n")
     var regex : Regex
@@ -81,6 +81,7 @@ def test_group ( reg:string; match:string; groups:array<string>)
             print("failed, expecting {x}={cgrp}, got {grp}")
             failed = true
     assert(!failed)
+    delete regex
 
 
 [unsafe]
