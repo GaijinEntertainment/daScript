@@ -584,7 +584,7 @@ namespace das {
     SimNode * SimNode_FuncConstValue::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(FuncAddr);
-        vis.arg(Func(subexpr.valueI+1),"fnIndex");
+        vis.arg(Func(subexpr.valueI),"fnIndex");
         V_END();
     }
 

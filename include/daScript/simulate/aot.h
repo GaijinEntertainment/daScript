@@ -1309,7 +1309,9 @@ namespace das {
     template <typename FuncT, FuncT fn>
     struct SimNode_Aot : SimNode_CallBase {
         const char * extFnName = nullptr;
-        __forceinline SimNode_Aot ( ) : SimNode_CallBase(LineInfo()) {}
+        __forceinline SimNode_Aot ( ) : SimNode_CallBase(LineInfo()) {
+            aotFunction = (void*) fn;
+        }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             using FunctionTrait = function_traits<FuncT>;
@@ -1635,32 +1637,56 @@ namespace das {
         static __forceinline ResType invoke ( Context * __context__, const Func & blk ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->callOrFastcall(simFunc, nullptr, 0);
-            return cast<ResType>::to(result);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context * );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__ );
+            } else {
+                vec4f result = __context__->callOrFastcall(simFunc, nullptr, 0);
+                return cast<ResType>::to(result);
+            }
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, const Func & blk, ArgType ...arg ) {
-            vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
-            return cast<ResType>::to(result);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context *, ArgType... );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__, arg... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
+                return cast<ResType>::to(result);
+            }
         }
         static __forceinline ResType invoke_cmres ( Context * __context__, const Func & blk ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            typename remove_const<ResType>::type result;
-            __context__->callWithCopyOnReturn(simFunc, nullptr, &result, 0);
-            return result;
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context * );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__ );
+            } else {
+                typename remove_const<ResType>::type result;
+                __context__->callWithCopyOnReturn(simFunc, nullptr, &result, 0);
+                return result;
+            }
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
-            if (!simFunc) __context__->throw_error("invoke null function");
-            typename remove_const<ResType>::type result;
-            __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
-            return result;
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context *, ArgType... );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__, arg... );
+            } else {
+                if (!simFunc) __context__->throw_error("invoke null function");
+                typename remove_const<ResType>::type result;
+                __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+                return result;
+            }
         }
     };
 

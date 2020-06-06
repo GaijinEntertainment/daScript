@@ -2490,6 +2490,7 @@ namespace das
                     }
                     gfun.stackSize = pfun->totalStackSize;
                     gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
+                    gfun.aotFunction = nullptr;
                     gfun.flags = 0;
                     gfun.fastcall = pfun->fastCall;
                 }
@@ -2666,6 +2667,8 @@ namespace das
                     fn.code = (it->second)(context);
                     fn.aot = true;
                     if ( logIt ) logs << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
+                    auto fcb = (SimNode_CallBase *) fn.code;
+                    fn.aotFunction = fcb->aotFunction;
                 } else {
                     if ( logIt ) logs << "NOT FOUND " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
                 }

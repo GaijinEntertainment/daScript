@@ -62,6 +62,7 @@ namespace das
         FuncInfo *  debugInfo;
         uint32_t    stackSize;
         uint32_t    mangledNameHash;
+        void *      aotFunction;
         union {
             uint32_t    flags;
             struct {
@@ -712,6 +713,7 @@ __forceinline void profileNode ( Context * context, SimNode * node ) {
         int32_t  fnIndex = -1;
         int32_t  nArguments = 0;
         SimNode * cmresEval = nullptr;
+        void * aotFunction = nullptr;
         // uint32_t stackTop = 0;
     };
 
