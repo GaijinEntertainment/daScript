@@ -499,19 +499,25 @@ namespace das
     }
 
     struct LambdaIterator : Iterator {
+        using lambdaFunc = bool (*) (Context *,void*, char*);
         LambdaIterator ( Context & context, const Lambda & ll ) : lambda(ll) {
             int32_t * fnIndex = (int32_t *) lambda.capture;
             if (!fnIndex) context.throw_error("invoke null lambda");
             simFunc = context.getFunction(*fnIndex-1);
             if (!simFunc) context.throw_error("invoke null function");
+            aotFunc = (lambdaFunc) simFunc->aotFunction;
         }
         __forceinline bool InvokeLambda ( Context & context, char * ptr ) {
-            vec4f argValues[4] = {
-                cast<Lambda>::from(lambda),
-                cast<char *>::from(ptr)
-            };
-            auto res = context.call(simFunc, argValues, 0);
-            return cast<bool>::to(res);
+            if ( aotFunc ) {
+                return (*aotFunc) ( &context, lambda.capture, ptr );
+            } else {
+                vec4f argValues[4] = {
+                    cast<Lambda>::from(lambda),
+                    cast<char *>::from(ptr)
+                };
+                auto res = context.call(simFunc, argValues, 0);
+                return cast<bool>::to(res);
+            }
         }
         virtual bool first ( Context & context, char * ptr ) override {
             return InvokeLambda(context, ptr);
@@ -538,6 +544,7 @@ namespace das
         }
         Lambda          lambda;
         SimFunction *   simFunc = nullptr;
+        lambdaFunc      aotFunc = nullptr;
     };
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, Context * context ) {
