@@ -949,7 +949,7 @@ namespace das
         Func fn; fn.index = func->index + 1;
         vec4f cval = v_zero();
         memcpy (&cval, &fn, sizeof(Func));
-        return context.code->makeNode<SimNode_ConstValue>(at,cval);
+        return context.code->makeNode<SimNode_FuncConstValue>(at,cval);
     }
 
     SimNode * ExprPtr2Ref::simulate (Context & context) const {

@@ -1872,6 +1872,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+    struct SimNode_FuncConstValue : SimNode_ConstValue {
+        SimNode_FuncConstValue(const LineInfo & at, vec4f c)
+            : SimNode_ConstValue(at,c) {
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+    };
+
     struct SimNode_Zero : SimNode_CallBase {
         SimNode_Zero(const LineInfo & at) : SimNode_CallBase(at) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;

@@ -581,6 +581,13 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_FuncConstValue::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(FuncAddr);
+        vis.arg(Func(subexpr.valueI+1),"fnIndex");
+        V_END();
+    }
+
     SimNode * SimNode_ConstString::visit ( SimVisitor & vis ) {
         using TT = char *;
         V_BEGIN();
