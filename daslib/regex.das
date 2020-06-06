@@ -513,7 +513,7 @@ def re_assign_match_functions ( var re:Regex )
         else
             panic("unsupported {node.op}")
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match single char `{node.text}` {offset}\n")
@@ -527,7 +527,7 @@ def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : ui
     else
         return tail
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match char `{node.text}` {offset}\n")
@@ -541,7 +541,7 @@ def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     else
         return tail
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match union {offset}\n")
@@ -552,7 +552,7 @@ def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
             return osub
     return null
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 set {offset}\n")
@@ -566,7 +566,7 @@ def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     else
         return tail
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_negative_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match negative set {offset}\n")
@@ -580,7 +580,7 @@ def re_match2_negative_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : u
     else
         return tail
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 any {offset}\n")
@@ -594,7 +594,7 @@ def re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     else
         return tail
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 concat {offset}\n")
@@ -605,7 +605,7 @@ def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     node.tail = node.right.tail
     return oleft
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match eos {offset}\n")
@@ -618,7 +618,7 @@ def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     else
         return str
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match question {offset}\n")
@@ -633,7 +633,7 @@ def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
     else
         return tail
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {offset}\n")
@@ -658,7 +658,7 @@ def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = ofs
         return ofs
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {offset}\n")
@@ -688,7 +688,7 @@ def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
         node.tail = ofs
         return ofs
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {offset}\n")
@@ -711,7 +711,7 @@ def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = ofs
         return ofs
 
-[private,unsafe]
+[private,unsafe,unsafe_deref]
 def re_match2_group ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 group {offset}\n")

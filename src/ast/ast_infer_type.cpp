@@ -1746,6 +1746,7 @@ namespace das {
                 reportAstChanged();
                 return expr->subexpr;
             }
+            expr->unsafeDeref = func ? func->unsafeDeref : false;
             // infer
             expr->subexpr = Expression::autoDereference(expr->subexpr);
             if ( !expr->subexpr->type->isPointer() ) {

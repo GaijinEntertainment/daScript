@@ -61,6 +61,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isPtr2Ref() const override { return true; }
         ExpressionPtr   subexpr;
+        bool unsafeDeref = false;
     };
 
     struct ExprAddr : Expression {

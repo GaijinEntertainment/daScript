@@ -953,7 +953,11 @@ namespace das
     }
 
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
-        return context.code->makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
+        if ( unsafeDeref ) {
+            return subexpr->simulate(context);
+        } else {
+            return context.code->makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
+        }
     }
 
     SimNode * ExprRef2Ptr::simulate (Context & context) const {
@@ -1634,9 +1638,6 @@ namespace das
         DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         if (value->type->isPointer()) {
             if ( unsafeDeref ) {
-                if ( auto chain = value->trySimulate(context, extraOffset + fieldOffset, r2vType) ) {
-                    return chain;
-                }
                 auto simV = value->simulate(context);
                 if (r2vType != Type::none) {
                     return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType, at, simV, fieldOffset + extraOffset);

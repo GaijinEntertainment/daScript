@@ -2154,10 +2154,18 @@ namespace das {
     // ptr2ref
         virtual void preVisit ( ExprPtr2Ref * ptr2ref ) override {
             Visitor::preVisit(ptr2ref);
-            ss << "das_deref(__context__,";
+            if ( ptr2ref->unsafeDeref ) {
+                ss << "(*(";
+            } else {
+                ss << "das_deref(__context__,";
+            }
         }
         virtual ExpressionPtr visit ( ExprPtr2Ref * ptr2ref ) override {
-            ss << ")";
+            if ( ptr2ref->unsafeDeref ) {
+                ss << "))";
+            } else {
+                ss << ")";
+            }
             return Visitor::visit(ptr2ref);
         }
      // ref2ptr
