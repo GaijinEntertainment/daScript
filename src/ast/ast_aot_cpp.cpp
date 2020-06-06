@@ -2227,7 +2227,7 @@ namespace das {
 
             } else {
                 ss  << "das_ascend<"
-                    << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ","
+                    << describeCppType(expr->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ","
                     << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
                     << ">::make(__context__,";
             }

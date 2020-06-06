@@ -1,3 +1,5 @@
+module regex
+
 enum ReOp
     Char
     Set
@@ -722,6 +724,7 @@ def re_match2_group ( var regex:Regex; var node:ReNode?; str:string; offset:int 
     top level API
 */
 
+[export]
 def regex_compile( var re:Regex; expr:string ) : bool
     re.root = re_parse(expr)
     if re.root != null
@@ -730,6 +733,7 @@ def regex_compile( var re:Regex; expr:string ) : bool
         re_assign_match_functions(re)
     return re.root != null
 
+[export]
 def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
     if empty(str)
         return -1
@@ -737,6 +741,7 @@ def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
         print("matching with `{str}` at {offset}\n")
     return invoke(regex.root.fun2,regex,regex.root,str,offset)
 
+[export]
 def regex_group ( regex:Regex; index:int; match:string )
     let sub_range = regex.groups[index]._0
     return slice(match, sub_range.x, sub_range.y)

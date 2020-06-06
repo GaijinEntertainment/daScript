@@ -6,8 +6,14 @@ namespace das
 {
     template <typename TT>
     struct RangeType {
-        TT  from;   //  [from,to) range
-        TT  to;
+        union {
+            TT  from;   //  [from,to) range
+            TT  x;
+        };
+        union {
+            TT  to;
+            TT  y;
+        };
         __forceinline RangeType() {}
         __forceinline RangeType( TT f, TT t ) : from(f), to(t) {}
         __forceinline RangeType( TT t ) : from(t), to(t) {}

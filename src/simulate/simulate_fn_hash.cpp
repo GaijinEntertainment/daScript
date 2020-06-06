@@ -98,9 +98,11 @@ namespace das {
         SimFnHashVisitor hashV;
         // append return type and result type
         string resT = fun->result->describe();
+        debug_hash(" [resT = %s] \n", resT.c_str());
         hashV.write(resT.c_str(), uint32_t(resT.length()));
         for ( auto & arg : fun->arguments ) {
             string argT = arg->type->describe();
+            debug_hash(" [argT = %s] \n", argT.c_str());
             hashV.write(argT.c_str(), uint32_t(argT.length()));
         }
         // append code
