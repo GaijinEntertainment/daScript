@@ -746,7 +746,7 @@ def regex_group ( regex:Regex; index:int; match:string )
     let sub_range = regex.groups[index]._0
     return slice(match, sub_range.x, sub_range.y)
 
-[unsafe]
+[export,unsafe]
 def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     if empty(str)
         return
