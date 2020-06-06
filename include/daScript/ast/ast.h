@@ -568,6 +568,7 @@ namespace das
                 bool    privateFunction : 1;
                 bool    generator : 1;
                 bool    lambda : 1;
+                bool    firstArgReturnType : 1;
             };
             uint32_t flags = 0;
         };

@@ -3894,6 +3894,29 @@ namespace das {
     // ExprOp1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            // pointer arithmetics
+            if ( expr->subexpr->type->isPointer() ) {
+                if ( !expr->subexpr->type->firstType ) {
+                    error("operations on void pointers are prohibited; " +
+                        expr->subexpr->type->describe(), "", "",
+                        expr->at, CompilationError::invalid_type);
+                } else {
+                    string pop;
+                            if ( expr->op=="++" || expr->op=="+++" )   { pop = "i_das_ptr_inc"; }
+                    else    if ( expr->op=="--" || expr->op=="---" )   { pop = "i_das_ptr_dec"; }
+                    if ( !pop.empty() ) {
+                        reportAstChanged();
+                        auto popc = make_smart<ExprCall>(expr->at, pop);
+                        auto stride = expr->subexpr->type->firstType->getSizeOf();
+                        popc->arguments.push_back(expr->subexpr->clone());
+                        popc->arguments.push_back(make_smart<ExprConstInt>(expr->at,stride));
+                        return popc;
+                    } else {
+                        error("pointer arithmetics only allows +, -, +=, -=, ++, --; not" + expr->op, "", "",
+                            expr->at, CompilationError::operator_not_found);
+                    }
+                }
+            }
             // infer
             vector<TypeDeclPtr> types = { expr->subexpr->type };
             auto functions = findMatchingFunctions(expr->op, types);
@@ -3906,7 +3929,7 @@ namespace das {
                     expr->at, CompilationError::operator_not_found);
             } else {
                 expr->func = functions[0].get();
-                expr->type = make_smart<TypeDecl>(*expr->func->result);
+                expr->type = make_smart<TypeDecl>(*(expr->func->firstArgReturnType ? expr->arguments[0]->type : expr->func->result));
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
                 // lets try to fold it
@@ -3949,12 +3972,53 @@ namespace das {
 
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
+            // pointer arithmetics
+            if ( expr->left->type->isPointer() && expr->right->type->isSimpleType(Type::tInt) ) {
+                if ( !expr->left->type->firstType ) {
+                    error("operations on void pointers are prohibited; " +
+                        expr->left->type->describe(), "", "",
+                        expr->at, CompilationError::invalid_type);
+                } else {
+                    string pop;
+                            if ( expr->op=="+" )    { pop = "i_das_ptr_add"; }
+                    else    if ( expr->op=="-" )    { pop = "i_das_ptr_sub"; }
+                    else    if ( expr->op=="+=" )   { pop = "i_das_ptr_set_add"; }
+                    else    if ( expr->op=="-=" )   { pop = "i_das_ptr_set_sub"; }
+                    if ( !pop.empty() ) {
+                        reportAstChanged();
+                        auto popc = make_smart<ExprCall>(expr->at, pop);
+                        auto stride = expr->left->type->firstType->getSizeOf();
+                        popc->arguments.push_back(expr->left->clone());
+                        popc->arguments.push_back(expr->right->clone());
+                        popc->arguments.push_back(make_smart<ExprConstInt>(expr->at,stride));
+                        return popc;
+                    } else {
+                        error("pointer arithmetics only allows +, -, +=, -=, ++, --; not" + expr->op, "", "",
+                            expr->at, CompilationError::operator_not_found);
+                    }
+                }
+            }
             // infer
             if ( expr->left->type->isPointer() && expr->right->type->isPointer() ) {
                 if ( !isSameSmartPtrType(expr->left->type,expr->right->type) ) {
                     error("operations on incompatible pointers are prohibited; " +
                         expr->left->type->describe() + " vs " + expr->right->type->describe(), "", "",
                         expr->at, CompilationError::invalid_type);
+                }
+                if ( expr->op=="-" ) {
+                    if ( !expr->left->type->firstType ) {
+                        error("operations on void pointers are prohibited; " +
+                            expr->left->type->describe(), "", "",
+                            expr->at, CompilationError::invalid_type);
+                    } else {
+                        reportAstChanged();
+                        auto popc = make_smart<ExprCall>(expr->at, "i_das_ptr_diff");
+                        auto stride = expr->left->type->firstType->getSizeOf();
+                        popc->arguments.push_back(expr->left->clone());
+                        popc->arguments.push_back(expr->right->clone());
+                        popc->arguments.push_back(make_smart<ExprConstInt>(expr->at,stride));
+                        return popc;
+                    }
                 }
             }
             if ( expr->left->type->isEnum() && expr->right->type->isEnum() )
@@ -4000,7 +4064,7 @@ namespace das {
             }
             else {
                 expr->func = functions[0].get();
-                expr->type = make_smart<TypeDecl>(*expr->func->result);
+                expr->type = make_smart<TypeDecl>(*(expr->func->firstArgReturnType ? expr->arguments[0]->type : expr->func->result));
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->left = Expression::autoDereference(expr->left);
                 if ( !expr->func->arguments[1]->type->isRef() )
@@ -5114,7 +5178,6 @@ namespace das {
                                 return nullptr;
                             }
                         }
-
                         // now we verify if tail end can indeed be fully infered
                         if (!program->addFunction(clone)) {
                             auto exf = program->thisModule->functions[clone->getMangledName()];
@@ -5152,7 +5215,7 @@ namespace das {
                         return nullptr;
                     }
                 }
-                expr->type = make_smart<TypeDecl>(*funcC->result);
+                expr->type = make_smart<TypeDecl>(*(funcC->firstArgReturnType ? expr->arguments[0]->type : funcC->result));
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];

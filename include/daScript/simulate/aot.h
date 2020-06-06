@@ -93,6 +93,44 @@ namespace das {
         memset(__context__->shared + offset, 0, sizeof(TT));
     }
 
+    __forceinline int das_memcmp ( void * left, void * right, int size ) {
+        return memcmp(left, right, size);
+    }
+
+    template <typename TT>
+    __forceinline void das_ptr_inc ( TT * & ptr, int ) {
+        ++ ptr;
+    }
+
+    template <typename TT>
+    __forceinline void das_ptr_dec ( TT * & ptr, int ) {
+        -- ptr;
+    }
+
+    template <typename TT>
+    __forceinline TT * das_ptr_add ( TT * ptr, int value, int ) {
+        return ptr + value;
+    }
+
+    template <typename TT>
+    __forceinline TT * das_ptr_sub ( TT * & ptr, int value, int ) {
+        return ptr - value;
+    }
+
+    template <typename TT>
+    __forceinline void das_ptr_set_add ( TT * & ptr, int value, int ) {
+        ptr += value;
+    }
+
+    template <typename TT>
+    __forceinline void das_ptr_set_sub ( TT * & ptr, int value, int ) {
+        ptr -= value;
+    }
+
+    __forceinline int64_t i_das_ptr_diff ( void * a, void *b, int stride ) {
+        return int64_t((char *)a - (char *)b) / int64_t(stride);
+    }
+
     template <typename TT>
     struct das_arg {
         static __forceinline TT & pass ( TT && a ) {

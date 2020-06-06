@@ -932,7 +932,7 @@ namespace das {
             "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime",
             "unsafe", "unsafeOperation", "unsafeDeref", "hasMakeBlock", "aotNeedPrologue",
             "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction",
-            "generatorFunction", "lambda"
+            "generatorFunction", "lambda", "firstArgReturnType"
         };
         return ft;
     }

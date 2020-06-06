@@ -1,9 +1,12 @@
+// options log = true
+// options log_aot = true
+
 require daslib/regex
 require fio
 
 [export,unsafe]
 def test
-    test_regex()
+    // test_regex()
     // return true
 
     var r1:Regex // email
@@ -18,7 +21,7 @@ def test
     let res2 = regex_match(r1,test2)
     assert(res2==-1)
 
-    regex_debug(r1)
+    // regex_debug(r1)
     let root = get_das_root()
     let input = root + "/../REGEX/input-text.txt"
     fopen(input,"rb") <| $( f )
@@ -26,9 +29,9 @@ def test
             var dict : table<string; int>
             fmap(f) <| $(data)
                 var text = clone_string(data)
-                profile(1,"regex email") <|
+                profile(5,"regex email") <|
                     regex_foreach(r1,text) <| $ ( r )
-                        print("match {slice(text,r.x,r.y)}\n")
+                        // print("match {slice(text,r.x,r.y)}\n")
                         return true
                 delete_string(text)
         else

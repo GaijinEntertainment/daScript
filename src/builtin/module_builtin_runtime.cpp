@@ -11,6 +11,7 @@
 #include "daScript/simulate/runtime_range.h"
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
+#include "daScript/simulate/aot.h"
 
 namespace das
 {
@@ -683,6 +684,30 @@ namespace das
         swap ( g_static_storage, dummy );
     }
 
+    __forceinline void i_das_ptr_inc ( void * & ptr, int stride ) {
+        ptr = (char*) ptr + stride;
+    }
+
+    __forceinline void i_das_ptr_dec ( void * & ptr, int stride ) {
+        ptr = (char*) ptr - stride;
+    }
+
+    __forceinline void * i_das_ptr_add ( void * ptr, int value, int stride ) {
+        return (char*) ptr + value * stride;
+    }
+
+    __forceinline void * i_das_ptr_sub ( void * & ptr, int value, int stride ) {
+        return (char*) ptr - value * stride;
+    }
+
+    __forceinline void i_das_ptr_set_add ( void * & ptr, int value, int stride ) {
+        ptr = (char*) ptr + value * stride;
+    }
+
+    __forceinline void i_das_ptr_set_sub ( void * & ptr, int value, int stride ) {
+        ptr = (char*) ptr + value * stride;
+    }
+
     Module_BuiltIn::~Module_BuiltIn() {
         gc0_reset();
     }
@@ -828,6 +853,27 @@ namespace das
         addExtern<DAS_BIND_FUN(gc0_restore_ptr)>(*this, lib, "gc0_restore_ptr", SideEffects::accessExternal, "gc0_restore_ptr");
         addExtern<DAS_BIND_FUN(gc0_restore_smart_ptr)>(*this, lib, "gc0_restore_smart_ptr", SideEffects::accessExternal, "gc0_restore_smart_ptr");
         addExtern<DAS_BIND_FUN(gc0_reset)>(*this, lib, "gc0_reset", SideEffects::modifyExternal, "gc0_reset");
+        // pointer ari
+        addExtern<DAS_BIND_FUN(das_memcmp)>(*this, lib, "memcmp", SideEffects::none, "das_memcmp")->unsafeOperation = true;
+        auto idpi = addExtern<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc");
+        idpi->unsafeOperation = true;
+        idpi->firstArgReturnType = true;
+        auto idpd = addExtern<DAS_BIND_FUN(i_das_ptr_dec)>(*this, lib, "i_das_ptr_dec", SideEffects::modifyArgument, "das_ptr_dec");
+        idpd->unsafeOperation = true;
+        idpd->firstArgReturnType = true;
+        auto idpa = addExtern<DAS_BIND_FUN(i_das_ptr_add)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add");
+        idpa->unsafeOperation = true;
+        idpa->firstArgReturnType = true;
+        auto idps = addExtern<DAS_BIND_FUN(i_das_ptr_sub)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub");
+        idps->unsafeOperation = true;
+        idps->firstArgReturnType = true;
+        auto idpsa = addExtern<DAS_BIND_FUN(i_das_ptr_set_add)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add");
+        idpsa->unsafeOperation = true;
+        idpsa->firstArgReturnType = true;
+        auto idpss = addExtern<DAS_BIND_FUN(i_das_ptr_set_sub)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub");
+        idpss->unsafeOperation = true;
+        idpss->firstArgReturnType = true;
+        addExtern<DAS_BIND_FUN(i_das_ptr_diff)>(*this, lib, "i_das_ptr_diff", SideEffects::none, "i_das_ptr_diff");
         // profile
         addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal, "builtin_profile");
         addString(lib);
