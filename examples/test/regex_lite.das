@@ -3,8 +3,10 @@ require fio
 
 [export,unsafe]
 def test
-    // test_regex()
-    // return true
+/*
+    test_regex()
+    return true
+*/
 
     var r1:Regex // email
     if !regex_compile(r1,"[\\w\\.+-]+@[\\w\\.-]+\\.[\\w\\.-]+")
@@ -69,11 +71,11 @@ def test_group ( reg:string; match:string; groups:array<string>)
         assert(false)
     let ma = regex_match(regex, match)
     assert(ma!=-1,"failed to match\n")
-    let tot = length(regex.groups)
+    let tot = length(regex.groups) - 1
     assert(tot==length(groups),"group count mismatch")
     var failed = false
     for x in range(0,tot)
-        let grp = regex_group(regex,x,match)
+        let grp = regex_group(regex,x+1,match)
         let cgrp = groups[x]
         if grp != cgrp
             print("failed, expecting {x}={cgrp}, got {grp}")
@@ -111,8 +113,6 @@ def test_regex
     test_re("(cat)?x",[{string "catx";"x"}], [{string "dog";"caat"}])
     // match2
     test_re("[a-z.]+.com", [{string[] "abra.com"}], [{string "1"; "2"}])
-
-    return
 
     // gropus
     test_group ( "i have a (cat|dog)", "i have a cat.", [{string[] "cat"}])
