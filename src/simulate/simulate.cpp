@@ -156,6 +156,7 @@ namespace das
         block->stackOffset = context.stack.spi();
         block->argumentsOffset = argStackTop ? (context.stack.spi() + argStackTop) : 0;
         block->body = subexpr;
+        block->aotFunction = nullptr;
         block->functionArguments = context.abiArguments();
         block->info = info;
         return cast<Block *>::from(block);

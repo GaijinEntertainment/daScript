@@ -10,6 +10,7 @@ namespace das
         uint32_t    stackOffset;
         uint32_t    argumentsOffset;
         SimNode *   body;
+        void *      aotFunction;
         vec4f *     functionArguments;
         FuncInfo *  info;
         __forceinline bool operator == ( const Block & b ) const {

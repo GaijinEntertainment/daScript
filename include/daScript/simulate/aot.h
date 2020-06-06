@@ -1448,6 +1448,7 @@ namespace das {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
+            aotFunction = &blockFunction;
             functionArguments = context->abiArguments();
             info = fi;
         };
@@ -1477,6 +1478,7 @@ namespace das {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
+            aotFunction = &blockFunction;
             functionArguments = context->abiArguments();
             info = fi;
         };
@@ -1495,6 +1497,7 @@ namespace das {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
+            aotFunction = &blockFunction;
             functionArguments = context->abiArguments();
             info = fi;
         };
@@ -1518,6 +1521,7 @@ namespace das {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
+            aotFunction = &blockFunction;
             functionArguments = context->abiArguments();
             info = fi;
        };
@@ -1543,6 +1547,7 @@ namespace das {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
+            aotFunction = &blockFunction;
             functionArguments = context->abiArguments();
             info = fi;
         };
@@ -1570,6 +1575,7 @@ namespace das {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
+            aotFunction = &blockFunction;
             functionArguments = context->abiArguments();
             info = fi;
         };
@@ -1588,27 +1594,51 @@ namespace das {
     struct das_invoke {
         // vector cast
         static __forceinline ResType invoke ( Context * __context__, const Block & blk ) {
-            vec4f result = __context__->invoke(blk, nullptr, nullptr);
-            return cast<ResType>::to(result);
+            using BlockFn = function < ResType () >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ();
+            } else {
+                vec4f result = __context__->invoke(blk, nullptr, nullptr);
+                return cast<ResType>::to(result);
+            }
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            vec4f arguments [] = { cast<ArgType>::from(arg)... };
-            vec4f result = __context__->invoke(blk, arguments, nullptr);
-            return cast<ResType>::to(result);
+            using BlockFn = function < ResType ( ArgType... ) >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ( arg... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                vec4f result = __context__->invoke(blk, arguments, nullptr);
+                return cast<ResType>::to(result);
+            }
         }
         // cmres
         static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk ) {
-            typename remove_const<ResType>::type result;
-            __context__->invoke(blk, nullptr, &result);
-            return result;
+            using BlockFn = function < ResType () >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ();
+            } else {
+                typename remove_const<ResType>::type result;
+                __context__->invoke(blk, nullptr, &result);
+                return result;
+            }
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            vec4f arguments [] = { cast<ArgType>::from(arg)... };
-            typename remove_const<ResType>::type result;
-            __context__->invoke(blk, arguments, &result);
-            return result;
+            using BlockFn = function < ResType ( ArgType... ) >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ( arg... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                typename remove_const<ResType>::type result;
+                __context__->invoke(blk, arguments, &result);
+                return result;
+            }
         }
         template <typename BLK, typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context *, const BLK & blk, ArgType ...arg ) {
@@ -1619,12 +1649,24 @@ namespace das {
     template <>
     struct das_invoke<void> {
         static __forceinline void invoke ( Context * __context__, const Block & blk ) {
-            __context__->invoke(blk, nullptr, nullptr);
+            using BlockFn = function < void () >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                (*fn) ();
+            } else {
+                __context__->invoke(blk, nullptr, nullptr);
+            }
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            vec4f arguments [] = { cast<ArgType>::from(arg)... };
-            __context__->invoke(blk, arguments, nullptr);
+            using BlockFn = function < void ( ArgType... ) >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                (*fn) ( arg... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                __context__->invoke(blk, arguments, nullptr);
+            }
         }
         template <typename BLK, typename ...ArgType>
         static __forceinline void invoke ( Context *, const BLK & blk, ArgType ...arg ) {
