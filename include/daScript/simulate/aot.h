@@ -1755,42 +1755,66 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f arguments[1];
-            arguments[0] = cast<Lambda>::from(blk);
-            vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
-            return cast<ResType>::to(result);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context *, void * );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__, blk.capture );
+            } else {
+                vec4f arguments[1];
+                arguments[0] = cast<Lambda>::from(blk);
+                vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
+                return cast<ResType>::to(result);
+            }
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
-            vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
-            return cast<ResType>::to(result);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__, blk.capture, arg... );
+            } else {
+                vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
+                vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
+                return cast<ResType>::to(result);
+            }
         }
         static __forceinline ResType invoke_cmres ( Context * __context__, const Lambda & blk ) {
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            typename remove_const<ResType>::type result;
-            vec4f arguments[1];
-            arguments[0] = cast<Lambda>::from(blk);
-            __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
-            return result;
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context *, void * );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__, blk.capture );
+            } else {
+                typename remove_const<ResType>::type result;
+                vec4f arguments[1];
+                arguments[0] = cast<Lambda>::from(blk);
+                __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+                return result;
+            }
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
-            vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            typename remove_const<ResType>::type result;
-            __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
-            return result;
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__, blk.capture, arg... );
+            } else {
+                vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
+                typename remove_const<ResType>::type result;
+                __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+                return result;
+            }
         }
     };
 
@@ -1801,18 +1825,30 @@ namespace das {
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            vec4f arguments[1];
-            arguments[0] = cast<Lambda>::from(blk);
-            __context__->callOrFastcall(simFunc, arguments, 0);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = void (*) ( Context *, void * );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                (*fnPtr) ( __context__, blk.capture );
+            } else {
+                vec4f arguments[1];
+                arguments[0] = cast<Lambda>::from(blk);
+                __context__->callOrFastcall(simFunc, arguments, 0);
+            }
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
-            vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->callOrFastcall(simFunc, arguments, 0);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = void (*) ( Context *, void *, ArgType... );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                (*fnPtr) ( __context__, blk.capture, arg... );
+            } else {
+                vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
+                __context__->callOrFastcall(simFunc, arguments, 0);
+            }
         }
     };
 
