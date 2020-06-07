@@ -4,14 +4,19 @@
 require daslib/regex
 require fio
 
+let
+    test_and_log = false
+
 [export,unsafe]
 def test
-    // test_regex()
-    // return true
+    static_if test_and_log
+        test_regex()
 
     var r1:Regex // email
     if !regex_compile(r1,"[\\w\\.+-]+@[\\w\\.-]+\\.[\\w\\.-]+")
         panic("can't compile")
+    static_if test_and_log
+        regex_debug(r1)
 
     let test = "first.last@learnxinyminutes.com"
     let res = regex_match(r1,test)

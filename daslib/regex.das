@@ -3,7 +3,6 @@ module regex
 enum ReOp
     Char
     Set
-    NegativeSet
     Any
     Eos
     Group
@@ -33,9 +32,11 @@ struct ReNode
     tail    : uint8?
 
 struct Regex
-    root    : ReNode?
-    match   : uint8?
-    groups  : array<tuple<range;string>>
+    root        : ReNode?
+    match       : uint8?
+    groups      : array<tuple<range;string>>
+    earlyOut    : CharSet
+    canEarlyOut : bool
 
 variant MaybeReNode
     value   : ReNode?
@@ -113,6 +114,13 @@ def next(re:MaybeReNode)
         stackwalk()
         panic("expecting value")
     return (re as value).at.y
+
+[private]
+def is_set_empty(cset:CharSet)
+    for x in cset
+        if x != 0u
+            return false
+    return true
 
 [private]
 def set_or_char(var cset:CharSet; ch:int)
@@ -684,6 +692,45 @@ def re_match2_group ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     return osub
 
 /*
+    early out
+*/
+
+def re_early_out ( var cset:CharSet; node:ReNode? ) : bool
+    if node.op==ReOp Char
+        set_or_char(cset,character_at(node.text,0))
+        return false
+    elif node.op==ReOp Set
+        set_or_set(cset,node.cset)
+        return false
+    elif node.op==ReOp Any
+        for x in cset
+            x = 0xffffffffu
+        return false
+    elif node.op==ReOp Eos
+        return false
+    elif node.op==ReOp Group
+        return re_early_out(cset,node.subexpr)
+    elif node.op==ReOp Plus
+        return re_early_out(cset,node.subexpr)
+    elif node.op==ReOp Star
+        re_early_out(cset,node.subexpr)
+        return true
+    elif node.op==ReOp Question
+        re_early_out(cset,node.subexpr)
+        return true
+    elif node.op==ReOp Concat
+        let left = re_early_out(cset,node.left)
+        return left ? re_early_out(cset,node.right) : false
+    elif node.op==ReOp Union
+        var any = false
+        for sub in node.all
+            any = re_early_out(cset,sub) | any
+        return any
+    else
+        panic("unsupported operation")
+        return false
+
+/*
     top level API
 */
 
@@ -694,6 +741,8 @@ def regex_compile( var re:Regex; expr:string ) : bool
         re_assign_next(re)
         re_assign_groups(re)
         re_assign_match_functions(re)
+        re_early_out(re.earlyOut, re.root)
+        re.canEarlyOut = !is_set_empty(re.earlyOut)
     return re.root != null
 
 [export,unsafe]
@@ -713,21 +762,38 @@ def regex_group ( regex:Regex; index:int; match:string )
     let sub_range = regex.groups[index]._0
     return slice(match, sub_range.x, sub_range.y)
 
-[export,unsafe]
+[export,unsafe,unsafe_deref]
 def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     if empty(str)
         return
     var root = regex.root
     var pstr = reinterpret<uint8?> str
     var cstr = pstr
-    while int(*cstr) != 0
-        let om = invoke(root.fun2,regex,root,cstr)
-        if om != null
-            if !invoke(blk,range(int(cstr-pstr),int(om-pstr)))
+    if regex.canEarlyOut
+        // lets try if it helps
+        while true
+            let Ch = int(*cstr)
+            if Ch==0
                 break
-            cstr = om
-        else
-            cstr ++
+            if is_char_in_set(Ch,regex.earlyOut)
+                let om = invoke(root.fun2,regex,root,cstr)
+                if om != null
+                    if !invoke(blk,range(int(cstr-pstr),int(om-pstr)))
+                        break
+                    cstr = om
+                else
+                    cstr++
+            else
+                cstr++
+    else
+        while int(*cstr) != 0
+            let om = invoke(root.fun2,regex,root,cstr)
+            if om != null
+                if !invoke(blk,range(int(cstr-pstr),int(om-pstr)))
+                    break
+                cstr = om
+            else
+                cstr ++
 
 /*
     printer
@@ -736,6 +802,10 @@ def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
 def regex_debug ( regex:Regex )
     debug_re(regex.root,1)
     print("\n")
+    if regex.canEarlyOut
+        print("early out: ")
+        debug_set(regex.earlyOut)
+        print("\n")
     if length(regex.groups) != 0
         print("groups:")
         for g in regex.groups
@@ -747,7 +817,7 @@ def debug_set(cset:CharSet)
             if x>=32 & x<=127
                 print("{to_char(x)}")
             else
-                print("\{x}")
+                print("\\{x}")
 
 [private]
 def debug_re ( node: ReNode?; tab:int )
