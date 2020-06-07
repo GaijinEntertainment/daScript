@@ -134,6 +134,11 @@ def set_or_set(var cset:CharSet; eset:CharSet)
         x |= y
 
 [private]
+def set_negative(var cset:CharSet)
+    for x in cset
+        x = ~x
+
+[private]
 def set_meta(var cset:CharSet; che:int)
     if che=='w'
         set_or_range(cset,range('a','z'))
@@ -221,61 +226,33 @@ def re_set_items(expr:string; offset:int) : MaybeReNode
             iofs += 1
     return maybe(new [[ReNode op=ReOp Set, cset=cset, at=range(offset,iofs)]])
 
-// <positive-set>	::=	"[" <set-items> "]"
-[private]
-def re_positive_set(expr:string; offset:int) : MaybeReNode
-    trace("re_positive_set",offset)
-    if eos(expr,offset)
-        return nada()
-    if at(expr,offset) != '['
-        return nada()
-    var oset = re_set_items(expr,offset+1)
-    if oset is nothing
-        return nada()
-    if at(expr,next(oset)) != ']'
-        delete oset
-        return nada()
-    var oval = oset as value
-    oval.at.x = offset
-    oval.at.y ++
-    trace_value(oval)
-    return oset
-
 // <negative-set>	::=	"[^" <set-items> "]"
-[private]
-def re_negative_set(expr:string; offset:int) : MaybeReNode
-    trace("re_negative_set",offset)
-    if eos(expr,offset)
-        return nada()
-    if at(expr,offset)!='[' | at(expr,offset+1)!='^'
-        return nada()
-    var oset = re_set_items(expr,offset+2)
-    if oset is nothing
-        return nada()
-    if at(expr,next(oset)) != ']'
-        delete oset
-        return nada()
-    var oval = oset as value
-    oval.at.x = offset
-    oval.at.y ++
-    oval.op = ReOp NegativeSet
-    trace_value(oval)
-    return oset
-
+// <positive-set>	::=	"[" <set-items> "]"
 // <set>	::=	<positive-set> | <negative-set>
-// todo: optimize
 [private]
 def re_set(expr:string; offset:int) : MaybeReNode
     trace("re_set",offset)
     if eos(expr,offset)
         return nada()
-    var oneg = re_negative_set(expr,offset)
-    if oneg is value
-        return oneg
-    var opos = re_positive_set(expr,offset)
-    if opos is value
-        return opos
-    return nada()
+    if at(expr,offset)!='['
+        return nada()
+    var negative = false
+    if at(expr,offset+1)=='^'
+        negative = true
+    var oset = re_set_items(expr,negative ? offset+2 : offset+1)
+    if oset is nothing
+        return nada()
+    if at(expr,next(oset)) != ']'
+        delete oset
+        return nada()
+    var oval = oset as value
+    oval.at.x = offset
+    oval.at.y ++
+    oval.op = ReOp Set
+    if negative
+        set_negative(oval.cset)
+    trace_value(oval)
+    return oset
 
 // <any>	::=	"."
 [private]
@@ -489,8 +466,6 @@ def re_assign_match_functions ( var re:Regex )
             node.fun2 = @@re_match2_union
         elif node.op==ReOp Set
             node.fun2 = @@re_match2_set
-        elif node.op==ReOp NegativeSet
-            node.fun2 = @@re_match2_negative_set
         elif node.op==ReOp Any
             node.fun2 = @@re_match2_any
         elif node.op==ReOp Eos
@@ -557,20 +532,6 @@ def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 set {offset}\n")
     if !is_char_in_set(int(*str),node.cset)
-        return null
-    var tail = str + 1
-    node.tail = tail
-    var node2 = node.next
-    if node2!=null
-        return invoke(node2.fun2,regex, node2, tail)
-    else
-        return tail
-
-[private,unsafe,unsafe_deref]
-def re_match2_negative_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
-    if log_match_enabled
-        print("match negative set {offset}\n")
-    if is_char_in_set(int(*str),node.cset)
         return null
     var tail = str + 1
     node.tail = tail
@@ -783,7 +744,10 @@ def regex_debug ( regex:Regex )
 def debug_set(cset:CharSet)
     for x in range(0,256)
         if (cset[x>>5] & uint(1<<(x & 31))) != 0u
-            print("{to_char(x)}")
+            if x>=32 & x<=127
+                print("{to_char(x)}")
+            else
+                print("\{x}")
 
 [private]
 def debug_re ( node: ReNode?; tab:int )
@@ -801,10 +765,6 @@ def debug_re ( node: ReNode?; tab:int )
         print("Char `{node.text}`)")
     elif node.op==ReOp Set
         print("Set ")
-        debug_set(node.cset)
-        print(")")
-    elif node.op==ReOp NegativeSet
-        print("Negative-Set ")
         debug_set(node.cset)
         print(")")
     elif node.op==ReOp Any
