@@ -367,6 +367,11 @@ namespace das {
             return Visitor::visit(expr);
         }
     // label
+        virtual void preVisit ( ExprReader * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "#" << expr->macro->name << " " << expr->sequence << " ";
+        }
+    // label
         virtual void preVisit ( ExprLabel * expr ) override {
             Visitor::preVisit(expr);
             ss << "label " << expr->label << ":";

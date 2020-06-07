@@ -712,7 +712,22 @@ namespace das
         gc0_reset();
     }
 
+    struct UnescapedStringMacro : public ReaderMacro {
+        UnescapedStringMacro ( ) : ReaderMacro("unescaped") {}
+        virtual ExpressionPtr visit ( Program *, Module *, ExprReader * expr ) {
+            return make_smart<ExprConstString>(expr->at,expr->sequence);
+        }
+        virtual bool accept ( ExprReader * re, int Ch ) override {
+            if ( Ch==-1 ) return false;
+            if ( Ch=='%' ) return false;
+            re->sequence.push_back(Ch);
+            return true;
+        }
+    };
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
+        // unesacpe macro
+        readMacros.push_back(make_smart<UnescapedStringMacro>());
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());

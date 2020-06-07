@@ -566,6 +566,21 @@ namespace das {
         }
     }
 
+   // Reader
+
+    ExpressionPtr ExprReader::visit(Visitor & vis) {
+        vis.preVisit(this);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprReader::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprReader>(expr);
+        Expression::clone(cexpr);
+        cexpr->macro = macro;
+        cexpr->sequence = sequence;
+        return cexpr;
+    }
+
     // Label
 
     ExpressionPtr ExprLabel::visit(Visitor & vis) {
@@ -2047,6 +2062,26 @@ namespace das {
     }
 
     // program
+
+    vector<ReaderMacroPtr> Program::getReaderMacro ( const string & name ) const {
+        vector<ReaderMacroPtr> macros;
+        string moduleName, markupName;
+        splitTypeName(name, moduleName, markupName);
+        auto tmod = thisModule.get();
+        auto modMacro = [&](Module * mod) -> bool {
+            if ( thisModule->isVisibleDirectly(mod) && mod!=tmod ) {
+                for ( const auto & pm : mod->readMacros ) {
+                    if ( pm->name == markupName ) {
+                        macros.push_back(pm);
+                    }
+                }
+            }
+            return true;
+        };
+        Module::foreach(modMacro);
+        library.foreach(modMacro, moduleName);
+        return macros;
+    }
 
     int Program::getContextStackSize() const {
         return options.getIntOption("stack", policies.stack);

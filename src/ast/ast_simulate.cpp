@@ -904,6 +904,13 @@ namespace das
         return block;
     }
 
+    // reader
+
+    SimNode * ExprReader::simulate (Context & context) const {
+        context.thisProgram->error("internal compilation error, calling 'simulate' on reader", "", "", at);
+        return nullptr;
+    }
+
     // label
 
     SimNode * ExprLabel::simulate (Context & context) const {

@@ -114,6 +114,8 @@ namespace das
     ,   invalid_return_semantics                =   32103       // return <- required
     ,   invalid_yield                           =   32104       // yield in block, yield in non generator, etc
 
+    ,   unsupported_read_macro                  =   33100       // #what ""
+
     ,   typeinfo_reference                      =   39901       //  typeinfo(sizeof type int&)
     ,   typeinfo_auto                           =   39902       //  typeinfo(typename type auto)
     ,   typeinfo_undefined                      =   39903       //  typeinfo(??? ...)

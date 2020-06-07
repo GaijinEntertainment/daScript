@@ -380,6 +380,7 @@ namespace das {
             inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());
             optimizationMacros.insert(optimizationMacros.end(), ptm->optimizationMacros.begin(), ptm->optimizationMacros.end());
             lintMacros.insert(lintMacros.end(), ptm->lintMacros.begin(), ptm->lintMacros.end());
+            readMacros.insert(readMacros.end(), ptm->readMacros.begin(), ptm->readMacros.end());
             return true;
         } else {
             DAS_FATAL_LOG("builtin module did not parse %s\n", modName.c_str());
