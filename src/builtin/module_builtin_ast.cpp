@@ -312,7 +312,7 @@ namespace das {
             :  AstExpressionAnnotation<EXPR> (na, ml) {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
-            this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("index");
+            this->template addField<DAS_BIND_MANAGED_FIELD(index)>("index");
             this->addFieldEx ( "atFlags", "atFlags", offsetof(ExprAt, atFlags), makeExprAtFlags() );
         }
     };
@@ -363,7 +363,7 @@ namespace das {
     struct AstExprWithAnnotation : AstExpressionAnnotation<ExprWith> {
         AstExprWithAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprWith> ("ExprWith", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(with)>("with");
+            addField<DAS_BIND_MANAGED_FIELD(with)>("_with", "with");
             addField<DAS_BIND_MANAGED_FIELD(body)>("body");
         }
     };
@@ -478,7 +478,7 @@ namespace das {
         AstTypeInfoMacroAnnotation(ModuleLibrary & ml)
             :  ManagedStructureAnnotation<TypeInfoMacro,false> ("TypeInfoMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }
     };
 
@@ -872,7 +872,7 @@ namespace das {
             addFieldEx ( "flags", "flags", offsetof(TypeDecl, flags), makeTypeDeclFlags() );
             addField<DAS_BIND_MANAGED_FIELD(alias)>("alias");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
             // properties
             addProperty<DAS_BIND_MANAGED_PROP(isVoid)>("isVoid","isVoid");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
@@ -917,7 +917,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("structureModule","module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module","module");
             addField<DAS_BIND_MANAGED_FIELD(parent)>("parent");
             addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addFieldEx ( "flags", "flags", offsetof(Structure, flags), makeStructureFlags() );
@@ -932,7 +932,7 @@ namespace das {
             "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime",
             "unsafe", "unsafeOperation", "unsafeDeref", "hasMakeBlock", "aotNeedPrologue",
             "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction",
-            "generatorFunction", "lambda", "firstArgReturnType"
+            "_generator", "_lambda", "firstArgReturnType"
         };
         return ft;
     }
@@ -971,7 +971,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(totalGenLabel)>("totalGenLabel");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(atDecl)>("atDecl");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
             // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useFunctions");
             // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
             // use global v
@@ -1014,7 +1014,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(index)>("index");
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
             // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useFunctions");
             // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
             addField<DAS_BIND_MANAGED_FIELD(initStackSize)>("initStackSize");

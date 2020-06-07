@@ -52,7 +52,7 @@ class PrintVisitor : AstVisitor
         print("typedef\n\t{name} = {describe([decl=typ,extra=extraTypeInfo])}\n\n")
 // enumeration
     def override preVisitEnumeration(enu:EnumerationPtr)
-        print("enum {enu.name} : {ast_das_to_string(enu.baseType)}\n")
+        print("enum {enu.name} : {das_to_string(enu.baseType)}\n")
     def override preVisitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool)
         print("\t{name} =")
     def override visitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool)
@@ -625,7 +625,7 @@ class PrintVisitor : AstVisitor
     def override preVisitExprConstBitfield(expr:smart_ptr<ExprConstBitfield>) : void
         var name : string
         if expr.bitfieldType!=null & !empty(expr.bitfieldType.alias)
-            name = ast_find_bitfield_name(expr.bitfieldType,expr.value)
+            name = find_bitfield_name(expr.bitfieldType,expr.value)
         if !empty(name)
             print("{expr.bitfieldType.alias} {name}")
         else
@@ -796,7 +796,7 @@ def allExpr(arg:int)
 def test
     var astVisitor = PrintVisitor()
     var astVisitorAdapter <- make_visitor(astVisitor)
-    ast_visit(ast_this_program(), astVisitorAdapter)
+    visit(this_program(), astVisitorAdapter)
 
 /*
     // ast_typedecl
