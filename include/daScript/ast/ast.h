@@ -34,6 +34,9 @@ namespace das
     struct VariantMacro;
     typedef smart_ptr<VariantMacro> VariantMacroPtr;
 
+    struct ReaderMacro;
+    typedef smart_ptr<ReaderMacro> ReaderMacroPtr;
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -749,6 +752,7 @@ namespace das
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
+        vector<ReaderMacroPtr>                      readMacros;         // %foo "blah"
         string  name;
         bool    builtIn = false;
     private:
@@ -817,6 +821,14 @@ namespace das
     struct PassMacro : ptr_ref_count {
         PassMacro ( const string na = "" ) : name(na) {}
         virtual bool apply( Program *, Module * ) { return false; }
+        string name;
+    };
+
+    class ExprReader;
+    struct ReaderMacro : ptr_ref_count {
+        ReaderMacro ( const string na = "" ) : name(na) {}
+        virtual bool accept ( ExprReader *, int Ch ) { return false; }
+        virtual ExpressionPtr visit (  Program *, Module *, ExprReader * ) { return nullptr; }
         string name;
     };
 
@@ -974,6 +986,7 @@ namespace das
         bool getOptimize() const;
         bool getDebugger() const;
         void makeMacroModule( TextWriter & logs );
+        vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
     public:
         template <typename TT>
         string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {

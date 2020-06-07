@@ -1,9 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.4.1.  */
+/* A Bison parser, made by GNU Bison 3.2.1.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
-   Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -52,7 +51,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "ds_parser.ypp"
+#line 2 "ds_parser.ypp" /* yacc.c:1912  */
 
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
@@ -70,6 +69,9 @@ extern int das_yydebug;
         extern FileAccessPtr            g_Access;
         extern vector<FileInfo *>       g_FileAccessStack;
         extern das_map<string,string>   das_module_alias;
+
+        ReaderMacro *                   g_ReaderMacro = nullptr;
+        ExprReader *                    g_ReaderExpr = nullptr;
     }
     using namespace das;
 
@@ -109,7 +111,7 @@ extern int das_yydebug;
 
     extern Structure * g_thisStructure;
 
-#line 113 "ds_parser.hpp"
+#line 115 "ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -254,22 +256,24 @@ extern int das_yydebug;
     END_STRING = 393,
     BEGIN_STRING_EXPR = 394,
     END_STRING_EXPR = 395,
-    UNARY_MINUS = 396,
-    UNARY_PLUS = 397,
-    PRE_INC = 398,
-    PRE_DEC = 399,
-    POST_INC = 400,
-    POST_DEC = 401,
-    DEREF = 402,
-    COLCOL = 403
+    END_OF_READ = 396,
+    UNARY_MINUS = 397,
+    UNARY_PLUS = 398,
+    PRE_INC = 399,
+    PRE_DEC = 400,
+    POST_INC = 401,
+    POST_DEC = 402,
+    DEREF = 403,
+    COLCOL = 404
   };
 #endif
 
 /* Value type.  */
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
+
 union DAS_YYSTYPE
 {
-#line 88 "ds_parser.ypp"
+#line 94 "ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -296,9 +300,9 @@ union DAS_YYSTYPE
     Structure *                     pStructure;
     Function *                      pFuncDecl;
 
-#line 300 "ds_parser.hpp"
-
+#line 304 "ds_parser.hpp" /* yacc.c:1912  */
 };
+
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
 # define DAS_YYSTYPE_IS_TRIVIAL 1
 # define DAS_YYSTYPE_IS_DECLARED 1

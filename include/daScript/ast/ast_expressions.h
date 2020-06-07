@@ -4,6 +4,17 @@
 
 namespace das
 {
+    struct ExprReader : Expression {
+        ExprReader () { __rtti = "ExprReader"; }
+        ExprReader ( const LineInfo & a, ReaderMacro * rm )
+            : Expression(a), macro(rm) { __rtti = "ExprReader"; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ReaderMacro * macro = nullptr;
+        string sequence;
+    };
+
     struct ExprLabel : Expression {
         ExprLabel () { __rtti = "ExprLabel"; };
         ExprLabel ( const LineInfo & a, int32_t s, const string & cm = string() )

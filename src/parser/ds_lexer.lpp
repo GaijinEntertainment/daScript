@@ -82,6 +82,7 @@ void YYNEWLINE() {
 %x cpp_comment
 %x include
 %s normal
+%x reader
 
 %%
 
@@ -132,6 +133,15 @@ void YYNEWLINE() {
 <c_comment><<EOF>>             {
     das_yyfatalerror("end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
     BEGIN(normal);
+}
+<reader><<EOF>>         {
+    das_yyfatalerror("reader constant exceeds file", CompilationError::string_constant_exceeds_file);
+    BEGIN(normal);
+    return END_OF_READ;
+}
+<reader>.         {
+    das_yylval.ch = yytext[0];
+    return STRING_CHARACTER;
 }
 <strb>\"                {
     // assert(nested_sb==0);
@@ -620,6 +630,14 @@ void YYNEWLINE() {
 %%
 
 extern int das_yydebug;
+
+void das_yybegin_reader ( void ) {
+    BEGIN(reader);
+}
+
+void das_yyend_reader ( void ) {
+    BEGIN(normal);
+}
 
 void das_yybegin(const char * str) {
     g_thisStructure = nullptr;

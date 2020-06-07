@@ -16,6 +16,9 @@
         extern FileAccessPtr            g_Access;
         extern vector<FileInfo *>       g_FileAccessStack;
         extern das_map<string,string>   das_module_alias;
+
+        ReaderMacro *                   g_ReaderMacro = nullptr;
+        ExprReader *                    g_ReaderExpr = nullptr;
     }
     using namespace das;
 
@@ -75,6 +78,9 @@
     void das_checkName(const string & name, const LineInfo &at);
     int yylex();
     void yybegin(const char * str);
+
+    void das_yybegin_reader ( void );
+    void das_yyend_reader ( void );
 
     __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
 %}
@@ -275,6 +281,7 @@
 %token      END_STRING              "end of the string"
 %token      BEGIN_STRING_EXPR       "{"
 %token      END_STRING_EXPR         "}"
+%token      END_OF_READ             "end of failed eader macro"
 
 %type <pNameList>       bitfield_bits
 %type <pNameWithPosList>variable_name_with_pos_list
@@ -359,6 +366,7 @@
 %type <pExpression>     expr_numeric_const
 %type <pExpression>     string_builder_body
 %type <pExpression>     string_builder
+%type <pExpression>     expr_reader
 %type <pExpression>     make_decl
 %type <pMakeStruct>     make_struct_fields
 %type <pExpression>     make_struct_decl
@@ -482,6 +490,41 @@ string_builder
         }
     }
     ;
+
+reader_character_sequence
+    :   STRING_CHARACTER[char] {
+        if ( !g_ReaderMacro->accept(g_ReaderExpr, $char) ) {
+            das_yyend_reader();
+        }
+    }
+    |   reader_character_sequence[elem]  STRING_CHARACTER[char] {
+        if ( !g_ReaderMacro->accept(g_ReaderExpr, $char) ) {
+            das_yyend_reader();
+        }
+    }
+    ;
+
+expr_reader
+    : '%' [loc] name_in_namespace[mark] {
+        auto macros = g_Program->getReaderMacro(*$mark);
+        if ( macros.size()==0 ) {
+            das_yyerror("reader macro " + *$mark + " not found",tokAt(@mark),
+                CompilationError::unsupported_read_macro);
+        } else if ( macros.size()>1 ) {
+            das_yyerror("too many options for macro " + *$mark,tokAt(@mark),
+                CompilationError::unsupported_read_macro);
+        } else {
+            g_ReaderMacro = macros.back().get();
+            g_ReaderExpr = new ExprReader(tokAt(@loc),g_ReaderMacro);
+            das_yybegin_reader();
+        }
+    } reader_character_sequence[seq] {
+        g_ReaderExpr->at = tokRangeAt(@loc,@seq);
+        $$ = g_ReaderExpr;
+        delete $mark;
+        g_ReaderMacro = nullptr;
+        g_ReaderExpr = nullptr;
+    }
 
 options_declaration
     :   DAS_OPTIONS annotation_argument_list[list] {
@@ -1354,6 +1397,7 @@ expr
     :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   name_in_namespace[name]               { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
     |   expr_numeric_const[nc]                { $$ = $nc; }
+    |   expr_reader[rdr]                      { $$ = $rdr; }
     |   string_builder[sb]                    { $$ = $sb; }
     |   make_decl[md]                         { $$ = $md; }
     |   DAS_TRUE[loc]                         { $$ = new ExprConstBool(tokAt(@loc),true); }
