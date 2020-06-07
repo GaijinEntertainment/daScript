@@ -36,7 +36,8 @@ def test
                 var text = clone_string(data)
                 profile(5,"regex email") <|
                     regex_foreach(r1,text) <| $ ( r )
-                        // print("match {slice(text,r.x,r.y)}\n")
+                        static_if test_and_log
+                            print("match {slice(text,r.x,r.y)}\n")
                         return true
                 delete_string(text)
         else
