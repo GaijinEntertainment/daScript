@@ -7,7 +7,7 @@ require fio
 let
     test_and_log = false
 
-[export,unsafe]
+[export]
 def test
     static_if test_and_log
         test_regex()
@@ -32,19 +32,16 @@ def test
     fopen(input,"rb") <| $( f )
         if f != null
             var dict : table<string; int>
-            fmap(f) <| $(data)
-                var text = clone_string(data)
-                profile(5,"regex email") <|
-                    regex_foreach(r1,text) <| $ ( r )
-                        static_if test_and_log
-                            print("match {slice(text,r.x,r.y)}\n")
-                        return true
-                delete_string(text)
+            let data = fread(f)
+            profile(5,"regex email") <|
+                regex_foreach(r1,data) <| $ ( r )
+                    static_if test_and_log
+                        print("match {slice(data,r.x,r.y)}\n")
+                    return true
         else
             print("can't open ")
     return true
 
-[unsafe]
 def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
     print("testing {reg}\n")
     var regex : Regex
@@ -66,7 +63,6 @@ def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
     assert(!failed)
     delete regex
 
-[unsafe]
 def test_group ( reg:string; match:string; groups:array<string>)
     print("testing groups is {reg}\n")
     var regex : Regex
@@ -92,10 +88,7 @@ def test_group ( reg:string; match:string; groups:array<string>)
     assert(!failed)
     delete regex
 
-
-[unsafe]
 def test_regex
-
     // character
     test_re("a", [{string[] "a"}], [{string ""; "b"; "ba"}])
     // union
