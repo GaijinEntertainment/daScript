@@ -279,6 +279,15 @@ namespace das {
         return reinterpret_cast<float4x4&>(res);
     }
 
+    float3x4 float3x4_inverse ( const float3x4 & src ) {
+        mat44f mat, invMat;
+        v_mat44_make_from_43cu(mat, &src.m[0].x);
+        v_mat44_inverse43(invMat, mat);
+        alignas(16) float3x4 ret;
+        v_mat_43ca_from_mat44(&ret.m[0].x, invMat);
+        return ret;
+    }
+
     void Module_BuiltIn::addMatrixTypes(ModuleLibrary & lib) {
         // structure annotations
         addAnnotation(make_smart<float4x4_ann>());
@@ -297,6 +306,7 @@ namespace das {
         addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity", SideEffects::modifyArgument,"float3x4_identity");
         addExtern<DAS_BIND_FUN(float3x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*", SideEffects::none,"float3x4_mul");
         addExtern<DAS_BIND_FUN(float3x4_mul_vec3p), SimNode_ExtFuncCall>(*this, lib, "*", SideEffects::none,"float3x4_mul_vec3p");
+        addExtern<DAS_BIND_FUN(float3x4_inverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "inverse", SideEffects::none, "float3x4_inverse");
         addExtern<DAS_BIND_FUN(rotate)>(*this, lib, "rotate", SideEffects::none, "rotate");
     }
 }

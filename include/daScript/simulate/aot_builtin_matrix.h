@@ -18,6 +18,7 @@ namespace das {
     float3x4 float3x4_mul(const float3x4 &a, const float3x4 &b);
     float4x4 float4x4_mul(const float4x4 &a, const float4x4 &b);
     float4x4 float4x4_transpose ( const float4x4 & src );
+    float3x4 float3x4_inverse ( const float3x4 & src );
 
     inline float3 float3x4_mul_vec3p(const float3x4 &a, float3 b) {
         mat44f va;
