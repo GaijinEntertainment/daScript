@@ -517,6 +517,9 @@ expr_reader
             }
             das_yyerror("too many options for macro " + *$mark +  "\n" + options, tokAt(@mark),
                 CompilationError::unsupported_read_macro);
+        } else if ( yychar != '~' ) {
+            das_yyerror("expecting ~ after the reader macro", tokAt(@mark),
+                CompilationError::syntax_error);
         } else {
             g_ReaderMacro = macros.back().get();
             g_ReaderExpr = new ExprReader(tokAt(@loc),g_ReaderMacro);
