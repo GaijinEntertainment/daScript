@@ -1513,9 +1513,11 @@ namespace das
         if ( finalList.size() ) {
             uint32_t blockDataSize = stackVarBottom - stackVarTop;
             if ( blockDataSize ) {
-                SimNode * fakeVar = context.code->makeNode<SimNode_GetLocal>(at, stackVarTop);
-                SimNode * memZ = context.code->makeNode<SimNode_MemZero>(at, fakeVar, blockDataSize );
-                simlist.insert( simlist.begin(), memZ );
+                for ( const auto & svr : stackCleanVars ) {
+                    SimNode * fakeVar = context.code->makeNode<SimNode_GetLocal>(at, svr.first);
+                    SimNode * memZ = context.code->makeNode<SimNode_MemZero>(at, fakeVar, svr.second );
+                    simlist.insert( simlist.begin(), memZ );
+                }
             }
         }
         // TODO: what if list size is 0?

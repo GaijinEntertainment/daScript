@@ -194,6 +194,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
             addField<DAS_BIND_MANAGED_FIELD(stackVarTop)>("stackVarTop");
             addField<DAS_BIND_MANAGED_FIELD(stackVarBottom)>("stackVarBottom");
+            addField<DAS_BIND_MANAGED_FIELD(stackCleanVars)>("stackCleanVars");
             addField<DAS_BIND_MANAGED_FIELD(maxLabelIndex)>("maxLabelIndex");
             addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addField<DAS_BIND_MANAGED_FIELD(annotationData)>("annotationData");

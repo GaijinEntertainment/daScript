@@ -169,6 +169,7 @@ namespace das
         uint32_t                stackTop = 0;
         uint32_t                stackVarTop = 0;
         uint32_t                stackVarBottom = 0;
+        vector<pair<uint32_t,uint32_t>> stackCleanVars;
         int32_t                 maxLabelIndex = -1;
         AnnotationList          annotations;
         uint64_t                annotationData = 0;         // to be filled with annotation

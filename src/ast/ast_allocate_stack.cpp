@@ -233,6 +233,7 @@ namespace das {
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
             block->stackVarTop = allocateStack(0);
+            block->stackCleanVars.clear();
             if ( inStruct ) return;
             if ( block->isClosure ) {
                 blocks.push_back(block);
@@ -353,6 +354,11 @@ namespace das {
                     logs << "\t" << var->stackTop << "\t" << sz
                         << "\tlet " << var->name << ", line " << var->at.line << "\n";
                 }
+            }
+            for ( auto blk = scopes.rbegin(); blk!=scopes.rend(); ++blk ) {
+                auto pblock = *blk;
+                pblock->stackCleanVars.push_back(make_pair(var->stackTop, var->type->getSizeOf()));
+                if ( pblock->isClosure ) break;
             }
             if ( var->init ) {
                 if ( var->init->rtti_isMakeLocal() ) {
