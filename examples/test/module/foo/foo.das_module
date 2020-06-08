@@ -4,7 +4,7 @@ let
     ]]
 
 def module_foo(req,from:string) : module_info
-    let request <- split(req,"./")
+    let request <- split_by_chars(req,"./")
     if request[0]!="foo"
         return [[auto "", "", ""]]
     if length(request)==1

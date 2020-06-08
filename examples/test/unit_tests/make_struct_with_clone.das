@@ -1,3 +1,5 @@
+require daslib/strings
+
 struct Foo
     a : array<int>
     b : string

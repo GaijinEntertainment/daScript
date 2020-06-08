@@ -308,7 +308,7 @@ namespace das
         context->invoke(block, args, nullptr);
     }
 
-    void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context ) {
+    void builtin_string_split_by_char ( const char * str, const char * delim, const Block & block, Context * context ) {
         if ( !str ) str = "";
         if ( !delim ) delim = "";
         vector<const char *> tokens;
@@ -334,6 +334,35 @@ namespace das
         args[0] = cast<Array *>::from(&arr);
         context->invoke(block, args, nullptr);
     }
+
+    void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context ) {
+        if ( !str ) str = "";
+        if ( !delim ) delim = "";
+        vector<const char *> tokens;
+        vector<string> words;
+        const char * ch = str;
+        auto delimLen = stringLengthSafe(*context,delim);
+        while ( *ch ) {
+            const char * tok = ch;
+            while ( *ch && memcmp(delim,ch,delimLen)!=0 ) ch++;
+            words.push_back(string(tok,ch-tok));
+            if ( !*ch ) break;
+            while ( *ch && memcmp(delim,ch,delimLen)==0 ) ch+=delimLen;
+            if ( !*ch ) words.push_back("");
+        }
+        tokens.reserve(words.size());
+        for ( auto & tok : words ) {
+            tokens.push_back(tok.c_str());
+        }
+        Array arr;
+        arr.data = (char *) tokens.data();
+        arr.capacity = arr.size = uint32_t(tokens.size());
+        arr.lock = 1;
+        vec4f args[1];
+        args[0] = cast<Array *>::from(&arr);
+        context->invoke(block, args, nullptr);
+    }
+
 
     char * builtin_string_clone ( const char *str, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
@@ -539,7 +568,10 @@ namespace das
             SideEffects::none, "builtin_string_tolower_in_place")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
             SideEffects::none, "builtin_string_toupper_in_place")->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split", SideEffects::modifyExternal, "builtin_string_split");
+        addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
+            SideEffects::modifyExternal, "builtin_string_split_by_char");
+        addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
+            SideEffects::modifyExternal, "builtin_string_split");
         addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string", SideEffects::none, "builtin_string_clone");
         addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
         addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");

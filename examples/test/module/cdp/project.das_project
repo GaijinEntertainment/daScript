@@ -1,3 +1,5 @@
+require daslib/strings
+
 typedef
     module_info = tuple<string;string;string> const
 
@@ -8,8 +10,8 @@ var
     modules : array< function<(req,from:string):module_info> >
 
 def module_default(req,from:string) : module_info
-    let rs <- split(req,"./")
-    var fr <- split(from,"/")
+    let rs <- split_by_chars(req,"./")
+    var fr <- split_by_chars(from,"/")
     let mod_name = rs[length(rs)-1]
     if length(fr)==0
         return [[auto mod_name, req + ".das", ""]]

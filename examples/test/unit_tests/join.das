@@ -1,3 +1,5 @@
+require daslib/strings
+
 [export]
 def test
     // dim

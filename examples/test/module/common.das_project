@@ -8,11 +8,13 @@ var
     modules : array< function<(req,from:string):module_info> >
 
 def module_default(req,from:string) : module_info
-    let rs <- split(req,"./")
-    var fr <- split(from,"/")
+    let rs <- split_by_chars(req,"./")
+    var fr <- split_by_chars(from,"/")
     let mod_name = rs[length(rs)-1]
     if length(fr)==0
         return [[auto mod_name, req + ".das", ""]]
+    elif length(fr)==1 & fr[0]=="daslib"
+        return [[auto mod_name, "{get_das_root()}/daslib/{req}.das", ""]]
     else
         pop(fr)
         for se in rs
@@ -22,11 +24,11 @@ def module_default(req,from:string) : module_info
 
 [export]
 def module_get(req,from:string) : module_info
+    print("looking for {req} from {from}\n")
     for mod in modules
         let res = invoke(mod,req,from)
         if res._0 != ""
             return res
     return module_default(req,from)
-
 
 

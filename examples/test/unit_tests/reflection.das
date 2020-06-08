@@ -1,4 +1,5 @@
 require rtti
+require daslib/strings
 
 // note: this is var because we want "sample" global variable to show up
 var
