@@ -389,7 +389,8 @@ int main( int argc, char * argv[] ) {
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "/examples/test/hello_world.das"
+    #define TEST_NAME   "/examples/test/array_reader_example.das"
+    // #define TEST_NAME   "/examples/test/hello_world.das"
     // #define TEST_NAME   "/examples/test/regex_lite.das"
     // #define TEST_NAME   "/examples/test/dict_pg.das"
     // #define TEST_NAME   "/examples/test/hint_macros.das"

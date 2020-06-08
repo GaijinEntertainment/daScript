@@ -1910,6 +1910,36 @@ namespace das {
         }
     };
 
+    struct ReaderMacroAdapter : ReaderMacro {
+        ReaderMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : ReaderMacro(n), classPtr(pClass), context(ctx) {
+            fnAccept = adapt("accept",pClass,info);
+            fnVisit = adapt("visit",pClass,info);
+        }
+        virtual bool accept ( ExprReader * expr, int Ch ) override {
+            if ( fnAccept ) {
+                return das_invoke_function<bool>::invoke<void *,ExprReader *,int32_t>
+                        (context,fnAccept,classPtr,expr,Ch);
+            } else {
+                return false;
+            }
+        }
+        virtual ExpressionPtr visit (  Program * prog, Module * mod, ExprReader * expr ) override {
+            if ( fnVisit ) {
+                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprReader>>
+                        (context,fnVisit,classPtr,prog,mod,expr);
+            } else {
+                return nullptr;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    protected:
+        Func    fnAccept;
+        Func    fnVisit;
+    };
+
     struct AstReaderMacroAnnotation : ManagedStructureAnnotation<ReaderMacro,false,true> {
         AstReaderMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ReaderMacro", ml) {
@@ -1919,6 +1949,16 @@ namespace das {
     };
 
     #include "ast.das.inc"
+
+    ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<ReaderMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context ) {
+        if ( !module->addReaderMacro(newM, true) ) {
+            context->throw_error_ex("can't add reader macro %s to module %s", newM->name.c_str(), module->name.c_str());
+        }
+    }
 
     smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<VisitorAdapter>((char *)pClass,info,context);
@@ -2275,6 +2315,11 @@ namespace das {
                 SideEffects::modifyExternal, "makePassMacro");
             addExtern<DAS_BIND_FUN(addModuleInferDirtyMacro)>(*this, lib,  "add_dirty_infer_macro",
                 SideEffects::modifyExternal, "addModuleInferDirtyMacro");
+            // reader macro
+            addExtern<DAS_BIND_FUN(makeReaderMacro)>(*this, lib,  "make_reader_macro",
+                SideEffects::modifyExternal, "makeReaderMacro");
+            addExtern<DAS_BIND_FUN(addModuleReaderMacro)>(*this, lib,  "add_reader_macro",
+                SideEffects::modifyExternal, "addModuleReaderMacro");
             // variant macro
             addAnnotation(make_smart<AstVariantMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVariantMacro)>(*this, lib,  "make_variant_macro",

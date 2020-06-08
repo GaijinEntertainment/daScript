@@ -16,6 +16,7 @@ typedef
     StructureAnnotationPtr = smart_ptr<StructureAnnotation>
     PassMacroPtr = smart_ptr<PassMacro>
     VariantMacroPtr = smart_ptr<VariantMacro>
+    ReaderMacroPtr = smart_ptr<ReaderMacro>
 
 [unsafe]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -126,6 +127,10 @@ class AstVariantMacro
     def abstract visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
     def abstract visitExprAsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr
     def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
+
+class AstReaderMacro
+    def abstract accept ( expr:ExprReader?; ch:int ) : bool
+    def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
 
 class AstVisitor
 // program
@@ -606,6 +611,14 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
             panic("expecting ife.if_true.ExprBlock")
         return reinterpret<ExprBlock?> ife.if_true
 
+def make_reader_macro ( name : string; someClassPtr ) : ReaderMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_reader_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[ReaderMacroPtr]]
+
 def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
     static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
@@ -649,6 +662,12 @@ def add_new_structure_annotation ( name:string; someClassPtr )
 def add_new_variant_macro ( name:string; someClassPtr )
     var ann <- make_variant_macro(name, someClassPtr)
     this_module() |> add_variant_macro(ann)
+    delete ann
+
+[unsafe]
+def add_new_reader_macro ( name:string; someClassPtr )
+    var ann <- make_reader_macro(name, someClassPtr)
+    this_module() |> add_reader_macro(ann)
     delete ann
 
 [_macro]
