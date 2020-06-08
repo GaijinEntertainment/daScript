@@ -485,6 +485,9 @@ class AstVisitor
 // fake line info
     def abstract preVisitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : void
     def abstract visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
+// reader
+    def abstract preVisitExprReader(expr:smart_ptr<ExprReader>) : void
+    def abstract visitExprReader(expr:smart_ptr<ExprReader>) : ExpressionPtr
 
 ////////
 // limbo

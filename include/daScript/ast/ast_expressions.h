@@ -6,12 +6,12 @@ namespace das
 {
     struct ExprReader : Expression {
         ExprReader () { __rtti = "ExprReader"; }
-        ExprReader ( const LineInfo & a, ReaderMacro * rm )
+        ExprReader ( const LineInfo & a, const ReaderMacroPtr & rm )
             : Expression(a), macro(rm) { __rtti = "ExprReader"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        ReaderMacro * macro = nullptr;
+        ReaderMacroPtr macro = nullptr;
         string sequence;
     };
 

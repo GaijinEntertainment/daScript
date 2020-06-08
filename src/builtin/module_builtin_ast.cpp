@@ -27,6 +27,7 @@ MAKE_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
 MAKE_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
 MAKE_TYPE_FACTORY(PassMacro,PassMacro)
 MAKE_TYPE_FACTORY(VariantMacro,VariantMacro)
+MAKE_TYPE_FACTORY(ReaderMacro,ReaderMacro)
 MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
 
@@ -121,6 +122,7 @@ MAKE_TYPE_FACTORY(ExprConstDouble,ExprConstDouble);
 MAKE_TYPE_FACTORY(ExprMakeBlock,ExprMakeBlock);
 MAKE_TYPE_FACTORY(ExprMakeGenerator,ExprMakeGenerator);
 MAKE_TYPE_FACTORY(ExprMemZero,ExprMemZero);
+MAKE_TYPE_FACTORY(ExprReader,ExprReader);
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -816,6 +818,14 @@ namespace das {
         }
     };
 
+    struct AstExprReaderAnnotation : AstExpressionAnnotation<ExprReader> {
+        AstExprReaderAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprReader> ("ExprReader", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(macro)>("macro");
+            addField<DAS_BIND_MANAGED_FIELD(sequence)>("sequence");
+        }
+    };
+
      // TYPE STUFF
 
     struct AstModuleLibraryAnnotation : ManagedStructureAnnotation<ModuleLibrary,false> {
@@ -1406,6 +1416,7 @@ namespace das {
         IMPL_ADAPT(ExprMakeBlock);
         IMPL_ADAPT(ExprMakeGenerator);
         IMPL_ADAPT(ExprMemZero);
+        IMPL_ADAPT(ExprReader);
     }
 // whole program
     void VisitorAdapter::preVisitProgram ( Program * expr )
@@ -1714,6 +1725,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprMakeBlock);
     IMPL_BIND_EXPR(ExprMakeGenerator);
     IMPL_BIND_EXPR(ExprMemZero);
+    IMPL_BIND_EXPR(ExprReader);
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
@@ -1895,6 +1907,14 @@ namespace das {
         AstVariantMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VariantMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
+    struct AstReaderMacroAnnotation : ManagedStructureAnnotation<ReaderMacro,false,true> {
+        AstReaderMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("ReaderMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module");
         }
     };
 
@@ -2119,6 +2139,8 @@ namespace das {
             initRecAnnotation(fna, lib);
             initRecAnnotation(iha, lib);
             initRecAnnotation(vaa, lib);
+            // reader macro
+            addAnnotation(make_smart<AstReaderMacroAnnotation>(lib));
             // expressions
             addAnnotation(make_smart<AstExprBlockAnnotation>(lib));
             addAnnotation(make_smart<AstExprLetAnnotation>(lib));
@@ -2212,6 +2234,7 @@ namespace das {
             addAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
+            addAnnotation(make_smart<AstExprReaderAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
