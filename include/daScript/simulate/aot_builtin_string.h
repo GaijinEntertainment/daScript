@@ -46,6 +46,10 @@ namespace das {
     char * to_das_string(const string & str, Context * ctx);
     void set_das_string(string & str, const char * bs);
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context);
+    void builtin_append_char_to_string(string & str, int32_t Ch);
+    bool builtin_string_ends_with(const string &str, char * substr, Context * context);
+    int32_t builtin_ext_string_length(string & str);
+    void builtin_resize_string(string & str, int32_t newLength);
     char * string_repeat ( const char * str, int count, Context * context );
     char * to_string_char(int ch, Context * context);
     void write_string_char(StringBuilderWriter & writer, int32_t ch);

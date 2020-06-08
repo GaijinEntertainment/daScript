@@ -450,6 +450,25 @@ namespace das
         str = nullptr;
     }
 
+    void builtin_append_char_to_string(string & str, int32_t Ch) {
+        str += Ch;
+    }
+
+    bool builtin_string_ends_with(const string &str, char * substr, Context * context ) {
+        if ( substr==nullptr ) return false;
+        auto sz = str.length();
+        auto slen = stringLengthSafe(*context,substr);
+        if ( slen>sz ) return false;
+        return memcmp ( str.data() + sz - slen, substr, slen )==0;
+    }
+
+    int32_t builtin_ext_string_length(string & str) {
+        return int32_t(str.size());
+    }
+    void builtin_resize_string(string & str, int32_t newLength) {
+        str.resize(newLength);
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
@@ -504,6 +523,14 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
         addExtern<DAS_BIND_FUN(builtin_append_char)>(*this, lib, "append",
             SideEffects::modifyArgumentAndExternal, "builtin_append_char")->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
+            SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string");
+        addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
+            SideEffects::none, "builtin_string_ends_with");
+        addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
+            SideEffects::modifyArgumentAndExternal, "builtin_resize_string");
+        addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
+            SideEffects::none, "builtin_ext_string_length");
         addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
         addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
         addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");

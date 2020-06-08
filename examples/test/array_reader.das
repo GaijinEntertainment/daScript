@@ -4,20 +4,14 @@ require rtti
 require ast
 
 class Uint8ArrayReader : AstReaderMacro
-    sequence : array<uint8>
     def override accept ( var expr:ExprReader?; ch:int ) : bool
-        if ch==-1
-            clear(sequence)
+        append(expr.sequence,ch)
+        if ends_with(expr.sequence,"%%")
+            let len = length(expr.sequence)
+            resize(expr.sequence,len-2)
             return false
-        push(sequence,uint8(ch))
-        let sz = length(sequence)
-        if sz >= 2
-            if int(sequence[sz-2])=='%' & int(sequence[sz-1])=='%'
-                resize(sequence,sz-2)
-                expr.sequence := string(sequence)
-                clear(sequence)
-                return false
-        return true
+        else
+            return true
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
         let seqStr = string(expr.sequence)
         var arrT <- new [[TypeDecl() baseType=Type tInt]]
