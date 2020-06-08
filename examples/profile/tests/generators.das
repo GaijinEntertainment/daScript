@@ -1,4 +1,5 @@
 require daslib/functional
+require daslib/strings
 
 def each_a(r:range) : array<int>
     var a : array<int>

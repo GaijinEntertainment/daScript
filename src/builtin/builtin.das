@@ -49,6 +49,9 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):
         __builtin_table_lock(Tab)
         invoke(blk,val)
         __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
 
 [unsafe_operation,unsafe]
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT const?
