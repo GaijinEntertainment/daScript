@@ -6,7 +6,7 @@
 
 require fio
 require daslib/json
-require daslib/json_enh
+require daslib/json_boost
 
 [export]
 def test_reader

@@ -17,7 +17,7 @@ let
         (FunctionFlags unsafeDeref) |
         (FunctionFlags unsafe) |
         (FunctionFlags unsafeOperation) |
-        (FunctionFlags generatorFunction) )
+        (FunctionFlags _generator) )
 
 // TODO: fixme
 def noBracket(expr)

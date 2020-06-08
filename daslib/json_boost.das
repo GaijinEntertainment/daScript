@@ -1,8 +1,9 @@
-module json_enh
+module json_boost
 
 require rtti
 require ast
 require daslib/json
+require daslib/ast_boost
 
 def is_json_ptr_value ( td : TypeDeclPtr )
     if td.baseType != Type tPointer

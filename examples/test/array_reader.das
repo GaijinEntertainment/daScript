@@ -2,8 +2,9 @@ module array_reader
 
 require rtti
 require ast
+require daslib/ast_boost
 
-class Uint8ArrayReader : AstReaderMacro
+class ArrayReader : AstReaderMacro
     def override accept ( var expr:ExprReader?; ch:int ) : bool
         append(expr.sequence,ch)
         if ends_with(expr.sequence,"%%")
@@ -24,4 +25,4 @@ class Uint8ArrayReader : AstReaderMacro
 
 [macro]
 def init_macros
-    add_new_reader_macro("arr", new Uint8ArrayReader())
+    add_new_reader_macro("arr", new ArrayReader())

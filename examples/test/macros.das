@@ -1,8 +1,8 @@
 module macros
 
-// require limbo
 require ast
 require rtti
+require daslib/ast_boost
 
 struct HintLookup
     tab : table<uint; string>
