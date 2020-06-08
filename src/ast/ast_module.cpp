@@ -171,7 +171,7 @@ namespace das {
         }
     }
 
-        bool Module::addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail ) {
+    bool Module::addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail ) {
         if ( typeInfoMacros.insert(make_pair(ptr->name, move(ptr))).second ) {
             ptr->seal(this);
             return true;
@@ -183,6 +183,20 @@ namespace das {
             return false;
         }
     }
+
+    bool Module::addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail ) {
+        if ( readMacros.insert(make_pair(ptr->name, move(ptr))).second ) {
+            ptr->seal(this);
+            return true;
+        } else {
+            if ( !canFail ) {
+                DAS_FATAL_LOG("can't add duplicate reader macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
+            return false;
+        }
+    }
+
 
     bool Module::addVariable ( const VariablePtr & var, bool canFail ) {
         if ( globals.insert(make_pair(var->name, var)).second ) {
@@ -380,7 +394,9 @@ namespace das {
             inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());
             optimizationMacros.insert(optimizationMacros.end(), ptm->optimizationMacros.begin(), ptm->optimizationMacros.end());
             lintMacros.insert(lintMacros.end(), ptm->lintMacros.begin(), ptm->lintMacros.end());
-            readMacros.insert(readMacros.end(), ptm->readMacros.begin(), ptm->readMacros.end());
+            for ( auto & rm : ptm->readMacros ) {
+                addReaderMacro(rm.second);
+            }
             return true;
         } else {
             DAS_FATAL_LOG("builtin module did not parse %s\n", modName.c_str());

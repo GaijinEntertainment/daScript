@@ -693,6 +693,7 @@ namespace das
         bool addGeneric ( const FunctionPtr & fn, bool canFail = false );
         bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );
         bool addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail = false );
+        bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
@@ -752,7 +753,7 @@ namespace das
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
-        vector<ReaderMacroPtr>                      readMacros;         // %foo "blah"
+        das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         string  name;
         bool    builtIn = false;
     private:
@@ -824,12 +825,14 @@ namespace das
         string name;
     };
 
-    class ExprReader;
+    struct ExprReader;
     struct ReaderMacro : ptr_ref_count {
         ReaderMacro ( const string na = "" ) : name(na) {}
-        virtual bool accept ( ExprReader *, int Ch ) { return false; }
+        virtual bool accept ( ExprReader *, int ) { return false; }
         virtual ExpressionPtr visit (  Program *, Module *, ExprReader * ) { return nullptr; }
+        virtual void seal( Module * m ) { module = m; }
         string name;
+        Module * module = nullptr;
     };
 
     struct ExprIsVariant;

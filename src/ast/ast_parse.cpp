@@ -181,6 +181,8 @@ namespace das {
     ProgramPtr g_Program;
     FileAccessPtr g_Access;
     vector<FileInfo *>  g_FileAccessStack;
+    ReaderMacro * g_ReaderMacro = nullptr;
+    ExprReader *  g_ReaderExpr = nullptr;
 
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
@@ -197,6 +199,8 @@ namespace das {
         program->isCompiling = true;
         g_Program->policies = policies;
         g_Access = access;
+        g_ReaderMacro = nullptr;
+        g_ReaderExpr = nullptr;
         program->thisModuleGroup = &libGroup;
         libGroup.foreach([&](Module * pm){
             g_Program->library.addModule(pm);

@@ -17,8 +17,8 @@
         extern vector<FileInfo *>       g_FileAccessStack;
         extern das_map<string,string>   das_module_alias;
 
-        ReaderMacro *                   g_ReaderMacro = nullptr;
-        ExprReader *                    g_ReaderExpr = nullptr;
+        extern ReaderMacro *            g_ReaderMacro;
+        extern ExprReader *             g_ReaderExpr;
     }
     using namespace das;
 
@@ -511,11 +511,16 @@ expr_reader
             das_yyerror("reader macro " + *$mark + " not found",tokAt(@mark),
                 CompilationError::unsupported_read_macro);
         } else if ( macros.size()>1 ) {
-            das_yyerror("too many options for macro " + *$mark,tokAt(@mark),
+            string options;
+            for ( auto & x : macros ) {
+                options += "\t" + x->module->name + "::" + x->name + "\n";
+            }
+            das_yyerror("too many options for macro " + *$mark +  "\n" + options, tokAt(@mark),
                 CompilationError::unsupported_read_macro);
         } else {
             g_ReaderMacro = macros.back().get();
             g_ReaderExpr = new ExprReader(tokAt(@loc),g_ReaderMacro);
+            yyclearin ;
             das_yybegin_reader();
         }
     } reader_character_sequence[seq] {

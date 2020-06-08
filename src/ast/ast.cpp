@@ -2070,15 +2070,13 @@ namespace das {
         auto tmod = thisModule.get();
         auto modMacro = [&](Module * mod) -> bool {
             if ( thisModule->isVisibleDirectly(mod) && mod!=tmod ) {
-                for ( const auto & pm : mod->readMacros ) {
-                    if ( pm->name == markupName ) {
-                        macros.push_back(pm);
-                    }
+                auto it = mod->readMacros.find(markupName);
+                if ( it != mod->readMacros.end() ) {
+                    macros.push_back(it->second);
                 }
             }
             return true;
         };
-        Module::foreach(modMacro);
         library.foreach(modMacro, moduleName);
         return macros;
     }
