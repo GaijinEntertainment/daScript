@@ -382,6 +382,20 @@ namespace das
         context->invoke(block, args, nullptr);
     }
 
+    char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context ) {
+        auto toSearchSize = stringLengthSafe(*context, toSearch);
+        if ( !toSearchSize ) return (char *) str;
+        string data = str ? str : "";
+        auto replaceStrSize = stringLengthSafe(*context,replaceStr);
+        const char * repl = replaceStr ? replaceStr : "";
+        const char * toss = toSearch ? toSearch : "";
+        size_t pos = data.find(toss);
+        while ( pos != string::npos ) {
+            data.replace(pos, toSearchSize, repl);
+            pos = data.find(toss, pos + replaceStrSize);
+        }
+        return context->stringHeap.allocateString(data);
+    }
 
     char * builtin_string_clone ( const char *str, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
@@ -600,6 +614,7 @@ namespace das
         addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none, "fast_to_float");
         addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape", SideEffects::none, "builtin_string_escape");
         addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape", SideEffects::none, "builtin_string_unescape");
+        addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace", SideEffects::none, "builtin_string_replace");
         // format
         addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format", SideEffects::none, "format<int32_t>");
         addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format", SideEffects::none, "format<uint32_t>");
