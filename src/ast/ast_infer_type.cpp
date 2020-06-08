@@ -1361,6 +1361,15 @@ namespace das {
                 error("global variable type can't be infered, it needs an initializer", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
+            if ( var->type->isAlias() ) {
+                if ( auto aT = inferAlias(var->type) ) {
+                    var->type = aT;
+                    reportAstChanged();
+                } else {
+                    error("undefined type " + var->type->describe(),  "", "",
+                        var->at, CompilationError::invalid_type );
+                }
+            }
         }
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
             if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
@@ -1415,6 +1424,9 @@ namespace das {
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
             if ( var->type && var->type->isExprType() ) {
+                return Visitor::visitGlobalLet(var);
+            }
+            if ( isCircularType(var->type) ) {
                 return Visitor::visitGlobalLet(var);
             }
             if ( var->type->ref )
