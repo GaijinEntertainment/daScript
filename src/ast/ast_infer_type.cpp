@@ -5706,7 +5706,7 @@ namespace das {
                 }
                 size_t argCount = expr->values.size();
                 if ( expr->recordType->argTypes.size() != argCount ) {
-                    error("expecting " + to_string(argCount) + " arguments", "", "",
+                    error("expecting " + to_string(argCount) + " arguments in " + expr->recordType->describe(), "", "",
                         expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
                 }

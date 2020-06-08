@@ -2,6 +2,7 @@ module json_enh
 
 require rtti
 require ast
+require daslib/json
 
 def is_json_ptr_value ( td : TypeDeclPtr )
     if td.baseType != Type tPointer
@@ -33,7 +34,70 @@ class BetterJsonMacro : AstVariantMacro
             return ExpressionPtr(isv)
         return [[ExpressionPtr]]
 
-[_macro]
+[unsafe]
+def make_json_embed ( value:JsonValue?; at:LineInfo ) : ExpressionPtr
+    var jsv <- new [[ExprCall() name:="JV", at=at]]
+    if value.value is _null
+        push(jsv.arguments,ExpressionPtr(new [[ExprConstPtr() at=at]]))
+    elif value.value is _bool
+        push(jsv.arguments,ExpressionPtr(new [[ExprConstBool() at=at, value=value.value as _bool]]))
+    elif value.value is _number
+        push(jsv.arguments,ExpressionPtr(new [[ExprConstDouble() at=at, value=value.value as _number]]))
+    elif value.value is _string
+        push(jsv.arguments,ExpressionPtr(new [[ExprConstString() at=at, value:=value.value as _string]]))
+    elif value.value is _array
+        let total = length(value.value as _array)
+        if total != 0
+            var arrT <- clone_type(typeinfo(ast_typedecl type<json::JsonValue?>))
+            push(arrT.dim,total)
+            var mkArr <- new [[ExprMakeArray() at=at, makeType <- arrT]]
+            for x in (value.value as _array)
+                push(mkArr.values,make_json_embed(x,at))
+            var mkToArrayMove <- new [[ExprCall() at=at, name:="to_array_move"]]
+            push(mkToArrayMove.arguments,ExpressionPtr(mkArr))
+            push(jsv.arguments,ExpressionPtr(mkToArrayMove))
+        else
+            jsv.name := "JVArr"
+    elif value.value is _object
+        let total = length(value.value as _object)
+        if total != 0
+            var tupT <- typeinfo(ast_typedecl type<tuple<string;JsonValue?>>)
+            var arrT <- clone_type(tupT)
+            push(arrT.dim,total)
+            var mkArr <- new [[ExprMakeArray() at=at, makeType <- arrT]]
+            for n,x in keys(value.value as _object),values(value.value as _object)
+                var mkTup <- new [[ExprMakeTuple() at=at, recordType <- clone_type(tupT), isKeyValue=true]]
+                push(mkTup.values,ExpressionPtr(new [[ExprConstString() at=at, value:=n]]))
+                push(mkTup.values,make_json_embed(x,at))
+                push(mkArr.values,ExpressionPtr(mkTup))
+            var mkToTableMove <- new [[ExprCall() at=at, name:="to_table_move"]]
+            push(mkToTableMove.arguments,ExpressionPtr(mkArr))
+            push(jsv.arguments,ExpressionPtr(mkToTableMove))
+        else
+            jsv.name := "JVObj"
+    else
+        panic("unsupported json subtype")
+    return ExpressionPtr(jsv)
+
+class JsonReader : AstReaderMacro
+    def override accept ( var expr:ExprReader?; ch:int ) : bool
+        append(expr.sequence,ch)
+        if ends_with(expr.sequence,"%%")
+            let len = length(expr.sequence)
+            resize(expr.sequence,len-2)
+            return false
+        else
+            return true
+    def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
+        let seqStr = string(expr.sequence)
+        var error = ""
+        var json = read_json(seqStr, error)
+        if json == null
+            panic("failed to parse, {error}\n") // TODO: report error correctly
+        var jsv <- make_json_embed(json,expr.at)
+        return ExpressionPtr(jsv)
+
+[macro]
 def setup
-    if is_compiling_macros()
-        add_new_variant_macro("better_json", new BetterJsonMacro())
+    add_new_variant_macro("better_json", new BetterJsonMacro())
+    add_new_reader_macro("json", new JsonReader())

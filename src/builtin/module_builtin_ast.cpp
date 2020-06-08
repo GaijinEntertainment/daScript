@@ -2341,6 +2341,9 @@ namespace das {
             // expression
             addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
                 SideEffects::none, "clone_expression");
+            // type
+            addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",
+                SideEffects::none, "clone_type");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready

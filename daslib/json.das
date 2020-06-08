@@ -48,6 +48,16 @@ def JV ( var v : table<string;JsonValue?> )
 def JV ( var v : array<JsonValue?> )
     return new [[JsonValue value <- [[JsValue _array <- v]]]]
 
+[export]
+def JVObj ( )
+    var v : table<string;JsonValue?>
+    return new [[JsonValue value <- [[JsValue _object <- v]]]]
+
+[export]
+def JVArr ( )
+    var v : array<JsonValue?>
+    return new [[JsonValue value <- [[JsValue _array <- v]]]]
+
 [unsafe, private]
 def lexer ( text : string )
     var stext = clone_string(text)

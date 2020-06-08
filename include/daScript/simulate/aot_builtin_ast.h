@@ -400,4 +400,5 @@ namespace das {
     VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * context );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
+    __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
 }
