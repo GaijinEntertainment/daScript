@@ -314,13 +314,23 @@ namespace das
         vector<const char *> tokens;
         vector<string> words;
         const char * ch = str;
-        while ( *ch ) {
-            const char * tok = ch;
-            while ( *ch && !strchr(delim,*ch) ) ch++;
-            words.push_back(string(tok,ch-tok));
-            if ( !*ch ) break;
-            while ( *ch && strchr(delim,*ch) ) ch++;
-            if ( !*ch ) words.push_back("");
+        auto delimLen = stringLengthSafe(*context,delim);
+        if ( delimLen ) {
+            while ( *ch ) {
+                const char * tok = ch;
+                while ( *ch && !strchr(delim,*ch) ) ch++;
+                words.push_back(string(tok,ch-tok));
+                if ( !*ch ) break;
+                while ( *ch && strchr(delim,*ch) ) ch++;
+                if ( !*ch ) words.push_back("");
+            }
+        } else {
+            auto len = stringLengthSafe(*context,str);
+            words.reserve(len);
+            while ( *ch ) {
+                words.push_back(string(1,*ch));
+                ch ++;
+            }
         }
         tokens.reserve(words.size());
         for ( auto & tok : words ) {
@@ -342,13 +352,22 @@ namespace das
         vector<string> words;
         const char * ch = str;
         auto delimLen = stringLengthSafe(*context,delim);
-        while ( *ch ) {
-            const char * tok = ch;
-            while ( *ch && memcmp(delim,ch,delimLen)!=0 ) ch++;
-            words.push_back(string(tok,ch-tok));
-            if ( !*ch ) break;
-            while ( *ch && memcmp(delim,ch,delimLen)==0 ) ch+=delimLen;
-            if ( !*ch ) words.push_back("");
+        if ( delimLen ) {
+            while ( *ch ) {
+                const char * tok = ch;
+                while ( *ch && memcmp(delim,ch,delimLen)!=0 ) ch++;
+                words.push_back(string(tok,ch-tok));
+                if ( !*ch ) break;
+                while ( *ch && memcmp(delim,ch,delimLen)==0 ) ch+=delimLen;
+                if ( !*ch ) words.push_back("");
+            }
+        } else {
+            auto len = stringLengthSafe(*context,str);
+            words.reserve(len);
+            while ( *ch ) {
+                words.push_back(string(1,*ch));
+                ch ++;
+            }
         }
         tokens.reserve(words.size());
         for ( auto & tok : words ) {

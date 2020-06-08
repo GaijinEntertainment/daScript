@@ -22,6 +22,13 @@ def expect3(a)
     assert(a[1]=="two")
     assert(a[2]=="three")
 
+[sideeffects]
+def expect3o(a)
+    assert(length(a)==3)
+    assert(a[0]=="o")
+    assert(a[1]=="n")
+    assert(a[2]=="e")
+
 [export]
 def test
     split("","") <| $ ( a )
@@ -32,11 +39,13 @@ def test
         expect2(a)
     split("one, two, three",", ") <| $ ( a )
         expect3(a)
-
+    split("one","") <| $ ( a )
+        expect3o(a)
     expect0(split("",""))
     expect1(split("one",","))
     expect2(split("one,two",","))
     expect3(split("one-->two-->three","-->"))
+    expect3o(split("one",""))
 
     // empty
     let es <- split("","/")
