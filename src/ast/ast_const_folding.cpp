@@ -616,12 +616,14 @@ namespace das {
             }
             if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) ) {
                 auto allConst = true;
+                bool canFold = true;
                 for ( auto & arg : expr->arguments ) {
                     if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {
                         allConst &= arg->constexpression;
+                        canFold &= arg->type->isFoldable();
                     }
                 }
-                if ( allConst ) {
+                if ( allConst && canFold ) {
                     if ( expr->func->builtIn ) {
                         return evalAndFold(expr);
                     } else {

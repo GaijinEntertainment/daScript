@@ -360,14 +360,14 @@ int *getPtr() {return &g_st;}
 
 uint2 get_screen_dimensions() {return uint2{1280, 720};}
 
-uint32_t CheckEid ( char * const name, Context * context ) {
+uint32_t CheckEid ( TestObjectFoo & foo, char * const name, Context * context ) {
     if (!name) context->throw_error("invalid id");
-    return hash_function(*context, name);
+    return hash_function(*context, name) + foo.fooData;
 }
 
-uint32_t CheckEidHint ( char * const name, uint32_t hashHint, Context * context ) {
+uint32_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint32_t hashHint, Context * context ) {
     if (!name) context->throw_error("invalid id");
-    uint32_t hv = hash_function(*context, name);
+    uint32_t hv = hash_function(*context, name) + foo.fooData;
     if ( hv != hashHint ) context->throw_error("invalid hash value");
     return hashHint;
 }
@@ -375,7 +375,7 @@ uint32_t CheckEidHint ( char * const name, uint32_t hashHint, Context * context 
 struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
     CheckEidFunctionAnnotation() : TransformFunctionAnnotation("check_eid") { }
     virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
-        auto arg = call->arguments[0];
+        auto arg = call->arguments[1];
         if ( arg->type && arg->type->isString() && arg->type->isConst() && arg->rtti_isConstant() ) {
             auto starg = static_pointer_cast<ExprConstString>(arg);
             if (!starg->getValue().empty()) {
@@ -384,7 +384,7 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
                 hconst->type = make_smart<TypeDecl>(Type::tUInt);
                 hconst->type->constant = true;
                 auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
-                newCall->arguments.insert(newCall->arguments.begin() + 1, hconst);
+                newCall->arguments.insert(newCall->arguments.begin() + 2, hconst);
                 return newCall;
             } else {
                 err = "EID can't be an empty string";
@@ -570,9 +570,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::modifyExternal, "CppS2DOffset");
     // register CheckEid functions
     addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid",
-        SideEffects::modifyExternal, "CheckEidHint");
+        SideEffects::none, "CheckEidHint");
     auto ceid = addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib,
-        "CheckEid", SideEffects::modifyExternal, "CheckEid");
+        "CheckEid", SideEffects::none, "CheckEid");
     auto ceid_decl = make_smart<AnnotationDeclaration>();
     ceid_decl->annotation = make_smart<CheckEidFunctionAnnotation>();
     ceid->annotations.push_back(ceid_decl);

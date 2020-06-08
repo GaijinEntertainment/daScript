@@ -5284,15 +5284,19 @@ namespace das {
                     expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());
+                bool failed = false;
                 for (auto & arg : expr->arguments) {
                     if ( auto carg = getConstExpr(arg.get()) ) {
                         cargs.push_back(carg);
                     } else {
-                        return Visitor::visit(expr);
+                        failed = true;
+                        break;
                     }
                 }
-                swap(cargs, expr->arguments);
-                return evalAndFold(expr);
+                if ( !failed ) {
+                    swap(cargs, expr->arguments);
+                    return evalAndFold(expr);
+                }
             }
             if ( expr->func ) {
                 for ( const auto & ann : expr->func->annotations ) {
