@@ -451,7 +451,7 @@ namespace das
     }
 
     void builtin_append_char_to_string(string & str, int32_t Ch) {
-        str += Ch;
+        str += char(Ch);
     }
 
     bool builtin_string_ends_with(const string &str, char * substr, Context * context ) {
