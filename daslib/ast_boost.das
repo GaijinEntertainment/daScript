@@ -1,3 +1,5 @@
+options indenting = 4
+
 module ast_boost
 
 require rtti
@@ -154,7 +156,7 @@ class SetupFunctionAnnotatoin : AstStructureAnnotation
 // if value is ast::Expr*
 class BetterRttiVisitor : AstVariantMacro
     def override visitExprIsVariant(prog:ProgramPtr; mod:Module?;expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
-        if isExpression(expr.value.typeDecl)
+        if isExpression(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
             var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
             var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-ExpressionPtr(vdr), right<-ExpressionPtr(cna)]]

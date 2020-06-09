@@ -1,3 +1,5 @@
+options indenting = 4
+
 module regex_boost
 
 require ast

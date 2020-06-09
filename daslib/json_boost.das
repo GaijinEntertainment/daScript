@@ -1,3 +1,5 @@
+options indenting = 4
+
 module json_boost
 
 require rtti
@@ -23,13 +25,13 @@ def is_json_ptr_value ( td : TypeDeclPtr )
 // if value is json::JsonValue?
 class BetterJsonMacro : AstVariantMacro
     def override visitExprIsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
-        if is_json_ptr_value(expr.value.typeDecl)
+        if is_json_ptr_value(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
             var isv <- new [[ExprIsVariant() at=expr.at, name:=expr.name, value <- ExpressionPtr(vdr) ]]
             return ExpressionPtr(isv)
         return [[ExpressionPtr]]
     def override visitExprAsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
-        if is_json_ptr_value(expr.value.typeDecl)
+        if is_json_ptr_value(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
             var isv <- new [[ExprAsVariant() at=expr.at, name:=expr.name, value <- ExpressionPtr(vdr) ]]
             return ExpressionPtr(isv)

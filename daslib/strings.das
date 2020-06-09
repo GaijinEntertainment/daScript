@@ -1,3 +1,5 @@
+options indenting = 4
+
 module strings
 
 def join(it; separator:string)
