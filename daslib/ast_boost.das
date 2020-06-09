@@ -62,7 +62,6 @@ def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
             return get_annotation_argument_value(a)
     return RttiValue_nothing()
 
-
 class TagFunctionMacro : AstStructureAnnotation
     [unsafe] def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let ann_name = "{st.name}"
@@ -132,6 +131,25 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
             panic("expecting ife.if_true.ExprBlock")
         return reinterpret<ExprBlock?> ife.if_true
 
+class SetupFunctionAnnotatoin : AstStructureAnnotation
+    [unsafe] def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        let ann_name = "{st.name}"
+        let argName = find_arg("name", args)
+        if argName is nothing
+            panic("missing name argument")
+        elif !(argName is tString)
+            panic("name must be string")
+        let name = argName as tString
+        var blk <- setup_macro("__setup_functions", st.at)
+        var cll <- new [[ExprCall() at=st.at, name:="add_new_function_annotation"]]
+        push_back(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
+        var nee <- new [[ExprNew() at=st.at, initializer=true]]
+        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=reinterpret<Structure?> st]]
+        push_back(cll.arguments, nee)
+        push_back(blk.list, cll)
+        return true
+
+
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
 // if value is ast::Expr*
 class BetterRttiVisitor : AstVariantMacro
@@ -148,6 +166,7 @@ def setup
     if is_compiling_macros()
         add_new_function_annotation("macro", new MacroMacro())
         add_new_function_annotation("tag_function",new TagFunctionAnnotation())
+        add_new_structure_annotation("function_annotation",new SetupFunctionAnnotatoin())
         add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
         add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())
         add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())
