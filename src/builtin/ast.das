@@ -88,7 +88,7 @@ class AstVariantMacro
     def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
 
 class AstReaderMacro
-    def abstract accept ( expr:ExprReader?; ch:int ) : bool
+    def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
 
 class AstVisitor

@@ -4158,7 +4158,7 @@ yyreduce:
   case 23:
 #line 495 "ds_parser.ypp"
     {
-        if ( !g_ReaderMacro->accept(g_ReaderExpr, (yyvsp[0].ch)) ) {
+        if ( !g_ReaderMacro->accept(g_Program.get(), g_Program->thisModule.get(), g_ReaderExpr, (yyvsp[0].ch), tokAt((yylsp[0]))) ) {
             das_yyend_reader();
         }
     }
@@ -4168,7 +4168,7 @@ yyreduce:
   case 24:
 #line 500 "ds_parser.ypp"
     {
-        if ( !g_ReaderMacro->accept(g_ReaderExpr, (yyvsp[0].ch)) ) {
+        if ( !g_ReaderMacro->accept(g_Program.get(), g_Program->thisModule.get(), g_ReaderExpr, (yyvsp[0].ch), tokAt((yylsp[0]))) ) {
             das_yyend_reader();
         }
     }

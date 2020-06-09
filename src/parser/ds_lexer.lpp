@@ -139,6 +139,11 @@ void YYNEWLINE() {
     BEGIN(normal);
     return END_OF_READ;
 }
+<reader>\n        {
+    YYNEWLINE();
+    das_yylval.ch = yytext[0];
+    return STRING_CHARACTER;
+}
 <reader>.         {
     das_yylval.ch = yytext[0];
     return STRING_CHARACTER;

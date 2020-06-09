@@ -493,12 +493,12 @@ string_builder
 
 reader_character_sequence
     :   STRING_CHARACTER[char] {
-        if ( !g_ReaderMacro->accept(g_ReaderExpr, $char) ) {
+        if ( !g_ReaderMacro->accept(g_Program.get(), g_Program->thisModule.get(), g_ReaderExpr, $char, tokAt(@char)) ) {
             das_yyend_reader();
         }
     }
     |   reader_character_sequence[elem]  STRING_CHARACTER[char] {
-        if ( !g_ReaderMacro->accept(g_ReaderExpr, $char) ) {
+        if ( !g_ReaderMacro->accept(g_Program.get(), g_Program->thisModule.get(), g_ReaderExpr, $char, tokAt(@char)) ) {
             das_yyend_reader();
         }
     }

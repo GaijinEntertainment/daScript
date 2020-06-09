@@ -2,19 +2,18 @@
 // options log_aot = true
 
 require daslib/regex
+require daslib/regex_boost
 require fio
 
 let
-    test_and_log = false
+    test_and_log = true
 
 [export]
 def test
     static_if test_and_log
         test_regex()
 
-    var r1:Regex // email
-    if !regex_compile(r1,"[\\w\\.+-]+@[\\w\\.-]+\\.[\\w\\.-]+")
-        panic("can't compile")
+    var r1 <- %regex~[\w\.+-]+@[\w\.-]+\.[\w\.-]+%%
     static_if test_and_log
         regex_debug(r1)
 
@@ -42,12 +41,7 @@ def test
             print("can't open ")
     return true
 
-def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
-    print("testing {reg}\n")
-    var regex : Regex
-    if !regex_compile(regex, reg)
-        print("failed to compile\n")
-        assert(false)
+def test_re ( var regex:Regex; matches:array<string>; nonmatches:array<string> )
     print("re is:\n")
     regex_debug(regex)
     var failed = false
@@ -63,12 +57,7 @@ def test_re ( reg:string; matches:array<string>; nonmatches:array<string> )
     assert(!failed)
     delete regex
 
-def test_group ( reg:string; match:string; groups:array<string>)
-    print("testing groups is {reg}\n")
-    var regex : Regex
-    if !regex_compile(regex, reg)
-        print("failed to compile\n")
-        assert(false)
+def test_group ( var regex:Regex; match:string; groups:array<string>)
     print("re is:\n")
     regex_debug(regex)
     if length(regex.groups)==0
@@ -90,34 +79,34 @@ def test_group ( reg:string; match:string; groups:array<string>)
 
 def test_regex
     // character
-    test_re("a", [{string[] "a"}], [{string ""; "b"; "ba"}])
+    test_re(%regex~a%%, [{string[] "a"}], [{string ""; "b"; "ba"}])
     // union
-    test_re("cat|dog", [{string "cat";"dog";"cats"}], [{string "at";" cat";"doog"}])
-    test_re("cat|dog|bat", [{string "cat";"dog";"cats";"bats"}], [{string "at";" cat";"doog";"at"}])
+    test_re(%regex~cat|dog%%, [{string "cat";"dog";"cats"}], [{string "at";" cat";"doog"}])
+    test_re(%regex~cat|dog|bat%%, [{string "cat";"dog";"cats";"bats"}], [{string "at";" cat";"doog";"at"}])
     // set & negatvie set
-    test_re("[0-9a-zA-Z_]",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
-    test_re("[\\w]",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
-    test_re("\\w",[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
-    test_re("[^0-9a-zA-Z_]",[{string "#";"*"}],[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}])
+    test_re(%regex~[0-9a-zA-Z_]%%,[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
+    test_re(%regex~[\w]%%,[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
+    test_re(%regex~\w%%,[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
+    test_re(%regex~[^0-9a-zA-Z_]%%,[{string "#";"*"}],[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}])
     // any, concat
-    test_re("cat.", [{string "catt";"cats"}], [{string "cat";" cat"}])
-    test_re("(cat)(dog)(bat)", [{string[] "catdogbat"}], [{string "cat";" cat"; "catdog"; "dogbat"}])
+    test_re(%regex~cat.%%, [{string "catt";"cats"}], [{string "cat";" cat"}])
+    test_re(%regex~(cat)(dog)(bat)%%, [{string[] "catdogbat"}], [{string "cat";" cat"; "catdog"; "dogbat"}])
     // eos
-    test_re("cat$", [{string[] "cat"}], [{string "cattt";" cat"}])
+    test_re(%regex~cat$%%, [{string[] "cat"}], [{string "cattt";" cat"}])
     // +
-    test_re("ab+", [{string "ab";"abb";"abbbc"}], [{string "a";" ab"; "bbb"}])
-    test_re("(cat)+",[{string "cat";"catcat"}], [{string "dog";"caat"}])
+    test_re(%regex~ab+%%, [{string "ab";"abb";"abbbc"}], [{string "a";" ab"; "bbb"}])
+    test_re(%regex~(cat)+%%,[{string "cat";"catcat"}], [{string "dog";"caat"}])
     // *
-    test_re("ab*", [{string "a";"ab";"abb";"abbbc"}], [{string " ab"; "bbb"}])
-    test_re("a(cat)*",[{string "a";"acat";"acatcat"}], [{string "dog";"caat";"cat"}])
-    test_re("a*(cat)",[{string "cat";"acat";"aaacat"}], [{string "dog";"caat"}])
+    test_re(%regex~ab*%%, [{string "a";"ab";"abb";"abbbc"}], [{string " ab"; "bbb"}])
+    test_re(%regex~a(cat)*%%,[{string "a";"acat";"acatcat"}], [{string "dog";"caat";"cat"}])
+    test_re(%regex~a*(cat)%%,[{string "cat";"acat";"aaacat"}], [{string "dog";"caat"}])
     // ?
-    test_re("ab?", [{string "a";"ab";"abb"}], [{string "b";" ab"; "bbb"}])
-    test_re("(cat)?x",[{string "catx";"x"}], [{string "dog";"caat"}])
+    test_re(%regex~ab?%%, [{string "a";"ab";"abb"}], [{string "b";" ab"; "bbb"}])
+    test_re(%regex~(cat)?x%%,[{string "catx";"x"}], [{string "dog";"caat"}])
     // match2
-    test_re("[a-z.]+.com", [{string[] "abra.com"}], [{string "1"; "2"}])
+    test_re(%regex~[a-z.]+.com%%, [{string[] "abra.com"}], [{string "1"; "2"}])
 
     // gropus
-    test_group ( "i have a (cat|dog)", "i have a cat.", [{string[] "cat"}])
-    test_group ( "(this|that) is a (book|table|car)", "that is a table", [{string "that";"table"}])
+    test_group ( %regex~i have a (cat|dog)%%, "i have a cat.", [{string[] "cat"}])
+    test_group ( %regex~(this|that) is a (book|table|car)%%, "that is a table", [{string "that";"table"}])
 

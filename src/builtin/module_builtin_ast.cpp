@@ -1917,10 +1917,10 @@ namespace das {
             fnAccept = adapt("accept",pClass,info);
             fnVisit = adapt("visit",pClass,info);
         }
-        virtual bool accept ( ExprReader * expr, int Ch ) override {
+        virtual bool accept ( Program * prog, Module * mod, ExprReader * expr, int Ch, const LineInfo & info ) override {
             if ( fnAccept ) {
-                return das_invoke_function<bool>::invoke<void *,ExprReader *,int32_t>
-                        (context,fnAccept,classPtr,expr,Ch);
+                return das_invoke_function<bool>::invoke<void *,ProgramPtr,Module *,ExprReader *,int32_t,const LineInfo&>
+                        (context,fnAccept,classPtr,prog,mod,expr,Ch,info);
             } else {
                 return false;
             }
@@ -2105,6 +2105,10 @@ namespace das {
 
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context ) {
         return context->stringHeap.allocateString(bft->findBitfieldName(value));
+    }
+
+    void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message ) {
+        prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
     }
 
     class Module_Ast : public Module {
@@ -2345,6 +2349,9 @@ namespace das {
             // type
             addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",
                 SideEffects::none, "clone_type");
+            // errors
+            addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
+                SideEffects::modifyArgumentAndExternal, "ast_error");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready

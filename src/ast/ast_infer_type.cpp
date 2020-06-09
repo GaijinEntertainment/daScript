@@ -1679,14 +1679,17 @@ namespace das {
     // ExprReader
         virtual ExpressionPtr visit ( ExprReader * expr ) override {
             // implement reader macros
+            auto errc = ctx.thisProgram->errors.size();
             auto thisModule = ctx.thisProgram->thisModule.get();
             auto substitute = expr->macro->visit(ctx.thisProgram, thisModule, expr);
             if ( substitute ) {
                 reportAstChanged();
                 return substitute;
             }
-            error("unsupported read macro " + expr->macro->name,  "", "",
-                expr->at, CompilationError::unsupported_read_macro);
+            if ( errc==ctx.thisProgram->errors.size() ) {
+                error("unsupported read macro " + expr->macro->name,  "", "",
+                    expr->at, CompilationError::unsupported_read_macro);
+            }
             return Visitor::visit(expr);
         }
     // ExprLabel

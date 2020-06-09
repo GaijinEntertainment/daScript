@@ -5,7 +5,7 @@ require ast
 require daslib/ast_boost
 
 class ArrayReader : AstReaderMacro
-    def override accept ( var expr:ExprReader?; ch:int ) : bool
+    def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool
         append(expr.sequence,ch)
         if ends_with(expr.sequence,"%%")
             let len = length(expr.sequence)

@@ -242,7 +242,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
     elif ahead is _null
         return JV(null)
     else
-        panic("internal parsing error near {ahead}")
+        error = "{ahead}"
         return null
 
 [export,unsafe]

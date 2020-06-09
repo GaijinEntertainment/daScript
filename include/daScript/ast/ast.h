@@ -828,7 +828,7 @@ namespace das
     struct ExprReader;
     struct ReaderMacro : ptr_ref_count {
         ReaderMacro ( const string na = "" ) : name(na) {}
-        virtual bool accept ( ExprReader *, int ) { return false; }
+        virtual bool accept ( Program *, Module *, ExprReader *, int, const LineInfo & ) { return false; }
         virtual ExpressionPtr visit (  Program *, Module *, ExprReader * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
         string name;

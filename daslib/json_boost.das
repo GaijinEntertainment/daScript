@@ -81,7 +81,7 @@ def make_json_embed ( value:JsonValue?; at:LineInfo ) : ExpressionPtr
     return ExpressionPtr(jsv)
 
 class JsonReader : AstReaderMacro
-    def override accept ( var expr:ExprReader?; ch:int ) : bool
+    def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool
         append(expr.sequence,ch)
         if ends_with(expr.sequence,"%%")
             let len = length(expr.sequence)
@@ -94,9 +94,11 @@ class JsonReader : AstReaderMacro
         var error = ""
         var json = read_json(seqStr, error)
         if json == null
-            panic("failed to parse, {error}\n") // TODO: report error correctly
-        var jsv <- make_json_embed(json,expr.at)
-        return ExpressionPtr(jsv)
+            macro_error(prog,expr.at,"json did not parse ({error})")
+            return [[ExpressionPtr]]
+        else
+            var jsv <- make_json_embed(json,expr.at)
+            return ExpressionPtr(jsv)
 
 [macro]
 def setup

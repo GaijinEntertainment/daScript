@@ -717,7 +717,7 @@ namespace das
         virtual ExpressionPtr visit ( Program *, Module *, ExprReader * expr ) {
             return make_smart<ExprConstString>(expr->at,expr->sequence);
         }
-        virtual bool accept ( ExprReader * re, int Ch ) override {
+        virtual bool accept ( Program *, Module *, ExprReader * re, int Ch, const LineInfo & ) override {
             if ( Ch==-1 ) return false;
             re->sequence.push_back(char(Ch));
             auto sz = re->sequence.size();
