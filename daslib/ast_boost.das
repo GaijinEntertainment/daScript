@@ -163,6 +163,139 @@ class BetterRttiVisitor : AstVariantMacro
             return ExpressionPtr(veq)
         return [[ExpressionPtr]]
 
+[unsafe,private]
+def walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+    let total = any_array_size(data)
+    if total != 0
+        let stride = info.firstType.sizeOf
+        var mkArr <- new [[ExprMakeArray() at=at, makeType<-clone_type(info.firstType)]]
+        any_array_foreach(data, stride) <| $ ( value )
+            var elem <- walk_and_convert(value, info.firstType, at)
+            push(mkArr.values, elem)
+        push(mkArr.makeType.dim,total)
+        var mkToArrayMove <- new [[ExprCall() at=at, name:="to_array_move"]]
+        push(mkToArrayMove.arguments,ExpressionPtr(mkArr))
+        return ExpressionPtr(mkToArrayMove)
+    else
+        var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
+        return ExpressionPtr(mkArr)
+
+[unsafe,private]
+def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+	let stride = info.baseSizeOf
+	let total = info.countOf
+	var einfo <- clone_type(info)
+	clear(einfo.dim)
+	var mkArr <- new [[ExprMakeArray() at=at, makeType := info]]
+	for x in range(0,total)
+		var elem <- walk_and_convert(data + stride*x, einfo, at)
+		push(mkArr.values, elem)
+	delete einfo
+	return ExpressionPtr(mkArr)
+
+[unsafe,private]
+def walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+	let pdata = *(reinterpret<uint8??> data)
+	var elem <- walk_and_convert(pdata, info.firstType, at)
+	var mkAsc <- new [[ExprAscend() at=at, subexpr <- elem]]
+	return ExpressionPtr(mkAsc)
+
+[unsafe,private]
+def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+	var mkStruct <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
+	let stype = info.structType
+	for x in stype.fields
+		let fdata = data + x.offset
+		var elem <- walk_and_convert ( fdata, x._type, at)
+		var mkS <- new [[ MakeStruct() ]]
+		var mkF <- new [[MakeFieldDecl() at=at, name := x.name, value <- elem]]
+        if !x._type.canCopy
+            mkF.flags = FieldDeclarationFlags moveSemantics
+		push(*mkS, mkF)
+		push(mkStruct.structs, mkS)
+	return ExpressionPtr(mkStruct)
+
+[unsafe,private]
+def walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+	let vindex = * reinterpret<int?> data
+	let offset = get_variant_field_offset(info,vindex)
+	var mkVariant <- new [[ExprMakeVariant() at=at, makeType<-clone_type(info)]]
+	var elem <- walk_and_convert ( data + offset, info.argTypes[vindex], at)
+	var mkS <- new [[MakeFieldDecl() at=at, name:=info.argNames[vindex], value <- elem]]
+    if !info.argTypes[vindex].canCopy
+        mkS.flags = FieldDeclarationFlags moveSemantics
+	push(mkVariant.variants, mkS)
+	return ExpressionPtr(mkVariant)
+
+[unsafe,private]
+def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+    let total = any_table_size(data)
+    if total != 0
+        var tupT <- new [[TypeDecl() baseType=Type tTuple]]
+        push(tupT.argTypes,clone_type(info.firstType))
+        push(tupT.argTypes,clone_type(info.secondType))
+        var arrT <- clone_type(tupT)
+        var mkArr <- new [[ExprMakeArray() at=at, makeType <- arrT]]
+        var key_stride = info.firstType.sizeOf
+        var value_stride = info.secondType.sizeOf
+        any_table_foreach ( data, key_stride, value_stride ) <| $ ( pkey, pvalue )
+            var key <- walk_and_convert ( pkey, info.firstType, at)
+            var value <- walk_and_convert ( pvalue, info.secondType, at)
+            var mkTup <- new [[ExprMakeTuple() at=at, recordType<-clone_type(tupT), isKeyValue=true]]
+            push(mkTup.values,key)
+            push(mkTup.values,value)
+            push(mkArr.values,ExpressionPtr(mkTup))
+        push(mkArr.makeType.dim,total)
+        var mkToTableMove <- new [[ExprCall() at=at, name:="to_table_move"]]
+        push(mkToTableMove.arguments,ExpressionPtr(mkArr))
+        return ExpressionPtr(mkToTableMove)
+    else
+        var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
+        return ExpressionPtr(mkArr)
+
+[unsafe,private]
+def walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+	if info.baseType == Type tInt
+		return ExpressionPtr(new [[ExprConstInt() at=at, value=*reinterpret<int?> data]])
+	elif info.baseType == Type tFloat
+		return ExpressionPtr(new [[ExprConstFloat() at=at, value=*reinterpret<float?> data]])
+	elif info.baseType == Type tDouble
+		return ExpressionPtr(new [[ExprConstDouble() at=at, value=*reinterpret<double?> data]])
+	elif info.baseType == Type tBool
+		return ExpressionPtr(new [[ExprConstBool() at=at, value=*reinterpret<bool?> data]])
+	elif info.baseType == Type tString
+		return ExpressionPtr(new [[ExprConstString() at=at, value:=*reinterpret<string?> data]])
+	else
+		panic("unsupported {info.baseType}")
+        return [[ExpressionPtr]]
+
+[unsafe,private]
+def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+	// print("0x{intptr(data)} {describe(info)}\n")
+	if info.dim.length != 0
+		return walk_and_convert_dim(data,info,at)
+	elif info.baseType == Type tArray
+		return walk_and_convert_array(data,info,at)
+	elif info.baseType == Type tPointer
+        if info.firstType==null | info.firstType.isVoid
+            return ExpressionPtr(new [[ExprConstPtr() at=at]])
+        else
+		    return walk_and_convert_pointer(data,info,at)
+	elif info.baseType == Type tStructure
+		return walk_and_convert_structure(data,info,at)
+	elif info.baseType == Type tVariant
+		return walk_and_convert_variant(data,info,at)
+	elif info.baseType == Type tTable
+		return walk_and_convert_table(data,info,at)
+    else
+        return walk_and_convert_basic(data,info,at)
+
+[unsafe,export]
+def convert_to_expression ( var value : auto&; at:LineInfo )
+	let info <- typeinfo(ast_typedecl value)
+	let pval = addr(value)
+	return walk_and_convert(reinterpret<uint8?> pval, info, at)
+
 [_macro]
 def setup
     if is_compiling_macros()

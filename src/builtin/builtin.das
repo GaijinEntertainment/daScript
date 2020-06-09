@@ -1,6 +1,13 @@
 options indenting=4
 options remove_unused_symbols=false
 
+[unsafe,generic]
+def intptr ( p : void? ) : uint64
+	static_if typeinfo(sizeof p)==4
+		return uint64(reinterpret<uint> p)
+	else
+		return reinterpret<uint64> p
+
 def resize(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_resize(Arr,newSize,typeinfo(sizeof type<numT>))
 

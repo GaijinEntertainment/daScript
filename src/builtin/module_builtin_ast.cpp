@@ -159,7 +159,7 @@ namespace das {
         void init() {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            this->template addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl","type");
+            this->template addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
             this->template addField<DAS_BIND_MANAGED_FIELD(__rtti)>("__rtti");
             this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
             this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
@@ -235,10 +235,33 @@ namespace das {
         }
     };
 
+    __forceinline void mks_vector_push ( MakeStruct & vec, MakeFieldDeclPtr value ) {
+        vec.push_back(value);
+    }
+    void mks_vector_pop ( MakeStruct & vec ) {
+        vec.pop_back();
+    }
+    void mks_vector_clear ( MakeStruct & vec ) {
+        vec.clear();
+    }
+    void mks_vector_resize ( MakeStruct & vec, int32_t newSize ) {
+        vec.resize(newSize);
+    }
+
     struct AstMakeStructAnnotation : ManagedVectorAnnotation<MakeStruct> {
         AstMakeStructAnnotation(ModuleLibrary & ml)
             :  ManagedVectorAnnotation<MakeStruct> ("MakeStruct", ml) {
         };
+        virtual bool isSmart() const { return true; }
+        virtual bool canNew() const override { return true; }
+        virtual bool canDeletePtr() const override { return true; }
+        virtual string getSmartAnnotationCloneFunction () const override { return "smart_ptr_clone"; }
+        virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
+            return context.code->makeNode<SimNode_NewHandle<MakeStruct,true>>(at);
+        }
+        virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
+            return context.code->makeNode<SimNode_DeleteHandlePtr<MakeStruct,true>>(at,sube,count);
+        }
     };
 
     template <typename EXPR>
@@ -885,6 +908,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
             // properties
+            addProperty<DAS_BIND_MANAGED_PROP(canCopy)>("canCopy","canCopy");
+            addProperty<DAS_BIND_MANAGED_PROP(canMove)>("canMove","canMove");
             addProperty<DAS_BIND_MANAGED_PROP(isVoid)>("isVoid","isVoid");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf","getSizeOf");
@@ -907,7 +932,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("_type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -1023,7 +1048,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("typeDecl");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("_type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(source)>("source");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -2115,6 +2140,40 @@ namespace das {
         prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
     }
 
+    int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index ) {
+        return td->getVariantFieldOffset(index);
+    }
+
+    void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context ) {
+        auto tab = (Table *) _tab;
+        if ( !tab->data ) return;
+        char * values = tab->data;
+        char * keys = tab->keys;
+        for ( uint32_t index=0; index!=tab->capacity; index++, keys+=keyStride, values+=valueStride ) {
+            if ( tab->hashes[index] > HASH_KILLED32 ) {
+                das_invoke<void>::invoke<void *,void *>(context,blk,(void*)keys,(void*)values);
+            }
+        }
+    }
+
+    void any_array_foreach ( void * _arr, int stride, const TBlock<void,void *> & blk, Context * context ) {
+        auto arr = (Array *) _arr;
+        if ( !arr->data ) return;
+        char * values = arr->data;
+        for ( uint32_t index=0; index!=arr->size; index++, values+=stride ) {
+            das_invoke<void>::invoke<void *>(context,blk,(void*)values);
+        }
+    }
+
+    int32_t any_array_size ( void * _arr ) {
+        return int32_t(((Array *) _arr)->size);
+    }
+
+    int32_t any_table_size ( void * _tab ) {
+        return int32_t(((Table *) _tab)->size);
+    }
+
+
     class Module_Ast : public Module {
     public:
         template <typename RecAnn>
@@ -2223,6 +2282,15 @@ namespace das {
             addAnnotation(make_smart<AstExprArrayComprehensionAnnotation>(lib));
             addAnnotation(make_smart<AstTypeInfoMacroAnnotation>(lib));
             addAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib));
+            // vector functions for custom containers
+            addExtern<DAS_BIND_FUN(mks_vector_push)>(*this, lib, "push",
+                SideEffects::modifyArgument, "mks_vector_push");
+            addExtern<DAS_BIND_FUN(mks_vector_pop)>(*this, lib, "pop",
+                SideEffects::modifyArgument, "mks_vector_pop");
+            addExtern<DAS_BIND_FUN(mks_vector_clear)>(*this, lib, "clear",
+                SideEffects::modifyArgument, "mks_vector_clear");
+            addExtern<DAS_BIND_FUN(mks_vector_resize)>(*this, lib, "resize",
+                SideEffects::modifyArgument, "mks_vector_resize");
             // expressions with no extra syntax
             addAnnotation(make_smart<AstExprLabelAnnotation>(lib));
             addAnnotation(make_smart<AstExprGotoAnnotation>(lib));
@@ -2353,6 +2421,16 @@ namespace das {
             // type
             addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",
                 SideEffects::none, "clone_type");
+            addExtern<DAS_BIND_FUN(get_variant_field_offset)>(*this, lib,  "get_variant_field_offset",
+                SideEffects::none, "get_variant_field_offset");
+            addExtern<DAS_BIND_FUN(any_table_foreach)>(*this, lib,  "any_table_foreach",
+                SideEffects::modifyArgumentAndExternal, "any_table_foreach");
+            addExtern<DAS_BIND_FUN(any_array_foreach)>(*this, lib,  "any_array_foreach",
+                SideEffects::modifyArgumentAndExternal, "any_array_foreach");
+            addExtern<DAS_BIND_FUN(any_array_size)>(*this, lib,  "any_array_size",
+                SideEffects::none, "any_array_size");
+            addExtern<DAS_BIND_FUN(any_table_size)>(*this, lib,  "any_table_size",
+                SideEffects::none, "any_table_size");
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");

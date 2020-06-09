@@ -1,9 +1,23 @@
 require daslib/json
-require daslib/json_enh
+require daslib/json_boost
+
+var
+	jsv = %json~
+		{"menu": {
+		"id": "file",
+		"value": "File",
+		"popup": {
+			"menuitem": [
+			{"value": "New", "onclick": "CreateNewDoc()"},
+			{"value": "Open", "onclick": "OpenDoc()"},
+			{"value": "Close", "onclick": "CloseDoc()"}
+			]
+		}
+		}}
+    %%
 
 [export]
-def test
-    var error = ""
-    var jsv = %_esc~1234%_esc
-    print("jsv=`{jsv}`\n")
+def test()
+	print("jsv = {write_json(jsv)}\n")
     return true
+

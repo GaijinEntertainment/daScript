@@ -388,6 +388,12 @@ namespace das
         static void init ( Module * mod, const ModuleLibrary & lib ) {
             addExtern<DAS_BIND_FUN(das_vector_push<TT>)>(*mod, lib, "push",
                 SideEffects::modifyArgument, "das_vector_push");
+            addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
+                SideEffects::modifyArgument, "das_vector_pop");
+            addExtern<DAS_BIND_FUN(das_vector_clear<TT>)>(*mod, lib, "clear",
+                SideEffects::modifyArgument, "das_vector_clear");
+            addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
+                SideEffects::modifyArgument, "das_vector_resize");
         }
     };
 
@@ -396,6 +402,12 @@ namespace das
         static void init ( Module * mod, const ModuleLibrary & lib ) {
             addExtern<DAS_BIND_FUN(das_vector_push_value<TT>)>(*mod, lib, "push",
                 SideEffects::modifyArgument, "das_vector_push_value");
+            addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
+                SideEffects::modifyArgument, "das_vector_pop");
+            addExtern<DAS_BIND_FUN(das_vector_clear<TT>)>(*mod, lib, "clear",
+                SideEffects::modifyArgument, "das_vector_clear");
+            addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
+                SideEffects::modifyArgument, "das_vector_resize");
         }
     };
 

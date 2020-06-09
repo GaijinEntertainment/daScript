@@ -2460,6 +2460,14 @@ make_struct_decl
         msd->at = tokAt(@loc);
         $$ = msd;
     }
+    |   BRABRAB [loc] type_declaration[mkt] '(' ')' optional_block[blk] ']' ']' {
+        auto msd = new ExprMakeStruct();
+        msd->makeType = TypeDeclPtr($mkt);
+        msd->useInitializer = true;
+        msd->block = $blk;
+        msd->at = tokAt(@loc);
+        $$ = msd;
+    }
     |   BRABRAB [loc] type_declaration[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] ']' ']' {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;

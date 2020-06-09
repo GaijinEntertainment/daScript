@@ -632,6 +632,7 @@ namespace das
     typedef smart_ptr<TypeInfoMacro> TypeInfoMacroPtr;
 
     struct Error {
+        Error () {}
         Error ( const string & w, const string & e, const string & f, LineInfo a, CompilationError ce )
             : what(w), extra(e), fixme(f), at(a), cerr(ce)  {}
         __forceinline bool operator < ( const Error & err ) const {

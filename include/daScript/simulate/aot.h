@@ -1991,7 +1991,7 @@ namespace das {
 
 
     template <typename TK, typename TV, typename TKey>
-    TV * __builtin_table_find ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
+    __forceinline TV * __builtin_table_find ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,sizeof(TV));
@@ -2000,7 +2000,7 @@ namespace das {
     }
 
     template <typename TK, typename TV, typename TKey>
-    bool __builtin_table_key_exists ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
+    __forceinline bool __builtin_table_key_exists ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context, sizeof(TV));
@@ -2008,7 +2008,7 @@ namespace das {
     }
 
     template <typename TK, typename TV, typename TKey>
-    bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, TKey _key ) {
+    __forceinline bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, TKey _key ) {
         if ( tab.lock ) context->throw_error("can't erase from locked table");
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
@@ -2017,15 +2017,29 @@ namespace das {
     }
 
     template <typename TT>
-    void das_vector_push ( vector<TT> & vec, const TT & value ) {
+    __forceinline void das_vector_push ( vector<TT> & vec, const TT & value ) {
         vec.push_back(value);
     }
 
     template <typename TT>
-    void das_vector_push_value ( vector<TT> & vec, TT value ) {
+    __forceinline void das_vector_push_value ( vector<TT> & vec, TT value ) {
         vec.push_back(value);
     }
 
+    template <typename TT>
+    __forceinline void das_vector_pop ( vector<TT> & vec ) {
+        vec.pop_back();
+    }
+
+    template <typename TT>
+    __forceinline void das_vector_clear ( vector<TT> & vec ) {
+        vec.clear();
+    }
+
+    template <typename TT>
+    __forceinline void das_vector_resize ( vector<TT> & vec, int32_t newSize ) {
+        vec.resize(newSize);
+    }
 }
 
 #include "daScript/simulate/aot_builtin_string.h"

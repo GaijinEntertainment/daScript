@@ -1293,10 +1293,10 @@ namespace das {
                               + decl.type->describe() + " = " + decl.init->type->describe(),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
                     } else if ( !decl.type->canCopy() && !decl.moveSemantics ) {
-                        error("this field can't be copied, use <- instead; " + decl.type->describe(), "", "",
+                        error("field " + decl.name + " can't be copied, use <- instead; " + decl.type->describe(), "", "",
                               decl.init->at, CompilationError::invalid_initialization_type );
                     } else if ( !decl.init->type->canCopy() && !decl.init->type->canMove() ) {
-                        error("this field can't be initialized at all; " + decl.init->type->describe(),  "", "",
+                        error("field " + decl.name + "can't be initialized at all; " + decl.init->type->describe(),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
                     } else if (decl.moveSemantics && decl.init->type->isConst()) {
                         error("can't move from a constant value " + decl.init->type->describe(), "", "",
@@ -1706,7 +1706,9 @@ namespace das {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // infer
             if ( !expr->subexpr->type->isRef() ) {
-                error("can only dereference a reference",  "", "",
+                TextWriter tw;
+                tw << *expr->subexpr;
+                error("can only dereference a reference", tw.str(), "",
                     expr->at, CompilationError::invalid_type);
             } else if ( !expr->subexpr->type->isSimpleType() && !expr->subexpr->type->isPointer() && !expr->subexpr->type->isEnum() ) {
                 error("can only dereference a simple type, not a " + expr->subexpr->type->describe(),  "", "",
@@ -3720,7 +3722,7 @@ namespace das {
                 }
                 expr->fieldIndex = index;
             } else {
-                error("can't get field of " + expr->value->type->describe(), "", "",
+                error("can't get field " + expr->name + " of " + expr->value->type->describe(), "", "",
                       expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
@@ -3958,7 +3960,12 @@ namespace das {
                     expr->at, CompilationError::operator_not_found);
             } else {
                 expr->func = functions[0].get();
-                expr->type = make_smart<TypeDecl>(*(expr->func->firstArgReturnType ? expr->arguments[0]->type : expr->func->result));
+                if ( expr->func->firstArgReturnType ) {
+                    expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
+                    expr->type->ref = false;
+                } else {
+                    expr->type = make_smart<TypeDecl>(*expr->func->result);
+                }
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
                 // lets try to fold it
@@ -4093,7 +4100,12 @@ namespace das {
             }
             else {
                 expr->func = functions[0].get();
-                expr->type = make_smart<TypeDecl>(*(expr->func->firstArgReturnType ? expr->arguments[0]->type : expr->func->result));
+                if ( expr->func->firstArgReturnType ) {
+                    expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
+                    expr->type->ref = false;
+                } else {
+                    expr->type = make_smart<TypeDecl>(*expr->func->result);
+                }
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->left = Expression::autoDereference(expr->left);
                 if ( !expr->func->arguments[1]->type->isRef() )
@@ -5244,7 +5256,12 @@ namespace das {
                         return nullptr;
                     }
                 }
-                expr->type = make_smart<TypeDecl>(*(funcC->firstArgReturnType ? expr->arguments[0]->type : funcC->result));
+                if ( funcC->firstArgReturnType ) {
+                    expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
+                    expr->type->ref = false;
+                } else {
+                    expr->type = make_smart<TypeDecl>(*funcC->result);
+                }
                 // infer FORWARD types
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
@@ -5375,7 +5392,7 @@ namespace das {
                         decl->value->at, CompilationError::invalid_type);
                 }
                 if (!fieldType->canCopy() && !decl->moveSemantics) {
-                    error("this field can't be copied; " + fieldType->describe(),"","use <- instead",
+                    error("field " + decl->name + " can't be copied; " + fieldType->describe(),"","use <- instead",
                         decl->at, CompilationError::invalid_type);
                 } else if (decl->moveSemantics && decl->value->type->isConst()) {
                     error("can't move from a constant value " + decl->value->type->describe(), "", "",
@@ -5461,7 +5478,7 @@ namespace das {
                                 decl->value->at, CompilationError::invalid_type );
                     }
                     if( !field->type->canCopy() && !decl->moveSemantics ) {
-                        error("this field can't be copied; " + field->type->describe(),"","use <- instead",
+                        error("field " + decl->name + " can't be copied; " + field->type->describe(),"","use <- instead",
                               decl->at, CompilationError::invalid_type );
                     } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + decl->value->type->describe(), "", "",
@@ -5483,7 +5500,7 @@ namespace das {
                                 decl->value->at, CompilationError::invalid_type );
                     }
                     if( !fldt->canCopy() && !decl->moveSemantics ) {
-                        error("this field can't be copied; " + fldt->describe(),"","use <- instead",
+                        error("field " + decl->name + " can't be copied; " + fldt->describe(),"","use <- instead",
                               decl->at, CompilationError::invalid_type );
                     } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + decl->value->type->describe(), "", "",
