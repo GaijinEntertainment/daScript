@@ -15,9 +15,14 @@
 
 #else
 
+#ifdef __NINTENDO__
+#include <arpa/inet.h>
+#endif
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
 
 #define closesocket close

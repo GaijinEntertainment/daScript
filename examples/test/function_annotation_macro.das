@@ -1,6 +1,5 @@
 module function_annotation_macro
 
-require rtti
 require ast
 require daslib/ast_boost
 

@@ -54,6 +54,7 @@ namespace das {
         }
         virtual void arg ( Func fun,  const char * argN ) override {
             SimFunction * simFun = context->getFunction(fun.index - 1);
+            DAS_ASSERT(simFun);
             write(simFun->mangledName);
             write(argN);
         }

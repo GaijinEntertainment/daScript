@@ -552,8 +552,8 @@ namespace das {
         }
         static __forceinline const TT * safe_index ( const THIS_TYPE * that, uint32_t idx, Context * ) {
             if (!that) return nullptr;
-            return that->data + idx;
             if ( idx>=size ) return nullptr;
+            return that->data + idx;
         }
     };
 

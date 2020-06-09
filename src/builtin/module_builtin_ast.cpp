@@ -887,6 +887,10 @@ namespace das {
             // properties
             addProperty<DAS_BIND_MANAGED_PROP(isVoid)>("isVoid","isVoid");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
+            addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf","getSizeOf");
+            addProperty<DAS_BIND_MANAGED_PROP(getBaseSizeOf)>("baseSizeOf","getBaseSizeOf");
+            addProperty<DAS_BIND_MANAGED_PROP(getCountOf)>("countOf","getCountOf");
+            addProperty<DAS_BIND_MANAGED_PROP(getAlignOf)>("alignOf","getAlignOf");
         }
     };
 
