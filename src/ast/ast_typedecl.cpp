@@ -82,7 +82,9 @@ namespace das
     }
 
     void TypeDecl::updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases ) {
-        if ( decl->baseType==Type::autoinfer ) {
+        if ( !pass ) {
+            return;
+        } else if ( decl->baseType==Type::autoinfer ) {
             if ( !decl->alias.empty() && aliases.find(decl->alias)==aliases.end() ) {
                 auto TT = make_smart<TypeDecl>(*pass);
                 TT->alias = decl->alias;
