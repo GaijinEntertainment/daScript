@@ -201,12 +201,12 @@ float2, float3, float4:
 
 .. das:function:: dot(x, y)
 
-    returns scalar representating dot product between `x` and `y`
+    returns scalar representing dot product between `x` and `y`
 
 .. das:function:: normalize(x)
 
     returns normalized `x`, or nan if length(x) is 0
-	
+
 .. das:function:: safe_normalize(x)
 
     returns normalized `x`, or 0 if length(x) is 0
@@ -218,6 +218,7 @@ float3 only:
 .. das:function:: cross(x, y)
 
     returns vector representating cross product between `x` and `y`
+
 .. das:function:: reflect(v, n)
 
     returns vector representating reflection of `x` from `n` same as ::

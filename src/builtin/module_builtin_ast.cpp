@@ -2210,6 +2210,15 @@ namespace das {
         return THIS->isSameType(*decl,refMatters,constMatters,temporaryMatters);
     }
 
+    void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
+        const TBlock<void,char *,char*,TypeDeclPtr,uint32_t> & block, Context * context ) {
+        for ( auto & it : ann.fields ) {
+            const auto & fld = it.second;
+            das_invoke<void>::invoke<const char *,const char *,TypeDeclPtr,uint32_t>(context,block,
+                it.first.c_str(), fld.cppName.c_str(),fld.decl,fld.offset);
+        }
+    }
+
     class Module_Ast : public Module {
     public:
         template <typename RecAnn>
@@ -2480,6 +2489,8 @@ namespace das {
                 SideEffects::modifyExternal, "for_each_structure");
             addExtern<DAS_BIND_FUN(for_each_generic)>(*this, lib,  "for_each_generic",
                 SideEffects::modifyExternal, "for_each_generic");
+            addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
+                SideEffects::modifyExternal, "builtin_structure_for_each_field");
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");

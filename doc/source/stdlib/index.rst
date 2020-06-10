@@ -30,3 +30,18 @@ THE SOFTWARE.
    stdiolib.rst
    stdrandom.rst
 
+   builtin.rst
+   math.rst
+   fio.rst
+   random.rst
+   network.rst
+   uriparser.rst
+   rtti.rst
+   ast.rst
+   ast_boost.rst
+   strings.rst
+   functional.rst
+   json.rst
+   json_boost.rst
+
+

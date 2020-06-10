@@ -12,6 +12,7 @@ namespace das {
         if ( at!=string::npos ) {
             moduleName = name.substr(0,at);
             funcName = name.substr(at+2);
+            if ( moduleName=="builtin`" ) moduleName="$";
             return true;
         } else {
             moduleName = "*";

@@ -4,26 +4,29 @@ require fio
 require rtti
 require ast
 require math
+require uriparser
 require daslib/ast_boost
 require daslib/strings
+require daslib/functional
+require daslib/json
+require daslib/json_boost
 
 var
     doc_file : FILE const?
 
-// todo: write to appropriate file
 def output(text:string)
     fwrite(doc_file,text)
 
 def make_header(name,lab:string)
     let wide = length(name)
     output(".. _stdlib_{lab}:\n\n")
-    output("{repeat("=",wide)}\n")
+    output("{builtin`::repeat("=",wide)}\n")
     output("{name}\n")
-    output("{repeat("=",wide)}\n\n")
+    output("{builtin`::repeat("=",wide)}\n\n")
 
 def output_table_separator(wid:array<int>)
     for x in wid
-        output("+{repeat("-",x)}")
+        output("+{builtin`::repeat("-",x)}")
     output("+\n")
 
 def output_table_line(line:array<string>;wid:array<int>)
@@ -112,7 +115,10 @@ def document_classes(mod:Module?)
     for_each_structure(mod) <| $(value)
         if !value.flags.isClass
             return
-        output(".. das:class:: {value.name}\n\n")
+        output(".. das:class:: {value.name}")
+        if value.parent!=null
+            output(" : {value.parent.name}")
+        output("\n\n")
         output("to be documented\n\n")
         var w  = 0
         for fld in value.fields
@@ -165,7 +171,10 @@ def document_structures(mod:Module?)
     for_each_structure(mod) <| $(value)
         if value.flags.isClass | value.flags.generated
             return
-        output(".. das:attribute:: {value.name}\n\n")
+        output(".. das:attribute:: {value.name}")
+        if value.parent!=null
+            output(" : {value.parent.name}")
+        output("\n\n")
         output("it defines as follows ::\n\n")
         var w  = 0
         for fld in value.fields
@@ -175,6 +184,47 @@ def document_structures(mod:Module?)
         output("\n")
         output("to be documented\n\n")
         output("\n")
+
+[unsafe]
+def document_structure_annotations(mod:Module?)
+    var any = false
+    module_for_each_annotation(mod) <| $(value)
+        if !value.isBasicStructureAnnotation
+            return
+        any = true
+    if !any
+        return
+    output("++++++++++++++++++\n")
+    output("Handled structures\n")
+    output("++++++++++++++++++\n\n")
+    module_for_each_annotation(mod) <| $(value)
+        if !value.isBasicStructureAnnotation
+            return
+        output(".. das:attribute:: {value.name}\n\n")
+        var w  = 0
+        var ann = reinterpret<BasicStructureAnnotation?> value
+        for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
+            if offset != -1u
+                w = max(w,length(name))
+        if w >0
+            output("it defines as follows ::\n\n")
+            for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
+                if offset != -1u
+                    output("  {wide(name,w)} : {describe(xtype,false)}\n")
+            output("\n")
+        w = 0
+        for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
+            if offset == -1u
+                w = max(w,length(name))
+        if w >0
+            output("it has the following properties ::\n\n")
+            for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
+                if offset == -1u
+                    output("  {wide(name,w)} : {describe(xtype,false)}\n")
+            output("\n")
+        output("to be documented\n\n")
+        output("\n")
+
 
 def function_needs_documenting(func:FunctionPtr)
     if func.flags.generated
@@ -277,6 +327,8 @@ def document_generics(mod:Module?)
         document_function(func)
 
 def document(name:string;mod:Module?;fname:string)
+    if mod==null
+        panic("missing module {name}")
     doc_file = fopen(fname,"wb")
     if doc_file == null
         panic("can't open {fname}")
@@ -286,6 +338,7 @@ def document(name:string;mod:Module?;fname:string)
     document_typedefs(mod)
     document_enumerations(mod)
     document_structures(mod)
+    document_structure_annotations(mod)
     document_classes(mod)
     document_generics(mod)
     document_functions(mod)
@@ -305,12 +358,28 @@ def test
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
     document("Built-in runtime",
         get_module("$"),"{root}/builtin.rst")
+    document("Math library",
+        get_module("math"),"{root}/math.rst")
+    document("File input output library",
+        get_module("fio"),"{root}/fio.rst")
+    document("Random generator library",
+        get_module("random"),"{root}/random.rst")
+    document("Network socket library",
+        get_module("network"),"{root}/network.rst")
+    document("URI manipulation library based on UriParser",
+        get_module("uriparser"),"{root}/uriparser.rst")
     document("Runtime type information library",
         get_module("rtti"),"{root}/rtti.rst")
     document("Compile time type  and AST information library",
         get_module("ast"),"{root}/ast.rst")
-    document("File input output library",
-        get_module("fio"),"{root}/fio.rst")
     document("Boost package for the AST",
         find_module("ast_boost"),"{root}/ast_boost.rst")
+    document("String manipulation library",
+        find_module("strings"),"{root}/strings.rst")
+    document("Functional programming library",
+        find_module("functional"),"{root}/functional.rst")
+    document("JSON manipulation library",
+        find_module("json"),"{root}/json.rst")
+    document("Boost package for JSON",
+        find_module("json_boost"),"{root}/json_boost.rst")
     return true
