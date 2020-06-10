@@ -1373,6 +1373,7 @@ namespace das {
         block->list.push_back(wth);
         // and done
         func->body = block;
+        func->isClassMethod = true;
         verifyGenerated(func->body);
     }
 
@@ -1432,6 +1433,7 @@ namespace das {
             auto fd = (Structure::FieldDeclaration *) baseClass->findField("__rtti");
             fd->init = finit;
             fd->parentType = fd->type->isAuto();
+            fd->generated = true;
         } else {
             auto pvoid = make_smart<TypeDecl>(Type::tPointer);
             pvoid->firstType = make_smart<TypeDecl>(Type::tVoid);

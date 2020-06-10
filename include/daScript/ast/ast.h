@@ -572,6 +572,7 @@ namespace das
                 bool    generator : 1;
                 bool    lambda : 1;
                 bool    firstArgReturnType : 1;
+                bool    isClassMethod : 1;
             };
             uint32_t flags = 0;
         };

@@ -47,6 +47,30 @@ def isExpression(t:TypeDeclPtr; top:bool=true) : bool
     else
         return false
 
+def is_same_or_inherited ( parent,child: Structure? )
+    var ch = child
+    while ch != null
+        if parent == ch
+            return true
+        ch = ch.parent
+    return false
+
+[unsafe]
+def is_class_method ( cinfo:StructurePtr; finfo:TypeDeclPtr )
+    if finfo.baseType != Type tFunction
+        return false
+    if finfo.dim.length !=0
+        return false
+    if finfo.argTypes.length == 0
+        return false
+    if finfo.argTypes[0].baseType != Type tStructure
+        return false
+    if finfo.argTypes[0].dim.length != 0
+        return false
+    if !is_same_or_inherited(finfo.argTypes[0].structType,reinterpret<Structure?> cinfo)
+        return false
+    return true
+
 class MacroMacro : AstFunctionAnnotation
     [unsafe] def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         compiling_program().flags |= ProgramFlags needMacroModule

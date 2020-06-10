@@ -2,6 +2,15 @@ options indenting = 4
 
 module strings
 
+[export]
+def wide (text:string; width:int)
+    let extra = width - length(text)
+    if extra > 0
+        return text + repeat(" ",extra)
+    else
+        return text
+
+
 def join(it; separator:string)
     static_if !typeinfo(is_iterable it)
         concept_assert(false,"can't join non-iterable type")

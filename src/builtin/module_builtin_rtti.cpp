@@ -544,15 +544,15 @@ namespace das {
         }
     }
 
-    const Module * rtti_get_this_module ( smart_ptr_raw<Program> program ) {
+    Module * rtti_get_this_module ( smart_ptr_raw<Program> program ) {
         return program->thisModule.get();
     }
 
-    const Module * rtti_get_builtin_module ( const char * name ) {
+    Module * rtti_get_builtin_module ( const char * name ) {
         return Module::require(name);
     }
 
-    void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,const Module *> & block, Context * context ) {
+    void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context ) {
         program->library.foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
             context->invoke(block, args, nullptr);
@@ -560,7 +560,7 @@ namespace das {
         }, "*");
     }
 
-    void rtti_builtin_program_for_each_registered_module ( const TBlock<void,const Module *> & block, Context * context ) {
+    void rtti_builtin_program_for_each_registered_module ( const TBlock<void,Module *> & block, Context * context ) {
         Module::foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
             context->invoke(block, args, nullptr);
@@ -568,7 +568,7 @@ namespace das {
         });
     }
 
-    void rtti_builtin_module_for_each_enumeration ( const Module * module, const TBlock<void,const EnumInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->enumerations ) {
@@ -636,7 +636,7 @@ namespace das {
         return nada;
     }
 
-    void rtti_builtin_module_for_each_structure ( const Module * module, const TBlock<void,const StructInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->structures ) {
@@ -662,7 +662,7 @@ namespace das {
         }
     }
 
-    void rtti_builtin_module_for_each_function ( const Module * module, const TBlock<void,const FuncInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->functions ) {
@@ -675,7 +675,7 @@ namespace das {
         }
     }
 
-    void rtti_builtin_module_for_each_generic ( const Module * module, const TBlock<void,const FuncInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->generics ) {
@@ -688,7 +688,7 @@ namespace das {
         }
     }
 
-    void rtti_builtin_module_for_each_global ( const Module * module, const TBlock<void,const VarInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->globals ) {
@@ -701,7 +701,7 @@ namespace das {
         }
     }
 
-    void rtti_builtin_module_for_each_annotation ( const Module * module, const TBlock<void,const Annotation> & block, Context * context ) {
+    void rtti_builtin_module_for_each_annotation ( Module * module, const TBlock<void,const Annotation> & block, Context * context ) {
         for ( auto & it : module->handleTypes ) {
             vec4f args[1] = {
                 cast<Annotation*>::from(it.second.get())

@@ -105,18 +105,18 @@ namespace das {
     void rtti_builtin_compile(char * modName, char * str, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
     void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
 
-    void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, const Module *> & block, Context * context);
-    void rtti_builtin_program_for_each_registered_module(const TBlock<void, const Module *> & block, Context * context);
+    void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context);
+    void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context);
 
-    const Module * rtti_get_this_module(smart_ptr_raw<Program> prog);
-    const Module * rtti_get_builtin_module(const char * name);
+    Module * rtti_get_this_module(smart_ptr_raw<Program> prog);
+    Module * rtti_get_builtin_module(const char * name);
 
-    void rtti_builtin_module_for_each_enumeration(const Module * module, const TBlock<void, const EnumInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_structure(const Module * module, const TBlock<void, const StructInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_function(const Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_generic(const Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_global(const Module * module, const TBlock<void, const VarInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_annotation(const Module * module, const TBlock<void, const Annotation> & block, Context * context);
+    void rtti_builtin_module_for_each_enumeration(Module * module, const TBlock<void, const EnumInfo> & block, Context * context);
+    void rtti_builtin_module_for_each_structure(Module * module, const TBlock<void, const StructInfo> & block, Context * context);
+    void rtti_builtin_module_for_each_function(Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
+    void rtti_builtin_module_for_each_generic(Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
+    void rtti_builtin_module_for_each_global(Module * module, const TBlock<void, const VarInfo> & block, Context * context);
+    void rtti_builtin_module_for_each_annotation(Module * module, const TBlock<void, const Annotation> & block, Context * context);
 
     // note: this one is not TBlock, so that we don't have to include ast.h
     void rtti_builtin_structure_for_each_annotation(const StructInfo & info, const Block & block, Context * context);

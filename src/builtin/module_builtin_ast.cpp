@@ -968,11 +968,11 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FunctionFlags";
         ft->argNames = { "builtIn", "policyBased", "callBased", "interopFn",
-            "hasRetur", "copyOnReturn", "moveOnReturn", "exports", "init",
+            "hasReturn", "copyOnReturn", "moveOnReturn", "exports", "init",
             "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime",
             "unsafe", "unsafeOperation", "unsafeDeref", "hasMakeBlock", "aotNeedPrologue",
             "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction",
-            "_generator", "_lambda", "firstArgReturnType"
+            "_generator", "_lambda", "firstArgReturnType", "isClassMethod"
         };
         return ft;
     }
@@ -2177,6 +2177,31 @@ namespace das {
         return int32_t(((Table *) _tab)->size);
     }
 
+    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context ) {
+        for ( auto & td : mod->aliasTypes ) {
+            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,block,td.first.c_str(),td.second);
+        }
+    }
+
+    void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context ) {
+        for ( auto & td : mod->enumerations ) {
+            das_invoke<void>::invoke<EnumerationPtr>(context,block,td.second);
+        }
+    }
+
+    void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context ) {
+        for ( auto & td : mod->structures ) {
+            das_invoke<void>::invoke<StructurePtr>(context,block,td.second);
+        }
+    }
+
+    bool isSameAstType ( TypeDeclPtr THIS,
+                     TypeDeclPtr decl,
+                     RefMatters refMatters,
+                     ConstMatters constMatters,
+                     TemporaryMatters temporaryMatters ) {
+        return THIS->isSameType(*decl,refMatters,constMatters,temporaryMatters);
+    }
 
     class Module_Ast : public Module {
     public:
@@ -2288,13 +2313,13 @@ namespace das {
             addAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib));
             // vector functions for custom containers
             addExtern<DAS_BIND_FUN(mks_vector_push)>(*this, lib, "push",
-                SideEffects::modifyArgument, "mks_vector_push");
+                SideEffects::modifyArgument, "mks_vector_push")->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_pop)>(*this, lib, "pop",
-                SideEffects::modifyArgument, "mks_vector_pop");
+                SideEffects::modifyArgument, "mks_vector_pop")->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_clear)>(*this, lib, "clear",
-                SideEffects::modifyArgument, "mks_vector_clear");
+                SideEffects::modifyArgument, "mks_vector_clear")->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_resize)>(*this, lib, "resize",
-                SideEffects::modifyArgument, "mks_vector_resize");
+                SideEffects::modifyArgument, "mks_vector_resize")->generated = true;
             // expressions with no extra syntax
             addAnnotation(make_smart<AstExprLabelAnnotation>(lib));
             addAnnotation(make_smart<AstExprGotoAnnotation>(lib));
@@ -2423,6 +2448,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
                 SideEffects::none, "clone_expression");
             // type
+            addExtern<DAS_BIND_FUN(isSameAstType)>(*this, lib,  "is_same_type",
+                SideEffects::none, "isSameAstType");
             addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",
                 SideEffects::none, "clone_type");
             addExtern<DAS_BIND_FUN(get_variant_field_offset)>(*this, lib,  "get_variant_field_offset",
@@ -2437,6 +2464,13 @@ namespace das {
                 SideEffects::none, "any_array_size");
             addExtern<DAS_BIND_FUN(any_table_size)>(*this, lib,  "any_table_size",
                 SideEffects::none, "any_table_size");
+            // module
+            addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
+                SideEffects::modifyExternal, "for_each_typedef");
+            addExtern<DAS_BIND_FUN(for_each_enumeration)>(*this, lib,  "for_each_enumeration",
+                SideEffects::modifyExternal, "for_each_enumeration");
+            addExtern<DAS_BIND_FUN(for_each_structure)>(*this, lib,  "for_each_structure",
+                SideEffects::modifyExternal, "for_each_structure");
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");
