@@ -25,8 +25,8 @@ class RegexReader : AstReaderMacro
             macro_error(prog,expr.at,"regular expression did not compile")
             return [[ExpressionPtr]]
         // TODO: turn into AOT?
+        let re_data <- convert_to_expression(regex,expr.at)
         delete regex
         var creg <- new [[ExprCall() at=expr.at, name:="regex::regex_compile"]]
-        var ex <- new [[ExprConstString() at=expr.at, value:=expr.sequence]]
-        push(creg.arguments,ExpressionPtr(ex))
+        push(creg.arguments,re_data)
         return ExpressionPtr(creg)

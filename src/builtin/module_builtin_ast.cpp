@@ -2144,6 +2144,10 @@ namespace das {
         return td->getVariantFieldOffset(index);
     }
 
+    int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index ) {
+        return td->getTupleFieldOffset(index);
+    }
+
     void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context ) {
         auto tab = (Table *) _tab;
         if ( !tab->data ) return;
@@ -2423,6 +2427,8 @@ namespace das {
                 SideEffects::none, "clone_type");
             addExtern<DAS_BIND_FUN(get_variant_field_offset)>(*this, lib,  "get_variant_field_offset",
                 SideEffects::none, "get_variant_field_offset");
+            addExtern<DAS_BIND_FUN(get_tuple_field_offset)>(*this, lib,  "get_tuple_field_offset",
+                SideEffects::none, "get_tuple_field_offset");
             addExtern<DAS_BIND_FUN(any_table_foreach)>(*this, lib,  "any_table_foreach",
                 SideEffects::modifyArgumentAndExternal, "any_table_foreach");
             addExtern<DAS_BIND_FUN(any_array_foreach)>(*this, lib,  "any_array_foreach",

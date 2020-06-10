@@ -20,7 +20,7 @@ typedef
 struct ReNode
     op      : ReOp
     id      : int
-    fun2    : function< (var regex:Regex; var node:ReNode?; str:uint8?) : uint8? >
+    [[do_not_convert]] fun2 : function< (var regex:Regex; var node:ReNode?; str:uint8?) : uint8? >
     at      : range
     text    : string
     textLen : int
@@ -28,14 +28,14 @@ struct ReNode
     left    : ReNode?
     right   : ReNode?
     subexpr : ReNode?
-    [[do_not_delete]] next : ReNode?
+    [[do_not_delete,do_not_convert]] next : ReNode?
     cset    : CharSet
     index   : int
-    tail    : uint8?
+    [[do_not_convert]] tail : uint8?
 
 struct Regex
     root        : ReNode?
-    match       : uint8?
+    [[do_not_convert]] match : uint8?
     groups      : array<tuple<range;string>>
     earlyOut    : CharSet
     canEarlyOut : bool
@@ -756,6 +756,13 @@ def regex_compile ( expr : string )
     var re:Regex
     if !regex_compile(re,expr)
         panic("regular expression {expr} did not compile")
+    return <- re
+
+[export]
+def regex_compile ( var re:Regex )
+    if re.root != null
+        re_assign_next(re)
+        re_assign_match_functions(re)
     return <- re
 
 [export,unsafe]

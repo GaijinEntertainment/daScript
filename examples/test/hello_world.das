@@ -1,23 +1,9 @@
-require daslib/json
-require daslib/json_boost
-
-var
-	jsv = %json~
-		{"menu": {
-		"id": "file",
-		"value": "File",
-		"popup": {
-			"menuitem": [
-			{"value": "New", "onclick": "CreateNewDoc()"},
-			{"value": "Open", "onclick": "OpenDoc()"},
-			{"value": "Close", "onclick": "CloseDoc()"}
-			]
-		}
-		}}
-    %%
+require daslib/regex
+require daslib/regex_boost
 
 [export]
 def test()
-	print("jsv = {write_json(jsv)}\n")
+	var r1 <- %regex~[\w\.+-]+@[\w\.-]+\.[\w\.-]+%%
+	regex_debug(r1)
     return true
 

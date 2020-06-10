@@ -237,18 +237,28 @@ def walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
 	return ExpressionPtr(mkAsc)
 
 [unsafe,private]
+def walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+    var mkArr <- new [[ExprMakeTuple() at=at, recordType<-clone_type(info)]]
+    for idx in range(0, info.argTypes.length)
+        let offset = get_tuple_field_offset(info,idx)
+        var elem <- walk_and_convert(data + offset, info.argTypes[idx], at)
+        push(mkArr.values, elem)
+    return ExpressionPtr(mkArr)
+
+[unsafe,private]
 def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	var mkStruct <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
 	let stype = info.structType
+    var mkS <- new [[ MakeStruct() ]]
 	for x in stype.fields
-		let fdata = data + x.offset
-		var elem <- walk_and_convert ( fdata, x._type, at)
-		var mkS <- new [[ MakeStruct() ]]
-		var mkF <- new [[MakeFieldDecl() at=at, name := x.name, value <- elem]]
-        if !x._type.canCopy
-            mkF.flags = FieldDeclarationFlags moveSemantics
-		push(*mkS, mkF)
-		push(mkStruct.structs, mkS)
+        if find_arg("do_not_convert",x.annotation) is nothing
+            let fdata = data + x.offset
+            var elem <- walk_and_convert ( fdata, x._type, at)
+            var mkF <- new [[MakeFieldDecl() at=at, name := x.name, value <- elem]]
+            if !x._type.canCopy
+                mkF.flags = FieldDeclarationFlags moveSemantics
+            push(*mkS, mkF)
+    push(mkStruct.structs, mkS)
 	return ExpressionPtr(mkStruct)
 
 [unsafe,private]
@@ -293,17 +303,36 @@ def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
 def walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	if info.baseType == Type tInt
 		return ExpressionPtr(new [[ExprConstInt() at=at, value=*reinterpret<int?> data]])
+	elif info.baseType == Type tUInt
+		return ExpressionPtr(new [[ExprConstUInt() at=at, value=*reinterpret<uint?> data]])
 	elif info.baseType == Type tFloat
 		return ExpressionPtr(new [[ExprConstFloat() at=at, value=*reinterpret<float?> data]])
 	elif info.baseType == Type tDouble
 		return ExpressionPtr(new [[ExprConstDouble() at=at, value=*reinterpret<double?> data]])
 	elif info.baseType == Type tBool
 		return ExpressionPtr(new [[ExprConstBool() at=at, value=*reinterpret<bool?> data]])
+	elif info.baseType == Type tRange
+		return ExpressionPtr(new [[ExprConstRange() at=at, value=*reinterpret<range?> data]])
+	elif info.baseType == Type tURange
+		return ExpressionPtr(new [[ExprConstURange() at=at, value=*reinterpret<urange?> data]])
 	elif info.baseType == Type tString
 		return ExpressionPtr(new [[ExprConstString() at=at, value:=*reinterpret<string?> data]])
 	else
 		panic("unsupported {info.baseType}")
         return [[ExpressionPtr]]
+
+[unsafe,private]
+def walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+    var eval = 0
+    if info.baseType == Type tEnumeration
+        eval = int(* reinterpret<uint?> data)
+    elif info.baseType == Type tEnumeration8
+        eval = int(* data)
+    elif info.baseType == Type tEnumeration16
+        eval = int(* reinterpret<uint16?> data)
+    else
+        panic("unsupported enumeration")
+    return ExpressionPtr(new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval]._0]])
 
 [unsafe,private]
 def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -313,7 +342,9 @@ def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expressi
 	elif info.baseType == Type tArray
 		return walk_and_convert_array(data,info,at)
 	elif info.baseType == Type tPointer
-        if info.firstType==null | info.firstType.isVoid
+        if *reinterpret<uint8??>data == null
+            return ExpressionPtr(new [[ExprConstPtr() at=at]])
+        elif info.firstType==null | info.firstType.isVoid
             return ExpressionPtr(new [[ExprConstPtr() at=at]])
         else
 		    return walk_and_convert_pointer(data,info,at)
@@ -321,8 +352,12 @@ def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expressi
 		return walk_and_convert_structure(data,info,at)
 	elif info.baseType == Type tVariant
 		return walk_and_convert_variant(data,info,at)
+	elif info.baseType == Type tTuple
+		return walk_and_convert_tuple(data,info,at)
 	elif info.baseType == Type tTable
 		return walk_and_convert_table(data,info,at)
+    elif info.baseType == Type tEnumeration8 | info.baseType == Type tEnumeration16 | info.baseType == Type tEnumeration
+        return walk_and_convert_enumeration(data,info,at)
     else
         return walk_and_convert_basic(data,info,at)
 
