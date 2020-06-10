@@ -851,8 +851,8 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
                                                       SideEffects::modifyArgumentAndExternal, "builtin_table_values");
         // array and table free
-        addExtern<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "builtin_array_free", SideEffects::modifyArgumentAndExternal, "builtin_array_free");
-        addExtern<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "builtin_table_free", SideEffects::modifyArgumentAndExternal, "builtin_table_free");
+        addExtern<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "__builtin_array_free", SideEffects::modifyArgumentAndExternal, "builtin_array_free");
+        addExtern<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "__builtin_table_free", SideEffects::modifyArgumentAndExternal, "builtin_table_free");
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprFind>("__builtin_table_find");

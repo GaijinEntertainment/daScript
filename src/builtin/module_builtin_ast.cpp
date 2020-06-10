@@ -911,6 +911,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(canCopy)>("canCopy","canCopy");
             addProperty<DAS_BIND_MANAGED_PROP(canMove)>("canMove","canMove");
             addProperty<DAS_BIND_MANAGED_PROP(isVoid)>("isVoid","isVoid");
+            addProperty<DAS_BIND_MANAGED_PROP(isCtorType)>("isCtorType","isCtorType");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf","getSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getBaseSizeOf)>("baseSizeOf","getBaseSizeOf");
@@ -2195,6 +2196,12 @@ namespace das {
         }
     }
 
+    void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context ) {
+        for ( auto & td : mod->generics ) {
+            das_invoke<void>::invoke<FunctionPtr>(context,block,td.second);
+        }
+    }
+
     bool isSameAstType ( TypeDeclPtr THIS,
                      TypeDeclPtr decl,
                      RefMatters refMatters,
@@ -2471,6 +2478,8 @@ namespace das {
                 SideEffects::modifyExternal, "for_each_enumeration");
             addExtern<DAS_BIND_FUN(for_each_structure)>(*this, lib,  "for_each_structure",
                 SideEffects::modifyExternal, "for_each_structure");
+            addExtern<DAS_BIND_FUN(for_each_generic)>(*this, lib,  "for_each_generic",
+                SideEffects::modifyExternal, "for_each_generic");
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");

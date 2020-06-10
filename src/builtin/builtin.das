@@ -178,14 +178,14 @@ def finalize(var a:array<auto(TT)>)
     static_if typeinfo(can_delete type<TT>)
         for aV in a
             delete aV
-    builtin_array_free(a,typeinfo(sizeof type<TT>))
+    __builtin_array_free(a,typeinfo(sizeof type<TT>))
 
 [unsafe]
 def finalize(var a:table<auto(TK);auto(TV)>)
     static_if typeinfo(can_delete type<TV>)
         for aV in values(a)
             delete aV
-    builtin_table_free(a,typeinfo(sizeof type<TK>),typeinfo(sizeof type<TV>))
+    __builtin_table_free(a,typeinfo(sizeof type<TK>),typeinfo(sizeof type<TV>))
 
 // temporal
 

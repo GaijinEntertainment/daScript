@@ -181,9 +181,70 @@ def function_needs_documenting(func:FunctionPtr)
         return false
     if func.flags.isClassMethod
         return false
+    if func.flags.privateFunction
+        return false
     if func.fromGeneric != null
         return false
+    var isBuiltin = false
+    peek(func._module.name) <| $(name)
+        if name=="$"
+            isBuiltin = true
+    // skip builtin operators
+    var isOperator = false
+    if isBuiltin
+        peek(func.name) <| $(name)
+            let ch = character_at(name,0)
+            if !is_alpha(ch) & !is_number(ch) & ch!='_'
+                isOperator = true
+    if isOperator
+        return false
+    // skip builtin type c'tors
+    var isTypeConstructor = false
+    if isBuiltin
+        peek(func.name) <| $(name)
+            if func.result!=null & func.result.isCtorType
+                let tname = das_to_string(func.result.baseType)
+                if name == tname
+                    isTypeConstructor = true
+    if isTypeConstructor
+        return false
+    // skip ones starting with _builtin or __builtin
+    var isBuiltinName = false
+    peek(func.name) <| $(name)
+        if starts_with(name,"_builtin") | starts_with(name,"__builtin")
+            isBuiltinName = true
+    if isBuiltinName
+        return false
     return true
+
+def document_function(func:FunctionPtr)
+    output(".. das:function:: {func.name}")
+    if func.arguments.length != 0
+        output("(")
+        output(join([{for arg in func.arguments; string(arg.name)}],";"))
+        output(")")
+    output("\n\n")
+    if func.result != null & !func.result.isVoid
+        output("{func.name} returns ::\n\n")
+        output(" {describe(func.result,false)}")
+        output("\n\n")
+    output("\n\n")
+    if func.flags.unsafeOperation
+        output(".. warning::\n\n")
+        output(" This is unsafe operation.\n\n")
+    if func.arguments.length !=0
+        var tab : array<array<string>>
+        for arg in func.arguments
+            var line : array<string>
+            push(line,string(arg.name))
+            push(line,describe(arg._type,false))
+            emplace(tab,line)
+        output("function arguments are\n\n")
+        output_table(tab)
+        output("\n")
+    output("\n")
+    output("to be documented\n\n")
+    output("\n")
 
 def document_functions(mod:Module?)
     var any = false
@@ -198,30 +259,22 @@ def document_functions(mod:Module?)
     ast::for_each_function(mod, "") <| $(func)
         if !function_needs_documenting(func)
             return
-        output(".. das:function:: {func.name}")
-        if func.arguments.length != 0
-            output("(")
-            output(join([{for arg in func.arguments; string(arg.name)}],";"))
-            output(")")
-        output("\n\n")
-        if func.result != null & !func.result.isVoid
-            output("{func.name} returns ::\n\n")
-            output(" {describe(func.result,false)}")
-            output("\n\n")
-        output("\n\n")
-        if func.arguments.length !=0
-            var tab : array<array<string>>
-            for arg in func.arguments
-                var line : array<string>
-                push(line,string(arg.name))
-                push(line,describe(arg._type,false))
-                emplace(tab,line)
-            output("function arguments are\n\n")
-            output_table(tab)
-            output("\n")
-        output("\n")
-        output("to be documented\n\n")
-        output("\n")
+        document_function(func)
+
+def document_generics(mod:Module?)
+    var any = false
+    ast::for_each_generic(mod) <| $(func)
+        if function_needs_documenting(func)
+            any = true
+    if !any
+        return
+    output("++++++++\n")
+    output("Generics\n")
+    output("++++++++\n\n")
+    ast::for_each_generic(mod) <| $(func)
+        if !function_needs_documenting(func)
+            return
+        document_function(func)
 
 def document(name:string;mod:Module?;fname:string)
     doc_file = fopen(fname,"wb")
@@ -234,6 +287,7 @@ def document(name:string;mod:Module?;fname:string)
     document_enumerations(mod)
     document_structures(mod)
     document_classes(mod)
+    document_generics(mod)
     document_functions(mod)
     output("\n")
     fclose(doc_file)
@@ -249,6 +303,8 @@ def find_module(name:string) : Module?
 [export]
 def test
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
+    document("Built-in runtime",
+        get_module("$"),"{root}/builtin.rst")
     document("Runtime type information library",
         get_module("rtti"),"{root}/rtti.rst")
     document("Compile time type  and AST information library",
