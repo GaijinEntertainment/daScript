@@ -13,7 +13,7 @@ as embeddable "scripting" language for real-time applications (like games).
 daScript offers a wide range of features like strong static typing, generic programming with iterative type inference,
 Ruby-like blocks, semantic indenting, native machine types, ahead-of-time "compilation" to C++ and fast and simplified bindings to C++ program.
 
-It's philsophy is build around modified Zen of Python.
+It's philosophy is build around modified Zen of Python.
 
 * *Performance counts.*
 * *But not at the cost of safety.*
@@ -25,11 +25,11 @@ It's philsophy is build around modified Zen of Python.
 * *Flat is better than nested.*
 
 daScript is supposed to work as "host data processor".
-While it is technically possible to mantain persistent state within script context (with a certain option set),
-daScript is designed to transform your host (C++) data/implement scripted behaviours.
+While it is technically possible to maintain persistent state within script context (with a certain option set),
+daScript is designed to transform your host (C++) data/implement scripted behaviors.
 
 In a certain sense, it is pure functional - i.e. all persistent state is out of scope of scripting context, and script's state is temporal by it's nature.
-So, the memory model and managment of persistent state becoming are or responsibility of application, and leads to extremely simple and fast memory model in the daScript itself.
+So, the memory model and management of persistent state becoming are or responsibility of application, and leads to extremely simple and fast memory model in the daScript itself.
 
 +++++++++++++
 Performance.
@@ -73,18 +73,39 @@ Generic programming and type system
 ++++++++++++++++++++++++++++++++++++
 
 Although above sample seem to be dynamically typed, it is actually a generic programming.
-The actual instance of fibI/fibR function is strong typed and basically is just accepting and returning int. This is similar to templates in C++ (although C++ is not atrong-typed language) or ML.
-Generic programming in daScript allows very powerful compile-time type reflection mechanisms, significally simplifying writing optimal and clear code.
-Unlike C++ with it's SFINAE, you can use comon conditions (if) in order to change instance of function depending on type info of arguments.
+The actual instance of fibI/fibR function is strong typed and basically is just accepting and returning int. This is similar to templates in C++ (although C++ is not a strong-typed language) or ML.
+Generic programming in daScript allows very powerful compile-time type reflection mechanisms, significantly simplifying writing optimal and clear code.
+Unlike C++ with it's SFINAE, you can use common conditions (if) in order to change instance of function depending on type info of arguments.
 Consider the following example::
 
     def setSomeField(var obj; val)
-        if typeinfo(has_field<someField> obj)
-              obj.someField = val
+        static_if typeinfo(has_field<someField> obj)
+            obj.someField = val
 
 this function will set someField in provided argument *if* it is a struct with someField member.
 
 For more info see :ref:`Generic programming <generic_programming>`).
+
++++++++++++++++++++++++
+Compilation time macros
++++++++++++++++++++++++
+
+daScript does a lot of heavy lifting during compilation time, so that it does not have to at run time.
+In fact daScript compiler runs daScript interpreter for each module, and has entire AST available to it.
+
+The following example modifies function call at compilation time to add precomputed hash of a constant string argument::
+
+    [tag_function_macro(tag="get_hint_tag")]
+    class GetHintFnMacro : AstFunctionAnnotation
+        [unsafe] def override transform ( var call : smart_ptr<ExprCall>;
+            var errors : das_string ) : ExpressionPtr
+            if call.arguments[1] is ExprConstString
+                let arg2 = reinterpret<ExprConstString?>(call.arguments[1])
+                var mkc <- new [[ExprConstUInt() at=arg2.at, value=hash("{arg2.value}")]]
+                push(call.arguments, ExpressionPtr(mkc))
+                return <- ExpressionPtr(call)
+            return [[ExpressionPtr]]
+
 
 ++++++++++++++++++++++++++++++++++++
 Features
@@ -92,12 +113,14 @@ Features
 It's (not)full list of features includes:
 
 * strong typing
-* Ruby-like blocks
+* Ruby-like blocks and lambda
 * tables
 * arrays
 * string-builder
 * native (C++ friendly) interop
 * generics
+* classes
+* macros, including reader macros
 * semantic indenting
 * ECS-friendly interop
 * easy-to-extend type system

@@ -25,24 +25,44 @@ Keywords
 
 .. index:: single: keywords
 
-The following words are reserved and cannot be used as identifiers:
+The following words are reserved as keywords and cannot be used as identifiers:
 
 +------------+------------+-----------+------------+------------+-------------+
-| struct     |   def      | recover   | panic      | let        | var         |
+| struct     | class      | let       | def        | while      | if          |
 +------------+------------+-----------+------------+------------+-------------+
-| continue   | break      | finally   | new        | delete     | enum        |
+| static_if  | else       | for       | recover    | true       | false       |
 +------------+------------+-----------+------------+------------+-------------+
-| enum       | for        | while     | if         | else       | elif        |
+| new        | typeinfo   | type      | in         | is         | as          |
 +------------+------------+-----------+------------+------------+-------------+
-| options    | null       | deref     | return     | typeinfo   | this        |
+| elif       | static_elif| array     | return     | null       | break       |
 +------------+------------+-----------+------------+------------+-------------+
-| cast       | upcast     |reinterpret| operator   | in         | scope       |
+| try        | options    | table     | expect     | const      | require     |
 +------------+------------+-----------+------------+------------+-------------+
-| require    | true       | false     | typedef    | with       | override    |
+| operator   | enum       | finally   | delete     | deref      | scope       |
 +------------+------------+-----------+------------+------------+-------------+
-|  type      | expect     | auto      | include    | where      | addr        |
+| typedef    | with       | cast      | override   | abstract   | upcast      |
 +------------+------------+-----------+------------+------------+-------------+
-|  assert    | invoke     |           |            |            |             |
+| iterator   | var        | addr      | continue   | where      | pass        |
++------------+------------+-----------+------------+------------+-------------+
+| reinterpret| module     | public    | label      | goto       | implicit    |
++------------+------------+-----------+------------+------------+-------------+
+| shared     | smart_ptr  | generator | yield      |            |             |
++------------+------------+-----------+------------+------------+-------------+
+
+The following words are reserved as type names and cannot be used as identifiers:
+
++------------+------------+-----------+------------+------------+-------------+
+| bool       | void       | string    | auto       | int        | int2        |
++------------+------------+-----------+------------+------------+-------------+
+| int3       | int4       | uint      | bitfield   | uint2      | uint3       |
++------------+------------+-----------+------------+------------+-------------+
+| uint4      | float      | float2    | float3     | float4     | range       |
++------------+------------+-----------+------------+------------+-------------+
+| urange     | block      | int64     | uint64     | double     | function    |
++------------+------------+-----------+------------+------------+-------------+
+| lambda     | int8       | uint8     | int16      | uint16     | tuple       |
++------------+------------+-----------+------------+------------+-------------+
+| variant    |            |           |            |            |             |
 +------------+------------+-----------+------------+------------+-------------+
 
 Keywords and types are covered in detail later in this document.
@@ -56,14 +76,19 @@ Operators
 daScript recognizes the following operators:
 
 +----------+----------+----------+----------+----------+----------+----------+----------+
-| ``!``    | ``:=``   | ``??``   | ``==``   | ``&``    | ``>=``   | ``<=``   | ``>``    |
+| ``+=``   | ``-=``   | ``/=``   | ``*=``   | ``%=``   | ``|=``   | ``^=``   | ``<<``   |
 +----------+----------+----------+----------+----------+----------+----------+----------+
-| ``->``   | ``+``    | ``+=``   | ``-``    | ``-=``   | ``/``    | ``/=``   | ``*``    |
+| ``>>``   | ``++``   | ``--``   | ``<=``   | ``<<=``  | ``>>=``  | ``>=``   | ``==``   |
 +----------+----------+----------+----------+----------+----------+----------+----------+
-| ``*=``   | ``|>``   | ``<|``   | ``++``   | ``--``   | ``<-``   | ``=``    | ``&``    |
+| ``!=``   | ``->``   | ``<-``   | ``??``   | ``?.``   | ``?[``   | ``<|``   | ``|>``   |
 +----------+----------+----------+----------+----------+----------+----------+----------+
-| ``^``    | ``|``    | ``~``    | ``>>``   | ``.``    | ``?.``   | ``??``   |          |
+| ``:=``   | ``<<<``  | ``>>>``  | ``<<<=`` | ``>>>=`` | ``=>``   | ``+``    | ``@@``   |
 +----------+----------+----------+----------+----------+----------+----------+----------+
+| ``-``    | ``*``    | ``/``    | ``%``    | ``&``    | ``|``    | ``^``    |   ``>``  |
++----------+----------+----------+----------+----------+----------+----------+----------+
+| ``<``    | ``!``    | ``~``    |          |          |          |          |          |
++----------+----------+----------+----------+----------+----------+----------+----------+
+
 
 ------------
 Other tokens
@@ -79,6 +104,10 @@ Other significant tokens are:
 | ``{``    | ``}``    | ``[``    | ``]``    | ``.``    | ``:``    |
 +----------+----------+----------+----------+----------+----------+
 | ``::``   | ``'``    | ``;``    | ``"``    | ``]]``   |  ``[[``  |
++----------+----------+----------+----------+----------+----------+
+| ``[{``   | ``}]``   | ``{{``   | ``}}``   | ``@``    |  ``$``   |
++----------+----------+----------+----------+----------+----------+
+| ``#``    |          |          |          |          |          |
 +----------+----------+----------+----------+----------+----------+
 
 -----------
@@ -166,4 +195,4 @@ daScript follows semantic indenting (much like Python).
 That means, that logical blocks are arranged with a same indenting, and if control statement requires nesting of block (such as body of function, block, if, for, etc.)
 it have to be indented one step more.
 Indenting step is part of options of program, so it is either 2, 4 or 8, but always the same for whole file.
-Default indenting is 4, and can be globally overriden per project.
+Default indenting is 4, and can be globally overridden per project.
