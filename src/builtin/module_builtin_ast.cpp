@@ -933,7 +933,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("_type");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("_type", "type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -1049,7 +1049,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("_type");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("_type", "type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(source)>("source");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -1975,7 +1975,7 @@ namespace das {
         AstReaderMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ReaderMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("_module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }
     };
 
