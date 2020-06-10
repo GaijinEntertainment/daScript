@@ -7,6 +7,7 @@ require ast
 require daslib/json
 require daslib/ast_boost
 
+[private]
 def is_json_ptr_value ( td : TypeDeclPtr )
     if td.baseType != Type tPointer
         return false
@@ -23,6 +24,7 @@ def is_json_ptr_value ( td : TypeDeclPtr )
 // replacing ExprIsVariant(value,name) => ExprIsVariant(value.value,name)
 // replacing ExprAsVariant(value,name) => ExprAsVariant(value.value,name)
 // if value is json::JsonValue?
+[variant_macro(name="better_json")]
 class BetterJsonMacro : AstVariantMacro
     def override visitExprIsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
         if is_json_ptr_value(expr.value._type)
@@ -37,6 +39,7 @@ class BetterJsonMacro : AstVariantMacro
             return ExpressionPtr(isv)
         return [[ExpressionPtr]]
 
+[reader_macro(name="json")]
 class JsonReader : AstReaderMacro
     def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool
         append(expr.sequence,ch)
@@ -57,7 +60,3 @@ class JsonReader : AstReaderMacro
             var jsv <- convert_to_expression(json,expr.at)
             return ExpressionPtr(jsv)
 
-[macro]
-def setup
-    add_new_variant_macro("better_json", new BetterJsonMacro())
-    add_new_reader_macro("json", new JsonReader())

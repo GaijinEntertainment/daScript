@@ -1528,7 +1528,7 @@ namespace das {
             argT->dim.push_back(int32_t(mks->structs.size()));
         }
         auto argV = make_smart<Variable>();
-        argV->name = "self";
+        argV->name = "__self__" + to_string(mks->at.line) + "_" + to_string(mks->at.column);
         argV->type = argT;
         argV->at = mks->at;
         argV->generated = true;

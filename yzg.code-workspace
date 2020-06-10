@@ -45,7 +45,8 @@
 			"xlocnum": "cpp",
 			"xloctime": "cpp",
 			"xstddef": "cpp",
-			"*.rh": "cpp"
+			"*.rh": "cpp",
+			"initializer_list": "cpp"
 		}
 	}
 }

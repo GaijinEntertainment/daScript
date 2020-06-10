@@ -30,29 +30,6 @@ def describe ( expr : smart_ptr<Expression> )
 def describe ( expr : smart_ptr<Function> )
     return describe_function(expr)
 
-[generic]
-def describe(list:AnnotationArgumentList)
-    return join([{ for arg in list; "{arg.name}={get_annotation_argument_value(arg)}" }],",")
-
-[generic]
-def describe(ann:AnnotationDeclaration)
-    if ann.arguments.length != 0
-        return "{ann.annotation.name}({describe(ann.arguments)})"
-    else
-        return "{ann.annotation.name}"
-
-[generic]
-def describe(list:AnnotationList)
-    return join([{ for arg in list; describe(*arg) }], ",")
-
-def describe_bitfield(bf;merger:string = "")
-    static_if typeinfo(is_bitfield bf)
-        let bftd <- typeinfo(ast_typedecl bf)
-        return join( [{ for name,bit in bftd.argNames,range(0,32); "[{name}]";
-            where (int(bf) & (1<<bit)) != 0 }], merger )
-    else
-        concept_assert(false,"requires bitfield")
-
 [unsafe]
 def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
     if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
@@ -60,15 +37,6 @@ def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
     else
         concept_assert(false, "not derived from ast::Expression")
         return [[ExpressionPtr]]
-
-[unsafe]
-def push_back(var vec:dasvector`smart_ptr`Expression;expr:smart_ptr<auto(TT)>)
-    static_if typeinfo(fulltypename expr)=="smart_ptr<ast::ExpressionPtr>"
-        push(vec,value)
-    elif starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
-        push(vec, reinterpret<smart_ptr<Expression>>(expr))
-    else
-        concept_assert(false, "not derived from ast::Expression")
 
 class AstFunctionAnnotation
     def abstract transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr

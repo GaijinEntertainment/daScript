@@ -812,6 +812,7 @@ def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     printer
 */
 
+[export]
 def regex_debug ( regex:Regex )
     debug_re(regex.root,1)
     print("\n")

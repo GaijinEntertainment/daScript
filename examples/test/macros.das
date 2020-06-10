@@ -21,7 +21,7 @@ class GetHintFnMacro : AstFunctionAnnotation
             let arg2 = reinterpret<ExprConstString?>(call.arguments[1])
             let hint = hash("{arg2.value}")
             var mkc <- new [[ExprConstUInt() at=arg2.at, value=hint]]
-            push_back(call.arguments, mkc)
+            push(call.arguments, ExpressionPtr(mkc))
             return <- ExpressionPtr(call)
         return [[ExpressionPtr]]
 

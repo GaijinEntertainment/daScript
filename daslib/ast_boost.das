@@ -5,6 +5,33 @@ module ast_boost
 require rtti
 require ast
 
+require daslib/strings
+
+[export]
+def describe(list:AnnotationArgumentList)
+    return join([{ for arg in list; "{arg.name}={get_annotation_argument_value(arg)}" }],",")
+
+[export]
+def describe(ann:AnnotationDeclaration)
+    if ann.arguments.length != 0
+        return "{ann.annotation.name}({describe(ann.arguments)})"
+    else
+        return "{ann.annotation.name}"
+
+[export]
+def describe(list:AnnotationList)
+    return join([{ for arg in list; describe(*arg) }], ",")
+
+[export]
+def describe_bitfield(bf;merger:string = "")
+    static_if typeinfo(is_bitfield bf)
+        let bftd <- typeinfo(ast_typedecl bf)
+        return join( [{ for name,bit in bftd.argNames,range(0,32); "[{name}]";
+            where (int(bf) & (1<<bit)) != 0 }], merger )
+    else
+        concept_assert(false,"requires bitfield")
+
+[export]
 def isExpression(t:TypeDeclPtr; top:bool=true) : bool
     if t==null
         return false
@@ -20,7 +47,6 @@ def isExpression(t:TypeDeclPtr; top:bool=true) : bool
     else
         return false
 
-
 class MacroMacro : AstFunctionAnnotation
     [unsafe] def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         compiling_program().flags |= ProgramFlags needMacroModule
@@ -28,7 +54,7 @@ class MacroMacro : AstFunctionAnnotation
         var blk <- new [[ExprBlock() at=func.at]]
         var ifm <- new [[ExprCall() at=func.at, name:="is_compiling_macros"]]
         var ife <- new [[ExprIfThenElse() at=func.at, cond<-ExpressionPtr(ifm), if_true<-func.body]]
-        push_back(blk.list,ife)
+        push(blk.list,ExpressionPtr(ife))
         func.body <- ExpressionPtr(blk)
         return true
 
@@ -50,6 +76,7 @@ class TagStructureAnnotation : AstStructureAnnotation
                 return false
         return true
 
+[private]
 def for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:FunctionPtr):void> )
     for_each_function(mod, "") <| $ ( func )
         for ann in func.annotations
@@ -58,43 +85,26 @@ def for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:Functio
                     if "{t.name}" == tag
                         invoke(blk, func)
 
+[export]
 def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
     for a in args
         if "{a.name}" == argn
             return get_annotation_argument_value(a)
     return RttiValue_nothing()
 
-class TagFunctionMacro : AstStructureAnnotation
-    [unsafe] def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        let ann_name = "{st.name}"
-        let argTag = find_arg("tag", args)
-        if argTag is nothing
-            panic("missing tag argument")
-        elif !(argTag is tString)
-            panic("tag must be string")
-        let tag = argTag as tString
-        var blk <- setup_macro("__setup_tag_functions", st.at)
-        var cll <- new [[ExprCall() at=st.at, name:="setup_tag_annotation"]]
-        push_back(cll.arguments,new [[ExprConstString() at=st.at, value:=ann_name]])
-        push_back(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
-        var nee <- new [[ExprNew() at=st.at, initializer=true]]
-        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=reinterpret<Structure?> st]]
-        push_back(cll.arguments, nee)
-        push_back(blk.list, cll)
-        return true
-
+[private]
 def apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
     for_each_tag_function(this_module(), tag) <| $ ( func )
         add_function_annotation(func, ann)
 
-[unsafe]
+[unsafe,export]
 def setup_tag_annotation(name,tag:string; classPtr)
     var ann <- make_function_annotation(name, classPtr)
     apply_tag_annotation(tag, ann)
     this_module() |> add_function_annotation(ann)
     delete ann
 
-[unsafe]
+[unsafe,private]
 def find_unique_function ( mod : Module?; name : string )
     var res : FunctionPtr
     var count = 0
@@ -105,7 +115,7 @@ def find_unique_function ( mod : Module?; name : string )
         panic("more than one function encountered")
     return res
 
-[unsafe]
+[unsafe,export]
 def setup_macro(name: string; at:LineInfo) : ExprBlock?
     compiling_program().flags |= ProgramFlags needMacroModule
     var fn <- compiling_module() |> find_unique_function(name)
@@ -118,7 +128,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         var iblk <- new [[ExprBlock() at=at]]
         var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros"]]
         var ife <- new [[ExprIfThenElse() at=at, cond<-ExpressionPtr(ifm), if_true:=ExpressionPtr(iblk)]]
-        push_back(blk.list,ife)
+        push(blk.list,ExpressionPtr(ife))
         fn.body <- ExpressionPtr(blk)
         compiling_module() |> add_function(fn)
         return reinterpret<ExprBlock?> iblk
@@ -133,24 +143,50 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
             panic("expecting ife.if_true.ExprBlock")
         return reinterpret<ExprBlock?> ife.if_true
 
-class SetupFunctionAnnotatoin : AstStructureAnnotation
+class SetupAnyAnnotation : AstStructureAnnotation
+    annotation_function_call : string = ""
+    name : string
+    def setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
+        push(cll.arguments,ExpressionPtr(new [[ExprConstString() at=st.at, value:=name]]))
     [unsafe] def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        let ann_name = "{st.name}"
         let argName = find_arg("name", args)
         if argName is nothing
-            panic("missing name argument")
+            name = "{st.name}"
         elif !(argName is tString)
             panic("name must be string")
-        let name = argName as tString
-        var blk <- setup_macro("__setup_functions", st.at)
-        var cll <- new [[ExprCall() at=st.at, name:="add_new_function_annotation"]]
-        push_back(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
+        else
+            name = argName as tString
+        var blk <- setup_macro("__setup_macros", st.at)
+        var cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
+        self->setup_call(st,cll)
         var nee <- new [[ExprNew() at=st.at, initializer=true]]
         nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=reinterpret<Structure?> st]]
-        push_back(cll.arguments, nee)
-        push_back(blk.list, cll)
+        push(cll.arguments,ExpressionPtr(nee))
+        push(blk.list,ExpressionPtr(cll))
         return true
 
+class SetupFunctionAnnotatoin : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_function_annotation"
+
+class SetupReaderMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_reader_macro"
+
+class SetupVariantMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_variant_macro"
+
+class TagFunctionMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "setup_tag_annotation"
+    tag : string
+    def override setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
+        push(cll.arguments,ExpressionPtr(new [[ExprConstString() at=st.at, value:=name]]))
+        push(cll.arguments,ExpressionPtr(new [[ExprConstString() at=st.at, value:=tag]]))
+    [unsafe] def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        let argTag = find_arg("tag", args)
+        if argTag is nothing
+            panic("missing tag argument")
+        elif !(argTag is tString)
+            panic("tag must be string")
+        return SetupAnyAnnotation`apply(cast<SetupAnyAnnotation> self,st,group,args,errors)
 
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
 // if value is ast::Expr*
@@ -296,12 +332,14 @@ def convert_to_expression ( var value : auto&; at:LineInfo )
 	let pval = addr(value)
 	return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
-[_macro]
+[_macro,private]
 def setup
     if is_compiling_macros()
         add_new_function_annotation("macro", new MacroMacro())
         add_new_function_annotation("tag_function",new TagFunctionAnnotation())
-        add_new_structure_annotation("function_annotation",new SetupFunctionAnnotatoin())
+        add_new_structure_annotation("function_macro",new SetupFunctionAnnotatoin())
+        add_new_structure_annotation("reader_macro",new SetupReaderMacro())
+        add_new_structure_annotation("variant_macro",new SetupVariantMacro())
         add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
         add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())
         add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())

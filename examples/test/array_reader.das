@@ -4,6 +4,7 @@ require rtti
 require ast
 require daslib/ast_boost
 
+[reader_macro(name="arr")]
 class ArrayReader : AstReaderMacro
     def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool
         append(expr.sequence,ch)
@@ -22,7 +23,3 @@ class ArrayReader : AstReaderMacro
             var mkC <- new [[ExprConstInt() at=expr.at, value=x]]
             push(mkArr.values,ExpressionPtr(mkC))
         return ExpressionPtr(mkArr)
-
-[macro]
-def init_macros
-    add_new_reader_macro("arr", new ArrayReader())

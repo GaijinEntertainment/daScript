@@ -6,6 +6,7 @@ require ast
 require daslib/ast_boost
 require daslib/regex
 
+[reader_macro(name="regex")]
 class RegexReader : AstReaderMacro
     def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool
         append(expr.sequence,ch)
@@ -29,7 +30,3 @@ class RegexReader : AstReaderMacro
         var ex <- new [[ExprConstString() at=expr.at, value:=expr.sequence]]
         push(creg.arguments,ExpressionPtr(ex))
         return ExpressionPtr(creg)
-
-[macro]
-def init_macros
-    add_new_reader_macro("regex", new RegexReader())
