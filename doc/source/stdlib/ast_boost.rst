@@ -13,16 +13,9 @@ Classes
 
 to be documented
 
-.. das:function:: BetterRttiVisitor->__finalize (self) 
+.. das:method:: BetterRttiVisitor.visitExprIsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprIsVariant> const) 
 
-to be documented
-
-
-.. das:function:: BetterRttiVisitor->visitExprIsVariant (self;prog;mod;expr) 
-
-visitExprIsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprIsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -38,11 +31,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: BetterRttiVisitor->visitExprAsVariant (self;prog;mod;expr) 
+.. das:method:: BetterRttiVisitor.visitExprAsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprAsVariant> const) 
 
-visitExprAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -58,11 +49,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: BetterRttiVisitor->visitExprSafeAsVariant (self;prog;mod;expr) 
+.. das:method:: BetterRttiVisitor.visitExprSafeAsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprSafeAsVariant> const) 
 
-visitExprSafeAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprSafeAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -83,69 +72,58 @@ to be documented
 
 to be documented
 
-.. das:function:: MacroMacro->__finalize (self) 
+.. das:method:: MacroMacro.transform (self:ast::AstFunctionAnnotation; call:smart_ptr<ast::ExprCall>; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: MacroMacro->transform (self;call;errors) 
-
-transform returns ::
-
- smart_ptr<ast::Expression>
+transform returns smart_ptr<ast::Expression>
 
 function arguments are
 
-+------+-------------------------------+
-+call  +smart_ptr<ast::ExprCall> -const+
-+------+-------------------------------+
-+errors+$::das_string -const           +
-+------+-------------------------------+
++------+------------------------+
++call  +smart_ptr<ast::ExprCall>+
++------+------------------------+
++errors+das_string              +
++------+------------------------+
 
 
 to be documented
 
 
-.. das:function:: MacroMacro->apply (self;func;group;args;errors) 
+.. das:method:: MacroMacro.apply (self:ast::AstFunctionAnnotation; func:smart_ptr<ast::Function>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+func  +smart_ptr<ast::Function> -const   +
++func  +smart_ptr<ast::Function>          +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: MacroMacro->finish (self;func;group;args;progArgs;errors) 
+.. das:method:: MacroMacro.finish (self:ast::AstFunctionAnnotation; func:smart_ptr<ast::Function>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; progArgs:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +--------+----------------------------------+
-+func    +smart_ptr<ast::Function> -const   +
++func    +smart_ptr<ast::Function>          +
 +--------+----------------------------------+
-+group   +ast::ModuleGroup -const           +
++group   +ast::ModuleGroup                  +
 +--------+----------------------------------+
 +args    +rtti::AnnotationArgumentList const+
 +--------+----------------------------------+
 +progArgs+rtti::AnnotationArgumentList const+
 +--------+----------------------------------+
-+errors  +$::das_string -const              +
++errors  +das_string                        +
 +--------+----------------------------------+
 
 
@@ -162,64 +140,55 @@ it defines as follows ::
   annotation_function_call : string
   name                     : string
 
-.. das:function:: SetupAnyAnnotation->__finalize (self) 
+.. das:method:: SetupAnyAnnotation.apply (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: SetupAnyAnnotation->apply (self;st;group;args;errors) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupAnyAnnotation->finish (self;st;group;args;errors) 
+.. das:method:: SetupAnyAnnotation.finish (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupAnyAnnotation->setup_call (self;st;cll) 
+.. das:method:: SetupAnyAnnotation.setup_call (self:ast_boost::SetupAnyAnnotation; st:smart_ptr<ast::Structure>; cll:smart_ptr<ast::ExprCall>) 
 
 function arguments are
 
-+---+--------------------------------+
-+st +smart_ptr<ast::Structure> -const+
-+---+--------------------------------+
-+cll+smart_ptr<ast::ExprCall> -const +
-+---+--------------------------------+
++---+-------------------------+
++st +smart_ptr<ast::Structure>+
++---+-------------------------+
++cll+smart_ptr<ast::ExprCall> +
++---+-------------------------+
 
 
 to be documented
@@ -235,64 +204,55 @@ it defines as follows ::
   annotation_function_call : string
   name                     : string
 
-.. das:function:: SetupFunctionAnnotatoin->__finalize (self) 
+.. das:method:: SetupFunctionAnnotatoin.apply (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: SetupFunctionAnnotatoin->apply (self;st;group;args;errors) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupFunctionAnnotatoin->finish (self;st;group;args;errors) 
+.. das:method:: SetupFunctionAnnotatoin.finish (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupFunctionAnnotatoin->setup_call (self;st;cll) 
+.. das:method:: SetupFunctionAnnotatoin.setup_call (self:ast_boost::SetupAnyAnnotation; st:smart_ptr<ast::Structure>; cll:smart_ptr<ast::ExprCall>) 
 
 function arguments are
 
-+---+--------------------------------+
-+st +smart_ptr<ast::Structure> -const+
-+---+--------------------------------+
-+cll+smart_ptr<ast::ExprCall> -const +
-+---+--------------------------------+
++---+-------------------------+
++st +smart_ptr<ast::Structure>+
++---+-------------------------+
++cll+smart_ptr<ast::ExprCall> +
++---+-------------------------+
 
 
 to be documented
@@ -308,64 +268,55 @@ it defines as follows ::
   annotation_function_call : string
   name                     : string
 
-.. das:function:: SetupReaderMacro->__finalize (self) 
+.. das:method:: SetupReaderMacro.apply (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: SetupReaderMacro->apply (self;st;group;args;errors) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupReaderMacro->finish (self;st;group;args;errors) 
+.. das:method:: SetupReaderMacro.finish (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupReaderMacro->setup_call (self;st;cll) 
+.. das:method:: SetupReaderMacro.setup_call (self:ast_boost::SetupAnyAnnotation; st:smart_ptr<ast::Structure>; cll:smart_ptr<ast::ExprCall>) 
 
 function arguments are
 
-+---+--------------------------------+
-+st +smart_ptr<ast::Structure> -const+
-+---+--------------------------------+
-+cll+smart_ptr<ast::ExprCall> -const +
-+---+--------------------------------+
++---+-------------------------+
++st +smart_ptr<ast::Structure>+
++---+-------------------------+
++cll+smart_ptr<ast::ExprCall> +
++---+-------------------------+
 
 
 to be documented
@@ -381,64 +332,55 @@ it defines as follows ::
   annotation_function_call : string
   name                     : string
 
-.. das:function:: SetupVariantMacro->__finalize (self) 
+.. das:method:: SetupVariantMacro.apply (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: SetupVariantMacro->apply (self;st;group;args;errors) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupVariantMacro->finish (self;st;group;args;errors) 
+.. das:method:: SetupVariantMacro.finish (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: SetupVariantMacro->setup_call (self;st;cll) 
+.. das:method:: SetupVariantMacro.setup_call (self:ast_boost::SetupAnyAnnotation; st:smart_ptr<ast::Structure>; cll:smart_ptr<ast::ExprCall>) 
 
 function arguments are
 
-+---+--------------------------------+
-+st +smart_ptr<ast::Structure> -const+
-+---+--------------------------------+
-+cll+smart_ptr<ast::ExprCall> -const +
-+---+--------------------------------+
++---+-------------------------+
++st +smart_ptr<ast::Structure>+
++---+-------------------------+
++cll+smart_ptr<ast::ExprCall> +
++---+-------------------------+
 
 
 to be documented
@@ -449,69 +391,58 @@ to be documented
 
 to be documented
 
-.. das:function:: TagFunctionAnnotation->__finalize (self) 
+.. das:method:: TagFunctionAnnotation.transform (self:ast::AstFunctionAnnotation; call:smart_ptr<ast::ExprCall>; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: TagFunctionAnnotation->transform (self;call;errors) 
-
-transform returns ::
-
- smart_ptr<ast::Expression>
+transform returns smart_ptr<ast::Expression>
 
 function arguments are
 
-+------+-------------------------------+
-+call  +smart_ptr<ast::ExprCall> -const+
-+------+-------------------------------+
-+errors+$::das_string -const           +
-+------+-------------------------------+
++------+------------------------+
++call  +smart_ptr<ast::ExprCall>+
++------+------------------------+
++errors+das_string              +
++------+------------------------+
 
 
 to be documented
 
 
-.. das:function:: TagFunctionAnnotation->apply (self;func;group;args;errors) 
+.. das:method:: TagFunctionAnnotation.apply (self:ast::AstFunctionAnnotation; func:smart_ptr<ast::Function>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+func  +smart_ptr<ast::Function> -const   +
++func  +smart_ptr<ast::Function>          +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: TagFunctionAnnotation->finish (self;func;group;args;progArgs;errors) 
+.. das:method:: TagFunctionAnnotation.finish (self:ast::AstFunctionAnnotation; func:smart_ptr<ast::Function>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; progArgs:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +--------+----------------------------------+
-+func    +smart_ptr<ast::Function> -const   +
++func    +smart_ptr<ast::Function>          +
 +--------+----------------------------------+
-+group   +ast::ModuleGroup -const           +
++group   +ast::ModuleGroup                  +
 +--------+----------------------------------+
 +args    +rtti::AnnotationArgumentList const+
 +--------+----------------------------------+
 +progArgs+rtti::AnnotationArgumentList const+
 +--------+----------------------------------+
-+errors  +$::das_string -const              +
++errors  +das_string                        +
 +--------+----------------------------------+
 
 
@@ -529,64 +460,55 @@ it defines as follows ::
   name                     : string
   tag                      : string
 
-.. das:function:: TagFunctionMacro->__finalize (self) 
+.. das:method:: TagFunctionMacro.apply (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: TagFunctionMacro->apply (self;st;group;args;errors) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: TagFunctionMacro->finish (self;st;group;args;errors) 
+.. das:method:: TagFunctionMacro.finish (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: TagFunctionMacro->setup_call (self;st;cll) 
+.. das:method:: TagFunctionMacro.setup_call (self:ast_boost::SetupAnyAnnotation; st:smart_ptr<ast::Structure>; cll:smart_ptr<ast::ExprCall>) 
 
 function arguments are
 
-+---+--------------------------------+
-+st +smart_ptr<ast::Structure> -const+
-+---+--------------------------------+
-+cll+smart_ptr<ast::ExprCall> -const +
-+---+--------------------------------+
++---+-------------------------+
++st +smart_ptr<ast::Structure>+
++---+-------------------------+
++cll+smart_ptr<ast::ExprCall> +
++---+-------------------------+
 
 
 to be documented
@@ -597,49 +519,40 @@ to be documented
 
 to be documented
 
-.. das:function:: TagStructureAnnotation->__finalize (self) 
+.. das:method:: TagStructureAnnotation.apply (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: TagStructureAnnotation->apply (self;st;group;args;errors) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: TagStructureAnnotation->finish (self;st;group;args;errors) 
+.. das:method:: TagStructureAnnotation.finish (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
@@ -651,18 +564,16 @@ to be documented
 Generics
 ++++++++
 
-.. das:function:: convert_to_expression(value;at)
+.. das:function:: convert_to_expression(value:auto&; at:rtti::LineInfo const)
 
-convert_to_expression returns ::
-
- auto
+convert_to_expression returns auto
 
 
 
 function arguments are
 
 +-----+--------------------+
-+value+auto& -const        +
++value+auto&               +
 +-----+--------------------+
 +at   +rtti::LineInfo const+
 +-----+--------------------+
@@ -672,11 +583,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe_bitfield(bf;merger)
+.. das:function:: describe_bitfield(bf:auto const; merger:string const)
 
-describe_bitfield returns ::
-
- auto
+describe_bitfield returns auto
 
 
 
@@ -693,11 +602,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: setup_tag_annotation(name;tag;classPtr)
+.. das:function:: setup_tag_annotation(name:string const; tag:string const; classPtr:auto const)
 
-setup_tag_annotation returns ::
-
- auto
+setup_tag_annotation returns auto
 
 
 
@@ -720,11 +627,9 @@ to be documented
 Functions
 +++++++++
 
-.. das:function:: describe(list)
+.. das:function:: describe(list:rtti::AnnotationArgumentList const)
 
-describe returns ::
-
- string const
+describe returns string const
 
 
 
@@ -739,11 +644,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe(ann)
+.. das:function:: describe(ann:rtti::AnnotationDeclaration const)
 
-describe returns ::
-
- string
+describe returns string
 
 
 
@@ -758,11 +661,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe(list)
+.. das:function:: describe(list:rtti::AnnotationList const)
 
-describe returns ::
-
- string const
+describe returns string const
 
 
 
@@ -777,11 +678,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: find_arg(argn;args)
+.. das:function:: find_arg(argn:string const; args:rtti::AnnotationArgumentList const)
 
-find_arg returns ::
-
- variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
+find_arg returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
 
 
 
@@ -798,11 +697,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: isExpression(t;top)
+.. das:function:: isExpression(t:smart_ptr<ast::TypeDecl> const; top:bool const)
 
-isExpression returns ::
-
- bool
+isExpression returns bool
 
 
 
@@ -819,11 +716,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_class_method(cinfo;finfo)
+.. das:function:: is_class_method(cinfo:smart_ptr<ast::Structure> const; finfo:smart_ptr<ast::TypeDecl> const)
 
-is_class_method returns ::
-
- bool const
+is_class_method returns bool const
 
 
 
@@ -840,11 +735,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_same_or_inherited(parent;child)
+.. das:function:: is_same_or_inherited(parent:ast::Structure? const; child:ast::Structure? const)
 
-is_same_or_inherited returns ::
-
- bool const
+is_same_or_inherited returns bool const
 
 
 
@@ -861,11 +754,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: setup_macro(name;at)
+.. das:function:: setup_macro(name:string const; at:rtti::LineInfo const)
 
-setup_macro returns ::
-
- ast::ExprBlock?
+setup_macro returns ast::ExprBlock?
 
 
 

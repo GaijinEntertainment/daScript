@@ -13,16 +13,9 @@ Classes
 
 to be documented
 
-.. das:function:: BetterJsonMacro->__finalize (self) 
+.. das:method:: BetterJsonMacro.visitExprIsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprIsVariant> const) 
 
-to be documented
-
-
-.. das:function:: BetterJsonMacro->visitExprIsVariant (self;prog;mod;expr) 
-
-visitExprIsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprIsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -38,11 +31,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: BetterJsonMacro->visitExprAsVariant (self;prog;mod;expr) 
+.. das:method:: BetterJsonMacro.visitExprAsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprAsVariant> const) 
 
-visitExprAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -58,11 +49,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: BetterJsonMacro->visitExprSafeAsVariant (self;prog;mod;expr) 
+.. das:method:: BetterJsonMacro.visitExprSafeAsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprSafeAsVariant> const) 
 
-visitExprSafeAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprSafeAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -83,16 +72,9 @@ to be documented
 
 to be documented
 
-.. das:function:: JsonReader->__finalize (self) 
+.. das:method:: JsonReader.accept (self:ast::AstReaderMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:ast::ExprReader? const; ch:int const; info:rtti::LineInfo const) 
 
-to be documented
-
-
-.. das:function:: JsonReader->accept (self;prog;mod;expr;ch;info) 
-
-accept returns ::
-
- bool
+accept returns bool
 
 function arguments are
 
@@ -112,11 +94,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: JsonReader->visit (self;prog;mod;expr) 
+.. das:method:: JsonReader.visit (self:ast::AstReaderMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprReader> const) 
 
-visit returns ::
-
- smart_ptr<ast::Expression>
+visit returns smart_ptr<ast::Expression>
 
 function arguments are
 

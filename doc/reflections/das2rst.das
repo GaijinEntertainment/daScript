@@ -17,6 +17,10 @@ var
 def output(text:string)
     fwrite(doc_file,text)
 
+def describe_type(td:TypeDeclPtr)
+    let tp = describe(td,false,false)
+    return replace(tp,"$::","")
+
 def make_header(name,lab:string)
     let wide = length(name)
     output(".. _stdlib_{lab}:\n\n")
@@ -73,10 +77,10 @@ def document_typedefs(mod:Module?)
             for nn in value.argNames
                 w = max(w,length(nn))
             for n,t in value.argNames,value.argTypes
-                output(" {wide(string(n),w)} : {describe(t,false)}\n")
+                output(" {wide(string(n),w)} : {describe_type(t)}\n")
             output("\n")
         else
-            output(" = {describe(value,false)}\n")
+            output(" = {describe_type(value)}\n")
             output("\n")
         output("to be documented\n")
         output("\n")
@@ -101,6 +105,13 @@ def document_enumerations(mod:Module?)
             emplace(tab,line)
         output_table(tab)
         output("\n")
+
+def argument_needs_documenting ( tt : TypeDeclPtr )
+    if tt.baseType == Type fakeContext
+        return false
+    if tt.baseType == Type fakeLineInfo
+        return false
+    return true
 
 def document_classes(mod:Module?)
     var any = false
@@ -128,27 +139,31 @@ def document_classes(mod:Module?)
             output("it defines as follows ::\n\n")
             for fld in value.fields
                 if !is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
-                    output("  {wide(string(fld.name),w)} : {describe(fld._type,false)}\n")
+                    output("  {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
             output("\n")
         for fld in value.fields
             if is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
-                output(".. das:function:: {value.name}->{fld.name}")
-                if fld._type.argTypes.length != 0
-                    output(" (")
-                    output(join(fld._type.argNames, ";"))
-                    output(")")
+                output(".. das:method:: {value.name}.{fld.name}")
+                output(" (")
+                var first = true
+                for an,at in fld._type.argNames,fld._type.argTypes
+                    if argument_needs_documenting(at)
+                        if first
+                            first = false
+                        else
+                            output("; ")
+                        output("{an}:{describe_type(at)}")
+                output(")")
                 output(" \n\n")
                 if fld._type.firstType != null & !fld._type.firstType.isVoid
-                    output("{fld.name} returns ::\n\n")
-                    output(" {describe(fld._type.firstType,false)}")
-                    output("\n\n")
+                    output("{fld.name} returns {describe_type(fld._type.firstType)}\n\n")
                 if fld._type.argTypes.length > 1
                     var tab : array<array<string>>
                     for an,at in fld._type.argNames,fld._type.argTypes
                         if string(an)!="self"
                             var line : array<string>
                             push(line,string(an))
-                            push(line,describe(at,false))
+                            push(line,describe_type(at))
                             emplace(tab,line)
                     output("function arguments are\n\n")
                     output_table(tab)
@@ -180,7 +195,7 @@ def document_structures(mod:Module?)
         for fld in value.fields
             w = max(w,length(fld.name))
         for fld in value.fields
-            output("  {wide(string(fld.name),w)} : {describe(fld._type,false)}\n")
+            output("  {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
         output("\n")
         output("to be documented\n\n")
         output("\n")
@@ -210,7 +225,7 @@ def document_structure_annotations(mod:Module?)
             output("it defines as follows ::\n\n")
             for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
                 if offset != -1u
-                    output("  {wide(name,w)} : {describe(xtype,false)}\n")
+                    output("  {wide(name,w)} : {describe_type(xtype)}\n")
             output("\n")
         w = 0
         for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
@@ -220,7 +235,7 @@ def document_structure_annotations(mod:Module?)
             output("it has the following properties ::\n\n")
             for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
                 if offset == -1u
-                    output("  {wide(name,w)} : {describe(xtype,false)}\n")
+                    output("  {wide(name,w)} : {describe_type(xtype)}\n")
             output("\n")
         output("to be documented\n\n")
         output("\n")
@@ -271,13 +286,18 @@ def document_function(func:FunctionPtr)
     output(".. das:function:: {func.name}")
     if func.arguments.length != 0
         output("(")
-        output(join([{for arg in func.arguments; string(arg.name)}],";"))
+        var first = true
+        for arg in func.arguments
+            if argument_needs_documenting(arg._type)
+                if first
+                    first = false
+                else
+                    output("; ")
+                output("{arg.name}:{describe_type(arg._type)}")
         output(")")
     output("\n\n")
     if func.result != null & !func.result.isVoid
-        output("{func.name} returns ::\n\n")
-        output(" {describe(func.result,false)}")
-        output("\n\n")
+        output("{func.name} returns {describe_type(func.result)}\n\n")
     output("\n\n")
     if func.flags.unsafeOperation
         output(".. warning::\n\n")
@@ -287,7 +307,7 @@ def document_function(func:FunctionPtr)
         for arg in func.arguments
             var line : array<string>
             push(line,string(arg.name))
-            push(line,describe(arg._type,false))
+            push(line,describe_type(arg._type))
             emplace(tab,line)
         output("function arguments are\n\n")
         output_table(tab)

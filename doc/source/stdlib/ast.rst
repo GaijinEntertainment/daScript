@@ -353,9 +353,9 @@ it defines as follows ::
 
   enumModule : rtti::Module?
   at         : rtti::LineInfo
-  cppName    : $::das_string
+  cppName    : das_string
   list       : ast::dasvector`pair`das_string`smart_ptr`Expression
-  name       : $::das_string
+  name       : das_string
   external   : bool
   baseType   : rtti::Type
 
@@ -367,7 +367,7 @@ to be documented
 it defines as follows ::
 
   func       : ast::Function?
-  target     : $::das_string
+  target     : das_string
   at         : rtti::LineInfo
   funcType   : smart_ptr<ast::TypeDecl>
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
@@ -409,7 +409,7 @@ it defines as follows ::
   field      : ast::FieldDeclaration const? const
   derefFlags : bitfield<unsafeDeref;ignoreCaptureConst>
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
-  name       : $::das_string
+  name       : das_string
   atField    : rtti::LineInfo
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -445,7 +445,7 @@ it defines as follows ::
   isVerify               : bool
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -522,7 +522,7 @@ it defines as follows ::
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
   stackTop               : uint
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   doesNotNeedSp          : bool
@@ -556,7 +556,7 @@ it defines as follows ::
 
   right      : smart_ptr<ast::Expression>
   at         : rtti::LineInfo
-  op         : $::das_string
+  op         : das_string
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -635,7 +635,7 @@ to be documented
 
 it defines as follows ::
 
-  value      : $::das_string
+  value      : das_string
   at         : rtti::LineInfo
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   enumType   : smart_ptr<ast::Enumeration>
@@ -860,7 +860,7 @@ to be documented
 
 it defines as follows ::
 
-  value      : $::das_string
+  value      : das_string
   at         : rtti::LineInfo
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   genFlags   : bitfield<alwaysSafe;generated>
@@ -1021,7 +1021,7 @@ it defines as follows ::
   takeOverRightStack : bool
   right              : smart_ptr<ast::Expression>
   at                 : rtti::LineInfo
-  op                 : $::das_string
+  op                 : das_string
   printFlags         : bitfield<topLevel;argLevel;bottomLevel>
   genFlags           : bitfield<alwaysSafe;generated>
   _type              : smart_ptr<ast::TypeDecl>
@@ -1039,7 +1039,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1072,7 +1072,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1124,7 +1124,7 @@ it defines as follows ::
   field      : ast::FieldDeclaration const? const
   derefFlags : bitfield<unsafeDeref;ignoreCaptureConst>
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
-  name       : $::das_string
+  name       : das_string
   atField    : rtti::LineInfo
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -1141,7 +1141,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1212,7 +1212,7 @@ it defines as follows ::
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
   stackTop               : uint
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   doesNotNeedSp          : bool
@@ -1251,7 +1251,7 @@ it defines as follows ::
   field      : ast::FieldDeclaration const? const
   derefFlags : bitfield<unsafeDeref;ignoreCaptureConst>
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
-  name       : $::das_string
+  name       : das_string
   atField    : rtti::LineInfo
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -1268,7 +1268,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1282,7 +1282,7 @@ to be documented
 
 it defines as follows ::
 
-  comment    : $::das_string
+  comment    : das_string
   at         : rtti::LineInfo
   labelName  : int
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
@@ -1317,7 +1317,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1371,7 +1371,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   iterType               : smart_ptr<ast::TypeDecl>
@@ -1467,7 +1467,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1483,7 +1483,7 @@ it defines as follows ::
 
   right      : smart_ptr<ast::Expression>
   at         : rtti::LineInfo
-  op         : $::das_string
+  op         : das_string
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -1501,7 +1501,7 @@ it defines as follows ::
   arguments              : ast::MakeStruct
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1522,7 +1522,7 @@ it defines as follows ::
   initializer            : bool
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
   stackTop               : uint
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1553,7 +1553,7 @@ to be documented
 it defines as follows ::
 
   at         : rtti::LineInfo
-  op         : $::das_string
+  op         : das_string
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   subexpr    : smart_ptr<ast::Expression>
   genFlags   : bitfield<alwaysSafe;generated>
@@ -1570,7 +1570,7 @@ it defines as follows ::
 
   right      : smart_ptr<ast::Expression>
   at         : rtti::LineInfo
-  op         : $::das_string
+  op         : das_string
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -1587,7 +1587,7 @@ it defines as follows ::
 
   right      : smart_ptr<ast::Expression>
   at         : rtti::LineInfo
-  op         : $::das_string
+  op         : das_string
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   subexpr    : smart_ptr<ast::Expression>
   genFlags   : bitfield<alwaysSafe;generated>
@@ -1619,7 +1619,7 @@ to be documented
 it defines as follows ::
 
   macro      : smart_ptr<ast::ReaderMacro>
-  sequence   : $::das_string
+  sequence   : das_string
   at         : rtti::LineInfo
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   genFlags   : bitfield<alwaysSafe;generated>
@@ -1692,7 +1692,7 @@ it defines as follows ::
   skipQQ     : bool
   derefFlags : bitfield<unsafeDeref;ignoreCaptureConst>
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
-  name       : $::das_string
+  name       : das_string
   atField    : rtti::LineInfo
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -1732,7 +1732,7 @@ it defines as follows ::
   skipQQ     : bool
   derefFlags : bitfield<unsafeDeref;ignoreCaptureConst>
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
-  name       : $::das_string
+  name       : das_string
   atField    : rtti::LineInfo
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -1749,7 +1749,7 @@ it defines as follows ::
   arguments              : ast::dasvector`smart_ptr`Expression
   at                     : rtti::LineInfo
   printFlags             : bitfield<topLevel;argLevel;bottomLevel>
-  name                   : $::das_string
+  name                   : das_string
   argumentsFailedToInfer : bool
   genFlags               : bitfield<alwaysSafe;generated>
   _type                  : smart_ptr<ast::TypeDecl>
@@ -1781,7 +1781,7 @@ it defines as follows ::
   value      : smart_ptr<ast::Expression>
   at         : rtti::LineInfo
   fieldFlags : bitfield<r2v;r2cr;write>
-  mask       : $::das_string
+  mask       : das_string
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   genFlags   : bitfield<alwaysSafe;generated>
   _type      : smart_ptr<ast::TypeDecl>
@@ -1813,11 +1813,11 @@ to be documented
 it defines as follows ::
 
   typeexpr   : smart_ptr<ast::TypeDecl>
-  extratrait : $::das_string
+  extratrait : das_string
   macro      : ast::TypeInfoMacro?
-  subtrait   : $::das_string
+  subtrait   : das_string
   at         : rtti::LineInfo
-  trait      : $::das_string
+  trait      : das_string
   printFlags : bitfield<topLevel;argLevel;bottomLevel>
   subexpr    : smart_ptr<ast::Expression>
   genFlags   : bitfield<alwaysSafe;generated>
@@ -1837,7 +1837,7 @@ it defines as follows ::
   varFlags      : bitfield<local;argument;block;thisBlock;r2v;r2cr;write>
   printFlags    : bitfield<topLevel;argLevel;bottomLevel>
   argumentIndex : int
-  name          : $::das_string
+  name          : das_string
   genFlags      : bitfield<alwaysSafe;generated>
   pBlock        : ast::ExprBlock?
   _type         : smart_ptr<ast::TypeDecl>
@@ -1915,7 +1915,7 @@ it defines as follows ::
 
   annotation : rtti::AnnotationArgumentList
   at         : rtti::LineInfo
-  name       : $::das_string
+  name       : das_string
   init       : smart_ptr<ast::Expression>
   offset     : int
   _type      : smart_ptr<ast::TypeDecl>
@@ -1942,7 +1942,7 @@ it defines as follows ::
   sideEffectFlags : bitfield<unsafe;userScenario;modifyExternal;modifyArgument;accessGlobal;invoke>
   annotations     : rtti::AnnotationList
   totalStackSize  : uint
-  name            : $::das_string
+  name            : das_string
   hash            : uint64
   flags           : bitfield<builtIn;policyBased;callBased;interopFn;hasReturn;copyOnReturn;moveOnReturn;exports;init;addr;used;fastCall;knownSideEffects;hasToRunAtCompileTime;unsafe;unsafeOperation;unsafeDeref;hasMakeBlock;aotNeedPrologue;noAot;aotHybrid;aotTemplate;generated;privateFunction;_generator;_lambda;firstArgReturnType;isClassMethod>
 
@@ -1970,7 +1970,7 @@ it defines as follows ::
 
   value : smart_ptr<ast::Expression>
   at    : rtti::LineInfo
-  name  : $::das_string
+  name  : das_string
   flags : bitfield<moveSemantics;cloneSemantics>
 
 to be documented
@@ -1990,7 +1990,7 @@ to be documented
 
 it defines as follows ::
 
-  name : $::das_string
+  name : das_string
 
 to be documented
 
@@ -2000,7 +2000,7 @@ to be documented
 it defines as follows ::
 
   _module : rtti::Module?
-  name    : $::das_string
+  name    : das_string
 
 to be documented
 
@@ -2013,7 +2013,7 @@ it defines as follows ::
   at          : rtti::LineInfo
   parent      : ast::Structure?
   annotations : rtti::AnnotationList
-  name        : $::das_string
+  name        : das_string
   fields      : ast::dasvector`FieldDeclaration
   flags       : bitfield<isClass;genCtor;cppLayout;cppLayoutNotPod;generated;persistent;isLambda>
 
@@ -2029,7 +2029,7 @@ to be documented
 
 it defines as follows ::
 
-  alias      : $::das_string
+  alias      : das_string
   annotation : rtti::TypeAnnotation?
   dimExpr    : ast::dasvector`smart_ptr`Expression
   argTypes   : ast::dasvector`smart_ptr`TypeDecl
@@ -2064,7 +2064,7 @@ to be documented
 it defines as follows ::
 
   _module : rtti::Module?
-  name    : $::das_string
+  name    : das_string
 
 to be documented
 
@@ -2079,7 +2079,7 @@ it defines as follows ::
   index         : int
   at            : rtti::LineInfo
   stackTop      : uint
-  name          : $::das_string
+  name          : das_string
   init          : smart_ptr<ast::Expression>
   access_flags  : bitfield<access_extern;access_get;access_ref;access_init;access_pass>
   source        : smart_ptr<ast::Expression>
@@ -2097,7 +2097,7 @@ to be documented
 
 it defines as follows ::
 
-  name : $::das_string
+  name : das_string
 
 to be documented
 
@@ -2119,69 +2119,58 @@ it defines as follows ::
 
   __rtti : void?
 
-.. das:function:: AstFunctionAnnotation->__finalize (self) 
+.. das:method:: AstFunctionAnnotation.transform (self:ast::AstFunctionAnnotation; call:smart_ptr<ast::ExprCall>; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: AstFunctionAnnotation->transform (self;call;errors) 
-
-transform returns ::
-
- smart_ptr<ast::Expression>
+transform returns smart_ptr<ast::Expression>
 
 function arguments are
 
-+------+-------------------------------+
-+call  +smart_ptr<ast::ExprCall> -const+
-+------+-------------------------------+
-+errors+$::das_string -const           +
-+------+-------------------------------+
++------+------------------------+
++call  +smart_ptr<ast::ExprCall>+
++------+------------------------+
++errors+das_string              +
++------+------------------------+
 
 
 to be documented
 
 
-.. das:function:: AstFunctionAnnotation->apply (self;func;group;args;errors) 
+.. das:method:: AstFunctionAnnotation.apply (self:ast::AstFunctionAnnotation; func:smart_ptr<ast::Function>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+func  +smart_ptr<ast::Function> -const   +
++func  +smart_ptr<ast::Function>          +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: AstFunctionAnnotation->finish (self;func;group;args;progArgs;errors) 
+.. das:method:: AstFunctionAnnotation.finish (self:ast::AstFunctionAnnotation; func:smart_ptr<ast::Function>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; progArgs:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +--------+----------------------------------+
-+func    +smart_ptr<ast::Function> -const   +
++func    +smart_ptr<ast::Function>          +
 +--------+----------------------------------+
-+group   +ast::ModuleGroup -const           +
++group   +ast::ModuleGroup                  +
 +--------+----------------------------------+
 +args    +rtti::AnnotationArgumentList const+
 +--------+----------------------------------+
 +progArgs+rtti::AnnotationArgumentList const+
 +--------+----------------------------------+
-+errors  +$::das_string -const              +
++errors  +das_string                        +
 +--------+----------------------------------+
 
 
@@ -2197,16 +2186,9 @@ it defines as follows ::
 
   __rtti : void?
 
-.. das:function:: AstPassMacro->__finalize (self) 
+.. das:method:: AstPassMacro.apply (self:ast::AstPassMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const) 
 
-to be documented
-
-
-.. das:function:: AstPassMacro->apply (self;prog;mod) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
@@ -2229,16 +2211,9 @@ it defines as follows ::
 
   __rtti : void?
 
-.. das:function:: AstReaderMacro->__finalize (self) 
+.. das:method:: AstReaderMacro.accept (self:ast::AstReaderMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:ast::ExprReader? const; ch:int const; info:rtti::LineInfo const) 
 
-to be documented
-
-
-.. das:function:: AstReaderMacro->accept (self;prog;mod;expr;ch;info) 
-
-accept returns ::
-
- bool
+accept returns bool
 
 function arguments are
 
@@ -2258,11 +2233,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstReaderMacro->visit (self;prog;mod;expr) 
+.. das:method:: AstReaderMacro.visit (self:ast::AstReaderMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprReader> const) 
 
-visit returns ::
-
- smart_ptr<ast::Expression>
+visit returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2287,49 +2260,40 @@ it defines as follows ::
 
   __rtti : void?
 
-.. das:function:: AstStructureAnnotation->__finalize (self) 
+.. das:method:: AstStructureAnnotation.apply (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-to be documented
-
-
-.. das:function:: AstStructureAnnotation->apply (self;st;group;args;errors) 
-
-apply returns ::
-
- bool
+apply returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
 to be documented
 
 
-.. das:function:: AstStructureAnnotation->finish (self;st;group;args;errors) 
+.. das:method:: AstStructureAnnotation.finish (self:ast::AstStructureAnnotation; st:smart_ptr<ast::Structure>; group:ast::ModuleGroup; args:rtti::AnnotationArgumentList const; errors:das_string) 
 
-finish returns ::
-
- bool
+finish returns bool
 
 function arguments are
 
 +------+----------------------------------+
-+st    +smart_ptr<ast::Structure> -const  +
++st    +smart_ptr<ast::Structure>         +
 +------+----------------------------------+
-+group +ast::ModuleGroup -const           +
++group +ast::ModuleGroup                  +
 +------+----------------------------------+
 +args  +rtti::AnnotationArgumentList const+
 +------+----------------------------------+
-+errors+$::das_string -const              +
++errors+das_string                        +
 +------+----------------------------------+
 
 
@@ -2345,16 +2309,9 @@ it defines as follows ::
 
   __rtti : void?
 
-.. das:function:: AstVariantMacro->__finalize (self) 
+.. das:method:: AstVariantMacro.visitExprIsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprIsVariant> const) 
 
-to be documented
-
-
-.. das:function:: AstVariantMacro->visitExprIsVariant (self;prog;mod;expr) 
-
-visitExprIsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprIsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2370,11 +2327,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVariantMacro->visitExprAsVariant (self;prog;mod;expr) 
+.. das:method:: AstVariantMacro.visitExprAsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprAsVariant> const) 
 
-visitExprAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2390,11 +2345,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVariantMacro->visitExprSafeAsVariant (self;prog;mod;expr) 
+.. das:method:: AstVariantMacro.visitExprSafeAsVariant (self:ast::AstVariantMacro; prog:smart_ptr<rtti::Program> const; mod:rtti::Module? const; expr:smart_ptr<ast::ExprSafeAsVariant> const) 
 
-visitExprSafeAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprSafeAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2419,12 +2372,7 @@ it defines as follows ::
 
   __rtti : void?
 
-.. das:function:: AstVisitor->__finalize (self) 
-
-to be documented
-
-
-.. das:function:: AstVisitor->preVisitProgram (self;prog) 
+.. das:method:: AstVisitor.preVisitProgram (self:ast::AstVisitor; prog:smart_ptr<rtti::Program> const) 
 
 function arguments are
 
@@ -2436,7 +2384,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitProgram (self;porg) 
+.. das:method:: AstVisitor.visitProgram (self:ast::AstVisitor; porg:smart_ptr<rtti::Program> const) 
 
 function arguments are
 
@@ -2448,7 +2396,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitProgramBody (self;prog) 
+.. das:method:: AstVisitor.preVisitProgramBody (self:ast::AstVisitor; prog:smart_ptr<rtti::Program> const) 
 
 function arguments are
 
@@ -2460,7 +2408,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitTypeDecl (self;typ) 
+.. das:method:: AstVisitor.preVisitTypeDecl (self:ast::AstVisitor; typ:smart_ptr<ast::TypeDecl> const) 
 
 function arguments are
 
@@ -2472,11 +2420,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitTypeDecl (self;typ) 
+.. das:method:: AstVisitor.visitTypeDecl (self:ast::AstVisitor; typ:smart_ptr<ast::TypeDecl> const) 
 
-visitTypeDecl returns ::
-
- smart_ptr<ast::TypeDecl>
+visitTypeDecl returns smart_ptr<ast::TypeDecl>
 
 function arguments are
 
@@ -2488,39 +2434,37 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitAlias (self;typ;name) 
+.. das:method:: AstVisitor.preVisitAlias (self:ast::AstVisitor; typ:smart_ptr<ast::TypeDecl> const; name:das_string const) 
 
 function arguments are
 
 +----+------------------------------+
 +typ +smart_ptr<ast::TypeDecl> const+
 +----+------------------------------+
-+name+$::das_string const           +
++name+das_string const              +
 +----+------------------------------+
 
 
 to be documented
 
 
-.. das:function:: AstVisitor->visitAlias (self;typ;name) 
+.. das:method:: AstVisitor.visitAlias (self:ast::AstVisitor; typ:smart_ptr<ast::TypeDecl> const; name:das_string const) 
 
-visitAlias returns ::
-
- smart_ptr<ast::TypeDecl>
+visitAlias returns smart_ptr<ast::TypeDecl>
 
 function arguments are
 
 +----+------------------------------+
 +typ +smart_ptr<ast::TypeDecl> const+
 +----+------------------------------+
-+name+$::das_string const           +
++name+das_string const              +
 +----+------------------------------+
 
 
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitEnumeration (self;enu) 
+.. das:method:: AstVisitor.preVisitEnumeration (self:ast::AstVisitor; enu:smart_ptr<ast::Enumeration> const) 
 
 function arguments are
 
@@ -2532,14 +2476,14 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitEnumerationValue (self;enu;name;value;last) 
+.. das:method:: AstVisitor.preVisitEnumerationValue (self:ast::AstVisitor; enu:smart_ptr<ast::Enumeration> const; name:das_string const; value:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
 +-----+---------------------------------+
 +enu  +smart_ptr<ast::Enumeration> const+
 +-----+---------------------------------+
-+name +$::das_string const              +
++name +das_string const                 +
 +-----+---------------------------------+
 +value+smart_ptr<ast::Expression> const +
 +-----+---------------------------------+
@@ -2550,18 +2494,16 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitEnumerationValue (self;enu;name;value;last) 
+.. das:method:: AstVisitor.visitEnumerationValue (self:ast::AstVisitor; enu:smart_ptr<ast::Enumeration> const; name:das_string const; value:smart_ptr<ast::Expression> const; last:bool const) 
 
-visitEnumerationValue returns ::
-
- smart_ptr<ast::Expression>
+visitEnumerationValue returns smart_ptr<ast::Expression>
 
 function arguments are
 
 +-----+---------------------------------+
 +enu  +smart_ptr<ast::Enumeration> const+
 +-----+---------------------------------+
-+name +$::das_string const              +
++name +das_string const                 +
 +-----+---------------------------------+
 +value+smart_ptr<ast::Expression> const +
 +-----+---------------------------------+
@@ -2572,11 +2514,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitEnumeration (self;enu) 
+.. das:method:: AstVisitor.visitEnumeration (self:ast::AstVisitor; enu:smart_ptr<ast::Enumeration> const) 
 
-visitEnumeration returns ::
-
- smart_ptr<ast::Enumeration>
+visitEnumeration returns smart_ptr<ast::Enumeration>
 
 function arguments are
 
@@ -2588,7 +2528,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitStructure (self;str) 
+.. das:method:: AstVisitor.preVisitStructure (self:ast::AstVisitor; str:smart_ptr<ast::Structure> const) 
 
 function arguments are
 
@@ -2600,7 +2540,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitStructureField (self;str;decl;last) 
+.. das:method:: AstVisitor.preVisitStructureField (self:ast::AstVisitor; str:smart_ptr<ast::Structure> const; decl:ast::FieldDeclaration const; last:bool const) 
 
 function arguments are
 
@@ -2616,7 +2556,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitStructureField (self;str;decl;last) 
+.. das:method:: AstVisitor.visitStructureField (self:ast::AstVisitor; str:smart_ptr<ast::Structure> const; decl:ast::FieldDeclaration const; last:bool const) 
 
 function arguments are
 
@@ -2632,11 +2572,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitStructure (self;str) 
+.. das:method:: AstVisitor.visitStructure (self:ast::AstVisitor; str:smart_ptr<ast::Structure> const) 
 
-visitStructure returns ::
-
- smart_ptr<ast::Structure>
+visitStructure returns smart_ptr<ast::Structure>
 
 function arguments are
 
@@ -2648,7 +2586,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitFunction (self;fun) 
+.. das:method:: AstVisitor.preVisitFunction (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const) 
 
 function arguments are
 
@@ -2660,11 +2598,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitFunction (self;fun) 
+.. das:method:: AstVisitor.visitFunction (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const) 
 
-visitFunction returns ::
-
- smart_ptr<ast::Function>
+visitFunction returns smart_ptr<ast::Function>
 
 function arguments are
 
@@ -2676,7 +2612,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitFunctionArgument (self;fun;arg;lastArg) 
+.. das:method:: AstVisitor.preVisitFunctionArgument (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
 function arguments are
 
@@ -2692,11 +2628,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitFunctionArgument (self;fun;arg;lastArg) 
+.. das:method:: AstVisitor.visitFunctionArgument (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
-visitFunctionArgument returns ::
-
- smart_ptr<ast::Variable>
+visitFunctionArgument returns smart_ptr<ast::Variable>
 
 function arguments are
 
@@ -2712,7 +2646,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitFunctionArgumentInit (self;fun;arg;value) 
+.. das:method:: AstVisitor.preVisitFunctionArgumentInit (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const; arg:smart_ptr<ast::Variable> const; value:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -2728,11 +2662,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitFunctionArgumentInit (self;fun;arg;value) 
+.. das:method:: AstVisitor.visitFunctionArgumentInit (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const; arg:smart_ptr<ast::Variable> const; value:smart_ptr<ast::Expression> const) 
 
-visitFunctionArgumentInit returns ::
-
- smart_ptr<ast::Expression>
+visitFunctionArgumentInit returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2748,7 +2680,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitFunctionBody (self;fun) 
+.. das:method:: AstVisitor.preVisitFunctionBody (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const) 
 
 function arguments are
 
@@ -2760,7 +2692,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitFunctionBody (self;fun) 
+.. das:method:: AstVisitor.visitFunctionBody (self:ast::AstVisitor; fun:smart_ptr<ast::Function> const) 
 
 function arguments are
 
@@ -2772,7 +2704,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExpression (self;expr) 
+.. das:method:: AstVisitor.preVisitExpression (self:ast::AstVisitor; expr:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -2784,11 +2716,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExpression (self;expr) 
+.. das:method:: AstVisitor.visitExpression (self:ast::AstVisitor; expr:smart_ptr<ast::Expression> const) 
 
-visitExpression returns ::
-
- smart_ptr<ast::Expression>
+visitExpression returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2800,7 +2730,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprBlock (self;blk) 
+.. das:method:: AstVisitor.preVisitExprBlock (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const) 
 
 function arguments are
 
@@ -2812,11 +2742,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprBlock (self;blk) 
+.. das:method:: AstVisitor.visitExprBlock (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const) 
 
-visitExprBlock returns ::
-
- smart_ptr<ast::Expression>
+visitExprBlock returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2828,7 +2756,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprBlockArgument (self;blk;arg;lastArg) 
+.. das:method:: AstVisitor.preVisitExprBlockArgument (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
 function arguments are
 
@@ -2844,11 +2772,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprBlockArgument (self;blk;arg;lastArg) 
+.. das:method:: AstVisitor.visitExprBlockArgument (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
-visitExprBlockArgument returns ::
-
- smart_ptr<ast::Variable>
+visitExprBlockArgument returns smart_ptr<ast::Variable>
 
 function arguments are
 
@@ -2864,7 +2790,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprBlockArgumentInit (self;blk;arg;expr) 
+.. das:method:: AstVisitor.preVisitExprBlockArgumentInit (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; arg:smart_ptr<ast::Variable> const; expr:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -2880,11 +2806,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprBlockArgumentInit (self;blk;arg;expr) 
+.. das:method:: AstVisitor.visitExprBlockArgumentInit (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; arg:smart_ptr<ast::Variable> const; expr:smart_ptr<ast::Expression> const) 
 
-visitExprBlockArgumentInit returns ::
-
- smart_ptr<ast::Expression>
+visitExprBlockArgumentInit returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2900,7 +2824,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprBlockExpression (self;blk;expr) 
+.. das:method:: AstVisitor.preVisitExprBlockExpression (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; expr:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -2914,11 +2838,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprBlockExpression (self;blk;expr) 
+.. das:method:: AstVisitor.visitExprBlockExpression (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; expr:smart_ptr<ast::Expression> const) 
 
-visitExprBlockExpression returns ::
-
- smart_ptr<ast::Expression>
+visitExprBlockExpression returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2932,7 +2854,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprBlockFinal (self;blk) 
+.. das:method:: AstVisitor.preVisitExprBlockFinal (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const) 
 
 function arguments are
 
@@ -2944,7 +2866,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprBlockFinal (self;blk) 
+.. das:method:: AstVisitor.visitExprBlockFinal (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const) 
 
 function arguments are
 
@@ -2956,7 +2878,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprBlockFinalExpression (self;blk;expr) 
+.. das:method:: AstVisitor.preVisitExprBlockFinalExpression (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; expr:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -2970,11 +2892,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprBlockFinalExpression (self;blk;expr) 
+.. das:method:: AstVisitor.visitExprBlockFinalExpression (self:ast::AstVisitor; blk:smart_ptr<ast::ExprBlock> const; expr:smart_ptr<ast::Expression> const) 
 
-visitExprBlockFinalExpression returns ::
-
- smart_ptr<ast::Expression>
+visitExprBlockFinalExpression returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -2988,7 +2908,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprLet (self;expr) 
+.. das:method:: AstVisitor.preVisitExprLet (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLet> const) 
 
 function arguments are
 
@@ -3000,11 +2920,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprLet (self;expr) 
+.. das:method:: AstVisitor.visitExprLet (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLet> const) 
 
-visitExprLet returns ::
-
- smart_ptr<ast::Expression>
+visitExprLet returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3016,7 +2934,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprLetVariable (self;expr;arg;lastArg) 
+.. das:method:: AstVisitor.preVisitExprLetVariable (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLet> const; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
 function arguments are
 
@@ -3032,11 +2950,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprLetVariable (self;expr;arg;lastArg) 
+.. das:method:: AstVisitor.visitExprLetVariable (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLet> const; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
-visitExprLetVariable returns ::
-
- smart_ptr<ast::Variable>
+visitExprLetVariable returns smart_ptr<ast::Variable>
 
 function arguments are
 
@@ -3052,7 +2968,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprLetVariableInit (self;blk;arg;expr) 
+.. das:method:: AstVisitor.preVisitExprLetVariableInit (self:ast::AstVisitor; blk:smart_ptr<ast::ExprLet> const; arg:smart_ptr<ast::Variable> const; expr:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3068,11 +2984,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprLetVariableInit (self;blk;arg;expr) 
+.. das:method:: AstVisitor.visitExprLetVariableInit (self:ast::AstVisitor; blk:smart_ptr<ast::ExprLet> const; arg:smart_ptr<ast::Variable> const; expr:smart_ptr<ast::Expression> const) 
 
-visitExprLetVariableInit returns ::
-
- smart_ptr<ast::Expression>
+visitExprLetVariableInit returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3088,7 +3002,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitGlobalLet (self;prog) 
+.. das:method:: AstVisitor.preVisitGlobalLet (self:ast::AstVisitor; prog:smart_ptr<rtti::Program> const) 
 
 function arguments are
 
@@ -3100,7 +3014,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitGlobalLet (self;prog) 
+.. das:method:: AstVisitor.visitGlobalLet (self:ast::AstVisitor; prog:smart_ptr<rtti::Program> const) 
 
 function arguments are
 
@@ -3112,7 +3026,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitGlobalLetVariable (self;arg;lastArg) 
+.. das:method:: AstVisitor.preVisitGlobalLetVariable (self:ast::AstVisitor; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
 function arguments are
 
@@ -3126,11 +3040,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitGlobalLetVariable (self;arg;lastArg) 
+.. das:method:: AstVisitor.visitGlobalLetVariable (self:ast::AstVisitor; arg:smart_ptr<ast::Variable> const; lastArg:bool const) 
 
-visitGlobalLetVariable returns ::
-
- smart_ptr<ast::Variable>
+visitGlobalLetVariable returns smart_ptr<ast::Variable>
 
 function arguments are
 
@@ -3144,7 +3056,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitGlobalLetVariableInit (self;arg;expr) 
+.. das:method:: AstVisitor.preVisitGlobalLetVariableInit (self:ast::AstVisitor; arg:smart_ptr<ast::Variable> const; expr:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3158,11 +3070,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitGlobalLetVariableInit (self;arg;expr) 
+.. das:method:: AstVisitor.visitGlobalLetVariableInit (self:ast::AstVisitor; arg:smart_ptr<ast::Variable> const; expr:smart_ptr<ast::Expression> const) 
 
-visitGlobalLetVariableInit returns ::
-
- smart_ptr<ast::Expression>
+visitGlobalLetVariableInit returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3176,7 +3086,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprStringBuilder (self;expr) 
+.. das:method:: AstVisitor.preVisitExprStringBuilder (self:ast::AstVisitor; expr:smart_ptr<ast::ExprStringBuilder> const) 
 
 function arguments are
 
@@ -3188,11 +3098,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprStringBuilder (self;expr) 
+.. das:method:: AstVisitor.visitExprStringBuilder (self:ast::AstVisitor; expr:smart_ptr<ast::ExprStringBuilder> const) 
 
-visitExprStringBuilder returns ::
-
- smart_ptr<ast::Expression>
+visitExprStringBuilder returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3204,7 +3112,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprStringBuilderElement (self;expr;elem;last) 
+.. das:method:: AstVisitor.preVisitExprStringBuilderElement (self:ast::AstVisitor; expr:smart_ptr<ast::ExprStringBuilder> const; elem:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
@@ -3220,11 +3128,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprStringBuilderElement (self;expr;elem;last) 
+.. das:method:: AstVisitor.visitExprStringBuilderElement (self:ast::AstVisitor; expr:smart_ptr<ast::ExprStringBuilder> const; elem:smart_ptr<ast::Expression> const; last:bool const) 
 
-visitExprStringBuilderElement returns ::
-
- smart_ptr<ast::Expression>
+visitExprStringBuilderElement returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3240,7 +3146,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprNew (self;expr) 
+.. das:method:: AstVisitor.preVisitExprNew (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNew> const) 
 
 function arguments are
 
@@ -3252,11 +3158,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprNew (self;expr) 
+.. das:method:: AstVisitor.visitExprNew (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNew> const) 
 
-visitExprNew returns ::
-
- smart_ptr<ast::Expression>
+visitExprNew returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3268,7 +3172,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprNewArgument (self;expr;arg;last) 
+.. das:method:: AstVisitor.preVisitExprNewArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNew> const; arg:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
@@ -3284,11 +3188,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprNewArgument (self;expr;arg;last) 
+.. das:method:: AstVisitor.visitExprNewArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNew> const; arg:smart_ptr<ast::Expression> const; last:bool const) 
 
-visitExprNewArgument returns ::
-
- smart_ptr<ast::Expression>
+visitExprNewArgument returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3304,7 +3206,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprNamedCall (self;expr) 
+.. das:method:: AstVisitor.preVisitExprNamedCall (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNamedCall> const) 
 
 function arguments are
 
@@ -3316,11 +3218,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprNamedCall (self;expr) 
+.. das:method:: AstVisitor.visitExprNamedCall (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNamedCall> const) 
 
-visitExprNamedCall returns ::
-
- smart_ptr<ast::Expression>
+visitExprNamedCall returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3332,27 +3232,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprNamedCallArgument (self;expr;arg;last) 
-
-function arguments are
-
-+----+-----------------------------------+
-+expr+smart_ptr<ast::ExprNamedCall> const+
-+----+-----------------------------------+
-+arg +smart_ptr<ast::MakeFieldDecl> const+
-+----+-----------------------------------+
-+last+bool const                         +
-+----+-----------------------------------+
-
-
-to be documented
-
-
-.. das:function:: AstVisitor->visitExprNamedCallArgument (self;expr;arg;last) 
-
-visitExprNamedCallArgument returns ::
-
- smart_ptr<ast::MakeFieldDecl>
+.. das:method:: AstVisitor.preVisitExprNamedCallArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNamedCall> const; arg:smart_ptr<ast::MakeFieldDecl> const; last:bool const) 
 
 function arguments are
 
@@ -3368,7 +3248,25 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprLooksLikeCall (self;expr) 
+.. das:method:: AstVisitor.visitExprNamedCallArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNamedCall> const; arg:smart_ptr<ast::MakeFieldDecl> const; last:bool const) 
+
+visitExprNamedCallArgument returns smart_ptr<ast::MakeFieldDecl>
+
+function arguments are
+
++----+-----------------------------------+
++expr+smart_ptr<ast::ExprNamedCall> const+
++----+-----------------------------------+
++arg +smart_ptr<ast::MakeFieldDecl> const+
++----+-----------------------------------+
++last+bool const                         +
++----+-----------------------------------+
+
+
+to be documented
+
+
+.. das:method:: AstVisitor.preVisitExprLooksLikeCall (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLooksLikeCall> const) 
 
 function arguments are
 
@@ -3380,11 +3278,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprLooksLikeCall (self;expr) 
+.. das:method:: AstVisitor.visitExprLooksLikeCall (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLooksLikeCall> const) 
 
-visitExprLooksLikeCall returns ::
-
- smart_ptr<ast::Expression>
+visitExprLooksLikeCall returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3396,27 +3292,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprLooksLikeCallArgument (self;expr;arg;last) 
-
-function arguments are
-
-+----+---------------------------------------+
-+expr+smart_ptr<ast::ExprLooksLikeCall> const+
-+----+---------------------------------------+
-+arg +smart_ptr<ast::Expression> const       +
-+----+---------------------------------------+
-+last+bool const                             +
-+----+---------------------------------------+
-
-
-to be documented
-
-
-.. das:function:: AstVisitor->visitExprLooksLikeCallArgument (self;expr;arg;last) 
-
-visitExprLooksLikeCallArgument returns ::
-
- smart_ptr<ast::Expression>
+.. das:method:: AstVisitor.preVisitExprLooksLikeCallArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLooksLikeCall> const; arg:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
@@ -3432,7 +3308,25 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprCall (self;expr) 
+.. das:method:: AstVisitor.visitExprLooksLikeCallArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLooksLikeCall> const; arg:smart_ptr<ast::Expression> const; last:bool const) 
+
+visitExprLooksLikeCallArgument returns smart_ptr<ast::Expression>
+
+function arguments are
+
++----+---------------------------------------+
++expr+smart_ptr<ast::ExprLooksLikeCall> const+
++----+---------------------------------------+
++arg +smart_ptr<ast::Expression> const       +
++----+---------------------------------------+
++last+bool const                             +
++----+---------------------------------------+
+
+
+to be documented
+
+
+.. das:method:: AstVisitor.preVisitExprCall (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCall> const) 
 
 function arguments are
 
@@ -3444,11 +3338,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprCall (self;expr) 
+.. das:method:: AstVisitor.visitExprCall (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCall> const) 
 
-visitExprCall returns ::
-
- smart_ptr<ast::Expression>
+visitExprCall returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3460,7 +3352,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprCallArgument (self;expr;arg;last) 
+.. das:method:: AstVisitor.preVisitExprCallArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCall> const; arg:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
@@ -3476,11 +3368,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprCallArgument (self;expr;arg;last) 
+.. das:method:: AstVisitor.visitExprCallArgument (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCall> const; arg:smart_ptr<ast::Expression> const; last:bool const) 
 
-visitExprCallArgument returns ::
-
- smart_ptr<ast::Expression>
+visitExprCallArgument returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3496,7 +3386,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprNullCoalescing (self;expr) 
+.. das:method:: AstVisitor.preVisitExprNullCoalescing (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNullCoalescing> const) 
 
 function arguments are
 
@@ -3508,11 +3398,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprNullCoalescing (self;expr) 
+.. das:method:: AstVisitor.visitExprNullCoalescing (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNullCoalescing> const) 
 
-visitExprNullCoalescing returns ::
-
- smart_ptr<ast::Expression>
+visitExprNullCoalescing returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3524,7 +3412,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprNullCoalescingDefault (self;expr;defval) 
+.. das:method:: AstVisitor.preVisitExprNullCoalescingDefault (self:ast::AstVisitor; expr:smart_ptr<ast::ExprNullCoalescing> const; defval:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3538,7 +3426,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprAt (self;expr) 
+.. das:method:: AstVisitor.preVisitExprAt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAt> const) 
 
 function arguments are
 
@@ -3550,11 +3438,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprAt (self;expr) 
+.. das:method:: AstVisitor.visitExprAt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAt> const) 
 
-visitExprAt returns ::
-
- smart_ptr<ast::Expression>
+visitExprAt returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3566,7 +3452,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprAtIndex (self;expr;index) 
+.. das:method:: AstVisitor.preVisitExprAtIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAt> const; index:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3580,7 +3466,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprSafeAt (self;expr) 
+.. das:method:: AstVisitor.preVisitExprSafeAt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSafeAt> const) 
 
 function arguments are
 
@@ -3592,11 +3478,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprSafeAt (self;expr) 
+.. das:method:: AstVisitor.visitExprSafeAt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSafeAt> const) 
 
-visitExprSafeAt returns ::
-
- smart_ptr<ast::Expression>
+visitExprSafeAt returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3608,7 +3492,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprSafeAtIndex (self;expr;index) 
+.. das:method:: AstVisitor.preVisitExprSafeAtIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAt> const; index:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3622,7 +3506,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprIs (self;expr) 
+.. das:method:: AstVisitor.preVisitExprIs (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIs> const) 
 
 function arguments are
 
@@ -3634,11 +3518,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprIs (self;expr) 
+.. das:method:: AstVisitor.visitExprIs (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIs> const) 
 
-visitExprIs returns ::
-
- smart_ptr<ast::Expression>
+visitExprIs returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3650,7 +3532,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprIsType (self;expr;typeDecl) 
+.. das:method:: AstVisitor.preVisitExprIsType (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAt> const; typeDecl:smart_ptr<ast::TypeDecl> const) 
 
 function arguments are
 
@@ -3664,7 +3546,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprOp2 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprOp2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp2> const) 
 
 function arguments are
 
@@ -3676,11 +3558,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprOp2 (self;expr) 
+.. das:method:: AstVisitor.visitExprOp2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp2> const) 
 
-visitExprOp2 returns ::
-
- smart_ptr<ast::Expression>
+visitExprOp2 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3692,7 +3572,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprOp2Right (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprOp2Right (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp2> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3706,7 +3586,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprOp3 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprOp3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp3> const) 
 
 function arguments are
 
@@ -3718,11 +3598,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprOp3 (self;expr) 
+.. das:method:: AstVisitor.visitExprOp3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp3> const) 
 
-visitExprOp3 returns ::
-
- smart_ptr<ast::Expression>
+visitExprOp3 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3734,7 +3612,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprOp3Left (self;expr;left) 
+.. das:method:: AstVisitor.preVisitExprOp3Left (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp3> const; left:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3748,7 +3626,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprOp3Right (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprOp3Right (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp3> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3762,7 +3640,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprCopy (self;expr) 
+.. das:method:: AstVisitor.preVisitExprCopy (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCopy> const) 
 
 function arguments are
 
@@ -3774,11 +3652,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprCopy (self;expr) 
+.. das:method:: AstVisitor.visitExprCopy (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCopy> const) 
 
-visitExprCopy returns ::
-
- smart_ptr<ast::Expression>
+visitExprCopy returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3790,7 +3666,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprCopyRight (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprCopyRight (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCopy> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3804,7 +3680,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMove (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMove (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMove> const) 
 
 function arguments are
 
@@ -3816,11 +3692,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMove (self;expr) 
+.. das:method:: AstVisitor.visitExprMove (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMove> const) 
 
-visitExprMove returns ::
-
- smart_ptr<ast::Expression>
+visitExprMove returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3832,7 +3706,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMoveRight (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprMoveRight (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMove> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3846,7 +3720,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprClone (self;expr) 
+.. das:method:: AstVisitor.preVisitExprClone (self:ast::AstVisitor; expr:smart_ptr<ast::ExprClone> const) 
 
 function arguments are
 
@@ -3858,11 +3732,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprClone (self;expr) 
+.. das:method:: AstVisitor.visitExprClone (self:ast::AstVisitor; expr:smart_ptr<ast::ExprClone> const) 
 
-visitExprClone returns ::
-
- smart_ptr<ast::Expression>
+visitExprClone returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3874,7 +3746,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprCloneRight (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprCloneRight (self:ast::AstVisitor; expr:smart_ptr<ast::ExprClone> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3888,7 +3760,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprWith (self;expr) 
+.. das:method:: AstVisitor.preVisitExprWith (self:ast::AstVisitor; expr:smart_ptr<ast::ExprWith> const) 
 
 function arguments are
 
@@ -3900,11 +3772,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprWith (self;expr) 
+.. das:method:: AstVisitor.visitExprWith (self:ast::AstVisitor; expr:smart_ptr<ast::ExprWith> const) 
 
-visitExprWith returns ::
-
- smart_ptr<ast::Expression>
+visitExprWith returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3916,7 +3786,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprWithBody (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprWithBody (self:ast::AstVisitor; expr:smart_ptr<ast::ExprWith> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3930,7 +3800,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprWhile (self;expr) 
+.. das:method:: AstVisitor.preVisitExprWhile (self:ast::AstVisitor; expr:smart_ptr<ast::ExprWhile> const) 
 
 function arguments are
 
@@ -3942,11 +3812,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprWhile (self;expr) 
+.. das:method:: AstVisitor.visitExprWhile (self:ast::AstVisitor; expr:smart_ptr<ast::ExprWhile> const) 
 
-visitExprWhile returns ::
-
- smart_ptr<ast::Expression>
+visitExprWhile returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -3958,7 +3826,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprWhileBody (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprWhileBody (self:ast::AstVisitor; expr:smart_ptr<ast::ExprWhile> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -3972,7 +3840,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprTryCatch (self;expr) 
+.. das:method:: AstVisitor.preVisitExprTryCatch (self:ast::AstVisitor; expr:smart_ptr<ast::ExprTryCatch> const) 
 
 function arguments are
 
@@ -3984,11 +3852,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprTryCatch (self;expr) 
+.. das:method:: AstVisitor.visitExprTryCatch (self:ast::AstVisitor; expr:smart_ptr<ast::ExprTryCatch> const) 
 
-visitExprTryCatch returns ::
-
- smart_ptr<ast::Expression>
+visitExprTryCatch returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4000,7 +3866,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprTryCatchCatch (self;expr;right) 
+.. das:method:: AstVisitor.preVisitExprTryCatchCatch (self:ast::AstVisitor; expr:smart_ptr<ast::ExprTryCatch> const; right:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -4014,7 +3880,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprIfThenElse (self;expr) 
+.. das:method:: AstVisitor.preVisitExprIfThenElse (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIfThenElse> const) 
 
 function arguments are
 
@@ -4026,11 +3892,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprIfThenElse (self;expr) 
+.. das:method:: AstVisitor.visitExprIfThenElse (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIfThenElse> const) 
 
-visitExprIfThenElse returns ::
-
- smart_ptr<ast::Expression>
+visitExprIfThenElse returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4042,7 +3906,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprIfThenElseIfBlock (self;expr;ifBlock) 
+.. das:method:: AstVisitor.preVisitExprIfThenElseIfBlock (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIfThenElse> const; ifBlock:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -4056,7 +3920,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprIfThenElseElseBlock (self;expr;elseBlock) 
+.. das:method:: AstVisitor.preVisitExprIfThenElseElseBlock (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIfThenElse> const; elseBlock:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -4070,7 +3934,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprFor (self;expr) 
+.. das:method:: AstVisitor.preVisitExprFor (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const) 
 
 function arguments are
 
@@ -4082,11 +3946,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprFor (self;expr) 
+.. das:method:: AstVisitor.visitExprFor (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const) 
 
-visitExprFor returns ::
-
- smart_ptr<ast::Expression>
+visitExprFor returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4098,7 +3960,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprForVariable (self;expr;svar;last) 
+.. das:method:: AstVisitor.preVisitExprForVariable (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const; svar:smart_ptr<ast::Variable> const; last:bool const) 
 
 function arguments are
 
@@ -4114,11 +3976,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprForVariable (self;expr;svar;last) 
+.. das:method:: AstVisitor.visitExprForVariable (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const; svar:smart_ptr<ast::Variable> const; last:bool const) 
 
-visitExprForVariable returns ::
-
- smart_ptr<ast::Variable>
+visitExprForVariable returns smart_ptr<ast::Variable>
 
 function arguments are
 
@@ -4134,7 +3994,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprForSource (self;expr;source;last) 
+.. das:method:: AstVisitor.preVisitExprForSource (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const; source:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
@@ -4150,11 +4010,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprForSource (self;expr;source;last) 
+.. das:method:: AstVisitor.visitExprForSource (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const; source:smart_ptr<ast::Expression> const; last:bool const) 
 
-visitExprForSource returns ::
-
- smart_ptr<ast::Expression>
+visitExprForSource returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4170,7 +4028,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprForStack (self;expr) 
+.. das:method:: AstVisitor.preVisitExprForStack (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const) 
 
 function arguments are
 
@@ -4182,7 +4040,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprForBody (self;expr) 
+.. das:method:: AstVisitor.preVisitExprForBody (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFor> const) 
 
 function arguments are
 
@@ -4194,7 +4052,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeVariant (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMakeVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeVariant> const) 
 
 function arguments are
 
@@ -4206,11 +4064,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeVariant (self;expr) 
+.. das:method:: AstVisitor.visitExprMakeVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeVariant> const) 
 
-visitExprMakeVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4222,7 +4078,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeVariantField (self;expr;index;decl;last) 
+.. das:method:: AstVisitor.preVisitExprMakeVariantField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeVariant> const; index:int const; decl:smart_ptr<ast::MakeFieldDecl> const; last:bool const) 
 
 function arguments are
 
@@ -4240,11 +4096,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeVariantField (self;expr;index;decl;last) 
+.. das:method:: AstVisitor.visitExprMakeVariantField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeVariant> const; index:int const; decl:smart_ptr<ast::MakeFieldDecl> const; last:bool const) 
 
-visitExprMakeVariantField returns ::
-
- smart_ptr<ast::MakeFieldDecl>
+visitExprMakeVariantField returns smart_ptr<ast::MakeFieldDecl>
 
 function arguments are
 
@@ -4262,7 +4116,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeStruct (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMakeStruct (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeStruct> const) 
 
 function arguments are
 
@@ -4274,11 +4128,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeStruct (self;expr) 
+.. das:method:: AstVisitor.visitExprMakeStruct (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeStruct> const) 
 
-visitExprMakeStruct returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeStruct returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4290,7 +4142,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeStructIndex (self;expr;index;last) 
+.. das:method:: AstVisitor.preVisitExprMakeStructIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeStruct> const; index:int const; last:bool const) 
 
 function arguments are
 
@@ -4306,7 +4158,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeStructIndex (self;expr;index;last) 
+.. das:method:: AstVisitor.visitExprMakeStructIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeStruct> const; index:int const; last:bool const) 
 
 function arguments are
 
@@ -4322,7 +4174,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeStructField (self;expr;index;decl;last) 
+.. das:method:: AstVisitor.preVisitExprMakeStructField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeStruct> const; index:int const; decl:smart_ptr<ast::MakeFieldDecl> const; last:bool const) 
 
 function arguments are
 
@@ -4340,11 +4192,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeStructField (self;expr;index;decl;last) 
+.. das:method:: AstVisitor.visitExprMakeStructField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeStruct> const; index:int const; decl:smart_ptr<ast::MakeFieldDecl> const; last:bool const) 
 
-visitExprMakeStructField returns ::
-
- smart_ptr<ast::MakeFieldDecl>
+visitExprMakeStructField returns smart_ptr<ast::MakeFieldDecl>
 
 function arguments are
 
@@ -4362,7 +4212,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeArray (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMakeArray (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeArray> const) 
 
 function arguments are
 
@@ -4374,11 +4224,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeArray (self;expr) 
+.. das:method:: AstVisitor.visitExprMakeArray (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeArray> const) 
 
-visitExprMakeArray returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeArray returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4390,7 +4238,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeArrayIndex (self;expr;index;init;last) 
+.. das:method:: AstVisitor.preVisitExprMakeArrayIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeArray> const; index:int const; init:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
@@ -4408,11 +4256,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeArrayIndex (self;expr;index;init;last) 
+.. das:method:: AstVisitor.visitExprMakeArrayIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeArray> const; index:int const; init:smart_ptr<ast::Expression> const; last:bool const) 
 
-visitExprMakeArrayIndex returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeArrayIndex returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4430,7 +4276,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeTuple (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMakeTuple (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeTuple> const) 
 
 function arguments are
 
@@ -4442,11 +4288,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeTuple (self;expr) 
+.. das:method:: AstVisitor.visitExprMakeTuple (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeTuple> const) 
 
-visitExprMakeTuple returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeTuple returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4458,7 +4302,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeTupleIndex (self;expr;index;init;last) 
+.. das:method:: AstVisitor.preVisitExprMakeTupleIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeTuple> const; index:int const; init:smart_ptr<ast::Expression> const; last:bool const) 
 
 function arguments are
 
@@ -4476,11 +4320,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeTupleIndex (self;expr;index;init;last) 
+.. das:method:: AstVisitor.visitExprMakeTupleIndex (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeTuple> const; index:int const; init:smart_ptr<ast::Expression> const; last:bool const) 
 
-visitExprMakeTupleIndex returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeTupleIndex returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4498,7 +4340,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprArrayComprehension (self;expr) 
+.. das:method:: AstVisitor.preVisitExprArrayComprehension (self:ast::AstVisitor; expr:smart_ptr<ast::ExprArrayComprehension> const) 
 
 function arguments are
 
@@ -4510,11 +4352,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprArrayComprehension (self;expr) 
+.. das:method:: AstVisitor.visitExprArrayComprehension (self:ast::AstVisitor; expr:smart_ptr<ast::ExprArrayComprehension> const) 
 
-visitExprArrayComprehension returns ::
-
- smart_ptr<ast::Expression>
+visitExprArrayComprehension returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4526,7 +4366,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprArrayComprehensionSubexpr (self;expr;subexrp) 
+.. das:method:: AstVisitor.preVisitExprArrayComprehensionSubexpr (self:ast::AstVisitor; expr:smart_ptr<ast::ExprArrayComprehension> const; subexrp:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -4540,7 +4380,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprArrayComprehensionWhere (self;expr;filter) 
+.. das:method:: AstVisitor.preVisitExprArrayComprehensionWhere (self:ast::AstVisitor; expr:smart_ptr<ast::ExprArrayComprehension> const; filter:smart_ptr<ast::Expression> const) 
 
 function arguments are
 
@@ -4554,7 +4394,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprTypeInfo (self;expr) 
+.. das:method:: AstVisitor.preVisitExprTypeInfo (self:ast::AstVisitor; expr:smart_ptr<ast::ExprTypeInfo> const) 
 
 function arguments are
 
@@ -4566,11 +4406,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprTypeInfo (self;expr) 
+.. das:method:: AstVisitor.visitExprTypeInfo (self:ast::AstVisitor; expr:smart_ptr<ast::ExprTypeInfo> const) 
 
-visitExprTypeInfo returns ::
-
- smart_ptr<ast::Expression>
+visitExprTypeInfo returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4582,7 +4420,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprPtr2Ref (self;expr) 
+.. das:method:: AstVisitor.preVisitExprPtr2Ref (self:ast::AstVisitor; expr:smart_ptr<ast::ExprPtr2Ref> const) 
 
 function arguments are
 
@@ -4594,11 +4432,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprPtr2Ref (self;expr) 
+.. das:method:: AstVisitor.visitExprPtr2Ref (self:ast::AstVisitor; expr:smart_ptr<ast::ExprPtr2Ref> const) 
 
-visitExprPtr2Ref returns ::
-
- smart_ptr<ast::Expression>
+visitExprPtr2Ref returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4610,7 +4446,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprLabel (self;expr) 
+.. das:method:: AstVisitor.preVisitExprLabel (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLabel> const) 
 
 function arguments are
 
@@ -4622,11 +4458,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprLabel (self;expr) 
+.. das:method:: AstVisitor.visitExprLabel (self:ast::AstVisitor; expr:smart_ptr<ast::ExprLabel> const) 
 
-visitExprLabel returns ::
-
- smart_ptr<ast::Expression>
+visitExprLabel returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4638,7 +4472,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprGoto (self;expr) 
+.. das:method:: AstVisitor.preVisitExprGoto (self:ast::AstVisitor; expr:smart_ptr<ast::ExprGoto> const) 
 
 function arguments are
 
@@ -4650,11 +4484,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprGoto (self;expr) 
+.. das:method:: AstVisitor.visitExprGoto (self:ast::AstVisitor; expr:smart_ptr<ast::ExprGoto> const) 
 
-visitExprGoto returns ::
-
- smart_ptr<ast::Expression>
+visitExprGoto returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4666,7 +4498,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprRef2Value (self;expr) 
+.. das:method:: AstVisitor.preVisitExprRef2Value (self:ast::AstVisitor; expr:smart_ptr<ast::ExprRef2Value> const) 
 
 function arguments are
 
@@ -4678,11 +4510,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprRef2Value (self;expr) 
+.. das:method:: AstVisitor.visitExprRef2Value (self:ast::AstVisitor; expr:smart_ptr<ast::ExprRef2Value> const) 
 
-visitExprRef2Value returns ::
-
- smart_ptr<ast::Expression>
+visitExprRef2Value returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4694,7 +4524,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprRef2Ptr (self;expr) 
+.. das:method:: AstVisitor.preVisitExprRef2Ptr (self:ast::AstVisitor; expr:smart_ptr<ast::ExprRef2Ptr> const) 
 
 function arguments are
 
@@ -4706,11 +4536,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprRef2Ptr (self;expr) 
+.. das:method:: AstVisitor.visitExprRef2Ptr (self:ast::AstVisitor; expr:smart_ptr<ast::ExprRef2Ptr> const) 
 
-visitExprRef2Ptr returns ::
-
- smart_ptr<ast::Expression>
+visitExprRef2Ptr returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4722,7 +4550,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprAddr (self;expr) 
+.. das:method:: AstVisitor.preVisitExprAddr (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAddr> const) 
 
 function arguments are
 
@@ -4734,11 +4562,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprAddr (self;expr) 
+.. das:method:: AstVisitor.visitExprAddr (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAddr> const) 
 
-visitExprAddr returns ::
-
- smart_ptr<ast::Expression>
+visitExprAddr returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4750,7 +4576,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprAssert (self;expr) 
+.. das:method:: AstVisitor.preVisitExprAssert (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAssert> const) 
 
 function arguments are
 
@@ -4762,11 +4588,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprAssert (self;expr) 
+.. das:method:: AstVisitor.visitExprAssert (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAssert> const) 
 
-visitExprAssert returns ::
-
- smart_ptr<ast::Expression>
+visitExprAssert returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4778,7 +4602,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprStaticAssert (self;expr) 
+.. das:method:: AstVisitor.preVisitExprStaticAssert (self:ast::AstVisitor; expr:smart_ptr<ast::ExprStaticAssert> const) 
 
 function arguments are
 
@@ -4790,11 +4614,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprStaticAssert (self;expr) 
+.. das:method:: AstVisitor.visitExprStaticAssert (self:ast::AstVisitor; expr:smart_ptr<ast::ExprStaticAssert> const) 
 
-visitExprStaticAssert returns ::
-
- smart_ptr<ast::Expression>
+visitExprStaticAssert returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4806,7 +4628,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprDebug (self;expr) 
+.. das:method:: AstVisitor.preVisitExprDebug (self:ast::AstVisitor; expr:smart_ptr<ast::ExprDebug> const) 
 
 function arguments are
 
@@ -4818,11 +4640,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprDebug (self;expr) 
+.. das:method:: AstVisitor.visitExprDebug (self:ast::AstVisitor; expr:smart_ptr<ast::ExprDebug> const) 
 
-visitExprDebug returns ::
-
- smart_ptr<ast::Expression>
+visitExprDebug returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4834,7 +4654,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprInvoke (self;expr) 
+.. das:method:: AstVisitor.preVisitExprInvoke (self:ast::AstVisitor; expr:smart_ptr<ast::ExprInvoke> const) 
 
 function arguments are
 
@@ -4846,11 +4666,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprInvoke (self;expr) 
+.. das:method:: AstVisitor.visitExprInvoke (self:ast::AstVisitor; expr:smart_ptr<ast::ExprInvoke> const) 
 
-visitExprInvoke returns ::
-
- smart_ptr<ast::Expression>
+visitExprInvoke returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4862,7 +4680,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprErase (self;expr) 
+.. das:method:: AstVisitor.preVisitExprErase (self:ast::AstVisitor; expr:smart_ptr<ast::ExprErase> const) 
 
 function arguments are
 
@@ -4874,11 +4692,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprErase (self;expr) 
+.. das:method:: AstVisitor.visitExprErase (self:ast::AstVisitor; expr:smart_ptr<ast::ExprErase> const) 
 
-visitExprErase returns ::
-
- smart_ptr<ast::Expression>
+visitExprErase returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4890,7 +4706,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprFind (self;expr) 
+.. das:method:: AstVisitor.preVisitExprFind (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFind> const) 
 
 function arguments are
 
@@ -4902,11 +4718,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprFind (self;expr) 
+.. das:method:: AstVisitor.visitExprFind (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFind> const) 
 
-visitExprFind returns ::
-
- smart_ptr<ast::Expression>
+visitExprFind returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4918,7 +4732,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprKeyExists (self;expr) 
+.. das:method:: AstVisitor.preVisitExprKeyExists (self:ast::AstVisitor; expr:smart_ptr<ast::ExprKeyExists> const) 
 
 function arguments are
 
@@ -4930,11 +4744,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprKeyExists (self;expr) 
+.. das:method:: AstVisitor.visitExprKeyExists (self:ast::AstVisitor; expr:smart_ptr<ast::ExprKeyExists> const) 
 
-visitExprKeyExists returns ::
-
- smart_ptr<ast::Expression>
+visitExprKeyExists returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4946,7 +4758,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprAscend (self;expr) 
+.. das:method:: AstVisitor.preVisitExprAscend (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAscend> const) 
 
 function arguments are
 
@@ -4958,11 +4770,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprAscend (self;expr) 
+.. das:method:: AstVisitor.visitExprAscend (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAscend> const) 
 
-visitExprAscend returns ::
-
- smart_ptr<ast::Expression>
+visitExprAscend returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -4974,7 +4784,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprCast (self;expr) 
+.. das:method:: AstVisitor.preVisitExprCast (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCast> const) 
 
 function arguments are
 
@@ -4986,11 +4796,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprCast (self;expr) 
+.. das:method:: AstVisitor.visitExprCast (self:ast::AstVisitor; expr:smart_ptr<ast::ExprCast> const) 
 
-visitExprCast returns ::
-
- smart_ptr<ast::Expression>
+visitExprCast returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5002,7 +4810,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprDelete (self;expr) 
+.. das:method:: AstVisitor.preVisitExprDelete (self:ast::AstVisitor; expr:smart_ptr<ast::ExprDelete> const) 
 
 function arguments are
 
@@ -5014,11 +4822,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprDelete (self;expr) 
+.. das:method:: AstVisitor.visitExprDelete (self:ast::AstVisitor; expr:smart_ptr<ast::ExprDelete> const) 
 
-visitExprDelete returns ::
-
- smart_ptr<ast::Expression>
+visitExprDelete returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5030,7 +4836,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprVar (self;expr) 
+.. das:method:: AstVisitor.preVisitExprVar (self:ast::AstVisitor; expr:smart_ptr<ast::ExprVar> const) 
 
 function arguments are
 
@@ -5042,11 +4848,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprVar (self;expr) 
+.. das:method:: AstVisitor.visitExprVar (self:ast::AstVisitor; expr:smart_ptr<ast::ExprVar> const) 
 
-visitExprVar returns ::
-
- smart_ptr<ast::Expression>
+visitExprVar returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5058,7 +4862,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprField (self;expr) 
+.. das:method:: AstVisitor.preVisitExprField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprField> const) 
 
 function arguments are
 
@@ -5070,11 +4874,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprField (self;expr) 
+.. das:method:: AstVisitor.visitExprField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprField> const) 
 
-visitExprField returns ::
-
- smart_ptr<ast::Expression>
+visitExprField returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5086,7 +4888,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprSafeField (self;expr) 
+.. das:method:: AstVisitor.preVisitExprSafeField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSafeField> const) 
 
 function arguments are
 
@@ -5098,11 +4900,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprSafeField (self;expr) 
+.. das:method:: AstVisitor.visitExprSafeField (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSafeField> const) 
 
-visitExprSafeField returns ::
-
- smart_ptr<ast::Expression>
+visitExprSafeField returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5114,7 +4914,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprSwizzle (self;expr) 
+.. das:method:: AstVisitor.preVisitExprSwizzle (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSwizzle> const) 
 
 function arguments are
 
@@ -5126,11 +4926,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprSwizzle (self;expr) 
+.. das:method:: AstVisitor.visitExprSwizzle (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSwizzle> const) 
 
-visitExprSwizzle returns ::
-
- smart_ptr<ast::Expression>
+visitExprSwizzle returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5142,7 +4940,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprIsVariant (self;expr) 
+.. das:method:: AstVisitor.preVisitExprIsVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIsVariant> const) 
 
 function arguments are
 
@@ -5154,11 +4952,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprIsVariant (self;expr) 
+.. das:method:: AstVisitor.visitExprIsVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprIsVariant> const) 
 
-visitExprIsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprIsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5170,7 +4966,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprAsVariant (self;expr) 
+.. das:method:: AstVisitor.preVisitExprAsVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAsVariant> const) 
 
 function arguments are
 
@@ -5182,11 +4978,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprAsVariant (self;expr) 
+.. das:method:: AstVisitor.visitExprAsVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprAsVariant> const) 
 
-visitExprAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5198,7 +4992,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprSafeAsVariant (self;expr) 
+.. das:method:: AstVisitor.preVisitExprSafeAsVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSafeAsVariant> const) 
 
 function arguments are
 
@@ -5210,11 +5004,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprSafeAsVariant (self;expr) 
+.. das:method:: AstVisitor.visitExprSafeAsVariant (self:ast::AstVisitor; expr:smart_ptr<ast::ExprSafeAsVariant> const) 
 
-visitExprSafeAsVariant returns ::
-
- smart_ptr<ast::Expression>
+visitExprSafeAsVariant returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5226,7 +5018,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprOp1 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprOp1 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp1> const) 
 
 function arguments are
 
@@ -5238,11 +5030,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprOp1 (self;expr) 
+.. das:method:: AstVisitor.visitExprOp1 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprOp1> const) 
 
-visitExprOp1 returns ::
-
- smart_ptr<ast::Expression>
+visitExprOp1 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5254,7 +5044,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprReturn (self;expr) 
+.. das:method:: AstVisitor.preVisitExprReturn (self:ast::AstVisitor; expr:smart_ptr<ast::ExprReturn> const) 
 
 function arguments are
 
@@ -5266,11 +5056,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprReturn (self;expr) 
+.. das:method:: AstVisitor.visitExprReturn (self:ast::AstVisitor; expr:smart_ptr<ast::ExprReturn> const) 
 
-visitExprReturn returns ::
-
- smart_ptr<ast::Expression>
+visitExprReturn returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5282,7 +5070,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprYield (self;expr) 
+.. das:method:: AstVisitor.preVisitExprYield (self:ast::AstVisitor; expr:smart_ptr<ast::ExprYield> const) 
 
 function arguments are
 
@@ -5294,11 +5082,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprYield (self;expr) 
+.. das:method:: AstVisitor.visitExprYield (self:ast::AstVisitor; expr:smart_ptr<ast::ExprYield> const) 
 
-visitExprYield returns ::
-
- smart_ptr<ast::Expression>
+visitExprYield returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5310,7 +5096,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprBreak (self;expr) 
+.. das:method:: AstVisitor.preVisitExprBreak (self:ast::AstVisitor; expr:smart_ptr<ast::ExprBreak> const) 
 
 function arguments are
 
@@ -5322,11 +5108,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprBreak (self;expr) 
+.. das:method:: AstVisitor.visitExprBreak (self:ast::AstVisitor; expr:smart_ptr<ast::ExprBreak> const) 
 
-visitExprBreak returns ::
-
- smart_ptr<ast::Expression>
+visitExprBreak returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5338,7 +5122,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprContinue (self;expr) 
+.. das:method:: AstVisitor.preVisitExprContinue (self:ast::AstVisitor; expr:smart_ptr<ast::ExprContinue> const) 
 
 function arguments are
 
@@ -5350,11 +5134,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprContinue (self;expr) 
+.. das:method:: AstVisitor.visitExprContinue (self:ast::AstVisitor; expr:smart_ptr<ast::ExprContinue> const) 
 
-visitExprContinue returns ::
-
- smart_ptr<ast::Expression>
+visitExprContinue returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5366,7 +5148,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeBlock (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMakeBlock (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeBlock> const) 
 
 function arguments are
 
@@ -5378,11 +5160,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeBlock (self;expr) 
+.. das:method:: AstVisitor.visitExprMakeBlock (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeBlock> const) 
 
-visitExprMakeBlock returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeBlock returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5394,7 +5174,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMakeGenerator (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMakeGenerator (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeGenerator> const) 
 
 function arguments are
 
@@ -5406,11 +5186,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMakeGenerator (self;expr) 
+.. das:method:: AstVisitor.visitExprMakeGenerator (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMakeGenerator> const) 
 
-visitExprMakeGenerator returns ::
-
- smart_ptr<ast::Expression>
+visitExprMakeGenerator returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5422,7 +5200,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprMemZero (self;expr) 
+.. das:method:: AstVisitor.preVisitExprMemZero (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMemZero> const) 
 
 function arguments are
 
@@ -5434,11 +5212,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprMemZero (self;expr) 
+.. das:method:: AstVisitor.visitExprMemZero (self:ast::AstVisitor; expr:smart_ptr<ast::ExprMemZero> const) 
 
-visitExprMemZero returns ::
-
- smart_ptr<ast::Expression>
+visitExprMemZero returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5450,7 +5226,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConst (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConst (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConst> const) 
 
 function arguments are
 
@@ -5462,11 +5238,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConst (self;expr) 
+.. das:method:: AstVisitor.visitExprConst (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConst> const) 
 
-visitExprConst returns ::
-
- smart_ptr<ast::Expression>
+visitExprConst returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5478,7 +5252,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstPtr (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstPtr (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstPtr> const) 
 
 function arguments are
 
@@ -5490,11 +5264,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstPtr (self;expr) 
+.. das:method:: AstVisitor.visitExprConstPtr (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstPtr> const) 
 
-visitExprConstPtr returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstPtr returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5506,7 +5278,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstEnumeration (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstEnumeration (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstEnumeration> const) 
 
 function arguments are
 
@@ -5518,11 +5290,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstEnumeration (self;expr) 
+.. das:method:: AstVisitor.visitExprConstEnumeration (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstEnumeration> const) 
 
-visitExprConstEnumeration returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstEnumeration returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5534,7 +5304,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstBitfield (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstBitfield (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstBitfield> const) 
 
 function arguments are
 
@@ -5546,11 +5316,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstBitfield (self;expr) 
+.. das:method:: AstVisitor.visitExprConstBitfield (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstBitfield> const) 
 
-visitExprConstBitfield returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstBitfield returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5562,7 +5330,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstInt8 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstInt8 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt8> const) 
 
 function arguments are
 
@@ -5574,11 +5342,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstInt8 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstInt8 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt8> const) 
 
-visitExprConstInt8 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstInt8 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5590,7 +5356,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstInt16 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstInt16 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt16> const) 
 
 function arguments are
 
@@ -5602,11 +5368,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstInt16 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstInt16 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt16> const) 
 
-visitExprConstInt16 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstInt16 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5618,7 +5382,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstInt64 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstInt64 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt64> const) 
 
 function arguments are
 
@@ -5630,11 +5394,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstInt64 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstInt64 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt64> const) 
 
-visitExprConstInt64 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstInt64 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5646,7 +5408,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstInt (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstInt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt> const) 
 
 function arguments are
 
@@ -5658,11 +5420,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstInt (self;expr) 
+.. das:method:: AstVisitor.visitExprConstInt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt> const) 
 
-visitExprConstInt returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstInt returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5674,7 +5434,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstInt2 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstInt2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt2> const) 
 
 function arguments are
 
@@ -5686,11 +5446,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstInt2 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstInt2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt2> const) 
 
-visitExprConstInt2 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstInt2 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5702,7 +5460,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstInt3 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstInt3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt3> const) 
 
 function arguments are
 
@@ -5714,11 +5472,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstInt3 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstInt3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt3> const) 
 
-visitExprConstInt3 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstInt3 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5730,7 +5486,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstInt4 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstInt4 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt4> const) 
 
 function arguments are
 
@@ -5742,11 +5498,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstInt4 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstInt4 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstInt4> const) 
 
-visitExprConstInt4 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstInt4 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5758,7 +5512,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstUInt8 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstUInt8 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt8> const) 
 
 function arguments are
 
@@ -5770,11 +5524,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstUInt8 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstUInt8 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt8> const) 
 
-visitExprConstUInt8 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstUInt8 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5786,7 +5538,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstUInt16 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstUInt16 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt16> const) 
 
 function arguments are
 
@@ -5798,11 +5550,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstUInt16 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstUInt16 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt16> const) 
 
-visitExprConstUInt16 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstUInt16 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5814,7 +5564,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstUInt64 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstUInt64 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt64> const) 
 
 function arguments are
 
@@ -5826,11 +5576,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstUInt64 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstUInt64 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt64> const) 
 
-visitExprConstUInt64 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstUInt64 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5842,7 +5590,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstUInt (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstUInt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt> const) 
 
 function arguments are
 
@@ -5854,11 +5602,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstUInt (self;expr) 
+.. das:method:: AstVisitor.visitExprConstUInt (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt> const) 
 
-visitExprConstUInt returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstUInt returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5870,7 +5616,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstUInt2 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstUInt2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt2> const) 
 
 function arguments are
 
@@ -5882,11 +5628,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstUInt2 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstUInt2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt2> const) 
 
-visitExprConstUInt2 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstUInt2 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5898,7 +5642,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstUInt3 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstUInt3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt3> const) 
 
 function arguments are
 
@@ -5910,11 +5654,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstUInt3 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstUInt3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt3> const) 
 
-visitExprConstUInt3 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstUInt3 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5926,7 +5668,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstUInt4 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstUInt4 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt4> const) 
 
 function arguments are
 
@@ -5938,11 +5680,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstUInt4 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstUInt4 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstUInt4> const) 
 
-visitExprConstUInt4 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstUInt4 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5954,7 +5694,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstRange (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstRange (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstRange> const) 
 
 function arguments are
 
@@ -5966,11 +5706,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstRange (self;expr) 
+.. das:method:: AstVisitor.visitExprConstRange (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstRange> const) 
 
-visitExprConstRange returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstRange returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -5982,7 +5720,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstURange (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstURange (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstURange> const) 
 
 function arguments are
 
@@ -5994,11 +5732,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstURange (self;expr) 
+.. das:method:: AstVisitor.visitExprConstURange (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstURange> const) 
 
-visitExprConstURange returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstURange returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6010,7 +5746,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstBool (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstBool (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstBool> const) 
 
 function arguments are
 
@@ -6022,11 +5758,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstBool (self;expr) 
+.. das:method:: AstVisitor.visitExprConstBool (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstBool> const) 
 
-visitExprConstBool returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstBool returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6038,7 +5772,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstFloat (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstFloat (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat> const) 
 
 function arguments are
 
@@ -6050,11 +5784,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstFloat (self;expr) 
+.. das:method:: AstVisitor.visitExprConstFloat (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat> const) 
 
-visitExprConstFloat returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstFloat returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6066,7 +5798,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstFloat2 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstFloat2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat2> const) 
 
 function arguments are
 
@@ -6078,11 +5810,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstFloat2 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstFloat2 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat2> const) 
 
-visitExprConstFloat2 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstFloat2 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6094,7 +5824,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstFloat3 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstFloat3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat3> const) 
 
 function arguments are
 
@@ -6106,11 +5836,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstFloat3 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstFloat3 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat3> const) 
 
-visitExprConstFloat3 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstFloat3 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6122,7 +5850,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstFloat4 (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstFloat4 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat4> const) 
 
 function arguments are
 
@@ -6134,11 +5862,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstFloat4 (self;expr) 
+.. das:method:: AstVisitor.visitExprConstFloat4 (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstFloat4> const) 
 
-visitExprConstFloat4 returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstFloat4 returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6150,7 +5876,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstString (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstString (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstString> const) 
 
 function arguments are
 
@@ -6162,11 +5888,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstString (self;expr) 
+.. das:method:: AstVisitor.visitExprConstString (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstString> const) 
 
-visitExprConstString returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstString returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6178,7 +5902,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprConstDouble (self;expr) 
+.. das:method:: AstVisitor.preVisitExprConstDouble (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstDouble> const) 
 
 function arguments are
 
@@ -6190,11 +5914,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprConstDouble (self;expr) 
+.. das:method:: AstVisitor.visitExprConstDouble (self:ast::AstVisitor; expr:smart_ptr<ast::ExprConstDouble> const) 
 
-visitExprConstDouble returns ::
-
- smart_ptr<ast::Expression>
+visitExprConstDouble returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6206,7 +5928,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprFakeContext (self;expr) 
+.. das:method:: AstVisitor.preVisitExprFakeContext (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFakeContext> const) 
 
 function arguments are
 
@@ -6218,11 +5940,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprFakeContext (self;expr) 
+.. das:method:: AstVisitor.visitExprFakeContext (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFakeContext> const) 
 
-visitExprFakeContext returns ::
-
- smart_ptr<ast::Expression>
+visitExprFakeContext returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6234,7 +5954,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprFakeLineInfo (self;expr) 
+.. das:method:: AstVisitor.preVisitExprFakeLineInfo (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFakeLineInfo> const) 
 
 function arguments are
 
@@ -6246,11 +5966,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprFakeLineInfo (self;expr) 
+.. das:method:: AstVisitor.visitExprFakeLineInfo (self:ast::AstVisitor; expr:smart_ptr<ast::ExprFakeLineInfo> const) 
 
-visitExprFakeLineInfo returns ::
-
- smart_ptr<ast::Expression>
+visitExprFakeLineInfo returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6262,7 +5980,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->preVisitExprReader (self;expr) 
+.. das:method:: AstVisitor.preVisitExprReader (self:ast::AstVisitor; expr:smart_ptr<ast::ExprReader> const) 
 
 function arguments are
 
@@ -6274,11 +5992,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: AstVisitor->visitExprReader (self;expr) 
+.. das:method:: AstVisitor.visitExprReader (self:ast::AstVisitor; expr:smart_ptr<ast::ExprReader> const) 
 
-visitExprReader returns ::
-
- smart_ptr<ast::Expression>
+visitExprReader returns smart_ptr<ast::Expression>
 
 function arguments are
 
@@ -6295,11 +6011,9 @@ to be documented
 Generics
 ++++++++
 
-.. das:function:: ExpressionPtr(expr)
+.. das:function:: ExpressionPtr(expr:smart_ptr<auto(TT)> const)
 
-ExpressionPtr returns ::
-
- smart_ptr<ast::Expression>
+ExpressionPtr returns smart_ptr<ast::Expression>
 
 
 
@@ -6314,11 +6028,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_new_function_annotation(name;someClassPtr)
+.. das:function:: add_new_function_annotation(name:string const; someClassPtr:auto const)
 
-add_new_function_annotation returns ::
-
- auto
+add_new_function_annotation returns auto
 
 
 
@@ -6335,11 +6047,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_new_reader_macro(name;someClassPtr)
+.. das:function:: add_new_reader_macro(name:string const; someClassPtr:auto const)
 
-add_new_reader_macro returns ::
-
- auto
+add_new_reader_macro returns auto
 
 
 
@@ -6356,11 +6066,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_new_structure_annotation(name;someClassPtr)
+.. das:function:: add_new_structure_annotation(name:string const; someClassPtr:auto const)
 
-add_new_structure_annotation returns ::
-
- auto
+add_new_structure_annotation returns auto
 
 
 
@@ -6377,11 +6085,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_new_variant_macro(name;someClassPtr)
+.. das:function:: add_new_variant_macro(name:string const; someClassPtr:auto const)
 
-add_new_variant_macro returns ::
-
- auto
+add_new_variant_macro returns auto
 
 
 
@@ -6398,11 +6104,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe(expr)
+.. das:function:: describe(expr:smart_ptr<ast::Expression> const)
 
-describe returns ::
-
- auto
+describe returns auto
 
 
 
@@ -6417,11 +6121,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe(expr)
+.. das:function:: describe(expr:smart_ptr<ast::Function> const)
 
-describe returns ::
-
- auto
+describe returns auto
 
 
 
@@ -6436,11 +6138,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe(decl;extra;contracts;modules)
+.. das:function:: describe(decl:smart_ptr<ast::TypeDecl> const; extra:bool const; contracts:bool const; modules:bool const)
 
-describe returns ::
-
- auto
+describe returns auto
 
 
 
@@ -6461,11 +6161,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_function_annotation(name;someClassPtr)
+.. das:function:: make_function_annotation(name:string const; someClassPtr:auto const)
 
-make_function_annotation returns ::
-
- smart_ptr<ast::FunctionAnnotation>
+make_function_annotation returns smart_ptr<ast::FunctionAnnotation>
 
 
 
@@ -6482,11 +6180,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_pass_macro(name;someClassPtr)
+.. das:function:: make_pass_macro(name:string const; someClassPtr:auto const)
 
-make_pass_macro returns ::
-
- smart_ptr<ast::PassMacro>
+make_pass_macro returns smart_ptr<ast::PassMacro>
 
 
 
@@ -6503,11 +6199,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_reader_macro(name;someClassPtr)
+.. das:function:: make_reader_macro(name:string const; someClassPtr:auto const)
 
-make_reader_macro returns ::
-
- smart_ptr<ast::ReaderMacro>
+make_reader_macro returns smart_ptr<ast::ReaderMacro>
 
 
 
@@ -6524,11 +6218,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_structure_annotation(name;someClassPtr)
+.. das:function:: make_structure_annotation(name:string const; someClassPtr:auto const)
 
-make_structure_annotation returns ::
-
- smart_ptr<ast::StructureAnnotation>
+make_structure_annotation returns smart_ptr<ast::StructureAnnotation>
 
 
 
@@ -6545,11 +6237,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_variant_macro(name;someClassPtr)
+.. das:function:: make_variant_macro(name:string const; someClassPtr:auto const)
 
-make_variant_macro returns ::
-
- smart_ptr<ast::VariantMacro>
+make_variant_macro returns smart_ptr<ast::VariantMacro>
 
 
 
@@ -6566,11 +6256,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_visitor(someClass)
+.. das:function:: make_visitor(someClass:auto const)
 
-make_visitor returns ::
-
- smart_ptr<ast::VisitorAdapter>
+make_visitor returns smart_ptr<ast::VisitorAdapter>
 
 
 
@@ -6589,7 +6277,7 @@ to be documented
 Functions
 +++++++++
 
-.. das:function:: add_dirty_infer_macro(arg0;arg1;arg2)
+.. das:function:: add_dirty_infer_macro(arg0:rtti::Module? const implicit; arg1:smart_ptr<ast::PassMacro> const implicit)
 
 
 
@@ -6608,7 +6296,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_function(arg0;arg1;arg2)
+.. das:function:: add_function(arg0:rtti::Module? const implicit; arg1:smart_ptr<ast::Function> const implicit)
 
 
 
@@ -6627,7 +6315,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_function_annotation(arg0;arg1;arg2)
+.. das:function:: add_function_annotation(arg0:rtti::Module? const implicit; arg1:smart_ptr<ast::FunctionAnnotation> const implicit)
 
 
 
@@ -6646,7 +6334,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_function_annotation(arg0;arg1;arg2)
+.. das:function:: add_function_annotation(arg0:smart_ptr<ast::Function> const implicit; arg1:smart_ptr<ast::FunctionAnnotation> const implicit)
 
 
 
@@ -6665,7 +6353,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_reader_macro(arg0;arg1;arg2)
+.. das:function:: add_reader_macro(arg0:rtti::Module? const implicit; arg1:smart_ptr<ast::ReaderMacro> const implicit)
 
 
 
@@ -6684,7 +6372,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_structure_annotation(arg0;arg1;arg2)
+.. das:function:: add_structure_annotation(arg0:rtti::Module? const implicit; arg1:smart_ptr<ast::StructureAnnotation> const implicit)
 
 
 
@@ -6703,7 +6391,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_structure_annotation(arg0;arg1;arg2)
+.. das:function:: add_structure_annotation(arg0:smart_ptr<ast::Structure> const implicit; arg1:smart_ptr<ast::StructureAnnotation> const implicit)
 
 
 
@@ -6722,7 +6410,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: add_variant_macro(arg0;arg1;arg2)
+.. das:function:: add_variant_macro(arg0:rtti::Module? const implicit; arg1:smart_ptr<ast::VariantMacro> const implicit)
 
 
 
@@ -6741,7 +6429,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: any_array_foreach(arg0;arg1;arg2;arg3)
+.. das:function:: any_array_foreach(arg0:void? const implicit; arg1:int const; arg2:block<(void?):void> const implicit)
 
 
 
@@ -6762,11 +6450,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: any_array_size(arg0)
+.. das:function:: any_array_size(arg0:void? const implicit)
 
-any_array_size returns ::
-
- int
+any_array_size returns int
 
 
 
@@ -6781,7 +6467,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: any_table_foreach(arg0;arg1;arg2;arg3;arg4)
+.. das:function:: any_table_foreach(arg0:void? const implicit; arg1:int const; arg2:int const; arg3:block<(void?;void?):void> const implicit)
 
 
 
@@ -6804,11 +6490,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: any_table_size(arg0)
+.. das:function:: any_table_size(arg0:void? const implicit)
 
-any_table_size returns ::
-
- int
+any_table_size returns int
 
 
 
@@ -6823,11 +6507,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: clone_expression(arg0)
+.. das:function:: clone_expression(arg0:smart_ptr<ast::Expression> const implicit)
 
-clone_expression returns ::
-
- smart_ptr<ast::Expression>
+clone_expression returns smart_ptr<ast::Expression>
 
 
 
@@ -6842,11 +6524,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: clone_type(arg0)
+.. das:function:: clone_type(arg0:smart_ptr<ast::TypeDecl> const implicit)
 
-clone_type returns ::
-
- smart_ptr<ast::TypeDecl>
+clone_type returns smart_ptr<ast::TypeDecl>
 
 
 
@@ -6863,9 +6543,7 @@ to be documented
 
 .. das:function:: compiling_module
 
-compiling_module returns ::
-
- rtti::Module?
+compiling_module returns rtti::Module?
 
 
 
@@ -6875,9 +6553,7 @@ to be documented
 
 .. das:function:: compiling_program
 
-compiling_program returns ::
-
- smart_ptr<rtti::Program>
+compiling_program returns smart_ptr<rtti::Program>
 
 
 
@@ -6885,11 +6561,9 @@ compiling_program returns ::
 to be documented
 
 
-.. das:function:: das_to_string(arg0;arg1)
+.. das:function:: das_to_string(arg0:rtti::Type const)
 
-das_to_string returns ::
-
- string
+das_to_string returns string
 
 
 
@@ -6906,11 +6580,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe_expression(arg0;arg1)
+.. das:function:: describe_expression(arg0:smart_ptr<ast::Expression> const implicit)
 
-describe_expression returns ::
-
- string
+describe_expression returns string
 
 
 
@@ -6927,11 +6599,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe_function(arg0;arg1)
+.. das:function:: describe_function(arg0:smart_ptr<ast::Function> const implicit)
 
-describe_function returns ::
-
- string
+describe_function returns string
 
 
 
@@ -6948,11 +6618,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: describe_typedecl(arg0;arg1;arg2;arg3;arg4)
+.. das:function:: describe_typedecl(arg0:smart_ptr<ast::TypeDecl> const implicit; arg1:bool const; arg2:bool const; arg3:bool const)
 
-describe_typedecl returns ::
-
- string
+describe_typedecl returns string
 
 
 
@@ -6975,11 +6643,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: find_bitfield_name(arg0;arg1;arg2)
+.. das:function:: find_bitfield_name(arg0:smart_ptr<ast::TypeDecl> const implicit; arg1:bitfield const)
 
-find_bitfield_name returns ::
-
- string
+find_bitfield_name returns string
 
 
 
@@ -6998,7 +6664,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: for_each_enumeration(arg0;arg1;arg2)
+.. das:function:: for_each_enumeration(arg0:rtti::Module? const implicit; arg1:block<(smart_ptr<ast::Enumeration>):void> const implicit)
 
 
 
@@ -7017,7 +6683,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: for_each_field(arg0;arg1;arg2)
+.. das:function:: for_each_field(arg0:rtti::BasicStructureAnnotation const implicit; arg1:block<(string;string;smart_ptr<ast::TypeDecl>;uint):void> const implicit)
 
 
 
@@ -7036,7 +6702,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: for_each_function(arg0;arg1;arg2;arg3;arg4)
+.. das:function:: for_each_function(arg0:rtti::Module? const implicit; arg1:string const; arg2:block<(smart_ptr<ast::Function>):void> const implicit)
 
 
 
@@ -7059,7 +6725,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: for_each_generic(arg0;arg1;arg2)
+.. das:function:: for_each_generic(arg0:rtti::Module? const implicit; arg1:block<(smart_ptr<ast::Function>):void> const implicit)
 
 
 
@@ -7078,7 +6744,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: for_each_structure(arg0;arg1;arg2)
+.. das:function:: for_each_structure(arg0:rtti::Module? const implicit; arg1:block<(smart_ptr<ast::Structure>):void> const implicit)
 
 
 
@@ -7097,7 +6763,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: for_each_typedef(arg0;arg1;arg2)
+.. das:function:: for_each_typedef(arg0:rtti::Module? const implicit; arg1:block<(string#;smart_ptr<ast::TypeDecl>):void> const implicit)
 
 
 
@@ -7116,11 +6782,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_tuple_field_offset(arg0;arg1)
+.. das:function:: get_tuple_field_offset(arg0:smart_ptr<ast::TypeDecl> const implicit; arg1:int const)
 
-get_tuple_field_offset returns ::
-
- int
+get_tuple_field_offset returns int
 
 
 
@@ -7137,11 +6801,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_variant_field_offset(arg0;arg1)
+.. das:function:: get_variant_field_offset(arg0:smart_ptr<ast::TypeDecl> const implicit; arg1:int const)
 
-get_variant_field_offset returns ::
-
- int
+get_variant_field_offset returns int
 
 
 
@@ -7158,11 +6820,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_same_type(arg0;arg1;arg2;arg3;arg4)
+.. das:function:: is_same_type(arg0:smart_ptr<ast::TypeDecl> const implicit; arg1:smart_ptr<ast::TypeDecl> const implicit; arg2:rtti::RefMatters const; arg3:rtti::ConstMatters const; arg4:rtti::TemporaryMatters const)
 
-is_same_type returns ::
-
- bool
+is_same_type returns bool
 
 
 
@@ -7185,7 +6845,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: macro_error(arg0;arg1;arg2)
+.. das:function:: macro_error(arg0:smart_ptr<rtti::Program> const implicit; arg1:rtti::LineInfo const implicit; arg2:string const)
 
 
 
@@ -7204,11 +6864,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_function_annotation(arg0;arg1;arg2;arg3)
+.. das:function:: make_function_annotation(arg0:string const; arg1:void? const implicit; arg2:rtti::StructInfo const? const implicit)
 
-make_function_annotation returns ::
-
- smart_ptr<ast::FunctionAnnotation>
+make_function_annotation returns smart_ptr<ast::FunctionAnnotation>
 
 
 
@@ -7229,11 +6887,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_pass_macro(arg0;arg1;arg2;arg3)
+.. das:function:: make_pass_macro(arg0:string const; arg1:void? const implicit; arg2:rtti::StructInfo const? const implicit)
 
-make_pass_macro returns ::
-
- smart_ptr<ast::PassMacro>
+make_pass_macro returns smart_ptr<ast::PassMacro>
 
 
 
@@ -7254,11 +6910,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_reader_macro(arg0;arg1;arg2;arg3)
+.. das:function:: make_reader_macro(arg0:string const; arg1:void? const implicit; arg2:rtti::StructInfo const? const implicit)
 
-make_reader_macro returns ::
-
- smart_ptr<ast::ReaderMacro>
+make_reader_macro returns smart_ptr<ast::ReaderMacro>
 
 
 
@@ -7279,11 +6933,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_structure_annotation(arg0;arg1;arg2;arg3)
+.. das:function:: make_structure_annotation(arg0:string const; arg1:void? const implicit; arg2:rtti::StructInfo const? const implicit)
 
-make_structure_annotation returns ::
-
- smart_ptr<ast::StructureAnnotation>
+make_structure_annotation returns smart_ptr<ast::StructureAnnotation>
 
 
 
@@ -7304,11 +6956,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_variant_macro(arg0;arg1;arg2;arg3)
+.. das:function:: make_variant_macro(arg0:string const; arg1:void? const implicit; arg2:rtti::StructInfo const? const implicit)
 
-make_variant_macro returns ::
-
- smart_ptr<ast::VariantMacro>
+make_variant_macro returns smart_ptr<ast::VariantMacro>
 
 
 
@@ -7329,11 +6979,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_visitor(arg0;arg1;arg2)
+.. das:function:: make_visitor(arg0:void? const implicit; arg1:rtti::StructInfo const? const implicit)
 
-make_visitor returns ::
-
- smart_ptr<ast::VisitorAdapter>
+make_visitor returns smart_ptr<ast::VisitorAdapter>
 
 
 
@@ -7352,11 +7000,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: this_module(arg0;arg1)
+.. das:function:: this_module()
 
-this_module returns ::
-
- rtti::Module?
+this_module returns rtti::Module?
 
 
 
@@ -7373,11 +7019,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: this_program(arg0)
+.. das:function:: this_program()
 
-this_program returns ::
-
- smart_ptr<rtti::Program>
+this_program returns smart_ptr<rtti::Program>
 
 
 
@@ -7392,7 +7036,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: visit(arg0;arg1)
+.. das:function:: visit(arg0:smart_ptr<rtti::Program> const implicit; arg1:smart_ptr<ast::VisitorAdapter> const implicit)
 
 
 

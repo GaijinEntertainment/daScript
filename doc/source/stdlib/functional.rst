@@ -9,11 +9,9 @@ Functional programming library
 Generics
 ++++++++
 
-.. das:function:: all(it)
+.. das:function:: all(it:auto const)
 
-all returns ::
-
- auto
+all returns auto
 
 
 
@@ -28,11 +26,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: any(it)
+.. das:function:: any(it:auto const)
 
-any returns ::
-
- auto
+any returns auto
 
 
 
@@ -47,58 +43,52 @@ function arguments are
 to be documented
 
 
-.. das:function:: count(start;step)
+.. das:function:: count(start:int; step:int)
 
-count returns ::
-
- iterator<int>
+count returns iterator<int>
 
 
 
 function arguments are
 
-+-----+----------+
-+start+int -const+
-+-----+----------+
-+step +int -const+
-+-----+----------+
++-----+---+
++start+int+
++-----+---+
++step +int+
++-----+---+
 
 
 
 to be documented
 
 
-.. das:function:: cycle(src)
+.. das:function:: cycle(src:iterator<auto(TT)>)
 
-cycle returns ::
-
- auto
+cycle returns auto
 
 
 
 function arguments are
 
-+---+-------------------------+
-+src+iterator<auto(TT)> -const+
-+---+-------------------------+
++---+------------------+
++src+iterator<auto(TT)>+
++---+------------------+
 
 
 
 to be documented
 
 
-.. das:function:: echo(x;extra)
+.. das:function:: echo(x:auto; extra:string const)
 
-echo returns ::
-
- auto
+echo returns auto
 
 
 
 function arguments are
 
 +-----+------------+
-+x    +auto -const +
++x    +auto        +
 +-----+------------+
 +extra+string const+
 +-----+------------+
@@ -108,18 +98,16 @@ function arguments are
 to be documented
 
 
-.. das:function:: filter(src;blk)
+.. das:function:: filter(src:iterator<auto(TT)>; blk:function<(what:TT const -&):bool> const)
 
-filter returns ::
-
- auto
+filter returns auto
 
 
 
 function arguments are
 
 +---+---------------------------------------+
-+src+iterator<auto(TT)> -const              +
++src+iterator<auto(TT)>                     +
 +---+---------------------------------------+
 +blk+function<(what:TT const -&):bool> const+
 +---+---------------------------------------+
@@ -129,18 +117,16 @@ function arguments are
 to be documented
 
 
-.. das:function:: filter(src;blk)
+.. das:function:: filter(src:iterator<auto(TT)>; blk:lambda<(what:TT const -&):bool> const)
 
-filter returns ::
-
- auto
+filter returns auto
 
 
 
 function arguments are
 
 +---+-------------------------------------+
-+src+iterator<auto(TT)> -const            +
++src+iterator<auto(TT)>                   +
 +---+-------------------------------------+
 +blk+lambda<(what:TT const -&):bool> const+
 +---+-------------------------------------+
@@ -150,11 +136,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_equal(a;b)
+.. das:function:: is_equal(a:auto const; b:auto const)
 
-is_equal returns ::
-
- auto
+is_equal returns auto
 
 
 
@@ -171,11 +155,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_not_equal(a;b)
+.. das:function:: is_not_equal(a:auto const; b:auto const)
 
-is_not_equal returns ::
-
- auto
+is_not_equal returns auto
 
 
 
@@ -192,41 +174,37 @@ function arguments are
 to be documented
 
 
-.. das:function:: islice(src;start;stop)
+.. das:function:: islice(src:iterator<auto(TT)>; start:int const; stop:int const)
 
-islice returns ::
-
- auto
+islice returns auto
 
 
 
 function arguments are
 
-+-----+-------------------------+
-+src  +iterator<auto(TT)> -const+
-+-----+-------------------------+
-+start+int const                +
-+-----+-------------------------+
-+stop +int const                +
-+-----+-------------------------+
++-----+------------------+
++src  +iterator<auto(TT)>+
++-----+------------------+
++start+int const         +
++-----+------------------+
++stop +int const         +
++-----+------------------+
 
 
 
 to be documented
 
 
-.. das:function:: map(src;blk)
+.. das:function:: map(src:iterator<auto(TT)>; blk:function<(what:TT const -&):auto(QQ)> const)
 
-map returns ::
-
- auto
+map returns auto
 
 
 
 function arguments are
 
 +---+-------------------------------------------+
-+src+iterator<auto(TT)> -const                  +
++src+iterator<auto(TT)>                         +
 +---+-------------------------------------------+
 +blk+function<(what:TT const -&):auto(QQ)> const+
 +---+-------------------------------------------+
@@ -236,18 +214,16 @@ function arguments are
 to be documented
 
 
-.. das:function:: map(src;blk)
+.. das:function:: map(src:iterator<auto(TT)>; blk:lambda<(what:TT const -&):auto(QQ)> const)
 
-map returns ::
-
- auto
+map returns auto
 
 
 
 function arguments are
 
 +---+-----------------------------------------+
-+src+iterator<auto(TT)> -const                +
++src+iterator<auto(TT)>                       +
 +---+-----------------------------------------+
 +blk+lambda<(what:TT const -&):auto(QQ)> const+
 +---+-----------------------------------------+
@@ -257,11 +233,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: not(x)
+.. das:function:: not(x:auto const)
 
-not returns ::
-
- auto
+not returns auto
 
 
 
@@ -276,11 +250,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: reduce(it;blk)
+.. das:function:: reduce(it:iterator<auto(TT)> const; blk:block<(left:TT const -&;right:TT const -&):TT const -&> const)
 
-reduce returns ::
-
- auto
+reduce returns auto
 
 
 
@@ -297,11 +269,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: reduce(it;blk)
+.. das:function:: reduce(it:iterator<auto(TT)> const; blk:function<(left:TT const -&;right:TT const -&):TT const -&> const)
 
-reduce returns ::
-
- auto
+reduce returns auto
 
 
 
@@ -318,11 +288,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: reduce(it;blk)
+.. das:function:: reduce(it:iterator<auto(TT)> const; blk:lambda<(left:TT const -&;right:TT const -&):TT const -&> const)
 
-reduce returns ::
-
- auto
+reduce returns auto
 
 
 
@@ -339,11 +307,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: repeat(value;count)
+.. das:function:: repeat(value:auto(TT) const; count:int)
 
-repeat returns ::
-
- auto
+repeat returns auto
 
 
 
@@ -352,7 +318,7 @@ function arguments are
 +-----+--------------+
 +value+auto(TT) const+
 +-----+--------------+
-+count+int -const    +
++count+int           +
 +-----+--------------+
 
 
@@ -360,11 +326,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: sum(it)
+.. das:function:: sum(it:iterator<auto(TT)> const)
 
-sum returns ::
-
- auto
+sum returns auto
 
 
 

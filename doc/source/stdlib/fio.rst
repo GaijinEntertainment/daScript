@@ -36,11 +36,11 @@ it defines as follows ::
 
 it has the following properties ::
 
-  atime  : $::clock
+  atime  : clock
   size   : uint64
-  ctime  : $::clock
+  ctime  : clock
   is_dir : bool
-  mtime  : $::clock
+  mtime  : clock
   is_reg : bool
 
 to be documented
@@ -50,11 +50,9 @@ to be documented
 Generics
 ++++++++
 
-.. das:function:: dir(path;blk)
+.. das:function:: dir(path:string const; blk:block<(filename:string const):void> const)
 
-dir returns ::
-
- auto
+dir returns auto
 
 
 
@@ -71,32 +69,28 @@ function arguments are
 to be documented
 
 
-.. das:function:: fload(f;buf)
+.. das:function:: fload(f:fio::FILE const? const; buf:auto(BufType) const)
 
-fload returns ::
-
- auto
+fload returns auto
 
 
 
 function arguments are
 
-+---+--------------------------+
-+f  +fio::FILE const? const    +
-+---+--------------------------+
-+buf+auto(BufType) const -const+
-+---+--------------------------+
++---+----------------------+
++f  +fio::FILE const? const+
++---+----------------------+
++buf+auto(BufType) const   +
++---+----------------------+
 
 
 
 to be documented
 
 
-.. das:function:: fsave(f;buf)
+.. das:function:: fsave(f:fio::FILE const? const; buf:auto(BufType) const)
 
-fsave returns ::
-
- auto
+fsave returns auto
 
 
 
@@ -117,11 +111,9 @@ to be documented
 Functions
 +++++++++
 
-.. das:function:: base_name(arg0;arg1)
+.. das:function:: base_name(arg0:string const)
 
-base_name returns ::
-
- string
+base_name returns string
 
 
 
@@ -138,7 +130,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: builtin_dir(arg0;arg1;arg2)
+.. das:function:: builtin_dir(arg0:string const; arg1:block<> const implicit)
 
 
 
@@ -157,11 +149,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: dir_name(arg0;arg1)
+.. das:function:: dir_name(arg0:string const)
 
-dir_name returns ::
-
- string
+dir_name returns string
 
 
 
@@ -178,7 +168,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: fclose(arg0;arg1)
+.. das:function:: fclose(arg0:fio::FILE const? const implicit)
 
 
 
@@ -195,11 +185,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: feof(arg0)
+.. das:function:: feof(arg0:fio::FILE const? const implicit)
 
-feof returns ::
-
- bool
+feof returns bool
 
 
 
@@ -214,11 +202,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: fgets(arg0;arg1)
+.. das:function:: fgets(arg0:fio::FILE const? const implicit)
 
-fgets returns ::
-
- string
+fgets returns string
 
 
 
@@ -235,7 +221,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: fmap(arg0;arg1;arg2)
+.. das:function:: fmap(arg0:fio::FILE const? const implicit; arg1:block<(string const#):void> const implicit)
 
 
 
@@ -254,11 +240,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: fopen(arg0;arg1)
+.. das:function:: fopen(arg0:string const; arg1:string const)
 
-fopen returns ::
-
- fio::FILE const? const
+fopen returns fio::FILE const? const
 
 
 
@@ -275,7 +259,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: fopen(name;mode;blk)
+.. das:function:: fopen(name:string const; mode:string const; blk:block<(f:fio::FILE const? const):void> const)
 
 
 
@@ -294,7 +278,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: fprint(arg0;arg1;arg2)
+.. das:function:: fprint(arg0:fio::FILE const? const implicit; arg1:string const)
 
 
 
@@ -313,11 +297,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: fread(arg0;arg1)
+.. das:function:: fread(arg0:fio::FILE const? const implicit)
 
-fread returns ::
-
- string
+fread returns string
 
 
 
@@ -334,11 +316,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: fstat(f)
+.. das:function:: fstat(f:fio::FILE const? const)
 
-fstat returns ::
-
- fio::FStat
+fstat returns fio::FStat
 
 
 
@@ -353,11 +333,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: fstat(arg0;arg1)
+.. das:function:: fstat(arg0:fio::FILE const? const implicit; arg1:fio::FStat implicit)
 
-fstat returns ::
-
- bool
+fstat returns bool
 
 
 
@@ -376,9 +354,7 @@ to be documented
 
 .. das:function:: fstderr
 
-fstderr returns ::
-
- fio::FILE const? const
+fstderr returns fio::FILE const? const
 
 
 
@@ -388,9 +364,7 @@ to be documented
 
 .. das:function:: fstdin
 
-fstdin returns ::
-
- fio::FILE const? const
+fstdin returns fio::FILE const? const
 
 
 
@@ -400,9 +374,7 @@ to be documented
 
 .. das:function:: fstdout
 
-fstdout returns ::
-
- fio::FILE const? const
+fstdout returns fio::FILE const? const
 
 
 
@@ -410,7 +382,7 @@ fstdout returns ::
 to be documented
 
 
-.. das:function:: fwrite(arg0;arg1;arg2)
+.. das:function:: fwrite(arg0:fio::FILE const? const implicit; arg1:string const)
 
 
 
@@ -429,11 +401,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: mkdir(arg0)
+.. das:function:: mkdir(arg0:string const)
 
-mkdir returns ::
-
- bool
+mkdir returns bool
 
 
 
@@ -448,7 +418,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: sleep(arg0)
+.. das:function:: sleep(arg0:uint const)
 
 
 
@@ -463,11 +433,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: stat(path)
+.. das:function:: stat(path:string const)
 
-stat returns ::
-
- fio::FStat
+stat returns fio::FStat
 
 
 
@@ -482,11 +450,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: stat(arg0;arg1)
+.. das:function:: stat(arg0:string const; arg1:fio::FStat implicit)
 
-stat returns ::
-
- bool
+stat returns bool
 
 
 

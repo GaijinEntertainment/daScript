@@ -527,6 +527,7 @@ namespace das {
         finFunc->argNames.push_back("__this");
         finFunc->firstType = make_smart<TypeDecl>(Type::tVoid);
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
+        pStruct->fields.back().generated = true;
         if ( needYield ) {
             auto yt = make_smart<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
@@ -1456,6 +1457,7 @@ namespace das {
             auto fd = (Structure::FieldDeclaration *) baseClass->findField("__finalize");
             fd->init = make_smart<ExprCast>(baseClass->at, finit, make_smart<TypeDecl>(Type::autoinfer));
             fd->parentType = fd->type->isAuto();
+            fd->generated = true;
         } else {
             baseClass->fields.emplace_back(
                 "__finalize",
@@ -1465,6 +1467,7 @@ namespace das {
                 false,
                 baseClass->at
             );
+            baseClass->fields.back().generated = true;
         }
         // make a function
         auto func = make_smart<Function>();

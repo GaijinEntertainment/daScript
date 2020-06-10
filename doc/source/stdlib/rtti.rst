@@ -400,8 +400,8 @@ Handled structures
 it defines as follows ::
 
   _module : rtti::Module?
-  cppName : $::das_string
-  name    : $::das_string
+  cppName : das_string
+  name    : das_string
 
 it has the following properties ::
 
@@ -417,8 +417,8 @@ it defines as follows ::
 
   fValue    : float
   iValue    : int
-  name      : $::das_string
-  sValue    : $::das_string
+  name      : das_string
+  sValue    : das_string
   bValue    : bool
   basicType : rtti::Type
 
@@ -439,8 +439,8 @@ to be documented
 
 it defines as follows ::
 
-  cppName : $::das_string
-  name    : $::das_string
+  cppName : das_string
+  name    : das_string
 
 it has the following properties ::
 
@@ -474,10 +474,10 @@ to be documented
 
 it defines as follows ::
 
-  fixme : $::das_string
+  fixme : das_string
   at    : rtti::LineInfo
-  what  : $::das_string
-  extra : $::das_string
+  what  : das_string
+  extra : das_string
   cerr  : rtti::CompilationError
 
 to be documented
@@ -493,7 +493,7 @@ to be documented
 it defines as follows ::
 
   tabSize      : int
-  name         : $::das_string
+  name         : das_string
   sourceLength : uint
 
 it has the following properties ::
@@ -535,7 +535,7 @@ to be documented
 
 it defines as follows ::
 
-  name : $::das_string
+  name : das_string
 
 to be documented
 
@@ -567,9 +567,9 @@ to be documented
 
 it defines as follows ::
 
-  cppName          : $::das_string
+  cppName          : das_string
   annotationModule : rtti::Module?
-  name             : $::das_string
+  name             : das_string
 
 to be documented
 
@@ -645,11 +645,9 @@ to be documented
 Generics
 ++++++++
 
-.. das:function:: class_info(cl)
+.. das:function:: class_info(cl:auto const)
 
-class_info returns ::
-
- rtti::StructInfo const?
+class_info returns rtti::StructInfo const?
 
 
 
@@ -670,9 +668,7 @@ Functions
 
 .. das:function:: RttiValue_nothing
 
-RttiValue_nothing returns ::
-
- variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
+RttiValue_nothing returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
 
 
 
@@ -680,11 +676,9 @@ RttiValue_nothing returns ::
 to be documented
 
 
-.. das:function:: arg_names(info)
+.. das:function:: arg_names(info:rtti::TypeInfo const)
 
-arg_names returns ::
-
- iterator<string>
+arg_names returns iterator<string>
 
 
 
@@ -699,11 +693,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: arg_names(info)
+.. das:function:: arg_names(info:rtti::VarInfo const)
 
-arg_names returns ::
-
- iterator<string>
+arg_names returns iterator<string>
 
 
 
@@ -718,11 +710,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: arg_types(info)
+.. das:function:: arg_types(info:rtti::TypeInfo const)
 
-arg_types returns ::
-
- iterator<rtti::TypeInfo const&>
+arg_types returns iterator<rtti::TypeInfo const&>
 
 
 
@@ -737,11 +727,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: arg_types(info)
+.. das:function:: arg_types(info:rtti::VarInfo const)
 
-arg_types returns ::
-
- iterator<rtti::TypeInfo const&>
+arg_types returns iterator<rtti::TypeInfo const&>
 
 
 
@@ -756,7 +744,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: basic_struct_for_each_field(arg0;arg1;arg2)
+.. das:function:: basic_struct_for_each_field(arg0:rtti::BasicStructureAnnotation const implicit; arg1:block<(string;string;rtti::TypeInfo const;uint):void> const implicit)
 
 
 
@@ -775,11 +763,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: builtin_is_same_type(arg0;arg1;arg2;arg3;arg4;arg5)
+.. das:function:: builtin_is_same_type(arg0:rtti::TypeInfo const? const implicit; arg1:rtti::TypeInfo const? const implicit; arg2:rtti::RefMatters const; arg3:rtti::ConstMatters const; arg4:rtti::TemporaryMatters const; arg5:bool const)
 
-builtin_is_same_type returns ::
-
- bool
+builtin_is_same_type returns bool
 
 
 
@@ -804,49 +790,49 @@ function arguments are
 to be documented
 
 
-.. das:function:: compile(arg0;arg1;arg2;arg3)
+.. das:function:: compile(arg0:string const; arg1:string const; arg2:block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
 
 
 function arguments are
 
-+----+------------------------------------------------------------------------------+
-+arg0+string const                                                                  +
-+----+------------------------------------------------------------------------------+
-+arg1+string const                                                                  +
-+----+------------------------------------------------------------------------------+
-+arg2+block<(bool;smart_ptr<rtti::Program>;$::das_string const):void> const implicit+
-+----+------------------------------------------------------------------------------+
-+arg3+ const                                                                        +
-+----+------------------------------------------------------------------------------+
++----+---------------------------------------------------------------------------+
++arg0+string const                                                               +
++----+---------------------------------------------------------------------------+
++arg1+string const                                                               +
++----+---------------------------------------------------------------------------+
++arg2+block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit+
++----+---------------------------------------------------------------------------+
++arg3+ const                                                                     +
++----+---------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: compile_file(arg0;arg1;arg2;arg3)
+.. das:function:: compile_file(arg0:string const; arg1:smart_ptr<rtti::FileAccess> const implicit; arg2:block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
 
 
 function arguments are
 
-+----+------------------------------------------------------------------------------+
-+arg0+string const                                                                  +
-+----+------------------------------------------------------------------------------+
-+arg1+smart_ptr<rtti::FileAccess> const implicit                                    +
-+----+------------------------------------------------------------------------------+
-+arg2+block<(bool;smart_ptr<rtti::Program>;$::das_string const):void> const implicit+
-+----+------------------------------------------------------------------------------+
-+arg3+ const                                                                        +
-+----+------------------------------------------------------------------------------+
++----+---------------------------------------------------------------------------+
++arg0+string const                                                               +
++----+---------------------------------------------------------------------------+
++arg1+smart_ptr<rtti::FileAccess> const implicit                                 +
++----+---------------------------------------------------------------------------+
++arg2+block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit+
++----+---------------------------------------------------------------------------+
++arg3+ const                                                                     +
++----+---------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: context_for_each_function(blk)
+.. das:function:: context_for_each_function(blk:block<(info:rtti::FuncInfo const):void> const)
 
 
 
@@ -861,7 +847,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: context_for_each_variable(blk)
+.. das:function:: context_for_each_variable(blk:block<(info:rtti::VarInfo const):void> const)
 
 
 
@@ -876,11 +862,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: each_dim(info)
+.. das:function:: each_dim(info:rtti::TypeInfo const)
 
-each_dim returns ::
-
- iterator<int>
+each_dim returns iterator<int>
 
 
 
@@ -895,11 +879,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: each_dim(info)
+.. das:function:: each_dim(info:rtti::VarInfo const)
 
-each_dim returns ::
-
- iterator<int>
+each_dim returns iterator<int>
 
 
 
@@ -914,11 +896,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_annotation_argument_value(arg0;arg1)
+.. das:function:: get_annotation_argument_value(arg0:rtti::AnnotationArgument const implicit)
 
-get_annotation_argument_value returns ::
-
- variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
+get_annotation_argument_value returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
 
 
 
@@ -935,11 +915,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_das_type_name(arg0;arg1)
+.. das:function:: get_das_type_name(arg0:rtti::Type const)
 
-get_das_type_name returns ::
-
- string
+get_das_type_name returns string
 
 
 
@@ -956,11 +934,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_dim(arg0;arg1;arg2)
+.. das:function:: get_dim(arg0:rtti::TypeInfo const implicit; arg1:int const)
 
-get_dim returns ::
-
- int
+get_dim returns int
 
 
 
@@ -979,11 +955,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_dim(arg0;arg1;arg2)
+.. das:function:: get_dim(arg0:rtti::VarInfo const implicit; arg1:int const)
 
-get_dim returns ::
-
- int
+get_dim returns int
 
 
 
@@ -1002,11 +976,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_function_info(arg0)
+.. das:function:: get_function_info(arg0:int)
 
-get_function_info returns ::
-
- rtti::FuncInfo const&
+get_function_info returns rtti::FuncInfo const&
 
 
 
@@ -1021,11 +993,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_module(arg0)
+.. das:function:: get_module(arg0:string const)
 
-get_module returns ::
-
- rtti::Module?
+get_module returns rtti::Module?
 
 
 
@@ -1040,11 +1010,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_this_module(arg0)
+.. das:function:: get_this_module(arg0:smart_ptr<rtti::Program> const implicit)
 
-get_this_module returns ::
-
- rtti::Module?
+get_this_module returns rtti::Module?
 
 
 
@@ -1059,11 +1027,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_total_functions(arg0)
+.. das:function:: get_total_functions()
 
-get_total_functions returns ::
-
- int
+get_total_functions returns int
 
 
 
@@ -1078,11 +1044,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_total_variables(arg0)
+.. das:function:: get_total_variables()
 
-get_total_variables returns ::
-
- int
+get_total_variables returns int
 
 
 
@@ -1097,11 +1061,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_variable_info(arg0)
+.. das:function:: get_variable_info(arg0:int)
 
-get_variable_info returns ::
-
- rtti::VarInfo const&
+get_variable_info returns rtti::VarInfo const&
 
 
 
@@ -1116,11 +1078,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_variable_value(arg0)
+.. das:function:: get_variable_value(arg0:rtti::VarInfo const implicit)
 
-get_variable_value returns ::
-
- variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
+get_variable_value returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
 
 
 
@@ -1135,11 +1095,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_compatible_cast(a;b)
+.. das:function:: is_compatible_cast(a:rtti::StructInfo const; b:rtti::StructInfo const)
 
-is_compatible_cast returns ::
-
- bool
+is_compatible_cast returns bool
 
 
 
@@ -1156,11 +1114,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_compatible_cast(arg0;arg1)
+.. das:function:: is_compatible_cast(arg0:rtti::StructInfo const? const implicit; arg1:rtti::StructInfo const? const implicit)
 
-is_compatible_cast returns ::
-
- bool
+is_compatible_cast returns bool
 
 
 
@@ -1177,11 +1133,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: is_same_type(a;b;refMatters;constMatters;temporaryMatters;topLevel)
+.. das:function:: is_same_type(a:rtti::TypeInfo const; b:rtti::TypeInfo const; refMatters:rtti::RefMatters const; constMatters:rtti::ConstMatters const; temporaryMatters:rtti::TemporaryMatters const; topLevel:bool const)
 
-is_same_type returns ::
-
- bool
+is_same_type returns bool
 
 
 
@@ -1206,11 +1160,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: make_file_access(arg0;arg1)
+.. das:function:: make_file_access(arg0:string const)
 
-make_file_access returns ::
-
- smart_ptr<rtti::FileAccess>
+make_file_access returns smart_ptr<rtti::FileAccess>
 
 
 
@@ -1227,7 +1179,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: module_for_each_annotation(arg0;arg1;arg2)
+.. das:function:: module_for_each_annotation(arg0:rtti::Module? const implicit; arg1:block<(rtti::Annotation const):void> const implicit)
 
 
 
@@ -1246,7 +1198,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: module_for_each_enumeration(arg0;arg1;arg2)
+.. das:function:: module_for_each_enumeration(arg0:rtti::Module? const implicit; arg1:block<(rtti::EnumInfo const):void> const implicit)
 
 
 
@@ -1265,7 +1217,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: module_for_each_function(arg0;arg1;arg2)
+.. das:function:: module_for_each_function(arg0:rtti::Module? const implicit; arg1:block<(rtti::FuncInfo const):void> const implicit)
 
 
 
@@ -1284,7 +1236,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: module_for_each_generic(arg0;arg1;arg2)
+.. das:function:: module_for_each_generic(arg0:rtti::Module? const implicit; arg1:block<(rtti::FuncInfo const):void> const implicit)
 
 
 
@@ -1303,7 +1255,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: module_for_each_global(arg0;arg1;arg2)
+.. das:function:: module_for_each_global(arg0:rtti::Module? const implicit; arg1:block<(rtti::VarInfo const):void> const implicit)
 
 
 
@@ -1322,7 +1274,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: module_for_each_structure(arg0;arg1;arg2)
+.. das:function:: module_for_each_structure(arg0:rtti::Module? const implicit; arg1:block<(rtti::StructInfo const):void> const implicit)
 
 
 
@@ -1341,7 +1293,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: program_for_each_module(arg0;arg1;arg2)
+.. das:function:: program_for_each_module(arg0:smart_ptr<rtti::Program> const implicit; arg1:block<(rtti::Module?):void> const implicit)
 
 
 
@@ -1360,7 +1312,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: program_for_each_registered_module(arg0;arg1)
+.. das:function:: program_for_each_registered_module(arg0:block<(rtti::Module?):void> const implicit)
 
 
 
@@ -1377,7 +1329,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: rtti_builtin_structure_for_each_annotation(arg0;arg1;arg2)
+.. das:function:: rtti_builtin_structure_for_each_annotation(arg0:rtti::StructInfo const implicit; arg1:block<> const implicit)
 
 
 
@@ -1396,11 +1348,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: set_file_source(arg0;arg1;arg2;arg3)
+.. das:function:: set_file_source(arg0:smart_ptr<rtti::FileAccess> const implicit; arg1:string const; arg2:string const)
 
-set_file_source returns ::
-
- bool
+set_file_source returns bool
 
 
 
@@ -1421,7 +1371,7 @@ function arguments are
 to be documented
 
 
-.. das:function:: structure_for_each_annotation(st;subexpr)
+.. das:function:: structure_for_each_annotation(st:rtti::StructInfo const; subexpr:block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
 
 
 

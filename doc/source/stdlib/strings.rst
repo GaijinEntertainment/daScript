@@ -9,11 +9,9 @@ String manipulation library
 Generics
 ++++++++
 
-.. das:function:: join(it;separator)
+.. das:function:: join(it:auto const; separator:string const)
 
-join returns ::
-
- auto
+join returns auto
 
 
 
@@ -30,11 +28,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: split(text;delim;blk)
+.. das:function:: split(text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const)
 
-split returns ::
-
- auto
+split returns auto
 
 
 
@@ -53,11 +49,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: split_by_chars(text;delim;blk)
+.. das:function:: split_by_chars(text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const)
 
-split_by_chars returns ::
-
- auto
+split_by_chars returns auto
 
 
 
@@ -80,11 +74,9 @@ to be documented
 Functions
 +++++++++
 
-.. das:function:: split(text;delim)
+.. das:function:: split(text:string const; delim:string const)
 
-split returns ::
-
- array<string>
+split returns array<string>
 
 
 
@@ -101,11 +93,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: split_by_chars(text;delim)
+.. das:function:: split_by_chars(text:string const; delim:string const)
 
-split_by_chars returns ::
-
- array<string>
+split_by_chars returns array<string>
 
 
 
@@ -122,11 +112,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: wide(text;width)
+.. das:function:: wide(text:string const; width:int const)
 
-wide returns ::
-
- string
+wide returns string
 
 
 
