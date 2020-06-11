@@ -11,6 +11,7 @@ require daslib/regex_boost
 
 let
     log_documentation = true
+    show_hidden_groups = true
 
 def module_name(mod)
     let mn = string(mod.name)
@@ -22,16 +23,14 @@ def alias_label_name(td:TypeDeclPtr)
 def enum_label_name(value:Enumeration?)
     return "enum-{module_name(value._module)}-{value.name}"
 
-[unsafe]
 def enum_label_name(value:EnumerationPtr)
-    return enum_label_name(reinterpret<Enumeration?> value)
+    return enum_label_name(get_ptr(value))
 
 def struct_label_name(value:Structure?)
     return "struct-{module_name(value._module)}-{value.name}"
 
-[unsafe]
 def struct_label_name(value:StructurePtr)
-    return struct_label_name(reinterpret<Structure?> value)
+    return struct_label_name(get_ptr(value))
 
 def handle_label_name(value)
     return "handle-{module_name(value._module)}-{value.name}"
@@ -42,6 +41,7 @@ def function_label_name(value:FunctionPtr)
     mn = replace(mn," ","_")
     mn = replace(mn,"$","_builtin_")
     mn = replace(mn,"#","_hh_")
+    mn = replace(mn,":","_c_")
     mn = replace(mn,"@","_at_")
     mn = replace(mn,"<","_ls_")
     mn = replace(mn,">","_gr_")
@@ -197,7 +197,9 @@ def make_label(name:string)
     return ".. _{name}:\n\n"
 
 def make_ref(name,text:string)
-    return " :ref:`{text} <{name}>` "
+    var t = replace(text,"<","\\<")
+    t = replace(t,">","\\>")
+    return " :ref:`{t} <{name}>` "
 
 def make_group(name:string; plus:string="+")
     let len = length(name)
@@ -340,10 +342,9 @@ def document_function_arguments(doc_file:file;argNames:array<string>;argTypes:ar
         fwrite(doc_file,"arguments are\n\n")
         fwrite(doc_file,make_table(tab))
 
-[unsafe]
 def document_class_method(doc_file:file;mod:Module?;value;fld)
     let argNames <- [{for arg in fld._type.argNames; string(arg)}]
-    let argTypes <- [{for arg in fld._type.argTypes; reinterpret<TypeDecl?> arg}]
+    let argTypes <- [{for arg in fld._type.argTypes; get_ptr(arg)}]
     document_function_declaration(doc_file,"das:function","{value.name}.{fld.name}",
         argNames,argTypes,fld._type.firstType)
     if fld._type.firstType != null & !fld._type.firstType.isVoid
@@ -528,10 +529,9 @@ def function_needs_documenting(func:FunctionPtr)
         return false
     return true
 
-[unsafe]
 def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
     let argNames <- [{for arg in func.arguments; string(arg.name)}]
-    let argTypes <- [{for arg in func.arguments; reinterpret<TypeDecl?> arg._type}]
+    let argTypes <- [{for arg in func.arguments; get_ptr(arg._type)}]
     fwrite(doc_file,make_label(function_label_name(func)))
     document_function_declaration(doc_file,"das:function","{func.name}",
         argNames,argTypes,func.result)
@@ -543,27 +543,30 @@ def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
     document_function_arguments(doc_file,argNames,argTypes)
     document_topic(doc_file,topic("function",mod,"{func.name}"))
 
-[unsafe]
 def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
     var tab : table<Function?;bool>
     for grp in groups
         if length(grp.func) != 0
-            fwrite(doc_file,make_group(grp.name))
-            for func in grp.func
-                let descr = describe_function_short(FunctionPtr(func))
-                var labn = function_label_name(FunctionPtr(func))
-                fwrite(doc_file,"  * {make_ref(labn,descr)}\n")
-            fwrite(doc_file,"\n")
-            for func in grp.func
-                if tab[func]
-                    continue
-                tab[func] = true
-                document_function(doc_file,mod,FunctionPtr(func))
+            if !show_hidden_groups & grp.hidden
+                for func in grp.func
+                    tab[func] = true
+            else
+                fwrite(doc_file,make_group(grp.name))
+                for func in grp.func
+                    let descr = describe_function_short(FunctionPtr(func))
+                    var labn = function_label_name(FunctionPtr(func))
+                    fwrite(doc_file,"  * {make_ref(labn,descr)}\n")
+                fwrite(doc_file,"\n")
+                for func in grp.func
+                    if tab[func]
+                        continue
+                    tab[func] = true
+                    document_function(doc_file,mod,FunctionPtr(func))
     var first_function = true
     for_each_function(mod, "") <| $(func)
         if !function_needs_documenting(func)
             return
-        var pfunc = reinterpret<Function?> func
+        var pfunc = get_ptr(func)
         if tab[pfunc]
             return
         tab[pfunc] = true
@@ -574,7 +577,7 @@ def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
     for_each_generic(mod) <| $(func)
         if !function_needs_documenting(func)
             return
-        var pfunc = reinterpret<Function?> func
+        var pfunc = get_ptr(func)
         if tab[pfunc]
             return
         tab[pfunc] = true
@@ -594,27 +597,32 @@ def find_module(name:string) : Module?
 struct DocGroup
     name : string
     func : array<Function?>
+    hidden : bool
 
 [unsafe]
-def debug_group(group:DocGroup)
+def debug_group(var group:DocGroup)
     print("Group {group.name}\n")
     for func in group.func
         print("\t{describe_function_short(FunctionPtr(func))}\n")
+    return <- group
 
-[unsafe]
 def append_by_regex(var group:DocGroup; mod:Module?; var reg:Regex)
     for_each_function(mod, "") <| $(func)
         if function_needs_documenting(func)
             if regex_match(reg,string(func.name)) != -1
-                push(group.func,reinterpret<Function?> func)
+                push(group.func,get_ptr(func))
     for_each_generic(mod) <| $(func)
         if function_needs_documenting(func)
             if regex_match(reg,string(func.name)) != -1
-                push(group.func,reinterpret<Function?> func)
+                push(group.func,get_ptr(func))
 
 def group_by_regex(name:string; mod:Module?; var reg:Regex)
-    var group <- [[DocGroup name=name]]
+    var group <- [[DocGroup name=name, hidden=false]]
     append_by_regex(group,mod,reg)
+    return <- group
+
+def hide_group(var group:DocGroup)
+    group.hidden = true
     return <- group
 
 def document(name:string;mod:Module?;fname:string;groups:array<DocGroup>)

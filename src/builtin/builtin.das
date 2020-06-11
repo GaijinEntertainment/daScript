@@ -142,14 +142,6 @@ def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>#)
 def clone(var a:das_string;b:string)
     set(a,b)
 
-def make_clone(res:auto(TT)) : TT -const
-    static_if typeinfo(can_copy type<TT>)
-        return res
-    else
-        var temp : TT
-        temp := res
-        return <- temp
-
 def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
     var it : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))

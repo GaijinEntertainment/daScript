@@ -9,7 +9,7 @@ URI manipulation library based on UriParser
 Uncategorized
 +++++++++++++
 
-.. _function-_at_uriparser::escape_uri_string_hh_const_bool_hh_const_bool_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_escape_uri_string_hh_const_bool_hh_const_bool_hh_const__hh_const:
 
 .. das:function:: escape_uri(arg0: string const; arg1: bool const; arg2: bool const)
 
@@ -28,7 +28,7 @@ arguments are
 
 function|uriparser|escape_uri to be documented
 
-.. _function-_at_uriparser::file_name_to_uri_string_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_file_name_to_uri_string_hh_const__hh_const:
 
 .. das:function:: file_name_to_uri(arg0: string const)
 
@@ -43,7 +43,7 @@ arguments are
 
 function|uriparser|file_name_to_uri to be documented
 
-.. _function-_at_uriparser::unescape_uri_string_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_unescape_uri_string_hh_const__hh_const:
 
 .. das:function:: unescape_uri(arg0: string const)
 
@@ -58,7 +58,7 @@ arguments are
 
 function|uriparser|unescape_uri to be documented
 
-.. _function-_at_uriparser::unix_file_name_to_uri_string_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_unix_file_name_to_uri_string_hh_const__hh_const:
 
 .. das:function:: unix_file_name_to_uri(arg0: string const)
 
@@ -73,7 +73,7 @@ arguments are
 
 function|uriparser|unix_file_name_to_uri to be documented
 
-.. _function-_at_uriparser::uri_to_file_name_string_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_uri_to_file_name_string_hh_const__hh_const:
 
 .. das:function:: uri_to_file_name(arg0: string const)
 
@@ -88,7 +88,7 @@ arguments are
 
 function|uriparser|uri_to_file_name to be documented
 
-.. _function-_at_uriparser::uri_to_unix_file_name_string_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_uri_to_unix_file_name_string_hh_const__hh_const:
 
 .. das:function:: uri_to_unix_file_name(arg0: string const)
 
@@ -103,7 +103,7 @@ arguments are
 
 function|uriparser|uri_to_unix_file_name to be documented
 
-.. _function-_at_uriparser::uri_to_windows_file_name_string_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_uri_to_windows_file_name_string_hh_const__hh_const:
 
 .. das:function:: uri_to_windows_file_name(arg0: string const)
 
@@ -118,7 +118,7 @@ arguments are
 
 function|uriparser|uri_to_windows_file_name to be documented
 
-.. _function-_at_uriparser::windows_file_name_to_uri_string_hh_const__hh_const:
+.. _function-_at_uriparser_c__c_windows_file_name_to_uri_string_hh_const__hh_const:
 
 .. das:function:: windows_file_name_to_uri(arg0: string const)
 

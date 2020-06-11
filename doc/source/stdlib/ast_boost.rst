@@ -599,7 +599,7 @@ method|ast_boost|TagStructureAnnotation.finish to be documented
 Uncategorized
 +++++++++++++
 
-.. _function-_at_ast_boost::describe__hh_handle_hh_AnnotationArgumentList_hh_const:
+.. _function-_at_ast_boost_c__c_describe__hh_handle_hh_AnnotationArgumentList_hh_const:
 
 .. das:function:: describe(list: AnnotationArgumentList const)
 
@@ -614,7 +614,7 @@ arguments are
 
 function|ast_boost|describe to be documented
 
-.. _function-_at_ast_boost::describe__hh_handle_hh_AnnotationDeclaration_hh_const:
+.. _function-_at_ast_boost_c__c_describe__hh_handle_hh_AnnotationDeclaration_hh_const:
 
 .. das:function:: describe(ann: AnnotationDeclaration const)
 
@@ -629,7 +629,7 @@ arguments are
 
 function|ast_boost|describe to be documented
 
-.. _function-_at_ast_boost::describe__hh_handle_hh_AnnotationList_hh_const:
+.. _function-_at_ast_boost_c__c_describe__hh_handle_hh_AnnotationList_hh_const:
 
 .. das:function:: describe(list: AnnotationList const)
 
@@ -644,7 +644,7 @@ arguments are
 
 function|ast_boost|describe to be documented
 
-.. _function-_at_ast_boost::describe_function_short__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const:
+.. _function-_at_ast_boost_c__c_describe_function_short__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const:
 
 .. das:function:: describe_function_short(func: FunctionPtr)
 
@@ -659,7 +659,7 @@ arguments are
 
 function|ast_boost|describe_function_short to be documented
 
-.. _function-_at_ast_boost::find_arg_string_hh_const__hh_handle_hh_AnnotationArgumentList_hh_const:
+.. _function-_at_ast_boost_c__c_find_arg_string_hh_const__hh_handle_hh_AnnotationArgumentList_hh_const:
 
 .. das:function:: find_arg(argn: string const; args: AnnotationArgumentList const)
 
@@ -676,7 +676,7 @@ arguments are
 
 function|ast_boost|find_arg to be documented
 
-.. _function-_at_ast_boost::isExpression__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_bool_hh_const:
+.. _function-_at_ast_boost_c__c_isExpression__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_bool_hh_const:
 
 .. das:function:: isExpression(t: TypeDeclPtr; top: bool const)
 
@@ -693,7 +693,7 @@ arguments are
 
 function|ast_boost|isExpression to be documented
 
-.. _function-_at_ast_boost::is_class_method__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const:
+.. _function-_at_ast_boost_c__c_is_class_method__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const:
 
 .. das:function:: is_class_method(cinfo: StructurePtr; finfo: TypeDeclPtr)
 
@@ -710,7 +710,7 @@ arguments are
 
 function|ast_boost|is_class_method to be documented
 
-.. _function-_at_ast_boost::is_same_or_inherited__hh_ptr_hh__hh_handle_hh_Structure_hh_const__hh_ptr_hh__hh_handle_hh_Structure_hh_const:
+.. _function-_at_ast_boost_c__c_is_same_or_inherited__hh_ptr_hh__hh_handle_hh_Structure_hh_const__hh_ptr_hh__hh_handle_hh_Structure_hh_const:
 
 .. das:function:: is_same_or_inherited(parent: ast::Structure? const; child: ast::Structure? const)
 
@@ -727,7 +727,7 @@ arguments are
 
 function|ast_boost|is_same_or_inherited to be documented
 
-.. _function-_at_ast_boost::setup_macro_string_hh_const__hh_handle_hh_LineInfo_hh_const:
+.. _function-_at_ast_boost_c__c_setup_macro_string_hh_const__hh_handle_hh_LineInfo_hh_const:
 
 .. das:function:: setup_macro(name: string const; at: LineInfo const)
 
@@ -744,7 +744,7 @@ arguments are
 
 function|ast_boost|setup_macro to be documented
 
-.. _function-_at_ast_boost::convert_to_expression__hh_auto_hh_ref__hh_handle_hh_LineInfo_hh_const:
+.. _function-_at_ast_boost_c__c_convert_to_expression__hh_auto_hh_ref__hh_handle_hh_LineInfo_hh_const:
 
 .. das:function:: convert_to_expression(value: auto&; at: LineInfo const)
 
@@ -761,7 +761,7 @@ arguments are
 
 function|ast_boost|convert_to_expression to be documented
 
-.. _function-_at_ast_boost::describe_bitfield__hh_auto_hh_const_string_hh_const:
+.. _function-_at_ast_boost_c__c_describe_bitfield__hh_auto_hh_const_string_hh_const:
 
 .. das:function:: describe_bitfield(bf: auto const; merger: string const)
 
@@ -778,7 +778,7 @@ arguments are
 
 function|ast_boost|describe_bitfield to be documented
 
-.. _function-_at_ast_boost::setup_tag_annotation_string_hh_const_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_boost_c__c_setup_tag_annotation_string_hh_const_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: setup_tag_annotation(name: string const; tag: string const; classPtr: auto const)
 

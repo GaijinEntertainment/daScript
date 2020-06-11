@@ -27,8 +27,28 @@ def document_module_math(root:string)
 def document_module_builtin(root:string)
     var mod = get_module("$")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin*%%));
+        hide_group(group_by_regex("Internal pointer arithmetics", mod, %regex~i_das_*%%));
+        hide_group(group_by_regex("Internal clone infrastructure", mod, %regex~clone*%%));
+        hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize*%%));
+        group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|reserve|each|emplace|erase|find|
+find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
+find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|sort|to_array|to_table|to_array_move|
+to_table_move)$%%);
+        group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%);
+        group_by_regex("String manipulation", mod, %regex~(append|as_string|build_string|character_at|character_uat|
+chop|delete_string|ends_with|escape|find_first_of|format|peek|repeat|set|slice|starts_with|empty|replace|reverse|
+strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|to_upper|to_upper_in_place|unescape)$%%);
+        group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%);
+        group_by_regex("Heap reporting", mod, %regex~(heap*|string_heap*)%%);
+        group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
+        group_by_regex("GC0 infrastructure", mod, %regex~gc0*%%);
+        group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr*|get_ptr$)%%);
+        group_by_regex("Macro infrastructure", mod, %regex~is_compiling*%%);
+        group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info)$%%);
+        group_by_regex("System infastructure", mod, %regex~(panic|print|terminate|breakpoint|stackwalk|get_das_root|get_clock)$%%);
+        group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash)$%%);
+        group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%)
     }]
     document("Built-in runtime",mod,"{root}/builtin.rst",groups)
 

@@ -7865,7 +7865,7 @@ method|ast|AstVisitor.visitExprReader to be documented
 Uncategorized
 +++++++++++++
 
-.. _function-_at_ast::FunctionPtr__hh_ptr_hh__hh_handle_hh_Function_hh_const:
+.. _function-_at_ast_c__c_FunctionPtr__hh_ptr_hh__hh_handle_hh_Function_hh_const:
 
 .. das:function:: FunctionPtr(fun: ast::Function? const)
 
@@ -7880,7 +7880,7 @@ arguments are
 
 function|ast|FunctionPtr to be documented
 
-.. _function-_at_ast::add_dirty_infer_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_PassMacro_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_dirty_infer_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_PassMacro_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_dirty_infer_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::PassMacro> const implicit)
 
@@ -7895,7 +7895,7 @@ arguments are
 
 function|ast|add_dirty_infer_macro to be documented
 
-.. _function-_at_ast::add_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_function(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::Function> const implicit)
 
@@ -7910,7 +7910,7 @@ arguments are
 
 function|ast|add_function to be documented
 
-.. _function-_at_ast::add_function_annotation__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_FunctionAnnotation_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_function_annotation__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_FunctionAnnotation_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_function_annotation(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::FunctionAnnotation> const implicit)
 
@@ -7925,7 +7925,7 @@ arguments are
 
 function|ast|add_function_annotation to be documented
 
-.. _function-_at_ast::add_function_annotation__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_FunctionAnnotation_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_function_annotation__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_FunctionAnnotation_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_function_annotation(arg0: smart_ptr<ast::Function> const implicit; arg1: smart_ptr<ast::FunctionAnnotation> const implicit)
 
@@ -7940,7 +7940,7 @@ arguments are
 
 function|ast|add_function_annotation to be documented
 
-.. _function-_at_ast::add_reader_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_ReaderMacro_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_reader_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_ReaderMacro_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_reader_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::ReaderMacro> const implicit)
 
@@ -7955,7 +7955,7 @@ arguments are
 
 function|ast|add_reader_macro to be documented
 
-.. _function-_at_ast::add_structure_annotation__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_StructureAnnotation_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_structure_annotation__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_StructureAnnotation_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_structure_annotation(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::StructureAnnotation> const implicit)
 
@@ -7970,7 +7970,7 @@ arguments are
 
 function|ast|add_structure_annotation to be documented
 
-.. _function-_at_ast::add_structure_annotation__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_StructureAnnotation_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_structure_annotation__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_StructureAnnotation_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_structure_annotation(arg0: smart_ptr<ast::Structure> const implicit; arg1: smart_ptr<ast::StructureAnnotation> const implicit)
 
@@ -7985,7 +7985,7 @@ arguments are
 
 function|ast|add_structure_annotation to be documented
 
-.. _function-_at_ast::add_variant_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_VariantMacro_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_add_variant_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_VariantMacro_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_variant_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::VariantMacro> const implicit)
 
@@ -8000,7 +8000,7 @@ arguments are
 
 function|ast|add_variant_macro to be documented
 
-.. _function-_at_ast::any_array_foreach__hh_ptr_hh_const_hh_implicit_int_hh_const__hh_block_hh__hh_ptr_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_any_array_foreach__hh_ptr_hh_const_hh_implicit_int_hh_const__hh_block_hh__hh_ptr_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: any_array_foreach(arg0: void? const implicit; arg1: int const; arg2: block<(void?):void> const implicit)
 
@@ -8017,7 +8017,7 @@ arguments are
 
 function|ast|any_array_foreach to be documented
 
-.. _function-_at_ast::any_array_size__hh_ptr_hh_const_hh_implicit:
+.. _function-_at_ast_c__c_any_array_size__hh_ptr_hh_const_hh_implicit:
 
 .. das:function:: any_array_size(arg0: void? const implicit)
 
@@ -8032,7 +8032,7 @@ arguments are
 
 function|ast|any_array_size to be documented
 
-.. _function-_at_ast::any_table_foreach__hh_ptr_hh_const_hh_implicit_int_hh_const_int_hh_const__hh_block_hh__hh_ptr_hh__hh_ptr_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_any_table_foreach__hh_ptr_hh_const_hh_implicit_int_hh_const_int_hh_const__hh_block_hh__hh_ptr_hh__hh_ptr_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: any_table_foreach(arg0: void? const implicit; arg1: int const; arg2: int const; arg3: block<(void?;void?):void> const implicit)
 
@@ -8051,7 +8051,7 @@ arguments are
 
 function|ast|any_table_foreach to be documented
 
-.. _function-_at_ast::any_table_size__hh_ptr_hh_const_hh_implicit:
+.. _function-_at_ast_c__c_any_table_size__hh_ptr_hh_const_hh_implicit:
 
 .. das:function:: any_table_size(arg0: void? const implicit)
 
@@ -8066,7 +8066,7 @@ arguments are
 
 function|ast|any_table_size to be documented
 
-.. _function-_at_ast::clone_expression__hh_smart_ptr_hh__hh_handle_hh_Expression_hh_const_hh_implicit:
+.. _function-_at_ast_c__c_clone_expression__hh_smart_ptr_hh__hh_handle_hh_Expression_hh_const_hh_implicit:
 
 .. das:function:: clone_expression(arg0: smart_ptr<ast::Expression> const implicit)
 
@@ -8081,7 +8081,7 @@ arguments are
 
 function|ast|clone_expression to be documented
 
-.. _function-_at_ast::clone_type__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit:
+.. _function-_at_ast_c__c_clone_type__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit:
 
 .. das:function:: clone_type(arg0: smart_ptr<ast::TypeDecl> const implicit)
 
@@ -8096,7 +8096,7 @@ arguments are
 
 function|ast|clone_type to be documented
 
-.. _function-_at_ast::compiling_module:
+.. _function-_at_ast_c__c_compiling_module:
 
 .. das:function:: compiling_module()
 
@@ -8104,7 +8104,7 @@ compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 function|ast|compiling_module to be documented
 
-.. _function-_at_ast::compiling_program:
+.. _function-_at_ast_c__c_compiling_program:
 
 .. das:function:: compiling_program()
 
@@ -8112,7 +8112,7 @@ compiling_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` 
 
 function|ast|compiling_program to be documented
 
-.. _function-_at_ast::das_to_string__hh_enum_hh_rtti::Type_hh_int_hh_const__hh_const:
+.. _function-_at_ast_c__c_das_to_string__hh_enum_hh_rtti_c__c_Type_hh_int_hh_const__hh_const:
 
 .. das:function:: das_to_string(arg0: Type const)
 
@@ -8127,7 +8127,7 @@ arguments are
 
 function|ast|das_to_string to be documented
 
-.. _function-_at_ast::describe_expression__hh_smart_ptr_hh__hh_handle_hh_Expression_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_describe_expression__hh_smart_ptr_hh__hh_handle_hh_Expression_hh_const_hh_implicit__hh_const:
 
 .. das:function:: describe_expression(arg0: smart_ptr<ast::Expression> const implicit)
 
@@ -8142,7 +8142,7 @@ arguments are
 
 function|ast|describe_expression to be documented
 
-.. _function-_at_ast::describe_function__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_describe_function__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_const:
 
 .. das:function:: describe_function(arg0: smart_ptr<ast::Function> const implicit)
 
@@ -8157,7 +8157,7 @@ arguments are
 
 function|ast|describe_function to be documented
 
-.. _function-_at_ast::describe_typedecl__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit_bool_hh_const_bool_hh_const_bool_hh_const__hh_const:
+.. _function-_at_ast_c__c_describe_typedecl__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit_bool_hh_const_bool_hh_const_bool_hh_const__hh_const:
 
 .. das:function:: describe_typedecl(arg0: smart_ptr<ast::TypeDecl> const implicit; arg1: bool const; arg2: bool const; arg3: bool const)
 
@@ -8178,7 +8178,7 @@ arguments are
 
 function|ast|describe_typedecl to be documented
 
-.. _function-_at_ast::find_bitfield_name__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit__hh_bitfield_hh_const__hh_const:
+.. _function-_at_ast_c__c_find_bitfield_name__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit__hh_bitfield_hh_const__hh_const:
 
 .. das:function:: find_bitfield_name(arg0: smart_ptr<ast::TypeDecl> const implicit; arg1: bitfield const)
 
@@ -8195,7 +8195,7 @@ arguments are
 
 function|ast|find_bitfield_name to be documented
 
-.. _function-_at_ast::for_each_enumeration__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Enumeration_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_for_each_enumeration__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Enumeration_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: for_each_enumeration(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Enumeration>):void> const implicit)
 
@@ -8210,7 +8210,7 @@ arguments are
 
 function|ast|for_each_enumeration to be documented
 
-.. _function-_at_ast::for_each_field__hh_handle_hh_BasicStructureAnnotation_hh_const_hh_implicit__hh_block_hh_string_hh_string_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_uint_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_for_each_field__hh_handle_hh_BasicStructureAnnotation_hh_const_hh_implicit__hh_block_hh_string_hh_string_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_uint_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: for_each_field(arg0: BasicStructureAnnotation const implicit; arg1: block<(string;string;smart_ptr<ast::TypeDecl>;uint):void> const implicit)
 
@@ -8225,7 +8225,7 @@ arguments are
 
 function|ast|for_each_field to be documented
 
-.. _function-_at_ast::for_each_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit_string_hh_const__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Function_hh_:void_hh_const_hh_implicit__hh_const__hh_const:
+.. _function-_at_ast_c__c_for_each_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit_string_hh_const__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Function_hh__c_void_hh_const_hh_implicit__hh_const__hh_const:
 
 .. das:function:: for_each_function(arg0: rtti::Module? const implicit; arg1: string const; arg2: block<(smart_ptr<ast::Function>):void> const implicit)
 
@@ -8242,7 +8242,7 @@ arguments are
 
 function|ast|for_each_function to be documented
 
-.. _function-_at_ast::for_each_generic__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Function_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_for_each_generic__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Function_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: for_each_generic(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Function>):void> const implicit)
 
@@ -8257,7 +8257,7 @@ arguments are
 
 function|ast|for_each_generic to be documented
 
-.. _function-_at_ast::for_each_structure__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_for_each_structure__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Structure_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: for_each_structure(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Structure>):void> const implicit)
 
@@ -8272,7 +8272,7 @@ arguments are
 
 function|ast|for_each_structure to be documented
 
-.. _function-_at_ast::for_each_typedef__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh_string_hh_temporary_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_for_each_typedef__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh_string_hh_temporary_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: for_each_typedef(arg0: rtti::Module? const implicit; arg1: block<(string#;smart_ptr<ast::TypeDecl>):void> const implicit)
 
@@ -8287,7 +8287,7 @@ arguments are
 
 function|ast|for_each_typedef to be documented
 
-.. _function-_at_ast::get_mangled_name__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_get_mangled_name__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_const:
 
 .. das:function:: get_mangled_name(arg0: smart_ptr<ast::Function> const implicit)
 
@@ -8302,7 +8302,7 @@ arguments are
 
 function|ast|get_mangled_name to be documented
 
-.. _function-_at_ast::get_tuple_field_offset__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit_int_hh_const:
+.. _function-_at_ast_c__c_get_tuple_field_offset__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit_int_hh_const:
 
 .. das:function:: get_tuple_field_offset(arg0: smart_ptr<ast::TypeDecl> const implicit; arg1: int const)
 
@@ -8319,7 +8319,7 @@ arguments are
 
 function|ast|get_tuple_field_offset to be documented
 
-.. _function-_at_ast::get_variant_field_offset__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit_int_hh_const:
+.. _function-_at_ast_c__c_get_variant_field_offset__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit_int_hh_const:
 
 .. das:function:: get_variant_field_offset(arg0: smart_ptr<ast::TypeDecl> const implicit; arg1: int const)
 
@@ -8336,7 +8336,7 @@ arguments are
 
 function|ast|get_variant_field_offset to be documented
 
-.. _function-_at_ast::is_same_type__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit__hh_enum_hh_rtti::RefMatters_hh_int_hh_const__hh_enum_hh_rtti::ConstMatters_hh_int_hh_const__hh_enum_hh_rtti::TemporaryMatters_hh_int_hh_const:
+.. _function-_at_ast_c__c_is_same_type__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit__hh_enum_hh_rtti_c__c_RefMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_ConstMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_TemporaryMatters_hh_int_hh_const:
 
 .. das:function:: is_same_type(arg0: smart_ptr<ast::TypeDecl> const implicit; arg1: smart_ptr<ast::TypeDecl> const implicit; arg2: RefMatters const; arg3: ConstMatters const; arg4: TemporaryMatters const)
 
@@ -8359,7 +8359,7 @@ arguments are
 
 function|ast|is_same_type to be documented
 
-.. _function-_at_ast::macro_error__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_handle_hh_LineInfo_hh_const_hh_implicit_string_hh_const:
+.. _function-_at_ast_c__c_macro_error__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_handle_hh_LineInfo_hh_const_hh_implicit_string_hh_const:
 
 .. das:function:: macro_error(arg0: smart_ptr<rtti::Program> const implicit; arg1: LineInfo const implicit; arg2: string const)
 
@@ -8376,7 +8376,7 @@ arguments are
 
 function|ast|macro_error to be documented
 
-.. _function-_at_ast::make_function_annotation_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_make_function_annotation_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: make_function_annotation(arg0: string const; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
 
@@ -8395,7 +8395,7 @@ arguments are
 
 function|ast|make_function_annotation to be documented
 
-.. _function-_at_ast::make_pass_macro_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_make_pass_macro_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: make_pass_macro(arg0: string const; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
 
@@ -8414,7 +8414,7 @@ arguments are
 
 function|ast|make_pass_macro to be documented
 
-.. _function-_at_ast::make_reader_macro_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_make_reader_macro_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: make_reader_macro(arg0: string const; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
 
@@ -8433,7 +8433,7 @@ arguments are
 
 function|ast|make_reader_macro to be documented
 
-.. _function-_at_ast::make_structure_annotation_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_make_structure_annotation_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: make_structure_annotation(arg0: string const; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
 
@@ -8452,7 +8452,7 @@ arguments are
 
 function|ast|make_structure_annotation to be documented
 
-.. _function-_at_ast::make_variant_macro_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_make_variant_macro_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: make_variant_macro(arg0: string const; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
 
@@ -8471,7 +8471,7 @@ arguments are
 
 function|ast|make_variant_macro to be documented
 
-.. _function-_at_ast::make_visitor__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_ast_c__c_make_visitor__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: make_visitor(arg0: void? const implicit; arg1: rtti::StructInfo const? const implicit)
 
@@ -8488,7 +8488,7 @@ arguments are
 
 function|ast|make_visitor to be documented
 
-.. _function-_at_ast::this_module__hh_const__hh_const:
+.. _function-_at_ast_c__c_this_module__hh_const__hh_const:
 
 .. das:function:: this_module()
 
@@ -8496,7 +8496,7 @@ this_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 function|ast|this_module to be documented
 
-.. _function-_at_ast::this_program__hh_const:
+.. _function-_at_ast_c__c_this_program__hh_const:
 
 .. das:function:: this_program()
 
@@ -8504,7 +8504,7 @@ this_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
 
 function|ast|this_program to be documented
 
-.. _function-_at_ast::visit__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_VisitorAdapter_hh_const_hh_implicit:
+.. _function-_at_ast_c__c_visit__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_VisitorAdapter_hh_const_hh_implicit:
 
 .. das:function:: visit(arg0: smart_ptr<rtti::Program> const implicit; arg1: smart_ptr<ast::VisitorAdapter> const implicit)
 
@@ -8519,7 +8519,7 @@ arguments are
 
 function|ast|visit to be documented
 
-.. _function-_at_ast::ExpressionPtr__hh_smart_ptr_hh__hh_auto_hh_const:
+.. _function-_at_ast_c__c_ExpressionPtr__hh_smart_ptr_hh__hh_auto_hh_const:
 
 .. das:function:: ExpressionPtr(expr: smart_ptr<auto(TT)> const)
 
@@ -8534,7 +8534,7 @@ arguments are
 
 function|ast|ExpressionPtr to be documented
 
-.. _function-_at_ast::add_new_function_annotation_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_add_new_function_annotation_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: add_new_function_annotation(name: string const; someClassPtr: auto const)
 
@@ -8551,7 +8551,7 @@ arguments are
 
 function|ast|add_new_function_annotation to be documented
 
-.. _function-_at_ast::add_new_reader_macro_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_add_new_reader_macro_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: add_new_reader_macro(name: string const; someClassPtr: auto const)
 
@@ -8568,7 +8568,7 @@ arguments are
 
 function|ast|add_new_reader_macro to be documented
 
-.. _function-_at_ast::add_new_structure_annotation_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_add_new_structure_annotation_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: add_new_structure_annotation(name: string const; someClassPtr: auto const)
 
@@ -8585,7 +8585,7 @@ arguments are
 
 function|ast|add_new_structure_annotation to be documented
 
-.. _function-_at_ast::add_new_variant_macro_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_add_new_variant_macro_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: add_new_variant_macro(name: string const; someClassPtr: auto const)
 
@@ -8602,7 +8602,7 @@ arguments are
 
 function|ast|add_new_variant_macro to be documented
 
-.. _function-_at_ast::describe__hh_smart_ptr_hh__hh_handle_hh_Expression_hh_const:
+.. _function-_at_ast_c__c_describe__hh_smart_ptr_hh__hh_handle_hh_Expression_hh_const:
 
 .. das:function:: describe(expr: smart_ptr<ast::Expression> const)
 
@@ -8617,7 +8617,7 @@ arguments are
 
 function|ast|describe to be documented
 
-.. _function-_at_ast::describe__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const:
+.. _function-_at_ast_c__c_describe__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const:
 
 .. das:function:: describe(expr: smart_ptr<ast::Function> const)
 
@@ -8632,7 +8632,7 @@ arguments are
 
 function|ast|describe to be documented
 
-.. _function-_at_ast::describe__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_bool_hh_const_bool_hh_const_bool_hh_const:
+.. _function-_at_ast_c__c_describe__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_bool_hh_const_bool_hh_const_bool_hh_const:
 
 .. das:function:: describe(decl: smart_ptr<ast::TypeDecl> const; extra: bool const; contracts: bool const; modules: bool const)
 
@@ -8653,7 +8653,7 @@ arguments are
 
 function|ast|describe to be documented
 
-.. _function-_at_ast::make_function_annotation_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_make_function_annotation_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: make_function_annotation(name: string const; someClassPtr: auto const)
 
@@ -8670,7 +8670,7 @@ arguments are
 
 function|ast|make_function_annotation to be documented
 
-.. _function-_at_ast::make_pass_macro_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_make_pass_macro_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: make_pass_macro(name: string const; someClassPtr: auto const)
 
@@ -8687,7 +8687,7 @@ arguments are
 
 function|ast|make_pass_macro to be documented
 
-.. _function-_at_ast::make_reader_macro_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_make_reader_macro_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: make_reader_macro(name: string const; someClassPtr: auto const)
 
@@ -8704,7 +8704,7 @@ arguments are
 
 function|ast|make_reader_macro to be documented
 
-.. _function-_at_ast::make_structure_annotation_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_make_structure_annotation_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: make_structure_annotation(name: string const; someClassPtr: auto const)
 
@@ -8721,7 +8721,7 @@ arguments are
 
 function|ast|make_structure_annotation to be documented
 
-.. _function-_at_ast::make_variant_macro_string_hh_const__hh_auto_hh_const:
+.. _function-_at_ast_c__c_make_variant_macro_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: make_variant_macro(name: string const; someClassPtr: auto const)
 
@@ -8738,7 +8738,7 @@ arguments are
 
 function|ast|make_variant_macro to be documented
 
-.. _function-_at_ast::make_visitor__hh_auto_hh_const:
+.. _function-_at_ast_c__c_make_visitor__hh_auto_hh_const:
 
 .. das:function:: make_visitor(someClass: auto const)
 

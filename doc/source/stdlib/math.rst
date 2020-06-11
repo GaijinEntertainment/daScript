@@ -9,32 +9,32 @@ Math library
 all numerics (uint*, int*, float*, double)
 ++++++++++++++++++++++++++++++++++++++++++
 
-  *  :ref:`max (arg0:double;arg1:double) : double <function-_at_math::max_double_double>` 
-  *  :ref:`max (arg0:float;arg1:float) : float <function-_at_math::max_float_float>` 
-  *  :ref:`max (arg0:float2;arg1:float2) : float2 <function-_at_math::max_float2_float2>` 
-  *  :ref:`max (arg0:float3;arg1:float3) : float3 <function-_at_math::max_float3_float3>` 
-  *  :ref:`max (arg0:float4;arg1:float4) : float4 <function-_at_math::max_float4_float4>` 
-  *  :ref:`max (arg0:int;arg1:int) : int <function-_at_math::max_int_int>` 
-  *  :ref:`max (arg0:int2;arg1:int2) : int2 <function-_at_math::max_int2_int2>` 
-  *  :ref:`max (arg0:int3;arg1:int3) : int3 <function-_at_math::max_int3_int3>` 
-  *  :ref:`max (arg0:int4;arg1:int4) : int4 <function-_at_math::max_int4_int4>` 
-  *  :ref:`max (arg0:int64;arg1:int64) : int64 <function-_at_math::max_int64_int64>` 
-  *  :ref:`max (arg0:uint;arg1:uint) : uint <function-_at_math::max_uint_uint>` 
-  *  :ref:`max (arg0:uint64;arg1:uint64) : uint64 <function-_at_math::max_uint64_uint64>` 
-  *  :ref:`min (arg0:double;arg1:double) : double <function-_at_math::min_double_double>` 
-  *  :ref:`min (arg0:float;arg1:float) : float <function-_at_math::min_float_float>` 
-  *  :ref:`min (arg0:float2;arg1:float2) : float2 <function-_at_math::min_float2_float2>` 
-  *  :ref:`min (arg0:float3;arg1:float3) : float3 <function-_at_math::min_float3_float3>` 
-  *  :ref:`min (arg0:float4;arg1:float4) : float4 <function-_at_math::min_float4_float4>` 
-  *  :ref:`min (arg0:int;arg1:int) : int <function-_at_math::min_int_int>` 
-  *  :ref:`min (arg0:int2;arg1:int2) : int2 <function-_at_math::min_int2_int2>` 
-  *  :ref:`min (arg0:int3;arg1:int3) : int3 <function-_at_math::min_int3_int3>` 
-  *  :ref:`min (arg0:int4;arg1:int4) : int4 <function-_at_math::min_int4_int4>` 
-  *  :ref:`min (arg0:int64;arg1:int64) : int64 <function-_at_math::min_int64_int64>` 
-  *  :ref:`min (arg0:uint;arg1:uint) : uint <function-_at_math::min_uint_uint>` 
-  *  :ref:`min (arg0:uint64;arg1:uint64) : uint64 <function-_at_math::min_uint64_uint64>` 
+  *  :ref:`max (arg0:double;arg1:double) : double <function-_at_math_c__c_max_double_double>` 
+  *  :ref:`max (arg0:float;arg1:float) : float <function-_at_math_c__c_max_float_float>` 
+  *  :ref:`max (arg0:float2;arg1:float2) : float2 <function-_at_math_c__c_max_float2_float2>` 
+  *  :ref:`max (arg0:float3;arg1:float3) : float3 <function-_at_math_c__c_max_float3_float3>` 
+  *  :ref:`max (arg0:float4;arg1:float4) : float4 <function-_at_math_c__c_max_float4_float4>` 
+  *  :ref:`max (arg0:int;arg1:int) : int <function-_at_math_c__c_max_int_int>` 
+  *  :ref:`max (arg0:int2;arg1:int2) : int2 <function-_at_math_c__c_max_int2_int2>` 
+  *  :ref:`max (arg0:int3;arg1:int3) : int3 <function-_at_math_c__c_max_int3_int3>` 
+  *  :ref:`max (arg0:int4;arg1:int4) : int4 <function-_at_math_c__c_max_int4_int4>` 
+  *  :ref:`max (arg0:int64;arg1:int64) : int64 <function-_at_math_c__c_max_int64_int64>` 
+  *  :ref:`max (arg0:uint;arg1:uint) : uint <function-_at_math_c__c_max_uint_uint>` 
+  *  :ref:`max (arg0:uint64;arg1:uint64) : uint64 <function-_at_math_c__c_max_uint64_uint64>` 
+  *  :ref:`min (arg0:double;arg1:double) : double <function-_at_math_c__c_min_double_double>` 
+  *  :ref:`min (arg0:float;arg1:float) : float <function-_at_math_c__c_min_float_float>` 
+  *  :ref:`min (arg0:float2;arg1:float2) : float2 <function-_at_math_c__c_min_float2_float2>` 
+  *  :ref:`min (arg0:float3;arg1:float3) : float3 <function-_at_math_c__c_min_float3_float3>` 
+  *  :ref:`min (arg0:float4;arg1:float4) : float4 <function-_at_math_c__c_min_float4_float4>` 
+  *  :ref:`min (arg0:int;arg1:int) : int <function-_at_math_c__c_min_int_int>` 
+  *  :ref:`min (arg0:int2;arg1:int2) : int2 <function-_at_math_c__c_min_int2_int2>` 
+  *  :ref:`min (arg0:int3;arg1:int3) : int3 <function-_at_math_c__c_min_int3_int3>` 
+  *  :ref:`min (arg0:int4;arg1:int4) : int4 <function-_at_math_c__c_min_int4_int4>` 
+  *  :ref:`min (arg0:int64;arg1:int64) : int64 <function-_at_math_c__c_min_int64_int64>` 
+  *  :ref:`min (arg0:uint;arg1:uint) : uint <function-_at_math_c__c_min_uint_uint>` 
+  *  :ref:`min (arg0:uint64;arg1:uint64) : uint64 <function-_at_math_c__c_min_uint64_uint64>` 
 
-.. _function-_at_math::max_double_double:
+.. _function-_at_math_c__c_max_double_double:
 
 .. das:function:: max(arg0: double; arg1: double)
 
@@ -51,7 +51,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_float_float:
+.. _function-_at_math_c__c_max_float_float:
 
 .. das:function:: max(arg0: float; arg1: float)
 
@@ -68,7 +68,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_float2_float2:
+.. _function-_at_math_c__c_max_float2_float2:
 
 .. das:function:: max(arg0: float2; arg1: float2)
 
@@ -85,7 +85,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_float3_float3:
+.. _function-_at_math_c__c_max_float3_float3:
 
 .. das:function:: max(arg0: float3; arg1: float3)
 
@@ -102,7 +102,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_float4_float4:
+.. _function-_at_math_c__c_max_float4_float4:
 
 .. das:function:: max(arg0: float4; arg1: float4)
 
@@ -119,7 +119,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_int_int:
+.. _function-_at_math_c__c_max_int_int:
 
 .. das:function:: max(arg0: int; arg1: int)
 
@@ -136,7 +136,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_int2_int2:
+.. _function-_at_math_c__c_max_int2_int2:
 
 .. das:function:: max(arg0: int2; arg1: int2)
 
@@ -153,7 +153,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_int3_int3:
+.. _function-_at_math_c__c_max_int3_int3:
 
 .. das:function:: max(arg0: int3; arg1: int3)
 
@@ -170,7 +170,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_int4_int4:
+.. _function-_at_math_c__c_max_int4_int4:
 
 .. das:function:: max(arg0: int4; arg1: int4)
 
@@ -187,7 +187,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_int64_int64:
+.. _function-_at_math_c__c_max_int64_int64:
 
 .. das:function:: max(arg0: int64; arg1: int64)
 
@@ -204,7 +204,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_uint_uint:
+.. _function-_at_math_c__c_max_uint_uint:
 
 .. das:function:: max(arg0: uint; arg1: uint)
 
@@ -221,7 +221,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::max_uint64_uint64:
+.. _function-_at_math_c__c_max_uint64_uint64:
 
 .. das:function:: max(arg0: uint64; arg1: uint64)
 
@@ -238,7 +238,7 @@ arguments are
 
 function|math|max to be documented
 
-.. _function-_at_math::min_double_double:
+.. _function-_at_math_c__c_min_double_double:
 
 .. das:function:: min(arg0: double; arg1: double)
 
@@ -255,7 +255,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_float_float:
+.. _function-_at_math_c__c_min_float_float:
 
 .. das:function:: min(arg0: float; arg1: float)
 
@@ -272,7 +272,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_float2_float2:
+.. _function-_at_math_c__c_min_float2_float2:
 
 .. das:function:: min(arg0: float2; arg1: float2)
 
@@ -289,7 +289,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_float3_float3:
+.. _function-_at_math_c__c_min_float3_float3:
 
 .. das:function:: min(arg0: float3; arg1: float3)
 
@@ -306,7 +306,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_float4_float4:
+.. _function-_at_math_c__c_min_float4_float4:
 
 .. das:function:: min(arg0: float4; arg1: float4)
 
@@ -323,7 +323,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_int_int:
+.. _function-_at_math_c__c_min_int_int:
 
 .. das:function:: min(arg0: int; arg1: int)
 
@@ -340,7 +340,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_int2_int2:
+.. _function-_at_math_c__c_min_int2_int2:
 
 .. das:function:: min(arg0: int2; arg1: int2)
 
@@ -357,7 +357,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_int3_int3:
+.. _function-_at_math_c__c_min_int3_int3:
 
 .. das:function:: min(arg0: int3; arg1: int3)
 
@@ -374,7 +374,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_int4_int4:
+.. _function-_at_math_c__c_min_int4_int4:
 
 .. das:function:: min(arg0: int4; arg1: int4)
 
@@ -391,7 +391,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_int64_int64:
+.. _function-_at_math_c__c_min_int64_int64:
 
 .. das:function:: min(arg0: int64; arg1: int64)
 
@@ -408,7 +408,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_uint_uint:
+.. _function-_at_math_c__c_min_uint_uint:
 
 .. das:function:: min(arg0: uint; arg1: uint)
 
@@ -425,7 +425,7 @@ arguments are
 
 function|math|min to be documented
 
-.. _function-_at_math::min_uint64_uint64:
+.. _function-_at_math_c__c_min_uint64_uint64:
 
 .. das:function:: min(arg0: uint64; arg1: uint64)
 
@@ -446,95 +446,95 @@ function|math|min to be documented
 float* and double
 +++++++++++++++++
 
-  *  :ref:`abs (arg0:double const) : double <function-_at_math::abs_double_hh_const>` 
-  *  :ref:`abs (arg0:float) : float <function-_at_math::abs_float>` 
-  *  :ref:`abs (arg0:float2) : float2 <function-_at_math::abs_float2>` 
-  *  :ref:`abs (arg0:float3) : float3 <function-_at_math::abs_float3>` 
-  *  :ref:`abs (arg0:float4) : float4 <function-_at_math::abs_float4>` 
-  *  :ref:`acos (arg0:double const) : double <function-_at_math::acos_double_hh_const>` 
-  *  :ref:`acos (arg0:float) : float <function-_at_math::acos_float>` 
-  *  :ref:`acos (arg0:float2) : float2 <function-_at_math::acos_float2>` 
-  *  :ref:`acos (arg0:float3) : float3 <function-_at_math::acos_float3>` 
-  *  :ref:`acos (arg0:float4) : float4 <function-_at_math::acos_float4>` 
-  *  :ref:`asin (arg0:double const) : double <function-_at_math::asin_double_hh_const>` 
-  *  :ref:`asin (arg0:float) : float <function-_at_math::asin_float>` 
-  *  :ref:`asin (arg0:float2) : float2 <function-_at_math::asin_float2>` 
-  *  :ref:`asin (arg0:float3) : float3 <function-_at_math::asin_float3>` 
-  *  :ref:`asin (arg0:float4) : float4 <function-_at_math::asin_float4>` 
-  *  :ref:`atan (arg0:double const) : double <function-_at_math::atan_double_hh_const>` 
-  *  :ref:`atan (arg0:float) : float <function-_at_math::atan_float>` 
-  *  :ref:`atan (arg0:float2) : float2 <function-_at_math::atan_float2>` 
-  *  :ref:`atan (arg0:float3) : float3 <function-_at_math::atan_float3>` 
-  *  :ref:`atan (arg0:float4) : float4 <function-_at_math::atan_float4>` 
-  *  :ref:`atan2 (arg0:double const;arg1:double const) : double <function-_at_math::atan2_double_hh_const_double_hh_const>` 
-  *  :ref:`atan2 (arg0:float;arg1:float) : float <function-_at_math::atan2_float_float>` 
-  *  :ref:`atan2 (arg0:float2;arg1:float2) : float2 <function-_at_math::atan2_float2_float2>` 
-  *  :ref:`atan2 (arg0:float3;arg1:float3) : float3 <function-_at_math::atan2_float3_float3>` 
-  *  :ref:`atan2 (arg0:float4;arg1:float4) : float4 <function-_at_math::atan2_float4_float4>` 
-  *  :ref:`ceil (arg0:float) : float <function-_at_math::ceil_float>` 
-  *  :ref:`ceil (arg0:float2) : float2 <function-_at_math::ceil_float2>` 
-  *  :ref:`ceil (arg0:float3) : float3 <function-_at_math::ceil_float3>` 
-  *  :ref:`ceil (arg0:float4) : float4 <function-_at_math::ceil_float4>` 
-  *  :ref:`cos (arg0:double const) : double <function-_at_math::cos_double_hh_const>` 
-  *  :ref:`cos (arg0:float) : float <function-_at_math::cos_float>` 
-  *  :ref:`cos (arg0:float2) : float2 <function-_at_math::cos_float2>` 
-  *  :ref:`cos (arg0:float3) : float3 <function-_at_math::cos_float3>` 
-  *  :ref:`cos (arg0:float4) : float4 <function-_at_math::cos_float4>` 
-  *  :ref:`exp (arg0:double const) : double <function-_at_math::exp_double_hh_const>` 
-  *  :ref:`exp (arg0:float) : float <function-_at_math::exp_float>` 
-  *  :ref:`exp (arg0:float2) : float2 <function-_at_math::exp_float2>` 
-  *  :ref:`exp (arg0:float3) : float3 <function-_at_math::exp_float3>` 
-  *  :ref:`exp (arg0:float4) : float4 <function-_at_math::exp_float4>` 
-  *  :ref:`exp2 (arg0:double const) : double <function-_at_math::exp2_double_hh_const>` 
-  *  :ref:`exp2 (arg0:float) : float <function-_at_math::exp2_float>` 
-  *  :ref:`exp2 (arg0:float2) : float2 <function-_at_math::exp2_float2>` 
-  *  :ref:`exp2 (arg0:float3) : float3 <function-_at_math::exp2_float3>` 
-  *  :ref:`exp2 (arg0:float4) : float4 <function-_at_math::exp2_float4>` 
-  *  :ref:`floor (arg0:float) : float <function-_at_math::floor_float>` 
-  *  :ref:`floor (arg0:float2) : float2 <function-_at_math::floor_float2>` 
-  *  :ref:`floor (arg0:float3) : float3 <function-_at_math::floor_float3>` 
-  *  :ref:`floor (arg0:float4) : float4 <function-_at_math::floor_float4>` 
-  *  :ref:`log (arg0:double const) : double <function-_at_math::log_double_hh_const>` 
-  *  :ref:`log (arg0:float) : float <function-_at_math::log_float>` 
-  *  :ref:`log (arg0:float2) : float2 <function-_at_math::log_float2>` 
-  *  :ref:`log (arg0:float3) : float3 <function-_at_math::log_float3>` 
-  *  :ref:`log (arg0:float4) : float4 <function-_at_math::log_float4>` 
-  *  :ref:`log2 (arg0:double const) : double <function-_at_math::log2_double_hh_const>` 
-  *  :ref:`log2 (arg0:float) : float <function-_at_math::log2_float>` 
-  *  :ref:`log2 (arg0:float2) : float2 <function-_at_math::log2_float2>` 
-  *  :ref:`log2 (arg0:float3) : float3 <function-_at_math::log2_float3>` 
-  *  :ref:`log2 (arg0:float4) : float4 <function-_at_math::log2_float4>` 
-  *  :ref:`pow (arg0:double const;arg1:double const) : double <function-_at_math::pow_double_hh_const_double_hh_const>` 
-  *  :ref:`pow (arg0:float;arg1:float) : float <function-_at_math::pow_float_float>` 
-  *  :ref:`pow (arg0:float2;arg1:float2) : float2 <function-_at_math::pow_float2_float2>` 
-  *  :ref:`pow (arg0:float3;arg1:float3) : float3 <function-_at_math::pow_float3_float3>` 
-  *  :ref:`pow (arg0:float4;arg1:float4) : float4 <function-_at_math::pow_float4_float4>` 
-  *  :ref:`rcp (arg0:double const) : double <function-_at_math::rcp_double_hh_const>` 
-  *  :ref:`rcp (arg0:float) : float <function-_at_math::rcp_float>` 
-  *  :ref:`rcp (arg0:float2) : float2 <function-_at_math::rcp_float2>` 
-  *  :ref:`rcp (arg0:float3) : float3 <function-_at_math::rcp_float3>` 
-  *  :ref:`rcp (arg0:float4) : float4 <function-_at_math::rcp_float4>` 
-  *  :ref:`saturate (arg0:float) : float <function-_at_math::saturate_float>` 
-  *  :ref:`saturate (arg0:float2) : float2 <function-_at_math::saturate_float2>` 
-  *  :ref:`saturate (arg0:float3) : float3 <function-_at_math::saturate_float3>` 
-  *  :ref:`saturate (arg0:float4) : float4 <function-_at_math::saturate_float4>` 
-  *  :ref:`sin (arg0:double const) : double <function-_at_math::sin_double_hh_const>` 
-  *  :ref:`sin (arg0:float) : float <function-_at_math::sin_float>` 
-  *  :ref:`sin (arg0:float2) : float2 <function-_at_math::sin_float2>` 
-  *  :ref:`sin (arg0:float3) : float3 <function-_at_math::sin_float3>` 
-  *  :ref:`sin (arg0:float4) : float4 <function-_at_math::sin_float4>` 
-  *  :ref:`sqrt (arg0:double const) : double <function-_at_math::sqrt_double_hh_const>` 
-  *  :ref:`sqrt (arg0:float) : float <function-_at_math::sqrt_float>` 
-  *  :ref:`sqrt (arg0:float2) : float2 <function-_at_math::sqrt_float2>` 
-  *  :ref:`sqrt (arg0:float3) : float3 <function-_at_math::sqrt_float3>` 
-  *  :ref:`sqrt (arg0:float4) : float4 <function-_at_math::sqrt_float4>` 
-  *  :ref:`tan (arg0:double const) : double <function-_at_math::tan_double_hh_const>` 
-  *  :ref:`tan (arg0:float) : float <function-_at_math::tan_float>` 
-  *  :ref:`tan (arg0:float2) : float2 <function-_at_math::tan_float2>` 
-  *  :ref:`tan (arg0:float3) : float3 <function-_at_math::tan_float3>` 
-  *  :ref:`tan (arg0:float4) : float4 <function-_at_math::tan_float4>` 
+  *  :ref:`abs (arg0:double const) : double <function-_at_math_c__c_abs_double_hh_const>` 
+  *  :ref:`abs (arg0:float) : float <function-_at_math_c__c_abs_float>` 
+  *  :ref:`abs (arg0:float2) : float2 <function-_at_math_c__c_abs_float2>` 
+  *  :ref:`abs (arg0:float3) : float3 <function-_at_math_c__c_abs_float3>` 
+  *  :ref:`abs (arg0:float4) : float4 <function-_at_math_c__c_abs_float4>` 
+  *  :ref:`acos (arg0:double const) : double <function-_at_math_c__c_acos_double_hh_const>` 
+  *  :ref:`acos (arg0:float) : float <function-_at_math_c__c_acos_float>` 
+  *  :ref:`acos (arg0:float2) : float2 <function-_at_math_c__c_acos_float2>` 
+  *  :ref:`acos (arg0:float3) : float3 <function-_at_math_c__c_acos_float3>` 
+  *  :ref:`acos (arg0:float4) : float4 <function-_at_math_c__c_acos_float4>` 
+  *  :ref:`asin (arg0:double const) : double <function-_at_math_c__c_asin_double_hh_const>` 
+  *  :ref:`asin (arg0:float) : float <function-_at_math_c__c_asin_float>` 
+  *  :ref:`asin (arg0:float2) : float2 <function-_at_math_c__c_asin_float2>` 
+  *  :ref:`asin (arg0:float3) : float3 <function-_at_math_c__c_asin_float3>` 
+  *  :ref:`asin (arg0:float4) : float4 <function-_at_math_c__c_asin_float4>` 
+  *  :ref:`atan (arg0:double const) : double <function-_at_math_c__c_atan_double_hh_const>` 
+  *  :ref:`atan (arg0:float) : float <function-_at_math_c__c_atan_float>` 
+  *  :ref:`atan (arg0:float2) : float2 <function-_at_math_c__c_atan_float2>` 
+  *  :ref:`atan (arg0:float3) : float3 <function-_at_math_c__c_atan_float3>` 
+  *  :ref:`atan (arg0:float4) : float4 <function-_at_math_c__c_atan_float4>` 
+  *  :ref:`atan2 (arg0:double const;arg1:double const) : double <function-_at_math_c__c_atan2_double_hh_const_double_hh_const>` 
+  *  :ref:`atan2 (arg0:float;arg1:float) : float <function-_at_math_c__c_atan2_float_float>` 
+  *  :ref:`atan2 (arg0:float2;arg1:float2) : float2 <function-_at_math_c__c_atan2_float2_float2>` 
+  *  :ref:`atan2 (arg0:float3;arg1:float3) : float3 <function-_at_math_c__c_atan2_float3_float3>` 
+  *  :ref:`atan2 (arg0:float4;arg1:float4) : float4 <function-_at_math_c__c_atan2_float4_float4>` 
+  *  :ref:`ceil (arg0:float) : float <function-_at_math_c__c_ceil_float>` 
+  *  :ref:`ceil (arg0:float2) : float2 <function-_at_math_c__c_ceil_float2>` 
+  *  :ref:`ceil (arg0:float3) : float3 <function-_at_math_c__c_ceil_float3>` 
+  *  :ref:`ceil (arg0:float4) : float4 <function-_at_math_c__c_ceil_float4>` 
+  *  :ref:`cos (arg0:double const) : double <function-_at_math_c__c_cos_double_hh_const>` 
+  *  :ref:`cos (arg0:float) : float <function-_at_math_c__c_cos_float>` 
+  *  :ref:`cos (arg0:float2) : float2 <function-_at_math_c__c_cos_float2>` 
+  *  :ref:`cos (arg0:float3) : float3 <function-_at_math_c__c_cos_float3>` 
+  *  :ref:`cos (arg0:float4) : float4 <function-_at_math_c__c_cos_float4>` 
+  *  :ref:`exp (arg0:double const) : double <function-_at_math_c__c_exp_double_hh_const>` 
+  *  :ref:`exp (arg0:float) : float <function-_at_math_c__c_exp_float>` 
+  *  :ref:`exp (arg0:float2) : float2 <function-_at_math_c__c_exp_float2>` 
+  *  :ref:`exp (arg0:float3) : float3 <function-_at_math_c__c_exp_float3>` 
+  *  :ref:`exp (arg0:float4) : float4 <function-_at_math_c__c_exp_float4>` 
+  *  :ref:`exp2 (arg0:double const) : double <function-_at_math_c__c_exp2_double_hh_const>` 
+  *  :ref:`exp2 (arg0:float) : float <function-_at_math_c__c_exp2_float>` 
+  *  :ref:`exp2 (arg0:float2) : float2 <function-_at_math_c__c_exp2_float2>` 
+  *  :ref:`exp2 (arg0:float3) : float3 <function-_at_math_c__c_exp2_float3>` 
+  *  :ref:`exp2 (arg0:float4) : float4 <function-_at_math_c__c_exp2_float4>` 
+  *  :ref:`floor (arg0:float) : float <function-_at_math_c__c_floor_float>` 
+  *  :ref:`floor (arg0:float2) : float2 <function-_at_math_c__c_floor_float2>` 
+  *  :ref:`floor (arg0:float3) : float3 <function-_at_math_c__c_floor_float3>` 
+  *  :ref:`floor (arg0:float4) : float4 <function-_at_math_c__c_floor_float4>` 
+  *  :ref:`log (arg0:double const) : double <function-_at_math_c__c_log_double_hh_const>` 
+  *  :ref:`log (arg0:float) : float <function-_at_math_c__c_log_float>` 
+  *  :ref:`log (arg0:float2) : float2 <function-_at_math_c__c_log_float2>` 
+  *  :ref:`log (arg0:float3) : float3 <function-_at_math_c__c_log_float3>` 
+  *  :ref:`log (arg0:float4) : float4 <function-_at_math_c__c_log_float4>` 
+  *  :ref:`log2 (arg0:double const) : double <function-_at_math_c__c_log2_double_hh_const>` 
+  *  :ref:`log2 (arg0:float) : float <function-_at_math_c__c_log2_float>` 
+  *  :ref:`log2 (arg0:float2) : float2 <function-_at_math_c__c_log2_float2>` 
+  *  :ref:`log2 (arg0:float3) : float3 <function-_at_math_c__c_log2_float3>` 
+  *  :ref:`log2 (arg0:float4) : float4 <function-_at_math_c__c_log2_float4>` 
+  *  :ref:`pow (arg0:double const;arg1:double const) : double <function-_at_math_c__c_pow_double_hh_const_double_hh_const>` 
+  *  :ref:`pow (arg0:float;arg1:float) : float <function-_at_math_c__c_pow_float_float>` 
+  *  :ref:`pow (arg0:float2;arg1:float2) : float2 <function-_at_math_c__c_pow_float2_float2>` 
+  *  :ref:`pow (arg0:float3;arg1:float3) : float3 <function-_at_math_c__c_pow_float3_float3>` 
+  *  :ref:`pow (arg0:float4;arg1:float4) : float4 <function-_at_math_c__c_pow_float4_float4>` 
+  *  :ref:`rcp (arg0:double const) : double <function-_at_math_c__c_rcp_double_hh_const>` 
+  *  :ref:`rcp (arg0:float) : float <function-_at_math_c__c_rcp_float>` 
+  *  :ref:`rcp (arg0:float2) : float2 <function-_at_math_c__c_rcp_float2>` 
+  *  :ref:`rcp (arg0:float3) : float3 <function-_at_math_c__c_rcp_float3>` 
+  *  :ref:`rcp (arg0:float4) : float4 <function-_at_math_c__c_rcp_float4>` 
+  *  :ref:`saturate (arg0:float) : float <function-_at_math_c__c_saturate_float>` 
+  *  :ref:`saturate (arg0:float2) : float2 <function-_at_math_c__c_saturate_float2>` 
+  *  :ref:`saturate (arg0:float3) : float3 <function-_at_math_c__c_saturate_float3>` 
+  *  :ref:`saturate (arg0:float4) : float4 <function-_at_math_c__c_saturate_float4>` 
+  *  :ref:`sin (arg0:double const) : double <function-_at_math_c__c_sin_double_hh_const>` 
+  *  :ref:`sin (arg0:float) : float <function-_at_math_c__c_sin_float>` 
+  *  :ref:`sin (arg0:float2) : float2 <function-_at_math_c__c_sin_float2>` 
+  *  :ref:`sin (arg0:float3) : float3 <function-_at_math_c__c_sin_float3>` 
+  *  :ref:`sin (arg0:float4) : float4 <function-_at_math_c__c_sin_float4>` 
+  *  :ref:`sqrt (arg0:double const) : double <function-_at_math_c__c_sqrt_double_hh_const>` 
+  *  :ref:`sqrt (arg0:float) : float <function-_at_math_c__c_sqrt_float>` 
+  *  :ref:`sqrt (arg0:float2) : float2 <function-_at_math_c__c_sqrt_float2>` 
+  *  :ref:`sqrt (arg0:float3) : float3 <function-_at_math_c__c_sqrt_float3>` 
+  *  :ref:`sqrt (arg0:float4) : float4 <function-_at_math_c__c_sqrt_float4>` 
+  *  :ref:`tan (arg0:double const) : double <function-_at_math_c__c_tan_double_hh_const>` 
+  *  :ref:`tan (arg0:float) : float <function-_at_math_c__c_tan_float>` 
+  *  :ref:`tan (arg0:float2) : float2 <function-_at_math_c__c_tan_float2>` 
+  *  :ref:`tan (arg0:float3) : float3 <function-_at_math_c__c_tan_float3>` 
+  *  :ref:`tan (arg0:float4) : float4 <function-_at_math_c__c_tan_float4>` 
 
-.. _function-_at_math::abs_double_hh_const:
+.. _function-_at_math_c__c_abs_double_hh_const:
 
 .. das:function:: abs(arg0: double const)
 
@@ -549,7 +549,7 @@ arguments are
 
 function|math|abs to be documented
 
-.. _function-_at_math::abs_float:
+.. _function-_at_math_c__c_abs_float:
 
 .. das:function:: abs(arg0: float)
 
@@ -564,7 +564,7 @@ arguments are
 
 function|math|abs to be documented
 
-.. _function-_at_math::abs_float2:
+.. _function-_at_math_c__c_abs_float2:
 
 .. das:function:: abs(arg0: float2)
 
@@ -579,7 +579,7 @@ arguments are
 
 function|math|abs to be documented
 
-.. _function-_at_math::abs_float3:
+.. _function-_at_math_c__c_abs_float3:
 
 .. das:function:: abs(arg0: float3)
 
@@ -594,7 +594,7 @@ arguments are
 
 function|math|abs to be documented
 
-.. _function-_at_math::abs_float4:
+.. _function-_at_math_c__c_abs_float4:
 
 .. das:function:: abs(arg0: float4)
 
@@ -609,7 +609,7 @@ arguments are
 
 function|math|abs to be documented
 
-.. _function-_at_math::acos_double_hh_const:
+.. _function-_at_math_c__c_acos_double_hh_const:
 
 .. das:function:: acos(arg0: double const)
 
@@ -624,7 +624,7 @@ arguments are
 
 function|math|acos to be documented
 
-.. _function-_at_math::acos_float:
+.. _function-_at_math_c__c_acos_float:
 
 .. das:function:: acos(arg0: float)
 
@@ -639,7 +639,7 @@ arguments are
 
 function|math|acos to be documented
 
-.. _function-_at_math::acos_float2:
+.. _function-_at_math_c__c_acos_float2:
 
 .. das:function:: acos(arg0: float2)
 
@@ -654,7 +654,7 @@ arguments are
 
 function|math|acos to be documented
 
-.. _function-_at_math::acos_float3:
+.. _function-_at_math_c__c_acos_float3:
 
 .. das:function:: acos(arg0: float3)
 
@@ -669,7 +669,7 @@ arguments are
 
 function|math|acos to be documented
 
-.. _function-_at_math::acos_float4:
+.. _function-_at_math_c__c_acos_float4:
 
 .. das:function:: acos(arg0: float4)
 
@@ -684,7 +684,7 @@ arguments are
 
 function|math|acos to be documented
 
-.. _function-_at_math::asin_double_hh_const:
+.. _function-_at_math_c__c_asin_double_hh_const:
 
 .. das:function:: asin(arg0: double const)
 
@@ -699,7 +699,7 @@ arguments are
 
 function|math|asin to be documented
 
-.. _function-_at_math::asin_float:
+.. _function-_at_math_c__c_asin_float:
 
 .. das:function:: asin(arg0: float)
 
@@ -714,7 +714,7 @@ arguments are
 
 function|math|asin to be documented
 
-.. _function-_at_math::asin_float2:
+.. _function-_at_math_c__c_asin_float2:
 
 .. das:function:: asin(arg0: float2)
 
@@ -729,7 +729,7 @@ arguments are
 
 function|math|asin to be documented
 
-.. _function-_at_math::asin_float3:
+.. _function-_at_math_c__c_asin_float3:
 
 .. das:function:: asin(arg0: float3)
 
@@ -744,7 +744,7 @@ arguments are
 
 function|math|asin to be documented
 
-.. _function-_at_math::asin_float4:
+.. _function-_at_math_c__c_asin_float4:
 
 .. das:function:: asin(arg0: float4)
 
@@ -759,7 +759,7 @@ arguments are
 
 function|math|asin to be documented
 
-.. _function-_at_math::atan_double_hh_const:
+.. _function-_at_math_c__c_atan_double_hh_const:
 
 .. das:function:: atan(arg0: double const)
 
@@ -774,7 +774,7 @@ arguments are
 
 function|math|atan to be documented
 
-.. _function-_at_math::atan_float:
+.. _function-_at_math_c__c_atan_float:
 
 .. das:function:: atan(arg0: float)
 
@@ -789,7 +789,7 @@ arguments are
 
 function|math|atan to be documented
 
-.. _function-_at_math::atan_float2:
+.. _function-_at_math_c__c_atan_float2:
 
 .. das:function:: atan(arg0: float2)
 
@@ -804,7 +804,7 @@ arguments are
 
 function|math|atan to be documented
 
-.. _function-_at_math::atan_float3:
+.. _function-_at_math_c__c_atan_float3:
 
 .. das:function:: atan(arg0: float3)
 
@@ -819,7 +819,7 @@ arguments are
 
 function|math|atan to be documented
 
-.. _function-_at_math::atan_float4:
+.. _function-_at_math_c__c_atan_float4:
 
 .. das:function:: atan(arg0: float4)
 
@@ -834,7 +834,7 @@ arguments are
 
 function|math|atan to be documented
 
-.. _function-_at_math::atan2_double_hh_const_double_hh_const:
+.. _function-_at_math_c__c_atan2_double_hh_const_double_hh_const:
 
 .. das:function:: atan2(arg0: double const; arg1: double const)
 
@@ -851,7 +851,7 @@ arguments are
 
 function|math|atan2 to be documented
 
-.. _function-_at_math::atan2_float_float:
+.. _function-_at_math_c__c_atan2_float_float:
 
 .. das:function:: atan2(arg0: float; arg1: float)
 
@@ -868,7 +868,7 @@ arguments are
 
 function|math|atan2 to be documented
 
-.. _function-_at_math::atan2_float2_float2:
+.. _function-_at_math_c__c_atan2_float2_float2:
 
 .. das:function:: atan2(arg0: float2; arg1: float2)
 
@@ -885,7 +885,7 @@ arguments are
 
 function|math|atan2 to be documented
 
-.. _function-_at_math::atan2_float3_float3:
+.. _function-_at_math_c__c_atan2_float3_float3:
 
 .. das:function:: atan2(arg0: float3; arg1: float3)
 
@@ -902,7 +902,7 @@ arguments are
 
 function|math|atan2 to be documented
 
-.. _function-_at_math::atan2_float4_float4:
+.. _function-_at_math_c__c_atan2_float4_float4:
 
 .. das:function:: atan2(arg0: float4; arg1: float4)
 
@@ -919,7 +919,7 @@ arguments are
 
 function|math|atan2 to be documented
 
-.. _function-_at_math::ceil_float:
+.. _function-_at_math_c__c_ceil_float:
 
 .. das:function:: ceil(arg0: float)
 
@@ -934,7 +934,7 @@ arguments are
 
 function|math|ceil to be documented
 
-.. _function-_at_math::ceil_float2:
+.. _function-_at_math_c__c_ceil_float2:
 
 .. das:function:: ceil(arg0: float2)
 
@@ -949,7 +949,7 @@ arguments are
 
 function|math|ceil to be documented
 
-.. _function-_at_math::ceil_float3:
+.. _function-_at_math_c__c_ceil_float3:
 
 .. das:function:: ceil(arg0: float3)
 
@@ -964,7 +964,7 @@ arguments are
 
 function|math|ceil to be documented
 
-.. _function-_at_math::ceil_float4:
+.. _function-_at_math_c__c_ceil_float4:
 
 .. das:function:: ceil(arg0: float4)
 
@@ -979,7 +979,7 @@ arguments are
 
 function|math|ceil to be documented
 
-.. _function-_at_math::cos_double_hh_const:
+.. _function-_at_math_c__c_cos_double_hh_const:
 
 .. das:function:: cos(arg0: double const)
 
@@ -994,7 +994,7 @@ arguments are
 
 function|math|cos to be documented
 
-.. _function-_at_math::cos_float:
+.. _function-_at_math_c__c_cos_float:
 
 .. das:function:: cos(arg0: float)
 
@@ -1009,7 +1009,7 @@ arguments are
 
 function|math|cos to be documented
 
-.. _function-_at_math::cos_float2:
+.. _function-_at_math_c__c_cos_float2:
 
 .. das:function:: cos(arg0: float2)
 
@@ -1024,7 +1024,7 @@ arguments are
 
 function|math|cos to be documented
 
-.. _function-_at_math::cos_float3:
+.. _function-_at_math_c__c_cos_float3:
 
 .. das:function:: cos(arg0: float3)
 
@@ -1039,7 +1039,7 @@ arguments are
 
 function|math|cos to be documented
 
-.. _function-_at_math::cos_float4:
+.. _function-_at_math_c__c_cos_float4:
 
 .. das:function:: cos(arg0: float4)
 
@@ -1054,7 +1054,7 @@ arguments are
 
 function|math|cos to be documented
 
-.. _function-_at_math::exp_double_hh_const:
+.. _function-_at_math_c__c_exp_double_hh_const:
 
 .. das:function:: exp(arg0: double const)
 
@@ -1069,7 +1069,7 @@ arguments are
 
 function|math|exp to be documented
 
-.. _function-_at_math::exp_float:
+.. _function-_at_math_c__c_exp_float:
 
 .. das:function:: exp(arg0: float)
 
@@ -1084,7 +1084,7 @@ arguments are
 
 function|math|exp to be documented
 
-.. _function-_at_math::exp_float2:
+.. _function-_at_math_c__c_exp_float2:
 
 .. das:function:: exp(arg0: float2)
 
@@ -1099,7 +1099,7 @@ arguments are
 
 function|math|exp to be documented
 
-.. _function-_at_math::exp_float3:
+.. _function-_at_math_c__c_exp_float3:
 
 .. das:function:: exp(arg0: float3)
 
@@ -1114,7 +1114,7 @@ arguments are
 
 function|math|exp to be documented
 
-.. _function-_at_math::exp_float4:
+.. _function-_at_math_c__c_exp_float4:
 
 .. das:function:: exp(arg0: float4)
 
@@ -1129,7 +1129,7 @@ arguments are
 
 function|math|exp to be documented
 
-.. _function-_at_math::exp2_double_hh_const:
+.. _function-_at_math_c__c_exp2_double_hh_const:
 
 .. das:function:: exp2(arg0: double const)
 
@@ -1144,7 +1144,7 @@ arguments are
 
 function|math|exp2 to be documented
 
-.. _function-_at_math::exp2_float:
+.. _function-_at_math_c__c_exp2_float:
 
 .. das:function:: exp2(arg0: float)
 
@@ -1159,7 +1159,7 @@ arguments are
 
 function|math|exp2 to be documented
 
-.. _function-_at_math::exp2_float2:
+.. _function-_at_math_c__c_exp2_float2:
 
 .. das:function:: exp2(arg0: float2)
 
@@ -1174,7 +1174,7 @@ arguments are
 
 function|math|exp2 to be documented
 
-.. _function-_at_math::exp2_float3:
+.. _function-_at_math_c__c_exp2_float3:
 
 .. das:function:: exp2(arg0: float3)
 
@@ -1189,7 +1189,7 @@ arguments are
 
 function|math|exp2 to be documented
 
-.. _function-_at_math::exp2_float4:
+.. _function-_at_math_c__c_exp2_float4:
 
 .. das:function:: exp2(arg0: float4)
 
@@ -1204,7 +1204,7 @@ arguments are
 
 function|math|exp2 to be documented
 
-.. _function-_at_math::floor_float:
+.. _function-_at_math_c__c_floor_float:
 
 .. das:function:: floor(arg0: float)
 
@@ -1219,7 +1219,7 @@ arguments are
 
 function|math|floor to be documented
 
-.. _function-_at_math::floor_float2:
+.. _function-_at_math_c__c_floor_float2:
 
 .. das:function:: floor(arg0: float2)
 
@@ -1234,7 +1234,7 @@ arguments are
 
 function|math|floor to be documented
 
-.. _function-_at_math::floor_float3:
+.. _function-_at_math_c__c_floor_float3:
 
 .. das:function:: floor(arg0: float3)
 
@@ -1249,7 +1249,7 @@ arguments are
 
 function|math|floor to be documented
 
-.. _function-_at_math::floor_float4:
+.. _function-_at_math_c__c_floor_float4:
 
 .. das:function:: floor(arg0: float4)
 
@@ -1264,7 +1264,7 @@ arguments are
 
 function|math|floor to be documented
 
-.. _function-_at_math::log_double_hh_const:
+.. _function-_at_math_c__c_log_double_hh_const:
 
 .. das:function:: log(arg0: double const)
 
@@ -1279,7 +1279,7 @@ arguments are
 
 function|math|log to be documented
 
-.. _function-_at_math::log_float:
+.. _function-_at_math_c__c_log_float:
 
 .. das:function:: log(arg0: float)
 
@@ -1294,7 +1294,7 @@ arguments are
 
 function|math|log to be documented
 
-.. _function-_at_math::log_float2:
+.. _function-_at_math_c__c_log_float2:
 
 .. das:function:: log(arg0: float2)
 
@@ -1309,7 +1309,7 @@ arguments are
 
 function|math|log to be documented
 
-.. _function-_at_math::log_float3:
+.. _function-_at_math_c__c_log_float3:
 
 .. das:function:: log(arg0: float3)
 
@@ -1324,7 +1324,7 @@ arguments are
 
 function|math|log to be documented
 
-.. _function-_at_math::log_float4:
+.. _function-_at_math_c__c_log_float4:
 
 .. das:function:: log(arg0: float4)
 
@@ -1339,7 +1339,7 @@ arguments are
 
 function|math|log to be documented
 
-.. _function-_at_math::log2_double_hh_const:
+.. _function-_at_math_c__c_log2_double_hh_const:
 
 .. das:function:: log2(arg0: double const)
 
@@ -1354,7 +1354,7 @@ arguments are
 
 function|math|log2 to be documented
 
-.. _function-_at_math::log2_float:
+.. _function-_at_math_c__c_log2_float:
 
 .. das:function:: log2(arg0: float)
 
@@ -1369,7 +1369,7 @@ arguments are
 
 function|math|log2 to be documented
 
-.. _function-_at_math::log2_float2:
+.. _function-_at_math_c__c_log2_float2:
 
 .. das:function:: log2(arg0: float2)
 
@@ -1384,7 +1384,7 @@ arguments are
 
 function|math|log2 to be documented
 
-.. _function-_at_math::log2_float3:
+.. _function-_at_math_c__c_log2_float3:
 
 .. das:function:: log2(arg0: float3)
 
@@ -1399,7 +1399,7 @@ arguments are
 
 function|math|log2 to be documented
 
-.. _function-_at_math::log2_float4:
+.. _function-_at_math_c__c_log2_float4:
 
 .. das:function:: log2(arg0: float4)
 
@@ -1414,7 +1414,7 @@ arguments are
 
 function|math|log2 to be documented
 
-.. _function-_at_math::pow_double_hh_const_double_hh_const:
+.. _function-_at_math_c__c_pow_double_hh_const_double_hh_const:
 
 .. das:function:: pow(arg0: double const; arg1: double const)
 
@@ -1431,7 +1431,7 @@ arguments are
 
 function|math|pow to be documented
 
-.. _function-_at_math::pow_float_float:
+.. _function-_at_math_c__c_pow_float_float:
 
 .. das:function:: pow(arg0: float; arg1: float)
 
@@ -1448,7 +1448,7 @@ arguments are
 
 function|math|pow to be documented
 
-.. _function-_at_math::pow_float2_float2:
+.. _function-_at_math_c__c_pow_float2_float2:
 
 .. das:function:: pow(arg0: float2; arg1: float2)
 
@@ -1465,7 +1465,7 @@ arguments are
 
 function|math|pow to be documented
 
-.. _function-_at_math::pow_float3_float3:
+.. _function-_at_math_c__c_pow_float3_float3:
 
 .. das:function:: pow(arg0: float3; arg1: float3)
 
@@ -1482,7 +1482,7 @@ arguments are
 
 function|math|pow to be documented
 
-.. _function-_at_math::pow_float4_float4:
+.. _function-_at_math_c__c_pow_float4_float4:
 
 .. das:function:: pow(arg0: float4; arg1: float4)
 
@@ -1499,7 +1499,7 @@ arguments are
 
 function|math|pow to be documented
 
-.. _function-_at_math::rcp_double_hh_const:
+.. _function-_at_math_c__c_rcp_double_hh_const:
 
 .. das:function:: rcp(arg0: double const)
 
@@ -1514,7 +1514,7 @@ arguments are
 
 function|math|rcp to be documented
 
-.. _function-_at_math::rcp_float:
+.. _function-_at_math_c__c_rcp_float:
 
 .. das:function:: rcp(arg0: float)
 
@@ -1529,7 +1529,7 @@ arguments are
 
 function|math|rcp to be documented
 
-.. _function-_at_math::rcp_float2:
+.. _function-_at_math_c__c_rcp_float2:
 
 .. das:function:: rcp(arg0: float2)
 
@@ -1544,7 +1544,7 @@ arguments are
 
 function|math|rcp to be documented
 
-.. _function-_at_math::rcp_float3:
+.. _function-_at_math_c__c_rcp_float3:
 
 .. das:function:: rcp(arg0: float3)
 
@@ -1559,7 +1559,7 @@ arguments are
 
 function|math|rcp to be documented
 
-.. _function-_at_math::rcp_float4:
+.. _function-_at_math_c__c_rcp_float4:
 
 .. das:function:: rcp(arg0: float4)
 
@@ -1574,7 +1574,7 @@ arguments are
 
 function|math|rcp to be documented
 
-.. _function-_at_math::saturate_float:
+.. _function-_at_math_c__c_saturate_float:
 
 .. das:function:: saturate(arg0: float)
 
@@ -1589,7 +1589,7 @@ arguments are
 
 function|math|saturate to be documented
 
-.. _function-_at_math::saturate_float2:
+.. _function-_at_math_c__c_saturate_float2:
 
 .. das:function:: saturate(arg0: float2)
 
@@ -1604,7 +1604,7 @@ arguments are
 
 function|math|saturate to be documented
 
-.. _function-_at_math::saturate_float3:
+.. _function-_at_math_c__c_saturate_float3:
 
 .. das:function:: saturate(arg0: float3)
 
@@ -1619,7 +1619,7 @@ arguments are
 
 function|math|saturate to be documented
 
-.. _function-_at_math::saturate_float4:
+.. _function-_at_math_c__c_saturate_float4:
 
 .. das:function:: saturate(arg0: float4)
 
@@ -1634,7 +1634,7 @@ arguments are
 
 function|math|saturate to be documented
 
-.. _function-_at_math::sin_double_hh_const:
+.. _function-_at_math_c__c_sin_double_hh_const:
 
 .. das:function:: sin(arg0: double const)
 
@@ -1649,7 +1649,7 @@ arguments are
 
 function|math|sin to be documented
 
-.. _function-_at_math::sin_float:
+.. _function-_at_math_c__c_sin_float:
 
 .. das:function:: sin(arg0: float)
 
@@ -1664,7 +1664,7 @@ arguments are
 
 function|math|sin to be documented
 
-.. _function-_at_math::sin_float2:
+.. _function-_at_math_c__c_sin_float2:
 
 .. das:function:: sin(arg0: float2)
 
@@ -1679,7 +1679,7 @@ arguments are
 
 function|math|sin to be documented
 
-.. _function-_at_math::sin_float3:
+.. _function-_at_math_c__c_sin_float3:
 
 .. das:function:: sin(arg0: float3)
 
@@ -1694,7 +1694,7 @@ arguments are
 
 function|math|sin to be documented
 
-.. _function-_at_math::sin_float4:
+.. _function-_at_math_c__c_sin_float4:
 
 .. das:function:: sin(arg0: float4)
 
@@ -1709,7 +1709,7 @@ arguments are
 
 function|math|sin to be documented
 
-.. _function-_at_math::sqrt_double_hh_const:
+.. _function-_at_math_c__c_sqrt_double_hh_const:
 
 .. das:function:: sqrt(arg0: double const)
 
@@ -1724,7 +1724,7 @@ arguments are
 
 function|math|sqrt to be documented
 
-.. _function-_at_math::sqrt_float:
+.. _function-_at_math_c__c_sqrt_float:
 
 .. das:function:: sqrt(arg0: float)
 
@@ -1739,7 +1739,7 @@ arguments are
 
 function|math|sqrt to be documented
 
-.. _function-_at_math::sqrt_float2:
+.. _function-_at_math_c__c_sqrt_float2:
 
 .. das:function:: sqrt(arg0: float2)
 
@@ -1754,7 +1754,7 @@ arguments are
 
 function|math|sqrt to be documented
 
-.. _function-_at_math::sqrt_float3:
+.. _function-_at_math_c__c_sqrt_float3:
 
 .. das:function:: sqrt(arg0: float3)
 
@@ -1769,7 +1769,7 @@ arguments are
 
 function|math|sqrt to be documented
 
-.. _function-_at_math::sqrt_float4:
+.. _function-_at_math_c__c_sqrt_float4:
 
 .. das:function:: sqrt(arg0: float4)
 
@@ -1784,7 +1784,7 @@ arguments are
 
 function|math|sqrt to be documented
 
-.. _function-_at_math::tan_double_hh_const:
+.. _function-_at_math_c__c_tan_double_hh_const:
 
 .. das:function:: tan(arg0: double const)
 
@@ -1799,7 +1799,7 @@ arguments are
 
 function|math|tan to be documented
 
-.. _function-_at_math::tan_float:
+.. _function-_at_math_c__c_tan_float:
 
 .. das:function:: tan(arg0: float)
 
@@ -1814,7 +1814,7 @@ arguments are
 
 function|math|tan to be documented
 
-.. _function-_at_math::tan_float2:
+.. _function-_at_math_c__c_tan_float2:
 
 .. das:function:: tan(arg0: float2)
 
@@ -1829,7 +1829,7 @@ arguments are
 
 function|math|tan to be documented
 
-.. _function-_at_math::tan_float3:
+.. _function-_at_math_c__c_tan_float3:
 
 .. das:function:: tan(arg0: float3)
 
@@ -1844,7 +1844,7 @@ arguments are
 
 function|math|tan to be documented
 
-.. _function-_at_math::tan_float4:
+.. _function-_at_math_c__c_tan_float4:
 
 .. das:function:: tan(arg0: float4)
 
@@ -1863,32 +1863,32 @@ function|math|tan to be documented
 float* only
 +++++++++++
 
-  *  :ref:`atan2_est (arg0:float;arg1:float) : float <function-_at_math::atan2_est_float_float>` 
-  *  :ref:`atan2_est (arg0:float2;arg1:float2) : float2 <function-_at_math::atan2_est_float2_float2>` 
-  *  :ref:`atan2_est (arg0:float3;arg1:float3) : float3 <function-_at_math::atan2_est_float3_float3>` 
-  *  :ref:`atan2_est (arg0:float4;arg1:float4) : float4 <function-_at_math::atan2_est_float4_float4>` 
-  *  :ref:`ceili (arg0:float) : int <function-_at_math::ceili_float>` 
-  *  :ref:`ceili (arg0:float2) : int2 <function-_at_math::ceili_float2>` 
-  *  :ref:`ceili (arg0:float3) : int3 <function-_at_math::ceili_float3>` 
-  *  :ref:`ceili (arg0:float4) : int4 <function-_at_math::ceili_float4>` 
-  *  :ref:`floori (arg0:float) : int <function-_at_math::floori_float>` 
-  *  :ref:`floori (arg0:float2) : int2 <function-_at_math::floori_float2>` 
-  *  :ref:`floori (arg0:float3) : int3 <function-_at_math::floori_float3>` 
-  *  :ref:`floori (arg0:float4) : int4 <function-_at_math::floori_float4>` 
-  *  :ref:`rcp_est (arg0:float) : float <function-_at_math::rcp_est_float>` 
-  *  :ref:`rcp_est (arg0:float2) : float2 <function-_at_math::rcp_est_float2>` 
-  *  :ref:`rcp_est (arg0:float3) : float3 <function-_at_math::rcp_est_float3>` 
-  *  :ref:`rcp_est (arg0:float4) : float4 <function-_at_math::rcp_est_float4>` 
-  *  :ref:`roundi (arg0:float) : int <function-_at_math::roundi_float>` 
-  *  :ref:`roundi (arg0:float2) : int2 <function-_at_math::roundi_float2>` 
-  *  :ref:`roundi (arg0:float3) : int3 <function-_at_math::roundi_float3>` 
-  *  :ref:`roundi (arg0:float4) : int4 <function-_at_math::roundi_float4>` 
-  *  :ref:`trunci (arg0:float) : int <function-_at_math::trunci_float>` 
-  *  :ref:`trunci (arg0:float2) : int2 <function-_at_math::trunci_float2>` 
-  *  :ref:`trunci (arg0:float3) : int3 <function-_at_math::trunci_float3>` 
-  *  :ref:`trunci (arg0:float4) : int4 <function-_at_math::trunci_float4>` 
+  *  :ref:`atan2_est (arg0:float;arg1:float) : float <function-_at_math_c__c_atan2_est_float_float>` 
+  *  :ref:`atan2_est (arg0:float2;arg1:float2) : float2 <function-_at_math_c__c_atan2_est_float2_float2>` 
+  *  :ref:`atan2_est (arg0:float3;arg1:float3) : float3 <function-_at_math_c__c_atan2_est_float3_float3>` 
+  *  :ref:`atan2_est (arg0:float4;arg1:float4) : float4 <function-_at_math_c__c_atan2_est_float4_float4>` 
+  *  :ref:`ceili (arg0:float) : int <function-_at_math_c__c_ceili_float>` 
+  *  :ref:`ceili (arg0:float2) : int2 <function-_at_math_c__c_ceili_float2>` 
+  *  :ref:`ceili (arg0:float3) : int3 <function-_at_math_c__c_ceili_float3>` 
+  *  :ref:`ceili (arg0:float4) : int4 <function-_at_math_c__c_ceili_float4>` 
+  *  :ref:`floori (arg0:float) : int <function-_at_math_c__c_floori_float>` 
+  *  :ref:`floori (arg0:float2) : int2 <function-_at_math_c__c_floori_float2>` 
+  *  :ref:`floori (arg0:float3) : int3 <function-_at_math_c__c_floori_float3>` 
+  *  :ref:`floori (arg0:float4) : int4 <function-_at_math_c__c_floori_float4>` 
+  *  :ref:`rcp_est (arg0:float) : float <function-_at_math_c__c_rcp_est_float>` 
+  *  :ref:`rcp_est (arg0:float2) : float2 <function-_at_math_c__c_rcp_est_float2>` 
+  *  :ref:`rcp_est (arg0:float3) : float3 <function-_at_math_c__c_rcp_est_float3>` 
+  *  :ref:`rcp_est (arg0:float4) : float4 <function-_at_math_c__c_rcp_est_float4>` 
+  *  :ref:`roundi (arg0:float) : int <function-_at_math_c__c_roundi_float>` 
+  *  :ref:`roundi (arg0:float2) : int2 <function-_at_math_c__c_roundi_float2>` 
+  *  :ref:`roundi (arg0:float3) : int3 <function-_at_math_c__c_roundi_float3>` 
+  *  :ref:`roundi (arg0:float4) : int4 <function-_at_math_c__c_roundi_float4>` 
+  *  :ref:`trunci (arg0:float) : int <function-_at_math_c__c_trunci_float>` 
+  *  :ref:`trunci (arg0:float2) : int2 <function-_at_math_c__c_trunci_float2>` 
+  *  :ref:`trunci (arg0:float3) : int3 <function-_at_math_c__c_trunci_float3>` 
+  *  :ref:`trunci (arg0:float4) : int4 <function-_at_math_c__c_trunci_float4>` 
 
-.. _function-_at_math::atan2_est_float_float:
+.. _function-_at_math_c__c_atan2_est_float_float:
 
 .. das:function:: atan2_est(arg0: float; arg1: float)
 
@@ -1905,7 +1905,7 @@ arguments are
 
 function|math|atan2_est to be documented
 
-.. _function-_at_math::atan2_est_float2_float2:
+.. _function-_at_math_c__c_atan2_est_float2_float2:
 
 .. das:function:: atan2_est(arg0: float2; arg1: float2)
 
@@ -1922,7 +1922,7 @@ arguments are
 
 function|math|atan2_est to be documented
 
-.. _function-_at_math::atan2_est_float3_float3:
+.. _function-_at_math_c__c_atan2_est_float3_float3:
 
 .. das:function:: atan2_est(arg0: float3; arg1: float3)
 
@@ -1939,7 +1939,7 @@ arguments are
 
 function|math|atan2_est to be documented
 
-.. _function-_at_math::atan2_est_float4_float4:
+.. _function-_at_math_c__c_atan2_est_float4_float4:
 
 .. das:function:: atan2_est(arg0: float4; arg1: float4)
 
@@ -1956,7 +1956,7 @@ arguments are
 
 function|math|atan2_est to be documented
 
-.. _function-_at_math::ceili_float:
+.. _function-_at_math_c__c_ceili_float:
 
 .. das:function:: ceili(arg0: float)
 
@@ -1971,7 +1971,7 @@ arguments are
 
 function|math|ceili to be documented
 
-.. _function-_at_math::ceili_float2:
+.. _function-_at_math_c__c_ceili_float2:
 
 .. das:function:: ceili(arg0: float2)
 
@@ -1986,7 +1986,7 @@ arguments are
 
 function|math|ceili to be documented
 
-.. _function-_at_math::ceili_float3:
+.. _function-_at_math_c__c_ceili_float3:
 
 .. das:function:: ceili(arg0: float3)
 
@@ -2001,7 +2001,7 @@ arguments are
 
 function|math|ceili to be documented
 
-.. _function-_at_math::ceili_float4:
+.. _function-_at_math_c__c_ceili_float4:
 
 .. das:function:: ceili(arg0: float4)
 
@@ -2016,7 +2016,7 @@ arguments are
 
 function|math|ceili to be documented
 
-.. _function-_at_math::floori_float:
+.. _function-_at_math_c__c_floori_float:
 
 .. das:function:: floori(arg0: float)
 
@@ -2031,7 +2031,7 @@ arguments are
 
 function|math|floori to be documented
 
-.. _function-_at_math::floori_float2:
+.. _function-_at_math_c__c_floori_float2:
 
 .. das:function:: floori(arg0: float2)
 
@@ -2046,7 +2046,7 @@ arguments are
 
 function|math|floori to be documented
 
-.. _function-_at_math::floori_float3:
+.. _function-_at_math_c__c_floori_float3:
 
 .. das:function:: floori(arg0: float3)
 
@@ -2061,7 +2061,7 @@ arguments are
 
 function|math|floori to be documented
 
-.. _function-_at_math::floori_float4:
+.. _function-_at_math_c__c_floori_float4:
 
 .. das:function:: floori(arg0: float4)
 
@@ -2076,7 +2076,7 @@ arguments are
 
 function|math|floori to be documented
 
-.. _function-_at_math::rcp_est_float:
+.. _function-_at_math_c__c_rcp_est_float:
 
 .. das:function:: rcp_est(arg0: float)
 
@@ -2091,7 +2091,7 @@ arguments are
 
 function|math|rcp_est to be documented
 
-.. _function-_at_math::rcp_est_float2:
+.. _function-_at_math_c__c_rcp_est_float2:
 
 .. das:function:: rcp_est(arg0: float2)
 
@@ -2106,7 +2106,7 @@ arguments are
 
 function|math|rcp_est to be documented
 
-.. _function-_at_math::rcp_est_float3:
+.. _function-_at_math_c__c_rcp_est_float3:
 
 .. das:function:: rcp_est(arg0: float3)
 
@@ -2121,7 +2121,7 @@ arguments are
 
 function|math|rcp_est to be documented
 
-.. _function-_at_math::rcp_est_float4:
+.. _function-_at_math_c__c_rcp_est_float4:
 
 .. das:function:: rcp_est(arg0: float4)
 
@@ -2136,7 +2136,7 @@ arguments are
 
 function|math|rcp_est to be documented
 
-.. _function-_at_math::roundi_float:
+.. _function-_at_math_c__c_roundi_float:
 
 .. das:function:: roundi(arg0: float)
 
@@ -2151,7 +2151,7 @@ arguments are
 
 function|math|roundi to be documented
 
-.. _function-_at_math::roundi_float2:
+.. _function-_at_math_c__c_roundi_float2:
 
 .. das:function:: roundi(arg0: float2)
 
@@ -2166,7 +2166,7 @@ arguments are
 
 function|math|roundi to be documented
 
-.. _function-_at_math::roundi_float3:
+.. _function-_at_math_c__c_roundi_float3:
 
 .. das:function:: roundi(arg0: float3)
 
@@ -2181,7 +2181,7 @@ arguments are
 
 function|math|roundi to be documented
 
-.. _function-_at_math::roundi_float4:
+.. _function-_at_math_c__c_roundi_float4:
 
 .. das:function:: roundi(arg0: float4)
 
@@ -2196,7 +2196,7 @@ arguments are
 
 function|math|roundi to be documented
 
-.. _function-_at_math::trunci_float:
+.. _function-_at_math_c__c_trunci_float:
 
 .. das:function:: trunci(arg0: float)
 
@@ -2211,7 +2211,7 @@ arguments are
 
 function|math|trunci to be documented
 
-.. _function-_at_math::trunci_float2:
+.. _function-_at_math_c__c_trunci_float2:
 
 .. das:function:: trunci(arg0: float2)
 
@@ -2226,7 +2226,7 @@ arguments are
 
 function|math|trunci to be documented
 
-.. _function-_at_math::trunci_float3:
+.. _function-_at_math_c__c_trunci_float3:
 
 .. das:function:: trunci(arg0: float3)
 
@@ -2241,7 +2241,7 @@ arguments are
 
 function|math|trunci to be documented
 
-.. _function-_at_math::trunci_float4:
+.. _function-_at_math_c__c_trunci_float4:
 
 .. das:function:: trunci(arg0: float4)
 
@@ -2260,12 +2260,12 @@ function|math|trunci to be documented
 Noise functions
 +++++++++++++++
 
-  *  :ref:`uint32_hash (arg0:uint const) : uint <function-_at_math::uint32_hash_uint_hh_const>` 
-  *  :ref:`uint_noise_1D (arg0:int const;arg1:uint const) : uint <function-_at_math::uint_noise_1D_int_hh_const_uint_hh_const>` 
-  *  :ref:`uint_noise_2D (arg0:int2 const;arg1:uint const) : uint <function-_at_math::uint_noise_2D_int2_hh_const_uint_hh_const>` 
-  *  :ref:`uint_noise_3D (arg0:int3 const;arg1:uint const) : uint <function-_at_math::uint_noise_3D_int3_hh_const_uint_hh_const>` 
+  *  :ref:`uint32_hash (arg0:uint const) : uint <function-_at_math_c__c_uint32_hash_uint_hh_const>` 
+  *  :ref:`uint_noise_1D (arg0:int const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_1D_int_hh_const_uint_hh_const>` 
+  *  :ref:`uint_noise_2D (arg0:int2 const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_2D_int2_hh_const_uint_hh_const>` 
+  *  :ref:`uint_noise_3D (arg0:int3 const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_3D_int3_hh_const_uint_hh_const>` 
 
-.. _function-_at_math::uint32_hash_uint_hh_const:
+.. _function-_at_math_c__c_uint32_hash_uint_hh_const:
 
 .. das:function:: uint32_hash(arg0: uint const)
 
@@ -2280,7 +2280,7 @@ arguments are
 
 function|math|uint32_hash to be documented
 
-.. _function-_at_math::uint_noise_1D_int_hh_const_uint_hh_const:
+.. _function-_at_math_c__c_uint_noise_1D_int_hh_const_uint_hh_const:
 
 .. das:function:: uint_noise_1D(arg0: int const; arg1: uint const)
 
@@ -2297,7 +2297,7 @@ arguments are
 
 function|math|uint_noise_1D to be documented
 
-.. _function-_at_math::uint_noise_2D_int2_hh_const_uint_hh_const:
+.. _function-_at_math_c__c_uint_noise_2D_int2_hh_const_uint_hh_const:
 
 .. das:function:: uint_noise_2D(arg0: int2 const; arg1: uint const)
 
@@ -2314,7 +2314,7 @@ arguments are
 
 function|math|uint_noise_2D to be documented
 
-.. _function-_at_math::uint_noise_3D_int3_hh_const_uint_hh_const:
+.. _function-_at_math_c__c_uint_noise_3D_int3_hh_const_uint_hh_const:
 
 .. das:function:: uint_noise_3D(arg0: int3 const; arg1: uint const)
 
@@ -2335,7 +2335,7 @@ function|math|uint_noise_3D to be documented
 Uncategorized
 +++++++++++++
 
-.. _function-_at_math::clamp_float_float_float:
+.. _function-_at_math_c__c_clamp_float_float_float:
 
 .. das:function:: clamp(arg0: float; arg1: float; arg2: float)
 
@@ -2354,7 +2354,7 @@ arguments are
 
 function|math|clamp to be documented
 
-.. _function-_at_math::clamp_float2_float2_float2:
+.. _function-_at_math_c__c_clamp_float2_float2_float2:
 
 .. das:function:: clamp(arg0: float2; arg1: float2; arg2: float2)
 
@@ -2373,7 +2373,7 @@ arguments are
 
 function|math|clamp to be documented
 
-.. _function-_at_math::clamp_float3_float3_float3:
+.. _function-_at_math_c__c_clamp_float3_float3_float3:
 
 .. das:function:: clamp(arg0: float3; arg1: float3; arg2: float3)
 
@@ -2392,7 +2392,7 @@ arguments are
 
 function|math|clamp to be documented
 
-.. _function-_at_math::clamp_float4_float4_float4:
+.. _function-_at_math_c__c_clamp_float4_float4_float4:
 
 .. das:function:: clamp(arg0: float4; arg1: float4; arg2: float4)
 
@@ -2411,7 +2411,7 @@ arguments are
 
 function|math|clamp to be documented
 
-.. _function-_at_math::cross_float3_hh_const_float3_hh_const:
+.. _function-_at_math_c__c_cross_float3_hh_const_float3_hh_const:
 
 .. das:function:: cross(arg0: float3 const; arg1: float3 const)
 
@@ -2428,7 +2428,7 @@ arguments are
 
 function|math|cross to be documented
 
-.. _function-_at_math::distance_float3_hh_const_float3_hh_const:
+.. _function-_at_math_c__c_distance_float3_hh_const_float3_hh_const:
 
 .. das:function:: distance(arg0: float3 const; arg1: float3 const)
 
@@ -2445,7 +2445,7 @@ arguments are
 
 function|math|distance to be documented
 
-.. _function-_at_math::distance_sq_float3_hh_const_float3_hh_const:
+.. _function-_at_math_c__c_distance_sq_float3_hh_const_float3_hh_const:
 
 .. das:function:: distance_sq(arg0: float3 const; arg1: float3 const)
 
@@ -2462,7 +2462,7 @@ arguments are
 
 function|math|distance_sq to be documented
 
-.. _function-_at_math::dot_float2_hh_const_float2_hh_const:
+.. _function-_at_math_c__c_dot_float2_hh_const_float2_hh_const:
 
 .. das:function:: dot(arg0: float2 const; arg1: float2 const)
 
@@ -2479,7 +2479,7 @@ arguments are
 
 function|math|dot to be documented
 
-.. _function-_at_math::dot_float3_hh_const_float3_hh_const:
+.. _function-_at_math_c__c_dot_float3_hh_const_float3_hh_const:
 
 .. das:function:: dot(arg0: float3 const; arg1: float3 const)
 
@@ -2496,7 +2496,7 @@ arguments are
 
 function|math|dot to be documented
 
-.. _function-_at_math::dot_float4_hh_const_float4_hh_const:
+.. _function-_at_math_c__c_dot_float4_hh_const_float4_hh_const:
 
 .. das:function:: dot(arg0: float4 const; arg1: float4 const)
 
@@ -2513,7 +2513,7 @@ arguments are
 
 function|math|dot to be documented
 
-.. _function-_at_math::fast_normalize_float2_hh_const:
+.. _function-_at_math_c__c_fast_normalize_float2_hh_const:
 
 .. das:function:: fast_normalize(arg0: float2 const)
 
@@ -2528,7 +2528,7 @@ arguments are
 
 function|math|fast_normalize to be documented
 
-.. _function-_at_math::fast_normalize_float3_hh_const:
+.. _function-_at_math_c__c_fast_normalize_float3_hh_const:
 
 .. das:function:: fast_normalize(arg0: float3 const)
 
@@ -2543,7 +2543,7 @@ arguments are
 
 function|math|fast_normalize to be documented
 
-.. _function-_at_math::fast_normalize_float4_hh_const:
+.. _function-_at_math_c__c_fast_normalize_float4_hh_const:
 
 .. das:function:: fast_normalize(arg0: float4 const)
 
@@ -2558,7 +2558,7 @@ arguments are
 
 function|math|fast_normalize to be documented
 
-.. _function-_at_math::inv_distance_float3_hh_const_float3_hh_const:
+.. _function-_at_math_c__c_inv_distance_float3_hh_const_float3_hh_const:
 
 .. das:function:: inv_distance(arg0: float3 const; arg1: float3 const)
 
@@ -2575,7 +2575,7 @@ arguments are
 
 function|math|inv_distance to be documented
 
-.. _function-_at_math::inv_distance_sq_float3_hh_const_float3_hh_const:
+.. _function-_at_math_c__c_inv_distance_sq_float3_hh_const_float3_hh_const:
 
 .. das:function:: inv_distance_sq(arg0: float3 const; arg1: float3 const)
 
@@ -2592,7 +2592,7 @@ arguments are
 
 function|math|inv_distance_sq to be documented
 
-.. _function-_at_math::inv_length_float2_hh_const:
+.. _function-_at_math_c__c_inv_length_float2_hh_const:
 
 .. das:function:: inv_length(arg0: float2 const)
 
@@ -2607,7 +2607,7 @@ arguments are
 
 function|math|inv_length to be documented
 
-.. _function-_at_math::inv_length_float3_hh_const:
+.. _function-_at_math_c__c_inv_length_float3_hh_const:
 
 .. das:function:: inv_length(arg0: float3 const)
 
@@ -2622,7 +2622,7 @@ arguments are
 
 function|math|inv_length to be documented
 
-.. _function-_at_math::inv_length_float4_hh_const:
+.. _function-_at_math_c__c_inv_length_float4_hh_const:
 
 .. das:function:: inv_length(arg0: float4 const)
 
@@ -2637,7 +2637,7 @@ arguments are
 
 function|math|inv_length to be documented
 
-.. _function-_at_math::inv_length_sq_float2_hh_const:
+.. _function-_at_math_c__c_inv_length_sq_float2_hh_const:
 
 .. das:function:: inv_length_sq(arg0: float2 const)
 
@@ -2652,7 +2652,7 @@ arguments are
 
 function|math|inv_length_sq to be documented
 
-.. _function-_at_math::inv_length_sq_float3_hh_const:
+.. _function-_at_math_c__c_inv_length_sq_float3_hh_const:
 
 .. das:function:: inv_length_sq(arg0: float3 const)
 
@@ -2667,7 +2667,7 @@ arguments are
 
 function|math|inv_length_sq to be documented
 
-.. _function-_at_math::inv_length_sq_float4_hh_const:
+.. _function-_at_math_c__c_inv_length_sq_float4_hh_const:
 
 .. das:function:: inv_length_sq(arg0: float4 const)
 
@@ -2682,7 +2682,7 @@ arguments are
 
 function|math|inv_length_sq to be documented
 
-.. _function-_at_math::length_float2_hh_const:
+.. _function-_at_math_c__c_length_float2_hh_const:
 
 .. das:function:: length(arg0: float2 const)
 
@@ -2697,7 +2697,7 @@ arguments are
 
 function|math|length to be documented
 
-.. _function-_at_math::length_float3_hh_const:
+.. _function-_at_math_c__c_length_float3_hh_const:
 
 .. das:function:: length(arg0: float3 const)
 
@@ -2712,7 +2712,7 @@ arguments are
 
 function|math|length to be documented
 
-.. _function-_at_math::length_float4_hh_const:
+.. _function-_at_math_c__c_length_float4_hh_const:
 
 .. das:function:: length(arg0: float4 const)
 
@@ -2727,7 +2727,7 @@ arguments are
 
 function|math|length to be documented
 
-.. _function-_at_math::length_sq_float2_hh_const:
+.. _function-_at_math_c__c_length_sq_float2_hh_const:
 
 .. das:function:: length_sq(arg0: float2 const)
 
@@ -2742,7 +2742,7 @@ arguments are
 
 function|math|length_sq to be documented
 
-.. _function-_at_math::length_sq_float3_hh_const:
+.. _function-_at_math_c__c_length_sq_float3_hh_const:
 
 .. das:function:: length_sq(arg0: float3 const)
 
@@ -2757,7 +2757,7 @@ arguments are
 
 function|math|length_sq to be documented
 
-.. _function-_at_math::length_sq_float4_hh_const:
+.. _function-_at_math_c__c_length_sq_float4_hh_const:
 
 .. das:function:: length_sq(arg0: float4 const)
 
@@ -2772,7 +2772,7 @@ arguments are
 
 function|math|length_sq to be documented
 
-.. _function-_at_math::lerp_float_float_float:
+.. _function-_at_math_c__c_lerp_float_float_float:
 
 .. das:function:: lerp(arg0: float; arg1: float; arg2: float)
 
@@ -2791,7 +2791,7 @@ arguments are
 
 function|math|lerp to be documented
 
-.. _function-_at_math::lerp_float2_float2_float2:
+.. _function-_at_math_c__c_lerp_float2_float2_float2:
 
 .. das:function:: lerp(arg0: float2; arg1: float2; arg2: float2)
 
@@ -2810,7 +2810,7 @@ arguments are
 
 function|math|lerp to be documented
 
-.. _function-_at_math::lerp_float3_float3_float3:
+.. _function-_at_math_c__c_lerp_float3_float3_float3:
 
 .. das:function:: lerp(arg0: float3; arg1: float3; arg2: float3)
 
@@ -2829,7 +2829,7 @@ arguments are
 
 function|math|lerp to be documented
 
-.. _function-_at_math::lerp_float4_float4_float4:
+.. _function-_at_math_c__c_lerp_float4_float4_float4:
 
 .. das:function:: lerp(arg0: float4; arg1: float4; arg2: float4)
 
@@ -2848,7 +2848,7 @@ arguments are
 
 function|math|lerp to be documented
 
-.. _function-_at_math::mad_float_float_float:
+.. _function-_at_math_c__c_mad_float_float_float:
 
 .. das:function:: mad(arg0: float; arg1: float; arg2: float)
 
@@ -2867,7 +2867,7 @@ arguments are
 
 function|math|mad to be documented
 
-.. _function-_at_math::mad_float2_float_float2:
+.. _function-_at_math_c__c_mad_float2_float_float2:
 
 .. das:function:: mad(arg0: float2; arg1: float; arg2: float2)
 
@@ -2886,7 +2886,7 @@ arguments are
 
 function|math|mad to be documented
 
-.. _function-_at_math::mad_float2_float2_float2:
+.. _function-_at_math_c__c_mad_float2_float2_float2:
 
 .. das:function:: mad(arg0: float2; arg1: float2; arg2: float2)
 
@@ -2905,7 +2905,7 @@ arguments are
 
 function|math|mad to be documented
 
-.. _function-_at_math::mad_float3_float_float3:
+.. _function-_at_math_c__c_mad_float3_float_float3:
 
 .. das:function:: mad(arg0: float3; arg1: float; arg2: float3)
 
@@ -2924,7 +2924,7 @@ arguments are
 
 function|math|mad to be documented
 
-.. _function-_at_math::mad_float3_float3_float3:
+.. _function-_at_math_c__c_mad_float3_float3_float3:
 
 .. das:function:: mad(arg0: float3; arg1: float3; arg2: float3)
 
@@ -2943,7 +2943,7 @@ arguments are
 
 function|math|mad to be documented
 
-.. _function-_at_math::mad_float4_float_float4:
+.. _function-_at_math_c__c_mad_float4_float_float4:
 
 .. das:function:: mad(arg0: float4; arg1: float; arg2: float4)
 
@@ -2962,7 +2962,7 @@ arguments are
 
 function|math|mad to be documented
 
-.. _function-_at_math::mad_float4_float4_float4:
+.. _function-_at_math_c__c_mad_float4_float4_float4:
 
 .. das:function:: mad(arg0: float4; arg1: float4; arg2: float4)
 
@@ -2981,7 +2981,7 @@ arguments are
 
 function|math|mad to be documented
 
-.. _function-_at_math::normalize_float2_hh_const:
+.. _function-_at_math_c__c_normalize_float2_hh_const:
 
 .. das:function:: normalize(arg0: float2 const)
 
@@ -2996,7 +2996,7 @@ arguments are
 
 function|math|normalize to be documented
 
-.. _function-_at_math::normalize_float3_hh_const:
+.. _function-_at_math_c__c_normalize_float3_hh_const:
 
 .. das:function:: normalize(arg0: float3 const)
 
@@ -3011,7 +3011,7 @@ arguments are
 
 function|math|normalize to be documented
 
-.. _function-_at_math::normalize_float4_hh_const:
+.. _function-_at_math_c__c_normalize_float4_hh_const:
 
 .. das:function:: normalize(arg0: float4 const)
 
@@ -3026,7 +3026,7 @@ arguments are
 
 function|math|normalize to be documented
 
-.. _function-_at_math::reflect_float3_hh_const_float3_hh_const:
+.. _function-_at_math_c__c_reflect_float3_hh_const_float3_hh_const:
 
 .. das:function:: reflect(arg0: float3 const; arg1: float3 const)
 
@@ -3043,7 +3043,7 @@ arguments are
 
 function|math|reflect to be documented
 
-.. _function-_at_math::refract_float3_hh_const_float3_hh_const_float_hh_const_float3_hh_ref:
+.. _function-_at_math_c__c_refract_float3_hh_const_float3_hh_const_float_hh_const_float3_hh_ref:
 
 .. das:function:: refract(arg0: float3 const; arg1: float3 const; arg2: float const; arg3: float3&)
 
@@ -3064,7 +3064,7 @@ arguments are
 
 function|math|refract to be documented
 
-.. _function-_at_math::rsqrt_float:
+.. _function-_at_math_c__c_rsqrt_float:
 
 .. das:function:: rsqrt(arg0: float)
 
@@ -3079,7 +3079,7 @@ arguments are
 
 function|math|rsqrt to be documented
 
-.. _function-_at_math::rsqrt_float2:
+.. _function-_at_math_c__c_rsqrt_float2:
 
 .. das:function:: rsqrt(arg0: float2)
 
@@ -3094,7 +3094,7 @@ arguments are
 
 function|math|rsqrt to be documented
 
-.. _function-_at_math::rsqrt_float3:
+.. _function-_at_math_c__c_rsqrt_float3:
 
 .. das:function:: rsqrt(arg0: float3)
 
@@ -3109,7 +3109,7 @@ arguments are
 
 function|math|rsqrt to be documented
 
-.. _function-_at_math::rsqrt_float4:
+.. _function-_at_math_c__c_rsqrt_float4:
 
 .. das:function:: rsqrt(arg0: float4)
 
@@ -3124,7 +3124,7 @@ arguments are
 
 function|math|rsqrt to be documented
 
-.. _function-_at_math::rsqrt_est_float:
+.. _function-_at_math_c__c_rsqrt_est_float:
 
 .. das:function:: rsqrt_est(arg0: float)
 
@@ -3139,7 +3139,7 @@ arguments are
 
 function|math|rsqrt_est to be documented
 
-.. _function-_at_math::rsqrt_est_float2:
+.. _function-_at_math_c__c_rsqrt_est_float2:
 
 .. das:function:: rsqrt_est(arg0: float2)
 
@@ -3154,7 +3154,7 @@ arguments are
 
 function|math|rsqrt_est to be documented
 
-.. _function-_at_math::rsqrt_est_float3:
+.. _function-_at_math_c__c_rsqrt_est_float3:
 
 .. das:function:: rsqrt_est(arg0: float3)
 
@@ -3169,7 +3169,7 @@ arguments are
 
 function|math|rsqrt_est to be documented
 
-.. _function-_at_math::rsqrt_est_float4:
+.. _function-_at_math_c__c_rsqrt_est_float4:
 
 .. das:function:: rsqrt_est(arg0: float4)
 
@@ -3184,7 +3184,7 @@ arguments are
 
 function|math|rsqrt_est to be documented
 
-.. _function-_at_math::sincos_double_hh_const_double_hh_ref_hh_implicit_double_hh_ref_hh_implicit:
+.. _function-_at_math_c__c_sincos_double_hh_const_double_hh_ref_hh_implicit_double_hh_ref_hh_implicit:
 
 .. das:function:: sincos(arg0: double const; arg1: double& implicit; arg2: double& implicit)
 
@@ -3201,7 +3201,7 @@ arguments are
 
 function|math|sincos to be documented
 
-.. _function-_at_math::sincos_float_hh_const_float_hh_ref_hh_implicit_float_hh_ref_hh_implicit:
+.. _function-_at_math_c__c_sincos_float_hh_const_float_hh_ref_hh_implicit_float_hh_ref_hh_implicit:
 
 .. das:function:: sincos(arg0: float const; arg1: float& implicit; arg2: float& implicit)
 

@@ -70,7 +70,7 @@ structure|json|JsonValue to be documented
 Uncategorized
 +++++++++++++
 
-.. _function-_at_json::JV__hh_array_hh__hh_ptr_hh_JsonValue:
+.. _function-_at_json_c__c_JV__hh_array_hh__hh_ptr_hh_JsonValue:
 
 .. das:function:: JV(v: array<json::JsonValue?>)
 
@@ -85,7 +85,7 @@ arguments are
 
 function|json|JV to be documented
 
-.. _function-_at_json::JV__hh_ptr_hh_void_hh_const:
+.. _function-_at_json_c__c_JV__hh_ptr_hh_void_hh_const:
 
 .. das:function:: JV(v: void? const)
 
@@ -100,7 +100,7 @@ arguments are
 
 function|json|JV to be documented
 
-.. _function-_at_json::JV__hh_table_hh_string_hh__hh_ptr_hh_JsonValue:
+.. _function-_at_json_c__c_JV__hh_table_hh_string_hh__hh_ptr_hh_JsonValue:
 
 .. das:function:: JV(v: table<string;json::JsonValue?>)
 
@@ -115,7 +115,7 @@ arguments are
 
 function|json|JV to be documented
 
-.. _function-_at_json::JV_bool_hh_const:
+.. _function-_at_json_c__c_JV_bool_hh_const:
 
 .. das:function:: JV(v: bool const)
 
@@ -130,7 +130,7 @@ arguments are
 
 function|json|JV to be documented
 
-.. _function-_at_json::JV_double_hh_const:
+.. _function-_at_json_c__c_JV_double_hh_const:
 
 .. das:function:: JV(v: double const)
 
@@ -145,7 +145,7 @@ arguments are
 
 function|json|JV to be documented
 
-.. _function-_at_json::JV_string_hh_const:
+.. _function-_at_json_c__c_JV_string_hh_const:
 
 .. das:function:: JV(v: string const)
 
@@ -160,7 +160,7 @@ arguments are
 
 function|json|JV to be documented
 
-.. _function-_at_json::read_json__hh_array_hh_uint8_hh_const_string_hh_ref:
+.. _function-_at_json_c__c_read_json__hh_array_hh_uint8_hh_const_string_hh_ref:
 
 .. das:function:: read_json(text: array<uint8> const; error: string&)
 
@@ -177,7 +177,7 @@ arguments are
 
 function|json|read_json to be documented
 
-.. _function-_at_json::read_json_string_hh_const_string_hh_ref:
+.. _function-_at_json_c__c_read_json_string_hh_const_string_hh_ref:
 
 .. das:function:: read_json(text: string const; error: string&)
 
@@ -194,7 +194,7 @@ arguments are
 
 function|json|read_json to be documented
 
-.. _function-_at_json::write_json__hh_ptr_hh_JsonValue_hh_const:
+.. _function-_at_json_c__c_write_json__hh_ptr_hh_JsonValue_hh_const:
 
 .. das:function:: write_json(val: json::JsonValue? const)
 

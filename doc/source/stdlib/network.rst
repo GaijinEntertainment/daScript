@@ -165,7 +165,7 @@ method|network|Server.onLog to be documented
 Uncategorized
 +++++++++++++
 
-.. _function-_at_network::make_server__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_network_c__c_make_server__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: make_server(arg0: void? const implicit; arg1: rtti::StructInfo const? const implicit)
 
@@ -182,7 +182,7 @@ arguments are
 
 function|network|make_server to be documented
 
-.. _function-_at_network::server_init__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit_int_hh_const__hh_const:
+.. _function-_at_network_c__c_server_init__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit_int_hh_const__hh_const:
 
 .. das:function:: server_init(arg0: smart_ptr<network::NetworkServer> const implicit; arg1: int const)
 
@@ -199,7 +199,7 @@ arguments are
 
 function|network|server_init to be documented
 
-.. _function-_at_network::server_is_connected__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
+.. _function-_at_network_c__c_server_is_connected__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
 
 .. das:function:: server_is_connected(arg0: smart_ptr<network::NetworkServer> const implicit)
 
@@ -214,7 +214,7 @@ arguments are
 
 function|network|server_is_connected to be documented
 
-.. _function-_at_network::server_is_open__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
+.. _function-_at_network_c__c_server_is_open__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
 
 .. das:function:: server_is_open(arg0: smart_ptr<network::NetworkServer> const implicit)
 
@@ -229,7 +229,7 @@ arguments are
 
 function|network|server_is_open to be documented
 
-.. _function-_at_network::server_restore__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_network_c__c_server_restore__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: server_restore(arg0: smart_ptr<network::NetworkServer> const implicit; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
 
@@ -246,7 +246,7 @@ arguments are
 
 function|network|server_restore to be documented
 
-.. _function-_at_network::server_send__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_ptr_hh_uint8_hh_const_hh_implicit_int_hh_const__hh_const:
+.. _function-_at_network_c__c_server_send__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_ptr_hh_uint8_hh_const_hh_implicit_int_hh_const__hh_const:
 
 .. das:function:: server_send(arg0: smart_ptr<network::NetworkServer> const implicit; arg1: uint8? const implicit; arg2: int const)
 
@@ -265,7 +265,7 @@ arguments are
 
 function|network|server_send to be documented
 
-.. _function-_at_network::server_tick__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
+.. _function-_at_network_c__c_server_tick__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
 
 .. das:function:: server_tick(arg0: smart_ptr<network::NetworkServer> const implicit)
 

@@ -76,7 +76,7 @@ structure_annotation|fio|FStat to be documented
 Uncategorized
 +++++++++++++
 
-.. _function-_at_fio::base_name_string_hh_const__hh_const:
+.. _function-_at_fio_c__c_base_name_string_hh_const__hh_const:
 
 .. das:function:: base_name(arg0: string const)
 
@@ -91,7 +91,7 @@ arguments are
 
 function|fio|base_name to be documented
 
-.. _function-_at_fio::builtin_dir_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_builtin_dir_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
 
 .. das:function:: builtin_dir(arg0: string const; arg1: block<> const implicit)
 
@@ -106,7 +106,7 @@ arguments are
 
 function|fio|builtin_dir to be documented
 
-.. _function-_at_fio::dir_name_string_hh_const__hh_const:
+.. _function-_at_fio_c__c_dir_name_string_hh_const__hh_const:
 
 .. das:function:: dir_name(arg0: string const)
 
@@ -121,7 +121,7 @@ arguments are
 
 function|fio|dir_name to be documented
 
-.. _function-_at_fio::fclose__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fclose__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: fclose(arg0: fio::FILE const? const implicit)
 
@@ -134,7 +134,7 @@ arguments are
 
 function|fio|fclose to be documented
 
-.. _function-_at_fio::feof__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit:
+.. _function-_at_fio_c__c_feof__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit:
 
 .. das:function:: feof(arg0: fio::FILE const? const implicit)
 
@@ -149,7 +149,7 @@ arguments are
 
 function|fio|feof to be documented
 
-.. _function-_at_fio::fgets__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fgets__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: fgets(arg0: fio::FILE const? const implicit)
 
@@ -164,7 +164,7 @@ arguments are
 
 function|fio|fgets to be documented
 
-.. _function-_at_fio::fmap__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fmap__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: fmap(arg0: fio::FILE const? const implicit; arg1: block<(string const#):void> const implicit)
 
@@ -179,7 +179,7 @@ arguments are
 
 function|fio|fmap to be documented
 
-.. _function-_at_fio::fopen_string_hh_const_string_hh_const:
+.. _function-_at_fio_c__c_fopen_string_hh_const_string_hh_const:
 
 .. das:function:: fopen(arg0: string const; arg1: string const)
 
@@ -196,7 +196,7 @@ arguments are
 
 function|fio|fopen to be documented
 
-.. _function-_at_fio::fopen_string_hh_const_string_hh_const__hh_block_hh__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh__rq_f_hh_:void_hh_const:
+.. _function-_at_fio_c__c_fopen_string_hh_const_string_hh_const__hh_block_hh__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh__rq_f_hh__c_void_hh_const:
 
 .. das:function:: fopen(name: string const; mode: string const; blk: block<(f:fio::FILE const? const):void> const)
 
@@ -213,7 +213,7 @@ arguments are
 
 function|fio|fopen to be documented
 
-.. _function-_at_fio::fprint__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const:
+.. _function-_at_fio_c__c_fprint__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const:
 
 .. das:function:: fprint(arg0: fio::FILE const? const implicit; arg1: string const)
 
@@ -228,7 +228,7 @@ arguments are
 
 function|fio|fprint to be documented
 
-.. _function-_at_fio::fread__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fread__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
 
 .. das:function:: fread(arg0: fio::FILE const? const implicit)
 
@@ -243,7 +243,7 @@ arguments are
 
 function|fio|fread to be documented
 
-.. _function-_at_fio::fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const:
+.. _function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const:
 
 .. das:function:: fstat(f: file)
 
@@ -258,7 +258,7 @@ arguments are
 
 function|fio|fstat to be documented
 
-.. _function-_at_fio::fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit:
+.. _function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit:
 
 .. das:function:: fstat(arg0: fio::FILE const? const implicit; arg1: FStat implicit)
 
@@ -275,7 +275,7 @@ arguments are
 
 function|fio|fstat to be documented
 
-.. _function-_at_fio::fstderr:
+.. _function-_at_fio_c__c_fstderr:
 
 .. das:function:: fstderr()
 
@@ -283,7 +283,7 @@ fstderr returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 function|fio|fstderr to be documented
 
-.. _function-_at_fio::fstdin:
+.. _function-_at_fio_c__c_fstdin:
 
 .. das:function:: fstdin()
 
@@ -291,7 +291,7 @@ fstdin returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 function|fio|fstdin to be documented
 
-.. _function-_at_fio::fstdout:
+.. _function-_at_fio_c__c_fstdout:
 
 .. das:function:: fstdout()
 
@@ -299,7 +299,7 @@ fstdout returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 function|fio|fstdout to be documented
 
-.. _function-_at_fio::fwrite__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const:
+.. _function-_at_fio_c__c_fwrite__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const:
 
 .. das:function:: fwrite(arg0: fio::FILE const? const implicit; arg1: string const)
 
@@ -314,7 +314,7 @@ arguments are
 
 function|fio|fwrite to be documented
 
-.. _function-_at_fio::mkdir_string_hh_const:
+.. _function-_at_fio_c__c_mkdir_string_hh_const:
 
 .. das:function:: mkdir(arg0: string const)
 
@@ -329,7 +329,7 @@ arguments are
 
 function|fio|mkdir to be documented
 
-.. _function-_at_fio::sleep_uint_hh_const:
+.. _function-_at_fio_c__c_sleep_uint_hh_const:
 
 .. das:function:: sleep(arg0: uint const)
 
@@ -342,7 +342,7 @@ arguments are
 
 function|fio|sleep to be documented
 
-.. _function-_at_fio::stat_string_hh_const:
+.. _function-_at_fio_c__c_stat_string_hh_const:
 
 .. das:function:: stat(path: string const)
 
@@ -357,7 +357,7 @@ arguments are
 
 function|fio|stat to be documented
 
-.. _function-_at_fio::stat_string_hh_const__hh_handle_hh_FStat_hh_implicit:
+.. _function-_at_fio_c__c_stat_string_hh_const__hh_handle_hh_FStat_hh_implicit:
 
 .. das:function:: stat(arg0: string const; arg1: FStat implicit)
 
@@ -374,7 +374,7 @@ arguments are
 
 function|fio|stat to be documented
 
-.. _function-_at_fio::dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh_:void_hh_const:
+.. _function-_at_fio_c__c_dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh__c_void_hh_const:
 
 .. das:function:: dir(path: string const; blk: block<(filename:string const):void> const)
 
@@ -391,7 +391,7 @@ arguments are
 
 function|fio|dir to be documented
 
-.. _function-_at_fio::fload__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
+.. _function-_at_fio_c__c_fload__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
 
 .. das:function:: fload(f: file; buf: auto(BufType) const)
 
@@ -408,7 +408,7 @@ arguments are
 
 function|fio|fload to be documented
 
-.. _function-_at_fio::fsave__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
+.. _function-_at_fio_c__c_fsave__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
 
 .. das:function:: fsave(f: file; buf: auto(BufType) const)
 

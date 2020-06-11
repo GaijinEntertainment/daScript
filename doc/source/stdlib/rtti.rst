@@ -875,7 +875,7 @@ any_annotation|rtti|dasvector`Error to be documented
 Uncategorized
 +++++++++++++
 
-.. _function-_at_rtti::RttiValue_nothing:
+.. _function-_at_rtti_c__c_RttiValue_nothing:
 
 .. das:function:: RttiValue_nothing()
 
@@ -883,7 +883,7 @@ RttiValue_nothing returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tU
 
 function|rtti|RttiValue_nothing to be documented
 
-.. _function-_at_rtti::arg_names__hh_handle_hh_TypeInfo_hh_const:
+.. _function-_at_rtti_c__c_arg_names__hh_handle_hh_TypeInfo_hh_const:
 
 .. das:function:: arg_names(info: TypeInfo const)
 
@@ -898,7 +898,7 @@ arguments are
 
 function|rtti|arg_names to be documented
 
-.. _function-_at_rtti::arg_names__hh_handle_hh_VarInfo_hh_const:
+.. _function-_at_rtti_c__c_arg_names__hh_handle_hh_VarInfo_hh_const:
 
 .. das:function:: arg_names(info: VarInfo const)
 
@@ -913,7 +913,7 @@ arguments are
 
 function|rtti|arg_names to be documented
 
-.. _function-_at_rtti::arg_types__hh_handle_hh_TypeInfo_hh_const:
+.. _function-_at_rtti_c__c_arg_types__hh_handle_hh_TypeInfo_hh_const:
 
 .. das:function:: arg_types(info: TypeInfo const)
 
@@ -928,7 +928,7 @@ arguments are
 
 function|rtti|arg_types to be documented
 
-.. _function-_at_rtti::arg_types__hh_handle_hh_VarInfo_hh_const:
+.. _function-_at_rtti_c__c_arg_types__hh_handle_hh_VarInfo_hh_const:
 
 .. das:function:: arg_types(info: VarInfo const)
 
@@ -943,7 +943,7 @@ arguments are
 
 function|rtti|arg_types to be documented
 
-.. _function-_at_rtti::basic_struct_for_each_field__hh_handle_hh_BasicStructureAnnotation_hh_const_hh_implicit__hh_block_hh_string_hh_string_hh__hh_handle_hh_TypeInfo_hh_const_hh_uint_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_basic_struct_for_each_field__hh_handle_hh_BasicStructureAnnotation_hh_const_hh_implicit__hh_block_hh_string_hh_string_hh__hh_handle_hh_TypeInfo_hh_const_hh_uint_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: basic_struct_for_each_field(arg0: BasicStructureAnnotation const implicit; arg1: block<(string;string;rtti::TypeInfo const;uint):void> const implicit)
 
@@ -958,7 +958,7 @@ arguments are
 
 function|rtti|basic_struct_for_each_field to be documented
 
-.. _function-_at_rtti::builtin_is_same_type__hh_ptr_hh__hh_handle_hh_TypeInfo_hh_const_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_TypeInfo_hh_const_hh_const_hh_implicit__hh_enum_hh_rtti::RefMatters_hh_int_hh_const__hh_enum_hh_rtti::ConstMatters_hh_int_hh_const__hh_enum_hh_rtti::TemporaryMatters_hh_int_hh_const_bool_hh_const:
+.. _function-_at_rtti_c__c_builtin_is_same_type__hh_ptr_hh__hh_handle_hh_TypeInfo_hh_const_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_TypeInfo_hh_const_hh_const_hh_implicit__hh_enum_hh_rtti_c__c_RefMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_ConstMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_TemporaryMatters_hh_int_hh_const_bool_hh_const:
 
 .. das:function:: builtin_is_same_type(arg0: rtti::TypeInfo const? const implicit; arg1: rtti::TypeInfo const? const implicit; arg2: RefMatters const; arg3: ConstMatters const; arg4: TemporaryMatters const; arg5: bool const)
 
@@ -983,7 +983,7 @@ arguments are
 
 function|rtti|builtin_is_same_type to be documented
 
-.. _function-_at_rtti::compile_string_hh_const_string_hh_const__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_compile_string_hh_const_string_hh_const__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: compile(arg0: string const; arg1: string const; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
@@ -1000,7 +1000,7 @@ arguments are
 
 function|rtti|compile to be documented
 
-.. _function-_at_rtti::compile_file_string_hh_const__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_compile_file_string_hh_const__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: compile_file(arg0: string const; arg1: smart_ptr<rtti::FileAccess> const implicit; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
@@ -1017,7 +1017,7 @@ arguments are
 
 function|rtti|compile_file to be documented
 
-.. _function-_at_rtti::context_for_each_function__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__rq_info_hh_:void_hh_const:
+.. _function-_at_rtti_c__c_context_for_each_function__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
 
 .. das:function:: context_for_each_function(blk: block<(info:rtti::FuncInfo const):void> const)
 
@@ -1030,7 +1030,7 @@ arguments are
 
 function|rtti|context_for_each_function to be documented
 
-.. _function-_at_rtti::context_for_each_variable__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh__rq_info_hh_:void_hh_const:
+.. _function-_at_rtti_c__c_context_for_each_variable__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
 
 .. das:function:: context_for_each_variable(blk: block<(info:rtti::VarInfo const):void> const)
 
@@ -1043,7 +1043,7 @@ arguments are
 
 function|rtti|context_for_each_variable to be documented
 
-.. _function-_at_rtti::each_dim__hh_handle_hh_TypeInfo_hh_const:
+.. _function-_at_rtti_c__c_each_dim__hh_handle_hh_TypeInfo_hh_const:
 
 .. das:function:: each_dim(info: TypeInfo const)
 
@@ -1058,7 +1058,7 @@ arguments are
 
 function|rtti|each_dim to be documented
 
-.. _function-_at_rtti::each_dim__hh_handle_hh_VarInfo_hh_const:
+.. _function-_at_rtti_c__c_each_dim__hh_handle_hh_VarInfo_hh_const:
 
 .. das:function:: each_dim(info: VarInfo const)
 
@@ -1073,7 +1073,7 @@ arguments are
 
 function|rtti|each_dim to be documented
 
-.. _function-_at_rtti::get_annotation_argument_value__hh_handle_hh_AnnotationArgument_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_get_annotation_argument_value__hh_handle_hh_AnnotationArgument_hh_const_hh_implicit__hh_const:
 
 .. das:function:: get_annotation_argument_value(arg0: AnnotationArgument const implicit)
 
@@ -1088,7 +1088,7 @@ arguments are
 
 function|rtti|get_annotation_argument_value to be documented
 
-.. _function-_at_rtti::get_das_type_name__hh_enum_hh_rtti::Type_hh_int_hh_const__hh_const:
+.. _function-_at_rtti_c__c_get_das_type_name__hh_enum_hh_rtti_c__c_Type_hh_int_hh_const__hh_const:
 
 .. das:function:: get_das_type_name(arg0: Type const)
 
@@ -1103,7 +1103,7 @@ arguments are
 
 function|rtti|get_das_type_name to be documented
 
-.. _function-_at_rtti::get_dim__hh_handle_hh_TypeInfo_hh_const_hh_implicit_int_hh_const__hh_const:
+.. _function-_at_rtti_c__c_get_dim__hh_handle_hh_TypeInfo_hh_const_hh_implicit_int_hh_const__hh_const:
 
 .. das:function:: get_dim(arg0: TypeInfo const implicit; arg1: int const)
 
@@ -1120,7 +1120,7 @@ arguments are
 
 function|rtti|get_dim to be documented
 
-.. _function-_at_rtti::get_dim__hh_handle_hh_VarInfo_hh_const_hh_implicit_int_hh_const__hh_const:
+.. _function-_at_rtti_c__c_get_dim__hh_handle_hh_VarInfo_hh_const_hh_implicit_int_hh_const__hh_const:
 
 .. das:function:: get_dim(arg0: VarInfo const implicit; arg1: int const)
 
@@ -1137,7 +1137,7 @@ arguments are
 
 function|rtti|get_dim to be documented
 
-.. _function-_at_rtti::get_function_info_int:
+.. _function-_at_rtti_c__c_get_function_info_int:
 
 .. das:function:: get_function_info(arg0: int)
 
@@ -1152,7 +1152,7 @@ arguments are
 
 function|rtti|get_function_info to be documented
 
-.. _function-_at_rtti::get_module_string_hh_const:
+.. _function-_at_rtti_c__c_get_module_string_hh_const:
 
 .. das:function:: get_module(arg0: string const)
 
@@ -1167,7 +1167,7 @@ arguments are
 
 function|rtti|get_module to be documented
 
-.. _function-_at_rtti::get_this_module__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit:
+.. _function-_at_rtti_c__c_get_this_module__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit:
 
 .. das:function:: get_this_module(arg0: smart_ptr<rtti::Program> const implicit)
 
@@ -1182,7 +1182,7 @@ arguments are
 
 function|rtti|get_this_module to be documented
 
-.. _function-_at_rtti::get_total_functions__hh_const:
+.. _function-_at_rtti_c__c_get_total_functions__hh_const:
 
 .. das:function:: get_total_functions()
 
@@ -1190,7 +1190,7 @@ get_total_functions returns int
 
 function|rtti|get_total_functions to be documented
 
-.. _function-_at_rtti::get_total_variables__hh_const:
+.. _function-_at_rtti_c__c_get_total_variables__hh_const:
 
 .. das:function:: get_total_variables()
 
@@ -1198,7 +1198,7 @@ get_total_variables returns int
 
 function|rtti|get_total_variables to be documented
 
-.. _function-_at_rtti::get_variable_info_int:
+.. _function-_at_rtti_c__c_get_variable_info_int:
 
 .. das:function:: get_variable_info(arg0: int)
 
@@ -1213,7 +1213,7 @@ arguments are
 
 function|rtti|get_variable_info to be documented
 
-.. _function-_at_rtti::get_variable_value__hh_handle_hh_VarInfo_hh_const_hh_implicit:
+.. _function-_at_rtti_c__c_get_variable_value__hh_handle_hh_VarInfo_hh_const_hh_implicit:
 
 .. das:function:: get_variable_value(arg0: VarInfo const implicit)
 
@@ -1228,7 +1228,7 @@ arguments are
 
 function|rtti|get_variable_value to be documented
 
-.. _function-_at_rtti::is_compatible_cast__hh_handle_hh_StructInfo_hh_const__hh_handle_hh_StructInfo_hh_const:
+.. _function-_at_rtti_c__c_is_compatible_cast__hh_handle_hh_StructInfo_hh_const__hh_handle_hh_StructInfo_hh_const:
 
 .. das:function:: is_compatible_cast(a: StructInfo const; b: StructInfo const)
 
@@ -1245,7 +1245,7 @@ arguments are
 
 function|rtti|is_compatible_cast to be documented
 
-.. _function-_at_rtti::is_compatible_cast__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit:
+.. _function-_at_rtti_c__c_is_compatible_cast__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit:
 
 .. das:function:: is_compatible_cast(arg0: rtti::StructInfo const? const implicit; arg1: rtti::StructInfo const? const implicit)
 
@@ -1262,7 +1262,7 @@ arguments are
 
 function|rtti|is_compatible_cast to be documented
 
-.. _function-_at_rtti::is_same_type__hh_handle_hh_TypeInfo_hh_const__hh_handle_hh_TypeInfo_hh_const__hh_enum_hh_rtti::RefMatters_hh_int_hh_const__hh_enum_hh_rtti::ConstMatters_hh_int_hh_const__hh_enum_hh_rtti::TemporaryMatters_hh_int_hh_const_bool_hh_const:
+.. _function-_at_rtti_c__c_is_same_type__hh_handle_hh_TypeInfo_hh_const__hh_handle_hh_TypeInfo_hh_const__hh_enum_hh_rtti_c__c_RefMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_ConstMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_TemporaryMatters_hh_int_hh_const_bool_hh_const:
 
 .. das:function:: is_same_type(a: TypeInfo const; b: TypeInfo const; refMatters: RefMatters const; constMatters: ConstMatters const; temporaryMatters: TemporaryMatters const; topLevel: bool const)
 
@@ -1287,7 +1287,7 @@ arguments are
 
 function|rtti|is_same_type to be documented
 
-.. _function-_at_rtti::make_file_access_string_hh_const__hh_const:
+.. _function-_at_rtti_c__c_make_file_access_string_hh_const__hh_const:
 
 .. das:function:: make_file_access(arg0: string const)
 
@@ -1302,7 +1302,7 @@ arguments are
 
 function|rtti|make_file_access to be documented
 
-.. _function-_at_rtti::module_for_each_annotation__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_module_for_each_annotation__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: module_for_each_annotation(arg0: rtti::Module? const implicit; arg1: block<(rtti::Annotation const):void> const implicit)
 
@@ -1317,7 +1317,7 @@ arguments are
 
 function|rtti|module_for_each_annotation to be documented
 
-.. _function-_at_rtti::module_for_each_enumeration__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_EnumInfo_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_module_for_each_enumeration__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_EnumInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: module_for_each_enumeration(arg0: rtti::Module? const implicit; arg1: block<(rtti::EnumInfo const):void> const implicit)
 
@@ -1332,7 +1332,7 @@ arguments are
 
 function|rtti|module_for_each_enumeration to be documented
 
-.. _function-_at_rtti::module_for_each_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_module_for_each_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: module_for_each_function(arg0: rtti::Module? const implicit; arg1: block<(rtti::FuncInfo const):void> const implicit)
 
@@ -1347,7 +1347,7 @@ arguments are
 
 function|rtti|module_for_each_function to be documented
 
-.. _function-_at_rtti::module_for_each_generic__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_module_for_each_generic__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: module_for_each_generic(arg0: rtti::Module? const implicit; arg1: block<(rtti::FuncInfo const):void> const implicit)
 
@@ -1362,7 +1362,7 @@ arguments are
 
 function|rtti|module_for_each_generic to be documented
 
-.. _function-_at_rtti::module_for_each_global__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_module_for_each_global__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: module_for_each_global(arg0: rtti::Module? const implicit; arg1: block<(rtti::VarInfo const):void> const implicit)
 
@@ -1377,7 +1377,7 @@ arguments are
 
 function|rtti|module_for_each_global to be documented
 
-.. _function-_at_rtti::module_for_each_structure__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_StructInfo_hh_const_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_module_for_each_structure__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_StructInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: module_for_each_structure(arg0: rtti::Module? const implicit; arg1: block<(rtti::StructInfo const):void> const implicit)
 
@@ -1392,7 +1392,7 @@ arguments are
 
 function|rtti|module_for_each_structure to be documented
 
-.. _function-_at_rtti::program_for_each_module__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_block_hh__hh_ptr_hh__hh_handle_hh_Module_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_program_for_each_module__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_block_hh__hh_ptr_hh__hh_handle_hh_Module_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: program_for_each_module(arg0: smart_ptr<rtti::Program> const implicit; arg1: block<(rtti::Module?):void> const implicit)
 
@@ -1407,7 +1407,7 @@ arguments are
 
 function|rtti|program_for_each_module to be documented
 
-.. _function-_at_rtti::program_for_each_registered_module__hh_block_hh__hh_ptr_hh__hh_handle_hh_Module_hh_:void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_program_for_each_registered_module__hh_block_hh__hh_ptr_hh__hh_handle_hh_Module_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: program_for_each_registered_module(arg0: block<(rtti::Module?):void> const implicit)
 
@@ -1420,7 +1420,7 @@ arguments are
 
 function|rtti|program_for_each_registered_module to be documented
 
-.. _function-_at_rtti::rtti_builtin_structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const_hh_implicit__hh_block_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_rtti_builtin_structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const_hh_implicit__hh_block_hh_const_hh_implicit__hh_const:
 
 .. das:function:: rtti_builtin_structure_for_each_annotation(arg0: StructInfo const implicit; arg1: block<> const implicit)
 
@@ -1435,7 +1435,7 @@ arguments are
 
 function|rtti|rtti_builtin_structure_for_each_annotation to be documented
 
-.. _function-_at_rtti::set_file_source__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit_string_hh_const_string_hh_const__hh_const:
+.. _function-_at_rtti_c__c_set_file_source__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit_string_hh_const_string_hh_const__hh_const:
 
 .. das:function:: set_file_source(arg0: smart_ptr<rtti::FileAccess> const implicit; arg1: string const; arg2: string const)
 
@@ -1454,7 +1454,7 @@ arguments are
 
 function|rtti|set_file_source to be documented
 
-.. _function-_at_rtti::structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh__hh_handle_hh_AnnotationArguments_hh_const_hh__rq_ann_hh__rq_args_hh_:void_hh_const:
+.. _function-_at_rtti_c__c_structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh__hh_handle_hh_AnnotationArguments_hh_const_hh__rq_ann_hh__rq_args_hh__c_void_hh_const:
 
 .. das:function:: structure_for_each_annotation(st: StructInfo const; subexpr: block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
 
@@ -1469,7 +1469,7 @@ arguments are
 
 function|rtti|structure_for_each_annotation to be documented
 
-.. _function-_at_rtti::class_info__hh_auto_hh_const:
+.. _function-_at_rtti_c__c_class_info__hh_auto_hh_const:
 
 .. das:function:: class_info(cl: auto const)
 

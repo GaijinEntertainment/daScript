@@ -62,7 +62,6 @@ def is_same_or_inherited ( parent,child: Structure? )
         ch = ch.parent
     return false
 
-[unsafe]
 def is_class_method ( cinfo:StructurePtr; finfo:TypeDeclPtr )
     if finfo.baseType != Type tFunction
         return false
@@ -74,7 +73,7 @@ def is_class_method ( cinfo:StructurePtr; finfo:TypeDeclPtr )
         return false
     if finfo.argTypes[0].dim.length != 0
         return false
-    if !is_same_or_inherited(finfo.argTypes[0].structType,reinterpret<Structure?> cinfo)
+    if !is_same_or_inherited(finfo.argTypes[0].structType,get_ptr(cinfo))
         return false
     return true
 
@@ -164,7 +163,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         push(blk.list,ExpressionPtr(ife))
         fn.body <- ExpressionPtr(blk)
         compiling_module() |> add_function(fn)
-        return reinterpret<ExprBlock?> iblk
+        return get_ptr(iblk)
     else
         if fn.body.__rtti != "ExprBlock"
             panic("expecting func.ExprBlock")
@@ -193,7 +192,7 @@ class SetupAnyAnnotation : AstStructureAnnotation
         var cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
         self->setup_call(st,cll)
         var nee <- new [[ExprNew() at=st.at, initializer=true]]
-        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=reinterpret<Structure?> st]]
+        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st)]]
         push(cll.arguments,ExpressionPtr(nee))
         push(blk.list,ExpressionPtr(cll))
         return true

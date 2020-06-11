@@ -9,7 +9,8 @@ require daslib/regex
 [reader_macro(name="regex")]
 class RegexReader : AstReaderMacro
     def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool
-        append(expr.sequence,ch)
+        if ch!='\n' & ch!='\r'
+            append(expr.sequence,ch)
         if ends_with(expr.sequence,"%%")
             let len = length(expr.sequence)
             resize(expr.sequence,len-2)
