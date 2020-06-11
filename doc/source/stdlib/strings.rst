@@ -5,17 +5,11 @@
 String manipulation library
 ===========================
 
-++++++++
-Generics
-++++++++
-
-.. das:function:: join ( it:auto const; separator:string const )  : auto
+.. das:function:: join (it:auto const; separator:string const )  : auto
 
 join returns auto
 
-
-
-function arguments are
+arguments are
 
 +---------+------------+
 +it       +auto const  +
@@ -24,17 +18,13 @@ function arguments are
 +---------+------------+
 
 
+function|strings|join to be documented
 
-to be documented
-
-
-.. das:function:: split ( text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const )  : auto
+.. das:function:: split (text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const )  : auto
 
 split returns auto
 
-
-
-function arguments are
+arguments are
 
 +-----+--------------------------------------------+
 +text +string const                                +
@@ -45,17 +35,13 @@ function arguments are
 +-----+--------------------------------------------+
 
 
+function|strings|split to be documented
 
-to be documented
-
-
-.. das:function:: split_by_chars ( text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const )  : auto
+.. das:function:: split_by_chars (text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const )  : auto
 
 split_by_chars returns auto
 
-
-
-function arguments are
+arguments are
 
 +-----+--------------------------------------------+
 +text +string const                                +
@@ -66,21 +52,13 @@ function arguments are
 +-----+--------------------------------------------+
 
 
+function|strings|split_by_chars to be documented
 
-to be documented
-
-
-+++++++++
-Functions
-+++++++++
-
-.. das:function:: split ( text:string const; delim:string const )  : array<string>
+.. das:function:: split (text:string const; delim:string const )  : array<string>
 
 split returns array<string>
 
-
-
-function arguments are
+arguments are
 
 +-----+------------+
 +text +string const+
@@ -89,17 +67,13 @@ function arguments are
 +-----+------------+
 
 
+function|strings|split to be documented
 
-to be documented
-
-
-.. das:function:: split_by_chars ( text:string const; delim:string const )  : array<string>
+.. das:function:: split_by_chars (text:string const; delim:string const )  : array<string>
 
 split_by_chars returns array<string>
 
-
-
-function arguments are
+arguments are
 
 +-----+------------+
 +text +string const+
@@ -108,17 +82,13 @@ function arguments are
 +-----+------------+
 
 
+function|strings|split_by_chars to be documented
 
-to be documented
-
-
-.. das:function:: wide ( text:string const; width:int const )  : string
+.. das:function:: wide (text:string const; width:int const )  : string
 
 wide returns string
 
-
-
-function arguments are
+arguments are
 
 +-----+------------+
 +text +string const+
@@ -127,8 +97,6 @@ function arguments are
 +-----+------------+
 
 
-
-to be documented
-
+function|strings|wide to be documented
 
 

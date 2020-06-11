@@ -2,7 +2,10 @@ options indenting=4
 
 require fio
 
-def fopen(name:string;mode:string;blk:block<(f:FILE const?):void>)
+typedef
+    file = FILE const?
+
+def fopen(name:string;mode:string;blk:block<(f:file):void>)
     let f = fopen(name,mode)
     invoke(blk,f)
     if f!=null
@@ -18,7 +21,7 @@ def stat(path:string):FStat
         fs.is_valid = true
     return fs
 
-def fstat(f:FILE const?):FStat
+def fstat(f:file):FStat
     var fs : FStat
     if fstat(f,fs)
         fs.is_valid = true
@@ -31,7 +34,7 @@ struct df_header
     magic:uint
     size:int
 
-def fload(f:FILE const?;buf:auto(BufType) -const)
+def fload(f:file;buf:auto(BufType) -const)
     var dfh:df_header
     let r1 = _builtin_read(f,dfh,typeinfo(sizeof type<df_header>))
     if r1<0
@@ -45,7 +48,7 @@ def fload(f:FILE const?;buf:auto(BufType) -const)
             loaded = true
     return loaded
 
-def fsave(f:FILE const?;buf:auto(BufType)const)
+def fsave(f:file;buf:auto(BufType)const)
     var r1, r2 : int
     binary_save(buf) <| $(data)
         let len = length(data)

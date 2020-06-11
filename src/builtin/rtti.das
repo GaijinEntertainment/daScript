@@ -4,6 +4,8 @@ require rtti
 
 typedef
     FileAccessPtr = smart_ptr<FileAccess>
+    AnnotationPtr = smart_ptr<Annotation>
+    TypeAnnotationPtr = smart_ptr<TypeAnnotation>
 
 def structure_for_each_annotation(st:StructInfo;subexpr:block<(ann:Annotation;args:AnnotationArguments):void>)
     rtti_builtin_structure_for_each_annotation(st,subexpr)

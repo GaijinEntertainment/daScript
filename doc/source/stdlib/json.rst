@@ -5,11 +5,11 @@
 JSON manipulation library
 =========================
 
-++++++++++++
-Type aliases
-++++++++++++
++++++++++++
+TypeAliases
++++++++++++
 
-.. _alias_JsValue:
+.. _alias-JsValue:
 
 .. das:attribute:: JsValueis a variant type
 
@@ -28,9 +28,9 @@ Type aliases
 +-------+---------------------------------------------------------------+
 
 
-to be documented
+typedef|json|JsValue to be documented
 
-.. _alias_Token:
+.. _alias-Token:
 
 .. das:attribute:: Tokenis a variant type
 
@@ -49,139 +49,106 @@ to be documented
 +-------+------+
 
 
-to be documented
-
-++++++++++
-Structures
-++++++++++
+typedef|json|Token to be documented
 
 .. _struct-json-JsonValue:
 
 .. das:attribute:: JsonValue
 
+
+
 JsonValue fields are
 
 +-----+--------------------------------+
-+value+ :ref:`JsValue <alias_JsValue>` +
++value+ :ref:`JsValue <alias-JsValue>` +
 +-----+--------------------------------+
 
 
-to be documented
+structure|json|JsonValue to be documented
 
-
-+++++++++
-Functions
-+++++++++
-
-.. das:function:: JV ( v:array<json::JsonValue?> )  : json::JsonValue?
+.. das:function:: JV (v:array<json::JsonValue?> )  : json::JsonValue?
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-+--------------------------------------------------------+
 +v+array< :ref:`json::JsonValue <struct-json-JsonValue>` ?>+
 +-+--------------------------------------------------------+
 
 
+function|json|JV to be documented
 
-to be documented
-
-
-.. das:function:: JV ( v:void? const )  : json::JsonValue?
+.. das:function:: JV (v:void? const )  : json::JsonValue?
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-+-----------+
 +v+void? const+
 +-+-----------+
 
 
+function|json|JV to be documented
 
-to be documented
-
-
-.. das:function:: JV ( v:table<string;json::JsonValue?> )  : json::JsonValue?
+.. das:function:: JV (v:table<string;json::JsonValue?> )  : json::JsonValue?
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-+---------------------------------------------------------------+
 +v+table<string; :ref:`json::JsonValue <struct-json-JsonValue>` ?>+
 +-+---------------------------------------------------------------+
 
 
+function|json|JV to be documented
 
-to be documented
-
-
-.. das:function:: JV ( v:bool const )  : json::JsonValue?
+.. das:function:: JV (v:bool const )  : json::JsonValue?
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-+----------+
 +v+bool const+
 +-+----------+
 
 
+function|json|JV to be documented
 
-to be documented
-
-
-.. das:function:: JV ( v:double const )  : json::JsonValue?
+.. das:function:: JV (v:double const )  : json::JsonValue?
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-+------------+
 +v+double const+
 +-+------------+
 
 
+function|json|JV to be documented
 
-to be documented
-
-
-.. das:function:: JV ( v:string const )  : json::JsonValue?
+.. das:function:: JV (v:string const )  : json::JsonValue?
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-+------------+
 +v+string const+
 +-+------------+
 
 
+function|json|JV to be documented
 
-to be documented
-
-
-.. das:function:: read_json ( text:array<uint8> const; error:string& )  : json::JsonValue?
+.. das:function:: read_json (text:array<uint8> const; error:string& )  : json::JsonValue?
 
 read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-----+------------------+
 +text +array<uint8> const+
@@ -190,17 +157,13 @@ function arguments are
 +-----+------------------+
 
 
+function|json|read_json to be documented
 
-to be documented
-
-
-.. das:function:: read_json ( text:string const; error:string& )  : json::JsonValue?
+.. das:function:: read_json (text:string const; error:string& )  : json::JsonValue?
 
 read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-
-
-function arguments are
+arguments are
 
 +-----+------------+
 +text +string const+
@@ -209,25 +172,19 @@ function arguments are
 +-----+------------+
 
 
+function|json|read_json to be documented
 
-to be documented
-
-
-.. das:function:: write_json ( val:json::JsonValue? const )  : string
+.. das:function:: write_json (val:json::JsonValue? const )  : string
 
 write_json returns string
 
-
-
-function arguments are
+arguments are
 
 +---+-------------------------------------------------------+
 +val+ :ref:`json::JsonValue <struct-json-JsonValue>` ? const+
 +---+-------------------------------------------------------+
 
 
-
-to be documented
-
+function|json|write_json to be documented
 
 

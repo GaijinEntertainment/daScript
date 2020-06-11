@@ -9,56 +9,45 @@ Built-in runtime
 Handled structures
 ++++++++++++++++++
 
-.. _handle_builtin_StringBuilderWriter:
+.. _handle-builtin-StringBuilderWriter:
 
 .. das:attribute:: StringBuilderWriter
 
-to be documented
-
+structure_annotation|$|StringBuilderWriter to be documented
 
 +++++++++++++
 Handled types
 +++++++++++++
 
-.. _handle_builtin_clock:
+.. _handle-builtin-clock:
 
 .. das:attribute:: clock
 
-to be documented
+any_annotation|$|clock to be documented
 
-
-.. _handle_builtin_das_string:
+.. _handle-builtin-das_string:
 
 .. das:attribute:: das_string
 
-to be documented
+any_annotation|$|das_string to be documented
 
-
-.. _handle_builtin_float3x4:
+.. _handle-builtin-float3x4:
 
 .. das:attribute:: float3x4
 
-to be documented
+any_annotation|$|float3x4 to be documented
 
-
-.. _handle_builtin_float4x4:
+.. _handle-builtin-float4x4:
 
 .. das:attribute:: float4x4
 
-to be documented
+any_annotation|$|float4x4 to be documented
 
-
-++++++++
-Generics
-++++++++
-
-.. das:function:: binary_load ( obj:auto; data:array<uint8> const )  : auto
+.. das:function:: binary_load (obj:auto; data:array<uint8> const )  : auto
 
 binary_load returns auto
 
-
-
-function arguments are
+arguments are
 
 +----+------------------+
 +obj +auto              +
@@ -67,17 +56,13 @@ function arguments are
 +----+------------------+
 
 
+function|$|binary_load to be documented
 
-to be documented
-
-
-.. das:function:: binary_save ( obj:auto const; subexpr:block<(data:array<uint8> const):void> const )  : auto
+.. das:function:: binary_save (obj:auto const; subexpr:block<(data:array<uint8> const):void> const )  : auto
 
 binary_save returns auto
 
-
-
-function arguments are
+arguments are
 
 +-------+-------------------------------------------+
 +obj    +auto const                                 +
@@ -86,17 +71,13 @@ function arguments are
 +-------+-------------------------------------------+
 
 
+function|$|binary_save to be documented
 
-to be documented
-
-
-.. das:function:: clone ( a:array<auto(TT)>; b:array<TT> const )  : auto
+.. das:function:: clone (a:array<auto(TT)>; b:array<TT> const )  : auto
 
 clone returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+---------------+
 +a+array<auto(TT)>+
@@ -105,17 +86,13 @@ function arguments are
 +-+---------------+
 
 
+function|$|clone to be documented
 
-to be documented
-
-
-.. das:function:: clone ( a:array<auto(TT)>; b:array<TT> const# )  : auto
+.. das:function:: clone (a:array<auto(TT)>; b:array<TT> const# )  : auto
 
 clone returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+----------------+
 +a+array<auto(TT)> +
@@ -124,17 +101,13 @@ function arguments are
 +-+----------------+
 
 
+function|$|clone to be documented
 
-to be documented
-
-
-.. das:function:: clone ( a:table<auto(KT);auto(VT)>; b:table<KT;VT> const )  : auto
+.. das:function:: clone (a:table<auto(KT);auto(VT)>; b:table<KT;VT> const )  : auto
 
 clone returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+------------------------+
 +a+table<auto(KT);auto(VT)>+
@@ -143,17 +116,13 @@ function arguments are
 +-+------------------------+
 
 
+function|$|clone to be documented
 
-to be documented
-
-
-.. das:function:: clone ( a:table<auto(KT);auto(VT)>; b:table<KT;VT> const# )  : auto
+.. das:function:: clone (a:table<auto(KT);auto(VT)>; b:table<KT;VT> const# )  : auto
 
 clone returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+------------------------+
 +a+table<auto(KT);auto(VT)>+
@@ -162,17 +131,13 @@ function arguments are
 +-+------------------------+
 
 
+function|$|clone to be documented
 
-to be documented
-
-
-.. das:function:: clone_dim ( a:auto; b:auto const )  : auto
+.. das:function:: clone_dim (a:auto; b:auto const )  : auto
 
 clone_dim returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+----------+
 +a+auto      +
@@ -181,17 +146,13 @@ function arguments are
 +-+----------+
 
 
+function|$|clone_dim to be documented
 
-to be documented
-
-
-.. das:function:: clone_dim ( a:auto; b:auto const# )  : auto
+.. das:function:: clone_dim (a:auto; b:auto const# )  : auto
 
 clone_dim returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+-----------+
 +a+auto       +
@@ -200,165 +161,126 @@ function arguments are
 +-+-----------+
 
 
+function|$|clone_dim to be documented
 
-to be documented
-
-
-.. das:function:: clone_to_move ( clone_src:auto(TT) const )  : TT
+.. das:function:: clone_to_move (clone_src:auto(TT) const )  : TT
 
 clone_to_move returns TT
 
-
-
-function arguments are
+arguments are
 
 +---------+--------------+
 +clone_src+auto(TT) const+
 +---------+--------------+
 
 
+function|$|clone_to_move to be documented
 
-to be documented
-
-
-.. das:function:: each ( a:array<auto(TT)> const )  : iterator<TT&>
+.. das:function:: each (a:array<auto(TT)> const )  : iterator<TT&>
 
 each returns iterator<TT&>
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +-+---------------------+
 +a+array<auto(TT)> const+
 +-+---------------------+
 
 
+function|$|each to be documented
 
-to be documented
-
-
-.. das:function:: each ( a:auto(TT) const[-1] )  : iterator<TT&>
+.. das:function:: each (a:auto(TT) const[-1] )  : iterator<TT&>
 
 each returns iterator<TT&>
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +-+------------------+
 +a+auto(TT) const[-1]+
 +-+------------------+
 
 
+function|$|each to be documented
 
-to be documented
-
-
-.. das:function:: each ( lam:lambda<(arg:auto(argT) -const):bool> const )  : iterator<argT -&>
+.. das:function:: each (lam:lambda<(arg:auto(argT) -const):bool> const )  : iterator<argT -&>
 
 each returns iterator<argT>
 
-
-
-function arguments are
+arguments are
 
 +---+-----------------------------------+
 +lam+lambda<(arg:auto(argT)):bool> const+
 +---+-----------------------------------+
 
 
+function|$|each to be documented
 
-to be documented
-
-
-.. das:function:: each ( rng:range const )  : iterator<int>
+.. das:function:: each (rng:range const )  : iterator<int>
 
 each returns iterator<int>
 
-
-
-function arguments are
+arguments are
 
 +---+-----------+
 +rng+range const+
 +---+-----------+
 
 
+function|$|each to be documented
 
-to be documented
-
-
-.. das:function:: each ( str:string const )  : iterator<int>
+.. das:function:: each (str:string const )  : iterator<int>
 
 each returns iterator<int>
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +---+------------+
 +str+string const+
 +---+------------+
 
 
+function|$|each to be documented
 
-to be documented
-
-
-.. das:function:: each_enum ( tt:auto(TT) const )  : iterator<TT -const -&>
+.. das:function:: each_enum (tt:auto(TT) const )  : iterator<TT -const -&>
 
 each_enum returns iterator<TT>
 
-
-
-function arguments are
+arguments are
 
 +--+--------------+
 +tt+auto(TT) const+
 +--+--------------+
 
 
+function|$|each_enum to be documented
 
-to be documented
-
-
-.. das:function:: each_ref ( lam:lambda<(arg:auto(argT)? -const):bool> const )  : iterator<argT&>
+.. das:function:: each_ref (lam:lambda<(arg:auto(argT)? -const):bool> const )  : iterator<argT&>
 
 each_ref returns iterator<argT&>
 
-
-
-function arguments are
+arguments are
 
 +---+------------------------------------+
 +lam+lambda<(arg:auto(argT)?):bool> const+
 +---+------------------------------------+
 
 
+function|$|each_ref to be documented
 
-to be documented
-
-
-.. das:function:: emplace ( Arr:array<auto(numT)>; value:numT; at:int const )  : auto
+.. das:function:: emplace (Arr:array<auto(numT)>; value:numT; at:int const )  : auto
 
 emplace returns auto
 
-
-
-function arguments are
+arguments are
 
 +-----+-----------------+
 +Arr  +array<auto(numT)>+
@@ -369,17 +291,13 @@ function arguments are
 +-----+-----------------+
 
 
+function|$|emplace to be documented
 
-to be documented
-
-
-.. das:function:: erase ( Arr:array<auto(numT)>; at:int const )  : auto
+.. das:function:: erase (Arr:array<auto(numT)>; at:int const )  : auto
 
 erase returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+-----------------+
 +Arr+array<auto(numT)>+
@@ -388,17 +306,13 @@ function arguments are
 +---+-----------------+
 
 
+function|$|erase to be documented
 
-to be documented
-
-
-.. das:function:: erase ( Tab:table<auto(keyT);auto(valT)>; at:keyT const )  : bool
+.. das:function:: erase (Tab:table<auto(keyT);auto(valT)>; at:keyT const )  : bool
 
 erase returns bool
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------+
 +Tab+table<auto(keyT);auto(valT)>+
@@ -407,72 +321,55 @@ function arguments are
 +---+----------------------------+
 
 
+function|$|erase to be documented
 
-to be documented
-
-
-.. das:function:: finalize ( a:array<auto(TT)> )  : auto
+.. das:function:: finalize (a:array<auto(TT)> )  : auto
 
 finalize returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+---------------+
 +a+array<auto(TT)>+
 +-+---------------+
 
 
+function|$|finalize to be documented
 
-to be documented
-
-
-.. das:function:: finalize ( a:table<auto(TK);auto(TV)> )  : auto
+.. das:function:: finalize (a:table<auto(TK);auto(TV)> )  : auto
 
 finalize returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+------------------------+
 +a+table<auto(TK);auto(TV)>+
 +-+------------------------+
 
 
+function|$|finalize to be documented
 
-to be documented
-
-
-.. das:function:: finalize_dim ( a:auto(TT)[-1] )  : auto
+.. das:function:: finalize_dim (a:auto(TT)[-1] )  : auto
 
 finalize_dim returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+------------+
 +a+auto(TT)[-1]+
 +-+------------+
 
 
+function|$|finalize_dim to be documented
 
-to be documented
-
-
-.. das:function:: find ( Tab:table<auto(keyT);auto(valT)> const; at:keyT const )  : valT const?
+.. das:function:: find (Tab:table<auto(keyT);auto(valT)> const; at:keyT const )  : valT const?
 
 find returns valT const?
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +---+----------------------------------+
 +Tab+table<auto(keyT);auto(valT)> const+
@@ -481,17 +378,13 @@ function arguments are
 +---+----------------------------------+
 
 
+function|$|find to be documented
 
-to be documented
-
-
-.. das:function:: find ( Tab:table<auto(keyT);auto(valT)> const; at:keyT const; blk:block<(p:valT? const):void> const )  : auto
+.. das:function:: find (Tab:table<auto(keyT);auto(valT)> const; at:keyT const; blk:block<(p:valT? const):void> const )  : auto
 
 find returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------------+
 +Tab+table<auto(keyT);auto(valT)> const+
@@ -502,17 +395,13 @@ function arguments are
 +---+----------------------------------+
 
 
+function|$|find to be documented
 
-to be documented
-
-
-.. das:function:: find ( Tab:table<auto(keyT);auto(valT)> const#; at:keyT const )  : valT const?#
+.. das:function:: find (Tab:table<auto(keyT);auto(valT)> const#; at:keyT const )  : valT const?#
 
 find returns valT const?#
 
-
-
-function arguments are
+arguments are
 
 +---+-----------------------------------+
 +Tab+table<auto(keyT);auto(valT)> const#+
@@ -521,21 +410,16 @@ function arguments are
 +---+-----------------------------------+
 
 
+function|$|find to be documented
 
-to be documented
-
-
-.. das:function:: find_for_edit ( Tab:table<auto(keyT);auto(valT)>; at:keyT const )  : valT?
+.. das:function:: find_for_edit (Tab:table<auto(keyT);auto(valT)>; at:keyT const )  : valT?
 
 find_for_edit returns valT?
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +---+----------------------------+
 +Tab+table<auto(keyT);auto(valT)>+
@@ -544,17 +428,13 @@ function arguments are
 +---+----------------------------+
 
 
+function|$|find_for_edit to be documented
 
-to be documented
-
-
-.. das:function:: find_for_edit ( Tab:table<auto(keyT);auto(valT)>; at:keyT const; blk:block<(p:valT? -const):void> const )  : auto
+.. das:function:: find_for_edit (Tab:table<auto(keyT);auto(valT)>; at:keyT const; blk:block<(p:valT? -const):void> const )  : auto
 
 find_for_edit returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------+
 +Tab+table<auto(keyT);auto(valT)>+
@@ -565,17 +445,13 @@ function arguments are
 +---+----------------------------+
 
 
+function|$|find_for_edit to be documented
 
-to be documented
-
-
-.. das:function:: find_for_edit_if_exists ( Tab:table<auto(keyT);auto(valT)>; at:keyT const; blk:block<(p:valT? -const):void> const )  : auto
+.. das:function:: find_for_edit_if_exists (Tab:table<auto(keyT);auto(valT)>; at:keyT const; blk:block<(p:valT? -const):void> const )  : auto
 
 find_for_edit_if_exists returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------+
 +Tab+table<auto(keyT);auto(valT)>+
@@ -586,17 +462,13 @@ function arguments are
 +---+----------------------------+
 
 
+function|$|find_for_edit_if_exists to be documented
 
-to be documented
-
-
-.. das:function:: find_if_exists ( Tab:table<auto(keyT);auto(valT)> const; at:keyT const; blk:block<(p:valT? const):void> const )  : auto
+.. das:function:: find_if_exists (Tab:table<auto(keyT);auto(valT)> const; at:keyT const; blk:block<(p:valT? const):void> const )  : auto
 
 find_if_exists returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------------+
 +Tab+table<auto(keyT);auto(valT)> const+
@@ -607,17 +479,13 @@ function arguments are
 +---+----------------------------------+
 
 
+function|$|find_if_exists to be documented
 
-to be documented
-
-
-.. das:function:: find_index ( arr:array<auto(TT)> const implicit; key:TT const )  : auto
+.. das:function:: find_index (arr:array<auto(TT)> const implicit; key:TT const )  : auto
 
 find_index returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+------------------------------+
 +arr+array<auto(TT)> const implicit+
@@ -626,17 +494,13 @@ function arguments are
 +---+------------------------------+
 
 
+function|$|find_index to be documented
 
-to be documented
-
-
-.. das:function:: find_index ( arr:auto(TT) const[-1] implicit; key:TT const )  : auto
+.. das:function:: find_index (arr:auto(TT) const[-1] implicit; key:TT const )  : auto
 
 find_index returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+---------------------------+
 +arr+auto(TT) const[-1] implicit+
@@ -645,17 +509,13 @@ function arguments are
 +---+---------------------------+
 
 
+function|$|find_index to be documented
 
-to be documented
-
-
-.. das:function:: find_index_if ( arr:array<auto(TT)> const implicit; blk:block<(key:TT const):bool> const )  : auto
+.. das:function:: find_index_if (arr:array<auto(TT)> const implicit; blk:block<(key:TT const):bool> const )  : auto
 
 find_index_if returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+--------------------------------+
 +arr+array<auto(TT)> const implicit  +
@@ -664,17 +524,13 @@ function arguments are
 +---+--------------------------------+
 
 
+function|$|find_index_if to be documented
 
-to be documented
-
-
-.. das:function:: find_index_if ( arr:auto(TT) const[-1] implicit; blk:block<(key:TT const):bool> const )  : auto
+.. das:function:: find_index_if (arr:auto(TT) const[-1] implicit; blk:block<(key:TT const):bool> const )  : auto
 
 find_index_if returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+--------------------------------+
 +arr+auto(TT) const[-1] implicit     +
@@ -683,34 +539,26 @@ function arguments are
 +---+--------------------------------+
 
 
+function|$|find_index_if to be documented
 
-to be documented
-
-
-.. das:function:: get_ptr ( src:smart_ptr<auto(TT)> const )  : TT?
+.. das:function:: get_ptr (src:smart_ptr<auto(TT)> const )  : TT?
 
 get_ptr returns TT?
 
-
-
-function arguments are
+arguments are
 
 +---+-------------------------+
 +src+smart_ptr<auto(TT)> const+
 +---+-------------------------+
 
 
+function|$|get_ptr to be documented
 
-to be documented
-
-
-.. das:function:: has_value ( a:auto const; key:auto const )  : auto
+.. das:function:: has_value (a:auto const; key:auto const )  : auto
 
 has_value returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+----------+
 +a  +auto const+
@@ -719,34 +567,26 @@ function arguments are
 +---+----------+
 
 
+function|$|has_value to be documented
 
-to be documented
-
-
-.. das:function:: intptr ( p:void? const )  : uint64
+.. das:function:: intptr (p:void? const )  : uint64
 
 intptr returns uint64
 
-
-
-function arguments are
+arguments are
 
 +-+-----------+
 +p+void? const+
 +-+-----------+
 
 
+function|$|intptr to be documented
 
-to be documented
-
-
-.. das:function:: key_exists ( Tab:table<auto(keyT);auto(valT)> const; at:keyT const )  : bool
+.. das:function:: key_exists (Tab:table<auto(keyT);auto(valT)> const; at:keyT const )  : bool
 
 key_exists returns bool
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------------+
 +Tab+table<auto(keyT);auto(valT)> const+
@@ -755,51 +595,39 @@ function arguments are
 +---+----------------------------------+
 
 
+function|$|key_exists to be documented
 
-to be documented
-
-
-.. das:function:: keys ( a:table<auto(keyT);auto(valT)> const )  : iterator<keyT const&>
+.. das:function:: keys (a:table<auto(keyT);auto(valT)> const )  : iterator<keyT const&>
 
 keys returns iterator<keyT const&>
 
-
-
-function arguments are
+arguments are
 
 +-+----------------------------------+
 +a+table<auto(keyT);auto(valT)> const+
 +-+----------------------------------+
 
 
+function|$|keys to be documented
 
-to be documented
-
-
-.. das:function:: length ( a:auto const[-1] )  : int
+.. das:function:: length (a:auto const[-1] )  : int
 
 length returns int
 
-
-
-function arguments are
+arguments are
 
 +-+--------------+
 +a+auto const[-1]+
 +-+--------------+
 
 
+function|$|length to be documented
 
-to be documented
-
-
-.. das:function:: lock ( Tab:table<auto(keyT);auto(valT)> const; blk:block<(t:table<keyT;valT> const#):void> const )  : auto
+.. das:function:: lock (Tab:table<auto(keyT);auto(valT)> const; blk:block<(t:table<keyT;valT> const#):void> const )  : auto
 
 lock returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+---------------------------------------------+
 +Tab+table<auto(keyT);auto(valT)> const           +
@@ -808,17 +636,13 @@ function arguments are
 +---+---------------------------------------------+
 
 
+function|$|lock to be documented
 
-to be documented
-
-
-.. das:function:: lock ( Tab:table<auto(keyT);auto(valT)> const#; blk:block<(t:table<keyT;valT> const#):void> const )  : auto
+.. das:function:: lock (Tab:table<auto(keyT);auto(valT)> const#; blk:block<(t:table<keyT;valT> const#):void> const )  : auto
 
 lock returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+---------------------------------------------+
 +Tab+table<auto(keyT);auto(valT)> const#          +
@@ -827,51 +651,39 @@ function arguments are
 +---+---------------------------------------------+
 
 
+function|$|lock to be documented
 
-to be documented
-
-
-.. das:function:: lock_forever ( Tab:table<auto(keyT);auto(valT)> )  : table<keyT;valT>#
+.. das:function:: lock_forever (Tab:table<auto(keyT);auto(valT)> )  : table<keyT;valT>#
 
 lock_forever returns table<keyT;valT>#
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------+
 +Tab+table<auto(keyT);auto(valT)>+
 +---+----------------------------+
 
 
+function|$|lock_forever to be documented
 
-to be documented
-
-
-.. das:function:: make_clone ( res:auto(TT) const )  : TT
+.. das:function:: make_clone (res:auto(TT) const )  : TT
 
 make_clone returns TT
 
-
-
-function arguments are
+arguments are
 
 +---+--------------+
 +res+auto(TT) const+
 +---+--------------+
 
 
+function|$|make_clone to be documented
 
-to be documented
-
-
-.. das:function:: next ( it:iterator<auto(TT)> const; value:TT& )  : bool
+.. das:function:: next (it:iterator<auto(TT)> const; value:TT& )  : bool
 
 next returns bool
 
-
-
-function arguments are
+arguments are
 
 +-----+------------------------+
 +it   +iterator<auto(TT)> const+
@@ -880,51 +692,39 @@ function arguments are
 +-----+------------------------+
 
 
+function|$|next to be documented
 
-to be documented
-
-
-.. das:function:: nothing ( it:iterator<auto(TT)> )  : iterator<TT>
+.. das:function:: nothing (it:iterator<auto(TT)> )  : iterator<TT>
 
 nothing returns iterator<TT>
 
-
-
-function arguments are
+arguments are
 
 +--+------------------+
 +it+iterator<auto(TT)>+
 +--+------------------+
 
 
+function|$|nothing to be documented
 
-to be documented
-
-
-.. das:function:: pop ( Arr:array<auto(numT)> )  : auto
+.. das:function:: pop (Arr:array<auto(numT)> )  : auto
 
 pop returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+-----------------+
 +Arr+array<auto(numT)>+
 +---+-----------------+
 
 
+function|$|pop to be documented
 
-to be documented
-
-
-.. das:function:: push ( Arr:array<auto(numT)>; value:numT const; at:int const )  : auto
+.. das:function:: push (Arr:array<auto(numT)>; value:numT const; at:int const )  : auto
 
 push returns auto
 
-
-
-function arguments are
+arguments are
 
 +-----+-----------------+
 +Arr  +array<auto(numT)>+
@@ -935,17 +735,13 @@ function arguments are
 +-----+-----------------+
 
 
+function|$|push to be documented
 
-to be documented
-
-
-.. das:function:: push_clone ( Arr:array<auto(numT)>; value:numT const; at:int const )  : auto
+.. das:function:: push_clone (Arr:array<auto(numT)>; value:numT const; at:int const )  : auto
 
 push_clone returns auto
 
-
-
-function arguments are
+arguments are
 
 +-----+-----------------+
 +Arr  +array<auto(numT)>+
@@ -956,17 +752,13 @@ function arguments are
 +-----+-----------------+
 
 
+function|$|push_clone to be documented
 
-to be documented
-
-
-.. das:function:: reserve ( Arr:array<auto(numT)>; newSize:int const )  : auto
+.. das:function:: reserve (Arr:array<auto(numT)>; newSize:int const )  : auto
 
 reserve returns auto
 
-
-
-function arguments are
+arguments are
 
 +-------+-----------------+
 +Arr    +array<auto(numT)>+
@@ -975,17 +767,13 @@ function arguments are
 +-------+-----------------+
 
 
+function|$|reserve to be documented
 
-to be documented
-
-
-.. das:function:: resize ( Arr:array<auto(numT)>; newSize:int const )  : auto
+.. das:function:: resize (Arr:array<auto(numT)>; newSize:int const )  : auto
 
 resize returns auto
 
-
-
-function arguments are
+arguments are
 
 +-------+-----------------+
 +Arr    +array<auto(numT)>+
@@ -994,34 +782,26 @@ function arguments are
 +-------+-----------------+
 
 
+function|$|resize to be documented
 
-to be documented
-
-
-.. das:function:: sort ( a:array<auto(TT)> )  : auto
+.. das:function:: sort (a:array<auto(TT)> )  : auto
 
 sort returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+---------------+
 +a+array<auto(TT)>+
 +-+---------------+
 
 
+function|$|sort to be documented
 
-to be documented
-
-
-.. das:function:: sort ( a:array<auto(TT)>; cmp:block<(x:TT const;y:TT const):bool> const )  : auto
+.. das:function:: sort (a:array<auto(TT)>; cmp:block<(x:TT const;y:TT const):bool> const )  : auto
 
 sort returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+-----------------------------------------+
 +a  +array<auto(TT)>                          +
@@ -1030,34 +810,26 @@ function arguments are
 +---+-----------------------------------------+
 
 
+function|$|sort to be documented
 
-to be documented
-
-
-.. das:function:: sort ( a:auto(TT)[-1] )  : auto
+.. das:function:: sort (a:auto(TT)[-1] )  : auto
 
 sort returns auto
 
-
-
-function arguments are
+arguments are
 
 +-+------------+
 +a+auto(TT)[-1]+
 +-+------------+
 
 
+function|$|sort to be documented
 
-to be documented
-
-
-.. das:function:: sort ( a:auto(TT)[-1]; cmp:block<(x:TT const;y:TT const):bool> const )  : auto
+.. das:function:: sort (a:auto(TT)[-1]; cmp:block<(x:TT const;y:TT const):bool> const )  : auto
 
 sort returns auto
 
-
-
-function arguments are
+arguments are
 
 +---+-----------------------------------------+
 +a  +auto(TT)[-1]                             +
@@ -1066,161 +838,120 @@ function arguments are
 +---+-----------------------------------------+
 
 
+function|$|sort to be documented
 
-to be documented
-
-
-.. das:function:: to_array ( a:auto(TT) const[-1] )  : array<TT -const>
+.. das:function:: to_array (a:auto(TT) const[-1] )  : array<TT -const>
 
 to_array returns array<TT>
 
-
-
-function arguments are
+arguments are
 
 +-+------------------+
 +a+auto(TT) const[-1]+
 +-+------------------+
 
 
+function|$|to_array to be documented
 
-to be documented
-
-
-.. das:function:: to_array ( it:iterator<auto(TT)> const )  : array<TT -const -&>
+.. das:function:: to_array (it:iterator<auto(TT)> const )  : array<TT -const -&>
 
 to_array returns array<TT>
 
-
-
-function arguments are
+arguments are
 
 +--+------------------------+
 +it+iterator<auto(TT)> const+
 +--+------------------------+
 
 
+function|$|to_array to be documented
 
-to be documented
-
-
-.. das:function:: to_array_move ( a:auto(TT)[-1] )  : array<TT -const>
+.. das:function:: to_array_move (a:auto(TT)[-1] )  : array<TT -const>
 
 to_array_move returns array<TT>
 
-
-
-function arguments are
+arguments are
 
 +-+------------+
 +a+auto(TT)[-1]+
 +-+------------+
 
 
+function|$|to_array_move to be documented
 
-to be documented
-
-
-.. das:function:: to_table ( a:tuple<auto(keyT);auto(valT)> const[-1] )  : table<keyT -const;valT>
+.. das:function:: to_table (a:tuple<auto(keyT);auto(valT)> const[-1] )  : table<keyT -const;valT>
 
 to_table returns table<keyT;valT>
 
-
-
-function arguments are
+arguments are
 
 +-+--------------------------------------+
 +a+tuple<auto(keyT);auto(valT)> const[-1]+
 +-+--------------------------------------+
 
 
+function|$|to_table to be documented
 
-to be documented
-
-
-.. das:function:: to_table_move ( a:tuple<auto(keyT);auto(valT)>[-1] )  : table<keyT -const;valT>
+.. das:function:: to_table_move (a:tuple<auto(keyT);auto(valT)>[-1] )  : table<keyT -const;valT>
 
 to_table_move returns table<keyT;valT>
 
-
-
-function arguments are
+arguments are
 
 +-+--------------------------------+
 +a+tuple<auto(keyT);auto(valT)>[-1]+
 +-+--------------------------------+
 
 
+function|$|to_table_move to be documented
 
-to be documented
-
-
-.. das:function:: values ( a:table<auto(keyT);auto(valT)> const! )  : iterator<valT const&>
+.. das:function:: values (a:table<auto(keyT);auto(valT)> const! )  : iterator<valT const&>
 
 values returns iterator<valT const&>
 
-
-
-function arguments are
+arguments are
 
 +-+-----------------------------------+
 +a+table<auto(keyT);auto(valT)> const!+
 +-+-----------------------------------+
 
 
+function|$|values to be documented
 
-to be documented
-
-
-.. das:function:: values ( a:table<auto(keyT);auto(valT)>! )  : iterator<valT&>
+.. das:function:: values (a:table<auto(keyT);auto(valT)>! )  : iterator<valT&>
 
 values returns iterator<valT&>
 
-
-
-function arguments are
+arguments are
 
 +-+-----------------------------+
 +a+table<auto(keyT);auto(valT)>!+
 +-+-----------------------------+
 
 
+function|$|values to be documented
 
-to be documented
+.. das:function:: append (arg0:das_string implicit; arg1:int const ) 
 
-
-+++++++++
-Functions
-+++++++++
-
-.. das:function:: append ( arg0:das_string implicit; arg1:int const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------+
-+arg0+ :ref:`builtin::das_string <handle_builtin_das_string>`  implicit+
++arg0+ :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
 +----+-----------------------------------------------------------------+
 +arg1+int const                                                        +
 +----+-----------------------------------------------------------------+
 
 
+function|$|append to be documented
 
-to be documented
-
-
-.. das:function:: append ( arg0:string const; arg1:int const )  : string
+.. das:function:: append (arg0:string const; arg1:int const )  : string
 
 append returns string
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1229,76 +960,60 @@ function arguments are
 +----+------------+
 
 
+function|$|append to be documented
 
-to be documented
-
-
-.. das:function:: as_string ( arg0:array<uint8> const implicit )  : string
+.. das:function:: as_string (arg0:array<uint8> const implicit )  : string
 
 as_string returns string
 
-
-
-function arguments are
+arguments are
 
 +----+---------------------------+
 +arg0+array<uint8> const implicit+
 +----+---------------------------+
 
 
+function|$|as_string to be documented
 
-to be documented
+.. das:function:: breakpoint ( ) 
 
+arguments are
 
-.. das:function:: breakpoint
-
-
-
-
-to be documented
++
 
 
-.. das:function:: build_string ( arg0:block<(StringBuilderWriter):void> const implicit )  : string
+function|$|breakpoint to be documented
+
+.. das:function:: build_string (arg0:block<(StringBuilderWriter):void> const implicit )  : string
 
 build_string returns string
 
-
-
-function arguments are
+arguments are
 
 +----+-------------------------------------------------------------------------------------------------------+
-+arg0+block<( :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>` ):void> const implicit+
++arg0+block<( :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>` ):void> const implicit+
 +----+-------------------------------------------------------------------------------------------------------+
 
 
+function|$|build_string to be documented
 
-to be documented
+.. das:function:: builtin_strdup (arg0:any ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: builtin_strdup ( arg0:any ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+---+
 +arg0+any+
 +----+---+
 
 
+function|$|builtin_strdup to be documented
 
-to be documented
+.. das:function:: builtin_string_split (arg0:string const; arg1:string const; arg2:block<> const implicit ) 
 
-
-.. das:function:: builtin_string_split ( arg0:string const; arg1:string const; arg2:block<> const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------+
 +arg0+string const          +
@@ -1309,15 +1024,11 @@ function arguments are
 +----+----------------------+
 
 
+function|$|builtin_string_split to be documented
 
-to be documented
+.. das:function:: builtin_string_split_by_char (arg0:string const; arg1:string const; arg2:block<> const implicit ) 
 
-
-.. das:function:: builtin_string_split_by_char ( arg0:string const; arg1:string const; arg2:block<> const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------+
 +arg0+string const          +
@@ -1328,51 +1039,39 @@ function arguments are
 +----+----------------------+
 
 
+function|$|builtin_string_split_by_char to be documented
 
-to be documented
-
-
-.. das:function:: capacity ( arg0:array const implicit )  : int
+.. das:function:: capacity (arg0:array const implicit )  : int
 
 capacity returns int
 
-
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+array const implicit+
 +----+--------------------+
 
 
+function|$|capacity to be documented
 
-to be documented
-
-
-.. das:function:: capacity ( arg0:table const implicit )  : int
+.. das:function:: capacity (arg0:table const implicit )  : int
 
 capacity returns int
 
-
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+table const implicit+
 +----+--------------------+
 
 
+function|$|capacity to be documented
 
-to be documented
-
-
-.. das:function:: character_at ( arg0:string const; arg1:int const )  : int
+.. das:function:: character_at (arg0:string const; arg1:int const )  : int
 
 character_at returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1381,21 +1080,16 @@ function arguments are
 +----+------------+
 
 
+function|$|character_at to be documented
 
-to be documented
-
-
-.. das:function:: character_uat ( arg0:string const; arg1:int const )  : int
+.. das:function:: character_uat (arg0:string const; arg1:int const )  : int
 
 character_uat returns int
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1404,21 +1098,16 @@ function arguments are
 +----+------------+
 
 
+function|$|character_uat to be documented
 
-to be documented
-
-
-.. das:function:: chop ( arg0:string const; arg1:int const; arg2:int const )  : string
+.. das:function:: chop (arg0:string const; arg1:int const; arg2:int const )  : string
 
 chop returns string
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1429,183 +1118,138 @@ function arguments are
 +----+------------+
 
 
+function|$|chop to be documented
 
-to be documented
+.. das:function:: clear (arg0:array implicit ) 
 
-
-.. das:function:: clear ( arg0:array implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+--------------+
 +arg0+array implicit+
 +----+--------------+
 
 
+function|$|clear to be documented
 
-to be documented
+.. das:function:: clear (arg0:table implicit ) 
 
-
-.. das:function:: clear ( arg0:table implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+--------------+
 +arg0+table implicit+
 +----+--------------+
 
 
+function|$|clear to be documented
 
-to be documented
+.. das:function:: clone (a:das_string; b:string const ) 
 
-
-.. das:function:: clone ( a:das_string; b:string const ) 
-
-
-
-function arguments are
+arguments are
 
 +-+--------------------------------------------------------+
-+a+ :ref:`builtin::das_string <handle_builtin_das_string>` +
++a+ :ref:`builtin::das_string <handle-builtin-das_string>` +
 +-+--------------------------------------------------------+
 +b+string const                                            +
 +-+--------------------------------------------------------+
 
 
+function|$|clone to be documented
 
-to be documented
-
-
-.. das:function:: clone_string ( arg0:string const )  : string
+.. das:function:: clone_string (arg0:string const )  : string
 
 clone_string returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|clone_string to be documented
 
-to be documented
+.. das:function:: delete_string (arg0:string& implicit ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: delete_string ( arg0:string& implicit ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+----------------+
 +arg0+string& implicit+
 +----+----------------+
 
 
+function|$|delete_string to be documented
 
-to be documented
+.. das:function:: dump_profile_info ( ) 
 
-
-.. das:function:: dump_profile_info (  ) 
-
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|dump_profile_info to be documented
 
-to be documented
-
-
-.. das:function:: empty ( arg0:das_string const implicit )  : bool
+.. das:function:: empty (arg0:das_string const implicit )  : bool
 
 empty returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------+
-+arg0+ :ref:`builtin::das_string <handle_builtin_das_string>`  const implicit+
++arg0+ :ref:`builtin::das_string <handle-builtin-das_string>`  const implicit+
 +----+-----------------------------------------------------------------------+
 
 
+function|$|empty to be documented
 
-to be documented
-
-
-.. das:function:: empty ( arg0:iterator const implicit )  : bool
+.. das:function:: empty (arg0:iterator const implicit )  : bool
 
 empty returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+-----------------------+
 +arg0+iterator const implicit+
 +----+-----------------------+
 
 
+function|$|empty to be documented
 
-to be documented
-
-
-.. das:function:: empty ( arg0:string const )  : bool
+.. das:function:: empty (arg0:string const )  : bool
 
 empty returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|empty to be documented
 
-to be documented
-
-
-.. das:function:: ends_with ( arg0:das_string const implicit; arg1:string const )  : bool
+.. das:function:: ends_with (arg0:das_string const implicit; arg1:string const )  : bool
 
 ends_with returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------+
-+arg0+ :ref:`builtin::das_string <handle_builtin_das_string>`  const implicit+
++arg0+ :ref:`builtin::das_string <handle-builtin-das_string>`  const implicit+
 +----+-----------------------------------------------------------------------+
 +arg1+string const                                                           +
 +----+-----------------------------------------------------------------------+
 
 
+function|$|ends_with to be documented
 
-to be documented
-
-
-.. das:function:: ends_with ( arg0:string const; arg1:string const )  : bool
+.. das:function:: ends_with (arg0:string const; arg1:string const )  : bool
 
 ends_with returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1614,34 +1258,26 @@ function arguments are
 +----+------------+
 
 
+function|$|ends_with to be documented
 
-to be documented
-
-
-.. das:function:: escape ( arg0:string const )  : string
+.. das:function:: escape (arg0:string const )  : string
 
 escape returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|escape to be documented
 
-to be documented
-
-
-.. das:function:: find ( arg0:string const; arg1:string const )  : int
+.. das:function:: find (arg0:string const; arg1:string const )  : int
 
 find returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1650,17 +1286,13 @@ function arguments are
 +----+------------+
 
 
+function|$|find to be documented
 
-to be documented
-
-
-.. das:function:: find ( arg0:string const; arg1:string const; arg2:int const )  : int
+.. das:function:: find (arg0:string const; arg1:string const; arg2:int const )  : int
 
 find returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1671,17 +1303,13 @@ function arguments are
 +----+------------+
 
 
+function|$|find to be documented
 
-to be documented
-
-
-.. das:function:: find_first_of ( arg0:string const; arg1:int const )  : int
+.. das:function:: find_first_of (arg0:string const; arg1:int const )  : int
 
 find_first_of returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1690,17 +1318,13 @@ function arguments are
 +----+------------+
 
 
+function|$|find_first_of to be documented
 
-to be documented
-
-
-.. das:function:: find_first_of ( arg0:string const; arg1:string const )  : int
+.. das:function:: find_first_of (arg0:string const; arg1:string const )  : int
 
 find_first_of returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1709,38 +1333,36 @@ function arguments are
 +----+------------+
 
 
+function|$|find_first_of to be documented
 
-to be documented
+.. das:function:: float3x4 ( )  : float3x4
 
+float3x4 returns  :ref:`builtin::float3x4 <handle-builtin-float3x4>` 
 
-.. das:function:: float3x4
+arguments are
 
-float3x4 returns  :ref:`builtin::float3x4 <handle_builtin_float3x4>` 
-
-
-
-
-to be documented
++
 
 
-.. das:function:: float4x4
+function|$|float3x4 to be documented
 
-float4x4 returns  :ref:`builtin::float4x4 <handle_builtin_float4x4>` 
+.. das:function:: float4x4 ( )  : float4x4
 
+float4x4 returns  :ref:`builtin::float4x4 <handle-builtin-float4x4>` 
 
+arguments are
 
-
-to be documented
-
-
-.. das:function:: format ( arg0:StringBuilderWriter implicit; arg1:string const; arg2:double const ) 
++
 
 
+function|$|float4x4 to be documented
 
-function arguments are
+.. das:function:: format (arg0:StringBuilderWriter implicit; arg1:string const; arg2:double const ) 
+
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+string const                                                                       +
 +----+-----------------------------------------------------------------------------------+
@@ -1748,18 +1370,14 @@ function arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|format to be documented
 
-to be documented
+.. das:function:: format (arg0:StringBuilderWriter implicit; arg1:string const; arg2:float const ) 
 
-
-.. das:function:: format ( arg0:StringBuilderWriter implicit; arg1:string const; arg2:float const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+string const                                                                       +
 +----+-----------------------------------------------------------------------------------+
@@ -1767,18 +1385,14 @@ function arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|format to be documented
 
-to be documented
+.. das:function:: format (arg0:StringBuilderWriter implicit; arg1:string const; arg2:int const ) 
 
-
-.. das:function:: format ( arg0:StringBuilderWriter implicit; arg1:string const; arg2:int const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+string const                                                                       +
 +----+-----------------------------------------------------------------------------------+
@@ -1786,18 +1400,14 @@ function arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|format to be documented
 
-to be documented
+.. das:function:: format (arg0:StringBuilderWriter implicit; arg1:string const; arg2:int64 const ) 
 
-
-.. das:function:: format ( arg0:StringBuilderWriter implicit; arg1:string const; arg2:int64 const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+string const                                                                       +
 +----+-----------------------------------------------------------------------------------+
@@ -1805,18 +1415,14 @@ function arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|format to be documented
 
-to be documented
+.. das:function:: format (arg0:StringBuilderWriter implicit; arg1:string const; arg2:uint const ) 
 
-
-.. das:function:: format ( arg0:StringBuilderWriter implicit; arg1:string const; arg2:uint const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+string const                                                                       +
 +----+-----------------------------------------------------------------------------------+
@@ -1824,18 +1430,14 @@ function arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|format to be documented
 
-to be documented
+.. das:function:: format (arg0:StringBuilderWriter implicit; arg1:string const; arg2:uint64 const ) 
 
-
-.. das:function:: format ( arg0:StringBuilderWriter implicit; arg1:string const; arg2:uint64 const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+string const                                                                       +
 +----+-----------------------------------------------------------------------------------+
@@ -1843,17 +1445,13 @@ function arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|format to be documented
 
-to be documented
-
-
-.. das:function:: format ( arg0:string const; arg1:double const )  : string
+.. das:function:: format (arg0:string const; arg1:double const )  : string
 
 format returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1862,17 +1460,13 @@ function arguments are
 +----+------------+
 
 
+function|$|format to be documented
 
-to be documented
-
-
-.. das:function:: format ( arg0:string const; arg1:float const )  : string
+.. das:function:: format (arg0:string const; arg1:float const )  : string
 
 format returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1881,17 +1475,13 @@ function arguments are
 +----+------------+
 
 
+function|$|format to be documented
 
-to be documented
-
-
-.. das:function:: format ( arg0:string const; arg1:int const )  : string
+.. das:function:: format (arg0:string const; arg1:int const )  : string
 
 format returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1900,17 +1490,13 @@ function arguments are
 +----+------------+
 
 
+function|$|format to be documented
 
-to be documented
-
-
-.. das:function:: format ( arg0:string const; arg1:int64 const )  : string
+.. das:function:: format (arg0:string const; arg1:int64 const )  : string
 
 format returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1919,17 +1505,13 @@ function arguments are
 +----+------------+
 
 
+function|$|format to be documented
 
-to be documented
-
-
-.. das:function:: format ( arg0:string const; arg1:uint const )  : string
+.. das:function:: format (arg0:string const; arg1:uint const )  : string
 
 format returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1938,17 +1520,13 @@ function arguments are
 +----+------------+
 
 
+function|$|format to be documented
 
-to be documented
-
-
-.. das:function:: format ( arg0:string const; arg1:uint64 const )  : string
+.. das:function:: format (arg0:string const; arg1:uint64 const )  : string
 
 format returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -1957,57 +1535,46 @@ function arguments are
 +----+------------+
 
 
+function|$|format to be documented
 
-to be documented
+.. das:function:: gc0_reset ( ) 
 
+arguments are
 
-.. das:function:: gc0_reset
-
-
-
-
-to be documented
++
 
 
-.. das:function:: gc0_restore_ptr ( arg0:string const )  : void?
+function|$|gc0_reset to be documented
+
+.. das:function:: gc0_restore_ptr (arg0:string const )  : void?
 
 gc0_restore_ptr returns void?
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|gc0_restore_ptr to be documented
 
-to be documented
-
-
-.. das:function:: gc0_restore_smart_ptr ( arg0:string const )  : smart_ptr<void>
+.. das:function:: gc0_restore_smart_ptr (arg0:string const )  : smart_ptr<void>
 
 gc0_restore_smart_ptr returns smart_ptr<void>
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|gc0_restore_smart_ptr to be documented
 
-to be documented
+.. das:function:: gc0_save_ptr (arg0:string const; arg1:void? const implicit ) 
 
-
-.. das:function:: gc0_save_ptr ( arg0:string const; arg1:void? const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+string const        +
@@ -2016,15 +1583,11 @@ function arguments are
 +----+--------------------+
 
 
+function|$|gc0_save_ptr to be documented
 
-to be documented
+.. das:function:: gc0_save_smart_ptr (arg0:string const; arg1:smart_ptr<void> const implicit ) 
 
-
-.. das:function:: gc0_save_smart_ptr ( arg0:string const; arg1:smart_ptr<void> const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+------------------------------+
 +arg0+string const                  +
@@ -2033,121 +1596,93 @@ function arguments are
 +----+------------------------------+
 
 
+function|$|gc0_save_smart_ptr to be documented
 
-to be documented
+.. das:function:: get_clock ( )  : clock
 
+get_clock returns  :ref:`builtin::clock <handle-builtin-clock>` 
 
-.. das:function:: get_clock
-
-get_clock returns  :ref:`builtin::clock <handle_builtin_clock>` 
-
-
-
-
-to be documented
-
-
-.. das:function:: get_das_root (  )  : string
-
-get_das_root returns string
-
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|get_clock to be documented
 
-to be documented
+.. das:function:: get_das_root ( )  : string
+
+get_das_root returns string
+
+arguments are
+
++
 
 
-.. das:function:: hash ( arg0:any )  : uint
+function|$|get_das_root to be documented
+
+.. das:function:: hash (arg0:any )  : uint
 
 hash returns uint
 
-
-
-function arguments are
+arguments are
 
 +----+---+
 +arg0+any+
 +----+---+
 
 
+function|$|hash to be documented
 
-to be documented
-
-
-.. das:function:: heap_bytes_allocated (  )  : uint
+.. das:function:: heap_bytes_allocated ( )  : uint
 
 heap_bytes_allocated returns uint
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|heap_bytes_allocated to be documented
 
-to be documented
-
-
-.. das:function:: heap_depth (  )  : int
+.. das:function:: heap_depth ( )  : int
 
 heap_depth returns int
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|heap_depth to be documented
 
-to be documented
-
-
-.. das:function:: heap_high_watermark (  )  : uint
+.. das:function:: heap_high_watermark ( )  : uint
 
 heap_high_watermark returns uint
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|heap_high_watermark to be documented
 
-to be documented
+.. das:function:: heap_report ( ) 
 
-
-.. das:function:: heap_report (  ) 
-
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|heap_report to be documented
 
-to be documented
-
-
-.. das:function:: i_das_ptr_add ( arg0:void? const implicit; arg1:int const; arg2:int const )  : void?
+.. das:function:: i_das_ptr_add (arg0:void? const implicit; arg1:int const; arg2:int const )  : void?
 
 i_das_ptr_add returns void?
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+void? const implicit+
@@ -2158,19 +1693,14 @@ function arguments are
 +----+--------------------+
 
 
+function|$|i_das_ptr_add to be documented
 
-to be documented
+.. das:function:: i_das_ptr_dec (arg0:void?& implicit; arg1:int const ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: i_das_ptr_dec ( arg0:void?& implicit; arg1:int const ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+---------------+
 +arg0+void?& implicit+
@@ -2179,17 +1709,13 @@ function arguments are
 +----+---------------+
 
 
+function|$|i_das_ptr_dec to be documented
 
-to be documented
-
-
-.. das:function:: i_das_ptr_diff ( arg0:void? const implicit; arg1:void? const implicit; arg2:int const )  : int64
+.. das:function:: i_das_ptr_diff (arg0:void? const implicit; arg1:void? const implicit; arg2:int const )  : int64
 
 i_das_ptr_diff returns int64
 
-
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+void? const implicit+
@@ -2200,19 +1726,14 @@ function arguments are
 +----+--------------------+
 
 
+function|$|i_das_ptr_diff to be documented
 
-to be documented
+.. das:function:: i_das_ptr_inc (arg0:void?& implicit; arg1:int const ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: i_das_ptr_inc ( arg0:void?& implicit; arg1:int const ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+---------------+
 +arg0+void?& implicit+
@@ -2221,19 +1742,14 @@ function arguments are
 +----+---------------+
 
 
+function|$|i_das_ptr_inc to be documented
 
-to be documented
+.. das:function:: i_das_ptr_set_add (arg0:void?& implicit; arg1:int const; arg2:int const ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: i_das_ptr_set_add ( arg0:void?& implicit; arg1:int const; arg2:int const ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+---------------+
 +arg0+void?& implicit+
@@ -2244,19 +1760,14 @@ function arguments are
 +----+---------------+
 
 
+function|$|i_das_ptr_set_add to be documented
 
-to be documented
+.. das:function:: i_das_ptr_set_sub (arg0:void?& implicit; arg1:int const; arg2:int const ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: i_das_ptr_set_sub ( arg0:void?& implicit; arg1:int const; arg2:int const ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+---------------+
 +arg0+void?& implicit+
@@ -2267,21 +1778,16 @@ function arguments are
 +----+---------------+
 
 
+function|$|i_das_ptr_set_sub to be documented
 
-to be documented
-
-
-.. das:function:: i_das_ptr_sub ( arg0:void?& implicit; arg1:int const; arg2:int const )  : void?
+.. das:function:: i_das_ptr_sub (arg0:void?& implicit; arg1:int const; arg2:int const )  : void?
 
 i_das_ptr_sub returns void?
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+---------------+
 +arg0+void?& implicit+
@@ -2292,81 +1798,61 @@ function arguments are
 +----+---------------+
 
 
+function|$|i_das_ptr_sub to be documented
 
-to be documented
+.. das:function:: identity (arg0:float3x4 implicit ) 
 
-
-.. das:function:: identity ( arg0:float3x4 implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-------------------------------------------------------------+
-+arg0+ :ref:`builtin::float3x4 <handle_builtin_float3x4>`  implicit+
++arg0+ :ref:`builtin::float3x4 <handle-builtin-float3x4>`  implicit+
 +----+-------------------------------------------------------------+
 
 
+function|$|identity to be documented
 
-to be documented
+.. das:function:: identity (arg0:float4x4 implicit ) 
 
-
-.. das:function:: identity ( arg0:float4x4 implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-------------------------------------------------------------+
-+arg0+ :ref:`builtin::float4x4 <handle_builtin_float4x4>`  implicit+
++arg0+ :ref:`builtin::float4x4 <handle-builtin-float4x4>`  implicit+
 +----+-------------------------------------------------------------+
 
 
+function|$|identity to be documented
 
-to be documented
+.. das:function:: inverse (arg0:float3x4 const implicit )  : float3x4
 
+inverse returns  :ref:`builtin::float3x4 <handle-builtin-float3x4>` 
 
-.. das:function:: inverse ( arg0:float3x4 const implicit )  : float3x4
-
-inverse returns  :ref:`builtin::float3x4 <handle_builtin_float3x4>` 
-
-
-
-function arguments are
+arguments are
 
 +----+-------------------------------------------------------------------+
-+arg0+ :ref:`builtin::float3x4 <handle_builtin_float3x4>`  const implicit+
++arg0+ :ref:`builtin::float3x4 <handle-builtin-float3x4>`  const implicit+
 +----+-------------------------------------------------------------------+
 
 
+function|$|inverse to be documented
 
-to be documented
-
-
-.. das:function:: is_alpha ( arg0:int const )  : bool
+.. das:function:: is_alpha (arg0:int const )  : bool
 
 is_alpha returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+---------+
 +arg0+int const+
 +----+---------+
 
 
+function|$|is_alpha to be documented
 
-to be documented
-
-
-.. das:function:: is_char_in_set ( arg0:int const; arg1:uint const[8] implicit )  : bool
+.. das:function:: is_char_in_set (arg0:int const; arg1:uint const[8] implicit )  : bool
 
 is_char_in_set returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+----------------------+
 +arg0+int const             +
@@ -2375,153 +1861,116 @@ function arguments are
 +----+----------------------+
 
 
+function|$|is_char_in_set to be documented
 
-to be documented
-
-
-.. das:function:: is_compiling (  )  : bool
+.. das:function:: is_compiling ( )  : bool
 
 is_compiling returns bool
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|is_compiling to be documented
 
-to be documented
-
-
-.. das:function:: is_compiling_macros (  )  : bool
+.. das:function:: is_compiling_macros ( )  : bool
 
 is_compiling_macros returns bool
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|is_compiling_macros to be documented
 
-to be documented
-
-
-.. das:function:: is_number ( arg0:int const )  : bool
+.. das:function:: is_number (arg0:int const )  : bool
 
 is_number returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+---------+
 +arg0+int const+
 +----+---------+
 
 
+function|$|is_number to be documented
 
-to be documented
-
-
-.. das:function:: is_white_space ( arg0:int const )  : bool
+.. das:function:: is_white_space (arg0:int const )  : bool
 
 is_white_space returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+---------+
 +arg0+int const+
 +----+---------+
 
 
+function|$|is_white_space to be documented
 
-to be documented
-
-
-.. das:function:: length ( arg0:array const implicit )  : int
+.. das:function:: length (arg0:array const implicit )  : int
 
 length returns int
 
-
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+array const implicit+
 +----+--------------------+
 
 
+function|$|length to be documented
 
-to be documented
-
-
-.. das:function:: length ( arg0:das_string implicit )  : int
+.. das:function:: length (arg0:das_string implicit )  : int
 
 length returns int
 
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------+
-+arg0+ :ref:`builtin::das_string <handle_builtin_das_string>`  implicit+
++arg0+ :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
 +----+-----------------------------------------------------------------+
 
 
+function|$|length to be documented
 
-to be documented
-
-
-.. das:function:: length ( arg0:table const implicit )  : int
+.. das:function:: length (arg0:table const implicit )  : int
 
 length returns int
 
-
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+table const implicit+
 +----+--------------------+
 
 
+function|$|length to be documented
 
-to be documented
-
-
-.. das:function:: length ( arg0:string const )  : int
+.. das:function:: length (arg0:string const )  : int
 
 length returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|length to be documented
 
-to be documented
-
-
-.. das:function:: memcmp ( arg0:void? const implicit; arg1:void? const implicit; arg2:int const )  : int
+.. das:function:: memcmp (arg0:void? const implicit; arg1:void? const implicit; arg2:int const )  : int
 
 memcmp returns int
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+--------------------+
 +arg0+void? const implicit+
@@ -2532,64 +1981,48 @@ function arguments are
 +----+--------------------+
 
 
+function|$|memcmp to be documented
 
-to be documented
+.. das:function:: panic (arg0:string const ) 
 
-
-.. das:function:: panic ( arg0:string const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|panic to be documented
 
-to be documented
+.. das:function:: peek (arg0:das_string const implicit; arg1:block<(string const#):void> const implicit ) 
 
-
-.. das:function:: peek ( arg0:das_string const implicit; arg1:block<(string const#):void> const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------+
-+arg0+ :ref:`builtin::das_string <handle_builtin_das_string>`  const implicit+
++arg0+ :ref:`builtin::das_string <handle-builtin-das_string>`  const implicit+
 +----+-----------------------------------------------------------------------+
 +arg1+block<(string const#):void> const implicit                             +
 +----+-----------------------------------------------------------------------+
 
 
+function|$|peek to be documented
 
-to be documented
+.. das:function:: print (arg0:string const ) 
 
-
-.. das:function:: print ( arg0:string const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|print to be documented
 
-to be documented
-
-
-.. das:function:: profile ( arg0:int const; arg1:string const; arg2:block<> const implicit )  : float
+.. das:function:: profile (arg0:int const; arg1:string const; arg2:block<> const implicit )  : float
 
 profile returns float
 
-
-
-function arguments are
+arguments are
 
 +----+----------------------+
 +arg0+int const             +
@@ -2600,17 +2033,13 @@ function arguments are
 +----+----------------------+
 
 
+function|$|profile to be documented
 
-to be documented
-
-
-.. das:function:: repeat ( arg0:string const; arg1:int const )  : string
+.. das:function:: repeat (arg0:string const; arg1:int const )  : string
 
 repeat returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -2619,17 +2048,13 @@ function arguments are
 +----+------------+
 
 
+function|$|repeat to be documented
 
-to be documented
-
-
-.. das:function:: replace ( arg0:string const; arg1:string const; arg2:string const )  : string
+.. das:function:: replace (arg0:string const; arg1:string const; arg2:string const )  : string
 
 replace returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -2640,102 +2065,77 @@ function arguments are
 +----+------------+
 
 
+function|$|replace to be documented
 
-to be documented
+.. das:function:: reset_profiler ( ) 
 
-
-.. das:function:: reset_profiler (  ) 
-
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|reset_profiler to be documented
 
-to be documented
+.. das:function:: resize (arg0:das_string implicit; arg1:int const ) 
 
-
-.. das:function:: resize ( arg0:das_string implicit; arg1:int const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------+
-+arg0+ :ref:`builtin::das_string <handle_builtin_das_string>`  implicit+
++arg0+ :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
 +----+-----------------------------------------------------------------+
 +arg1+int const                                                        +
 +----+-----------------------------------------------------------------+
 
 
+function|$|resize to be documented
 
-to be documented
-
-
-.. das:function:: reverse ( arg0:string const )  : string
+.. das:function:: reverse (arg0:string const )  : string
 
 reverse returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|reverse to be documented
 
-to be documented
-
-
-.. das:function:: rotate ( arg0:float3x4 const implicit; arg1:float3 const )  : float3
+.. das:function:: rotate (arg0:float3x4 const implicit; arg1:float3 const )  : float3
 
 rotate returns float3
 
-
-
-function arguments are
+arguments are
 
 +----+-------------------------------------------------------------------+
-+arg0+ :ref:`builtin::float3x4 <handle_builtin_float3x4>`  const implicit+
++arg0+ :ref:`builtin::float3x4 <handle-builtin-float3x4>`  const implicit+
 +----+-------------------------------------------------------------------+
 +arg1+float3 const                                                       +
 +----+-------------------------------------------------------------------+
 
 
+function|$|rotate to be documented
 
-to be documented
+.. das:function:: set (arg0:das_string implicit; arg1:string const ) 
 
-
-.. das:function:: set ( arg0:das_string implicit; arg1:string const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------+
-+arg0+ :ref:`builtin::das_string <handle_builtin_das_string>`  implicit+
++arg0+ :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
 +----+-----------------------------------------------------------------+
 +arg1+string const                                                     +
 +----+-----------------------------------------------------------------+
 
 
+function|$|set to be documented
 
-to be documented
+.. das:function:: set_variant_index (arg0:variant<> implicit; arg1:int const ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: set_variant_index ( arg0:variant<> implicit; arg1:int const ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+------------------+
 +arg0+variant<> implicit+
@@ -2744,17 +2144,13 @@ function arguments are
 +----+------------------+
 
 
+function|$|set_variant_index to be documented
 
-to be documented
-
-
-.. das:function:: slice ( arg0:string const; arg1:int const )  : string
+.. das:function:: slice (arg0:string const; arg1:int const )  : string
 
 slice returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -2763,17 +2159,13 @@ function arguments are
 +----+------------+
 
 
+function|$|slice to be documented
 
-to be documented
-
-
-.. das:function:: slice ( arg0:string const; arg1:int const; arg2:int const )  : string
+.. das:function:: slice (arg0:string const; arg1:int const; arg2:int const )  : string
 
 slice returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -2784,15 +2176,11 @@ function arguments are
 +----+------------+
 
 
+function|$|slice to be documented
 
-to be documented
+.. das:function:: smart_ptr_clone (arg0:smart_ptr<void>& implicit; arg1:void? const implicit ) 
 
-
-.. das:function:: smart_ptr_clone ( arg0:smart_ptr<void>& implicit; arg1:void? const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-------------------------+
 +arg0+smart_ptr<void>& implicit+
@@ -2801,15 +2189,11 @@ function arguments are
 +----+-------------------------+
 
 
+function|$|smart_ptr_clone to be documented
 
-to be documented
+.. das:function:: smart_ptr_clone (arg0:smart_ptr<void>& implicit; arg1:smart_ptr<void> const implicit ) 
 
-
-.. das:function:: smart_ptr_clone ( arg0:smart_ptr<void>& implicit; arg1:smart_ptr<void> const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+------------------------------+
 +arg0+smart_ptr<void>& implicit     +
@@ -2818,47 +2202,35 @@ function arguments are
 +----+------------------------------+
 
 
+function|$|smart_ptr_clone to be documented
 
-to be documented
-
-
-.. das:function:: smart_ptr_use_count ( arg0:smart_ptr<void> const implicit )  : uint
+.. das:function:: smart_ptr_use_count (arg0:smart_ptr<void> const implicit )  : uint
 
 smart_ptr_use_count returns uint
 
-
-
-function arguments are
+arguments are
 
 +----+------------------------------+
 +arg0+smart_ptr<void> const implicit+
 +----+------------------------------+
 
 
+function|$|smart_ptr_use_count to be documented
 
-to be documented
+.. das:function:: stackwalk ( ) 
 
-
-.. das:function:: stackwalk (  ) 
-
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|stackwalk to be documented
 
-to be documented
-
-
-.. das:function:: starts_with ( arg0:string const; arg1:string const )  : bool
+.. das:function:: starts_with (arg0:string const; arg1:string const )  : bool
 
 starts_with returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -2867,386 +2239,291 @@ function arguments are
 +----+------------+
 
 
+function|$|starts_with to be documented
 
-to be documented
-
-
-.. das:function:: string_heap_bytes_allocated (  )  : uint
+.. das:function:: string_heap_bytes_allocated ( )  : uint
 
 string_heap_bytes_allocated returns uint
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|string_heap_bytes_allocated to be documented
 
-to be documented
+.. das:function:: string_heap_collect ( ) 
 
+.. warning:: 
+  This is unsafe operation.
 
-.. das:function:: string_heap_collect (  ) 
-
-
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|string_heap_collect to be documented
 
-to be documented
-
-
-.. das:function:: string_heap_depth (  )  : int
+.. das:function:: string_heap_depth ( )  : int
 
 string_heap_depth returns int
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|string_heap_depth to be documented
 
-to be documented
-
-
-.. das:function:: string_heap_high_watermark (  )  : uint
+.. das:function:: string_heap_high_watermark ( )  : uint
 
 string_heap_high_watermark returns uint
 
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|string_heap_high_watermark to be documented
 
-to be documented
+.. das:function:: string_heap_report ( ) 
 
-
-.. das:function:: string_heap_report (  ) 
-
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|string_heap_report to be documented
 
-to be documented
-
-
-.. das:function:: strip ( arg0:string const )  : string
+.. das:function:: strip (arg0:string const )  : string
 
 strip returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|strip to be documented
 
-to be documented
-
-
-.. das:function:: strip_left ( arg0:string const )  : string
+.. das:function:: strip_left (arg0:string const )  : string
 
 strip_left returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|strip_left to be documented
 
-to be documented
-
-
-.. das:function:: strip_right ( arg0:string const )  : string
+.. das:function:: strip_right (arg0:string const )  : string
 
 strip_right returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|strip_right to be documented
 
-to be documented
+.. das:function:: terminate ( ) 
 
-
-.. das:function:: terminate (  ) 
-
-
-
-function arguments are
+arguments are
 
 +
 
 
+function|$|terminate to be documented
 
-to be documented
-
-
-.. das:function:: to_char ( arg0:int const )  : string
+.. das:function:: to_char (arg0:int const )  : string
 
 to_char returns string
 
-
-
-function arguments are
+arguments are
 
 +----+---------+
 +arg0+int const+
 +----+---------+
 
 
+function|$|to_char to be documented
 
-to be documented
-
-
-.. das:function:: to_float ( arg0:string const )  : float
+.. das:function:: to_float (arg0:string const )  : float
 
 to_float returns float
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|to_float to be documented
 
-to be documented
-
-
-.. das:function:: to_int ( arg0:string const )  : int
+.. das:function:: to_int (arg0:string const )  : int
 
 to_int returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|to_int to be documented
 
-to be documented
-
-
-.. das:function:: to_lower ( arg0:string const )  : string
+.. das:function:: to_lower (arg0:string const )  : string
 
 to_lower returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|to_lower to be documented
 
-to be documented
-
-
-.. das:function:: to_lower_in_place ( arg0:string const )  : string
+.. das:function:: to_lower_in_place (arg0:string const )  : string
 
 to_lower_in_place returns string
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|to_lower_in_place to be documented
 
-to be documented
-
-
-.. das:function:: to_upper ( arg0:string const )  : string
+.. das:function:: to_upper (arg0:string const )  : string
 
 to_upper returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|to_upper to be documented
 
-to be documented
-
-
-.. das:function:: to_upper_in_place ( arg0:string const )  : string
+.. das:function:: to_upper_in_place (arg0:string const )  : string
 
 to_upper_in_place returns string
 
+.. warning:: 
+  This is unsafe operation.
 
-
-.. warning::
-
- This is unsafe operation.
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|to_upper_in_place to be documented
 
-to be documented
+.. das:function:: translation (arg0:float3 const )  : float4x4
 
+translation returns  :ref:`builtin::float4x4 <handle-builtin-float4x4>` 
 
-.. das:function:: translation ( arg0:float3 const )  : float4x4
-
-translation returns  :ref:`builtin::float4x4 <handle_builtin_float4x4>` 
-
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+float3 const+
 +----+------------+
 
 
+function|$|translation to be documented
 
-to be documented
+.. das:function:: transpose (arg0:float4x4 const implicit )  : float4x4
 
+transpose returns  :ref:`builtin::float4x4 <handle-builtin-float4x4>` 
 
-.. das:function:: transpose ( arg0:float4x4 const implicit )  : float4x4
-
-transpose returns  :ref:`builtin::float4x4 <handle_builtin_float4x4>` 
-
-
-
-function arguments are
+arguments are
 
 +----+-------------------------------------------------------------------+
-+arg0+ :ref:`builtin::float4x4 <handle_builtin_float4x4>`  const implicit+
++arg0+ :ref:`builtin::float4x4 <handle-builtin-float4x4>`  const implicit+
 +----+-------------------------------------------------------------------+
 
 
+function|$|transpose to be documented
 
-to be documented
-
-
-.. das:function:: unescape ( arg0:string const )  : string
+.. das:function:: unescape (arg0:string const )  : string
 
 unescape returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|$|unescape to be documented
 
-to be documented
-
-
-.. das:function:: variant_index ( arg0:variant<> const implicit )  : int
+.. das:function:: variant_index (arg0:variant<> const implicit )  : int
 
 variant_index returns int
 
-
-
-function arguments are
+arguments are
 
 +----+------------------------+
 +arg0+variant<> const implicit+
 +----+------------------------+
 
 
+function|$|variant_index to be documented
 
-to be documented
+.. das:function:: write (arg0:StringBuilderWriter; arg1:any ) 
 
-
-.. das:function:: write ( arg0:StringBuilderWriter; arg1:any ) 
-
-
-
-function arguments are
+arguments are
 
 +----+--------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>` +
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>` +
 +----+--------------------------------------------------------------------------+
 +arg1+any                                                                       +
 +----+--------------------------------------------------------------------------+
 
 
+function|$|write to be documented
 
-to be documented
+.. das:function:: write_char (arg0:StringBuilderWriter implicit; arg1:int const ) 
 
-
-.. das:function:: write_char ( arg0:StringBuilderWriter implicit; arg1:int const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+int const                                                                          +
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|write_char to be documented
 
-to be documented
+.. das:function:: write_chars (arg0:StringBuilderWriter implicit; arg1:int const; arg2:int const ) 
 
-
-.. das:function:: write_chars ( arg0:StringBuilderWriter implicit; arg1:int const; arg2:int const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+int const                                                                          +
 +----+-----------------------------------------------------------------------------------+
@@ -3254,25 +2531,19 @@ function arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
+function|$|write_chars to be documented
 
-to be documented
+.. das:function:: write_escape_string (arg0:StringBuilderWriter implicit; arg1:string const ) 
 
-
-.. das:function:: write_escape_string ( arg0:StringBuilderWriter implicit; arg1:string const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------------------+
-+arg0+ :ref:`builtin::StringBuilderWriter <handle_builtin_StringBuilderWriter>`  implicit+
++arg0+ :ref:`builtin::StringBuilderWriter <handle-builtin-StringBuilderWriter>`  implicit+
 +----+-----------------------------------------------------------------------------------+
 +arg1+string const                                                                       +
 +----+-----------------------------------------------------------------------------------+
 
 
-
-to be documented
-
+function|$|write_escape_string to be documented
 
 

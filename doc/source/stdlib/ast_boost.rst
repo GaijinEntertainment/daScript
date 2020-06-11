@@ -13,504 +13,476 @@ Classes
 
 .. das:class:: BetterRttiVisitor : AstVariantMacro
 
-to be documented
+class|ast_boost|BetterRttiVisitor to be documented
 
-.. das:method:: BetterRttiVisitor.visitExprIsVariant ( self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprIsVariant> const )  : ExpressionPtr 
+.. das:method:: BetterRttiVisitor.visitExprIsVariant (self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprIsVariant> const )  : ExpressionPtr
 
-visitExprIsVariant returns  :ref:`ExpressionPtr <alias_ExpressionPtr>` 
+visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-method arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias_ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle_rtti_Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIsVariant <handle_ast_ExprIsVariant>` > const+
-+----+-----------------------------------------------------------------------+
-
-
-to be documented
-
-
-.. das:method:: BetterRttiVisitor.visitExprAsVariant ( self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprAsVariant> const )  : ExpressionPtr 
-
-visitExprAsVariant returns  :ref:`ExpressionPtr <alias_ExpressionPtr>` 
-
-method arguments are
+arguments are
 
 +----+-----------------------------------------------------------------------+
 +self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
 +----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias_ProgramPtr>`                                  +
++prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
 +----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle_rtti_Module>` ? const                      +
++mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
 +----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAsVariant <handle_ast_ExprAsVariant>` > const+
++expr+smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
 +----+-----------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|BetterRttiVisitor.visitExprIsVariant to be documented
+
+.. das:method:: BetterRttiVisitor.visitExprAsVariant (self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprAsVariant> const )  : ExpressionPtr
+
+visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+arguments are
+
++----+-----------------------------------------------------------------------+
++self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
++----+-----------------------------------------------------------------------+
++prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++----+-----------------------------------------------------------------------+
++mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++----+-----------------------------------------------------------------------+
++expr+smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
++----+-----------------------------------------------------------------------+
 
 
-.. das:method:: BetterRttiVisitor.visitExprSafeAsVariant ( self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprSafeAsVariant> const )  : ExpressionPtr 
+method|ast_boost|BetterRttiVisitor.visitExprAsVariant to be documented
 
-visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias_ExpressionPtr>` 
+.. das:method:: BetterRttiVisitor.visitExprSafeAsVariant (self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprSafeAsVariant> const )  : ExpressionPtr
 
-method arguments are
+visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+arguments are
 
 +----+-------------------------------------------------------------------------------+
 +self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`                      +
 +----+-------------------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias_ProgramPtr>`                                          +
++prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                          +
 +----+-------------------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle_rtti_Module>` ? const                              +
++mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                              +
 +----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAsVariant <handle_ast_ExprSafeAsVariant>` > const+
++expr+smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
 +----+-------------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|BetterRttiVisitor.visitExprSafeAsVariant to be documented
 
 .. _struct-ast_boost-MacroMacro:
 
 .. das:class:: MacroMacro : AstFunctionAnnotation
 
-to be documented
+class|ast_boost|MacroMacro to be documented
 
-.. das:method:: MacroMacro.transform ( self:AstFunctionAnnotation; call:smart_ptr<ast::ExprCall>; errors:das_string )  : ExpressionPtr 
+.. das:method:: MacroMacro.transform (self:AstFunctionAnnotation; call:smart_ptr<ast::ExprCall>; errors:das_string )  : ExpressionPtr
 
-transform returns  :ref:`ExpressionPtr <alias_ExpressionPtr>` 
+transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-method arguments are
+arguments are
 
 +------+----------------------------------------------------------------------+
 +self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
 +------+----------------------------------------------------------------------+
-+call  +smart_ptr< :ref:`ast::ExprCall <handle_ast_ExprCall>` >               +
++call  +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
 +------+----------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`               +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`               +
 +------+----------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|MacroMacro.transform to be documented
 
-
-.. das:method:: MacroMacro.apply ( self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: MacroMacro.apply (self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
 +------+--------------------------------------------------------------------------------+
-+func  + :ref:`FunctionPtr <alias_FunctionPtr>`                                         +
++func  + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|MacroMacro.apply to be documented
 
-
-.. das:method:: MacroMacro.finish ( self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; progArgs:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: MacroMacro.finish (self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; progArgs:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +--------+--------------------------------------------------------------------------------+
 +self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
 +--------+--------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias_FunctionPtr>`                                         +
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
 +--------+--------------------------------------------------------------------------------+
-+group   + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +--------+--------------------------------------------------------------------------------+
-+args    + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +--------+--------------------------------------------------------------------------------+
-+progArgs+ :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++progArgs+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +--------+--------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +--------+--------------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|MacroMacro.finish to be documented
 
 .. _struct-ast_boost-SetupAnyAnnotation:
 
 .. das:class:: SetupAnyAnnotation : AstStructureAnnotation
 
-to be documented
+class|ast_boost|SetupAnyAnnotation to be documented
 
 it defines as follows
 
   annotation_function_call : string
   name                     : string
 
-.. das:method:: SetupAnyAnnotation.apply ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupAnyAnnotation.apply (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupAnyAnnotation.apply to be documented
 
-
-.. das:method:: SetupAnyAnnotation.finish ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupAnyAnnotation.finish (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupAnyAnnotation.finish to be documented
 
+.. das:method:: SetupAnyAnnotation.setup_call (self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> ) 
 
-.. das:method:: SetupAnyAnnotation.setup_call ( self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> )  
-
-method arguments are
+arguments are
 
 +----+----------------------------------------------------------------------------+
 +self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
 +----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias_StructurePtr>`                                   +
++st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
 +----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle_ast_ExprCall>` >                     +
++cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
 +----+----------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|SetupAnyAnnotation.setup_call to be documented
 
 .. _struct-ast_boost-SetupFunctionAnnotatoin:
 
 .. das:class:: SetupFunctionAnnotatoin : SetupAnyAnnotation
 
-to be documented
+class|ast_boost|SetupFunctionAnnotatoin to be documented
 
 it defines as follows
 
   annotation_function_call : string
   name                     : string
 
-.. das:method:: SetupFunctionAnnotatoin.apply ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupFunctionAnnotatoin.apply (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupFunctionAnnotatoin.apply to be documented
 
-
-.. das:method:: SetupFunctionAnnotatoin.finish ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupFunctionAnnotatoin.finish (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupFunctionAnnotatoin.finish to be documented
 
+.. das:method:: SetupFunctionAnnotatoin.setup_call (self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> ) 
 
-.. das:method:: SetupFunctionAnnotatoin.setup_call ( self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> )  
-
-method arguments are
+arguments are
 
 +----+----------------------------------------------------------------------------+
 +self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
 +----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias_StructurePtr>`                                   +
++st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
 +----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle_ast_ExprCall>` >                     +
++cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
 +----+----------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|SetupFunctionAnnotatoin.setup_call to be documented
 
 .. _struct-ast_boost-SetupReaderMacro:
 
 .. das:class:: SetupReaderMacro : SetupAnyAnnotation
 
-to be documented
+class|ast_boost|SetupReaderMacro to be documented
 
 it defines as follows
 
   annotation_function_call : string
   name                     : string
 
-.. das:method:: SetupReaderMacro.apply ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupReaderMacro.apply (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupReaderMacro.apply to be documented
 
-
-.. das:method:: SetupReaderMacro.finish ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupReaderMacro.finish (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupReaderMacro.finish to be documented
 
+.. das:method:: SetupReaderMacro.setup_call (self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> ) 
 
-.. das:method:: SetupReaderMacro.setup_call ( self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> )  
-
-method arguments are
+arguments are
 
 +----+----------------------------------------------------------------------------+
 +self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
 +----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias_StructurePtr>`                                   +
++st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
 +----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle_ast_ExprCall>` >                     +
++cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
 +----+----------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|SetupReaderMacro.setup_call to be documented
 
 .. _struct-ast_boost-SetupVariantMacro:
 
 .. das:class:: SetupVariantMacro : SetupAnyAnnotation
 
-to be documented
+class|ast_boost|SetupVariantMacro to be documented
 
 it defines as follows
 
   annotation_function_call : string
   name                     : string
 
-.. das:method:: SetupVariantMacro.apply ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupVariantMacro.apply (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupVariantMacro.apply to be documented
 
-
-.. das:method:: SetupVariantMacro.finish ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: SetupVariantMacro.finish (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|SetupVariantMacro.finish to be documented
 
+.. das:method:: SetupVariantMacro.setup_call (self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> ) 
 
-.. das:method:: SetupVariantMacro.setup_call ( self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> )  
-
-method arguments are
+arguments are
 
 +----+----------------------------------------------------------------------------+
 +self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
 +----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias_StructurePtr>`                                   +
++st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
 +----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle_ast_ExprCall>` >                     +
++cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
 +----+----------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|SetupVariantMacro.setup_call to be documented
 
 .. _struct-ast_boost-TagFunctionAnnotation:
 
 .. das:class:: TagFunctionAnnotation : AstFunctionAnnotation
 
-to be documented
+class|ast_boost|TagFunctionAnnotation to be documented
 
-.. das:method:: TagFunctionAnnotation.transform ( self:AstFunctionAnnotation; call:smart_ptr<ast::ExprCall>; errors:das_string )  : ExpressionPtr 
+.. das:method:: TagFunctionAnnotation.transform (self:AstFunctionAnnotation; call:smart_ptr<ast::ExprCall>; errors:das_string )  : ExpressionPtr
 
-transform returns  :ref:`ExpressionPtr <alias_ExpressionPtr>` 
+transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-method arguments are
+arguments are
 
 +------+----------------------------------------------------------------------+
 +self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
 +------+----------------------------------------------------------------------+
-+call  +smart_ptr< :ref:`ast::ExprCall <handle_ast_ExprCall>` >               +
++call  +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
 +------+----------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`               +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`               +
 +------+----------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|TagFunctionAnnotation.transform to be documented
 
-
-.. das:method:: TagFunctionAnnotation.apply ( self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: TagFunctionAnnotation.apply (self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
 +------+--------------------------------------------------------------------------------+
-+func  + :ref:`FunctionPtr <alias_FunctionPtr>`                                         +
++func  + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|TagFunctionAnnotation.apply to be documented
 
-
-.. das:method:: TagFunctionAnnotation.finish ( self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; progArgs:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: TagFunctionAnnotation.finish (self:AstFunctionAnnotation; func:FunctionPtr; group:ModuleGroup; args:AnnotationArgumentList const; progArgs:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +--------+--------------------------------------------------------------------------------+
 +self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
 +--------+--------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias_FunctionPtr>`                                         +
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
 +--------+--------------------------------------------------------------------------------+
-+group   + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +--------+--------------------------------------------------------------------------------+
-+args    + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +--------+--------------------------------------------------------------------------------+
-+progArgs+ :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++progArgs+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +--------+--------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +--------+--------------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|TagFunctionAnnotation.finish to be documented
 
 .. _struct-ast_boost-TagFunctionMacro:
 
 .. das:class:: TagFunctionMacro : SetupAnyAnnotation
 
-to be documented
+class|ast_boost|TagFunctionMacro to be documented
 
 it defines as follows
 
@@ -518,148 +490,131 @@ it defines as follows
   name                     : string
   tag                      : string
 
-.. das:method:: TagFunctionMacro.apply ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: TagFunctionMacro.apply (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|TagFunctionMacro.apply to be documented
 
-
-.. das:method:: TagFunctionMacro.finish ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: TagFunctionMacro.finish (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|TagFunctionMacro.finish to be documented
 
+.. das:method:: TagFunctionMacro.setup_call (self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> ) 
 
-.. das:method:: TagFunctionMacro.setup_call ( self:SetupAnyAnnotation; st:StructurePtr; cll:smart_ptr<ast::ExprCall> )  
-
-method arguments are
+arguments are
 
 +----+----------------------------------------------------------------------------+
 +self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
 +----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias_StructurePtr>`                                   +
++st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
 +----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle_ast_ExprCall>` >                     +
++cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
 +----+----------------------------------------------------------------------------+
 
 
-to be documented
-
-
+method|ast_boost|TagFunctionMacro.setup_call to be documented
 
 .. _struct-ast_boost-TagStructureAnnotation:
 
 .. das:class:: TagStructureAnnotation : AstStructureAnnotation
 
-to be documented
+class|ast_boost|TagStructureAnnotation to be documented
 
-.. das:method:: TagStructureAnnotation.apply ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: TagStructureAnnotation.apply (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 apply returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|TagStructureAnnotation.apply to be documented
 
-
-.. das:method:: TagStructureAnnotation.finish ( self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool 
+.. das:method:: TagStructureAnnotation.finish (self:AstStructureAnnotation; st:StructurePtr; group:ModuleGroup; args:AnnotationArgumentList const; errors:das_string )  : bool
 
 finish returns bool
 
-method arguments are
+arguments are
 
 +------+--------------------------------------------------------------------------------+
 +self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
 +------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias_StructurePtr>`                                       +
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
 +------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle_ast_ModuleGroup>`                               +
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
 +------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle_builtin_das_string>`                         +
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
 +------+--------------------------------------------------------------------------------+
 
 
-to be documented
+method|ast_boost|TagStructureAnnotation.finish to be documented
 
-
-
-++++++++
-Generics
-++++++++
-
-.. das:function:: convert_to_expression ( value:auto&; at:LineInfo const )  : auto
+.. das:function:: convert_to_expression (value:auto&; at:LineInfo const )  : auto
 
 convert_to_expression returns auto
 
-
-
-function arguments are
+arguments are
 
 +-----+----------------------------------------------------+
 +value+auto&                                               +
 +-----+----------------------------------------------------+
-+at   + :ref:`rtti::LineInfo <handle_rtti_LineInfo>`  const+
++at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
 +-----+----------------------------------------------------+
 
 
+function|ast_boost|convert_to_expression to be documented
 
-to be documented
-
-
-.. das:function:: describe_bitfield ( bf:auto const; merger:string const )  : auto
+.. das:function:: describe_bitfield (bf:auto const; merger:string const )  : auto
 
 describe_bitfield returns auto
 
-
-
-function arguments are
+arguments are
 
 +------+------------+
 +bf    +auto const  +
@@ -668,17 +623,13 @@ function arguments are
 +------+------------+
 
 
+function|ast_boost|describe_bitfield to be documented
 
-to be documented
-
-
-.. das:function:: setup_tag_annotation ( name:string const; tag:string const; classPtr:auto const )  : auto
+.. das:function:: setup_tag_annotation (name:string const; tag:string const; classPtr:auto const )  : auto
 
 setup_tag_annotation returns auto
 
-
-
-function arguments are
+arguments are
 
 +--------+------------+
 +name    +string const+
@@ -689,158 +640,120 @@ function arguments are
 +--------+------------+
 
 
+function|ast_boost|setup_tag_annotation to be documented
 
-to be documented
-
-
-+++++++++
-Functions
-+++++++++
-
-.. das:function:: describe ( list:AnnotationArgumentList const )  : string const
+.. das:function:: describe (list:AnnotationArgumentList const )  : string const
 
 describe returns string const
 
-
-
-function arguments are
+arguments are
 
 +----+--------------------------------------------------------------------------------+
-+list+ :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++list+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +----+--------------------------------------------------------------------------------+
 
 
+function|ast_boost|describe to be documented
 
-to be documented
-
-
-.. das:function:: describe ( ann:AnnotationDeclaration const )  : string
+.. das:function:: describe (ann:AnnotationDeclaration const )  : string
 
 describe returns string
 
-
-
-function arguments are
+arguments are
 
 +---+------------------------------------------------------------------------------+
-+ann+ :ref:`rtti::AnnotationDeclaration <handle_rtti_AnnotationDeclaration>`  const+
++ann+ :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>`  const+
 +---+------------------------------------------------------------------------------+
 
 
+function|ast_boost|describe to be documented
 
-to be documented
-
-
-.. das:function:: describe ( list:AnnotationList const )  : string const
+.. das:function:: describe (list:AnnotationList const )  : string const
 
 describe returns string const
 
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------------+
-+list+ :ref:`rtti::AnnotationList <handle_rtti_AnnotationList>`  const+
++list+ :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`  const+
 +----+----------------------------------------------------------------+
 
 
+function|ast_boost|describe to be documented
 
-to be documented
+.. das:function:: find_arg (argn:string const; args:AnnotationArgumentList const )  : RttiValue
 
+find_arg returns  :ref:`RttiValue <alias-RttiValue>` 
 
-.. das:function:: find_arg ( argn:string const; args:AnnotationArgumentList const )  : RttiValue
-
-find_arg returns  :ref:`RttiValue <alias_RttiValue>` 
-
-
-
-function arguments are
+arguments are
 
 +----+--------------------------------------------------------------------------------+
 +argn+string const                                                                    +
 +----+--------------------------------------------------------------------------------+
-+args+ :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>`  const+
++args+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
 +----+--------------------------------------------------------------------------------+
 
 
+function|ast_boost|find_arg to be documented
 
-to be documented
-
-
-.. das:function:: isExpression ( t:TypeDeclPtr; top:bool const )  : bool
+.. das:function:: isExpression (t:TypeDeclPtr; top:bool const )  : bool
 
 isExpression returns bool
 
-
-
-function arguments are
+arguments are
 
 +---+----------------------------------------+
-+t  + :ref:`TypeDeclPtr <alias_TypeDeclPtr>` +
++t  + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
 +---+----------------------------------------+
 +top+bool const                              +
 +---+----------------------------------------+
 
 
+function|ast_boost|isExpression to be documented
 
-to be documented
-
-
-.. das:function:: is_class_method ( cinfo:StructurePtr; finfo:TypeDeclPtr )  : bool const
+.. das:function:: is_class_method (cinfo:StructurePtr; finfo:TypeDeclPtr )  : bool const
 
 is_class_method returns bool const
 
-
-
-function arguments are
+arguments are
 
 +-----+------------------------------------------+
-+cinfo+ :ref:`StructurePtr <alias_StructurePtr>` +
++cinfo+ :ref:`StructurePtr <alias-StructurePtr>` +
 +-----+------------------------------------------+
-+finfo+ :ref:`TypeDeclPtr <alias_TypeDeclPtr>`   +
++finfo+ :ref:`TypeDeclPtr <alias-TypeDeclPtr>`   +
 +-----+------------------------------------------+
 
 
+function|ast_boost|is_class_method to be documented
 
-to be documented
-
-
-.. das:function:: is_same_or_inherited ( parent:ast::Structure? const; child:ast::Structure? const )  : bool const
+.. das:function:: is_same_or_inherited (parent:ast::Structure? const; child:ast::Structure? const )  : bool const
 
 is_same_or_inherited returns bool const
 
-
-
-function arguments are
+arguments are
 
 +------+-----------------------------------------------------+
-+parent+ :ref:`ast::Structure <handle_ast_Structure>` ? const+
++parent+ :ref:`ast::Structure <handle-ast-Structure>` ? const+
 +------+-----------------------------------------------------+
-+child + :ref:`ast::Structure <handle_ast_Structure>` ? const+
++child + :ref:`ast::Structure <handle-ast-Structure>` ? const+
 +------+-----------------------------------------------------+
 
 
+function|ast_boost|is_same_or_inherited to be documented
 
-to be documented
+.. das:function:: setup_macro (name:string const; at:LineInfo const )  : ast::ExprBlock?
 
+setup_macro returns  :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?
 
-.. das:function:: setup_macro ( name:string const; at:LineInfo const )  : ast::ExprBlock?
-
-setup_macro returns  :ref:`ast::ExprBlock <handle_ast_ExprBlock>` ?
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------+
 +name+string const                                        +
 +----+----------------------------------------------------+
-+at  + :ref:`rtti::LineInfo <handle_rtti_LineInfo>`  const+
++at  + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
 +----+----------------------------------------------------+
 
 
-
-to be documented
-
+function|ast_boost|setup_macro to be documented
 
 

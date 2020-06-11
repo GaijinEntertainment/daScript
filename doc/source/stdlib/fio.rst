@@ -5,13 +5,21 @@
 File input output library
 =========================
 
-++++++++++
-Structures
-++++++++++
++++++++++++
+TypeAliases
++++++++++++
+
+.. _alias-file:
+
+.. das:attribute:: file = file
+
+typedef|fio|file to be documented
 
 .. _struct-fio-df_header:
 
 .. das:attribute:: df_header
+
+
 
 df_header fields are
 
@@ -22,21 +30,19 @@ df_header fields are
 +-----+----+
 
 
-to be documented
-
+structure|fio|df_header to be documented
 
 ++++++++++++++++++
 Handled structures
 ++++++++++++++++++
 
-.. _handle_fio_FILE:
+.. _handle-fio-FILE:
 
 .. das:attribute:: FILE
 
-to be documented
+structure_annotation|fio|FILE to be documented
 
-
-.. _handle_fio_FStat:
+.. _handle-fio-FStat:
 
 .. das:attribute:: FStat
 
@@ -50,34 +56,27 @@ FStat fields are
 FStat properties are
 
 +------+----------------------------------------------+
-+atime + :ref:`builtin::clock <handle_builtin_clock>` +
++atime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
 +size  +uint64                                        +
 +------+----------------------------------------------+
-+ctime + :ref:`builtin::clock <handle_builtin_clock>` +
++ctime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
 +is_dir+bool                                          +
 +------+----------------------------------------------+
-+mtime + :ref:`builtin::clock <handle_builtin_clock>` +
++mtime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
 +is_reg+bool                                          +
 +------+----------------------------------------------+
 
 
-to be documented
+structure_annotation|fio|FStat to be documented
 
-
-++++++++
-Generics
-++++++++
-
-.. das:function:: dir ( path:string const; blk:block<(filename:string const):void> const )  : auto
+.. das:function:: dir (path:string const; blk:block<(filename:string const):void> const )  : auto
 
 dir returns auto
 
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------+
 +path+string const                             +
@@ -86,74 +85,54 @@ function arguments are
 +----+-----------------------------------------+
 
 
+function|fio|dir to be documented
 
-to be documented
-
-
-.. das:function:: fload ( f:fio::FILE const? const; buf:auto(BufType) const )  : auto
+.. das:function:: fload (f:file; buf:auto(BufType) const )  : auto
 
 fload returns auto
 
+arguments are
+
++---+--------------------------+
++f  + :ref:`file <alias-file>` +
++---+--------------------------+
++buf+auto(BufType) const       +
++---+--------------------------+
 
 
-function arguments are
+function|fio|fload to be documented
 
-+---+-------------------------------------------------+
-+f  + :ref:`fio::FILE <handle_fio_FILE>`  const? const+
-+---+-------------------------------------------------+
-+buf+auto(BufType) const                              +
-+---+-------------------------------------------------+
-
-
-
-to be documented
-
-
-.. das:function:: fsave ( f:fio::FILE const? const; buf:auto(BufType) const )  : auto
+.. das:function:: fsave (f:file; buf:auto(BufType) const )  : auto
 
 fsave returns auto
 
+arguments are
+
++---+--------------------------+
++f  + :ref:`file <alias-file>` +
++---+--------------------------+
++buf+auto(BufType) const       +
++---+--------------------------+
 
 
-function arguments are
+function|fio|fsave to be documented
 
-+---+-------------------------------------------------+
-+f  + :ref:`fio::FILE <handle_fio_FILE>`  const? const+
-+---+-------------------------------------------------+
-+buf+auto(BufType) const                              +
-+---+-------------------------------------------------+
-
-
-
-to be documented
-
-
-+++++++++
-Functions
-+++++++++
-
-.. das:function:: base_name ( arg0:string const )  : string
+.. das:function:: base_name (arg0:string const )  : string
 
 base_name returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|fio|base_name to be documented
 
-to be documented
+.. das:function:: builtin_dir (arg0:string const; arg1:block<> const implicit ) 
 
-
-.. das:function:: builtin_dir ( arg0:string const; arg1:block<> const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------+
 +arg0+string const          +
@@ -162,100 +141,76 @@ function arguments are
 +----+----------------------+
 
 
+function|fio|builtin_dir to be documented
 
-to be documented
-
-
-.. das:function:: dir_name ( arg0:string const )  : string
+.. das:function:: dir_name (arg0:string const )  : string
 
 dir_name returns string
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|fio|dir_name to be documented
 
-to be documented
+.. das:function:: fclose (arg0:fio::FILE const? const implicit ) 
 
-
-.. das:function:: fclose ( arg0:fio::FILE const? const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
 
 
+function|fio|fclose to be documented
 
-to be documented
-
-
-.. das:function:: feof ( arg0:fio::FILE const? const implicit )  : bool
+.. das:function:: feof (arg0:fio::FILE const? const implicit )  : bool
 
 feof returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
 
 
+function|fio|feof to be documented
 
-to be documented
-
-
-.. das:function:: fgets ( arg0:fio::FILE const? const implicit )  : string
+.. das:function:: fgets (arg0:fio::FILE const? const implicit )  : string
 
 fgets returns string
 
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
 
 
+function|fio|fgets to be documented
 
-to be documented
+.. das:function:: fmap (arg0:fio::FILE const? const implicit; arg1:block<(string const#):void> const implicit ) 
 
-
-.. das:function:: fmap ( arg0:fio::FILE const? const implicit; arg1:block<(string const#):void> const implicit ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
 +arg1+block<(string const#):void> const implicit                +
 +----+----------------------------------------------------------+
 
 
+function|fio|fmap to be documented
 
-to be documented
+.. das:function:: fopen (arg0:string const; arg1:string const )  : fio::FILE const? const
 
+fopen returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
-.. das:function:: fopen ( arg0:string const; arg1:string const )  : fio::FILE const? const
-
-fopen returns  :ref:`fio::FILE <handle_fio_FILE>`  const? const
-
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
@@ -264,212 +219,173 @@ function arguments are
 +----+------------+
 
 
+function|fio|fopen to be documented
 
-to be documented
+.. das:function:: fopen (name:string const; mode:string const; blk:block<(f:fio::FILE const? const):void> const ) 
 
+arguments are
 
-.. das:function:: fopen ( name:string const; mode:string const; blk:block<(f:fio::FILE const? const):void> const ) 
-
-
-
-function arguments are
-
-+----+-----------------------------------------------------------------------+
-+name+string const                                                           +
-+----+-----------------------------------------------------------------------+
-+mode+string const                                                           +
-+----+-----------------------------------------------------------------------+
-+blk +block<(f: :ref:`fio::FILE <handle_fio_FILE>`  const? const):void> const+
-+----+-----------------------------------------------------------------------+
++----+------------------------------------------------+
++name+string const                                    +
++----+------------------------------------------------+
++mode+string const                                    +
++----+------------------------------------------------+
++blk +block<(f: :ref:`file <alias-file>` ):void> const+
++----+------------------------------------------------+
 
 
+function|fio|fopen to be documented
 
-to be documented
+.. das:function:: fprint (arg0:fio::FILE const? const implicit; arg1:string const ) 
 
-
-.. das:function:: fprint ( arg0:fio::FILE const? const implicit; arg1:string const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
 +arg1+string const                                              +
 +----+----------------------------------------------------------+
 
 
+function|fio|fprint to be documented
 
-to be documented
-
-
-.. das:function:: fread ( arg0:fio::FILE const? const implicit )  : string
+.. das:function:: fread (arg0:fio::FILE const? const implicit )  : string
 
 fread returns string
 
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
 
 
+function|fio|fread to be documented
 
-to be documented
+.. das:function:: fstat (f:file )  : FStat
 
+fstat returns  :ref:`fio::FStat <handle-fio-FStat>` 
 
-.. das:function:: fstat ( f:fio::FILE const? const )  : FStat
+arguments are
 
-fstat returns  :ref:`fio::FStat <handle_fio_FStat>` 
-
-
-
-function arguments are
-
-+-+-------------------------------------------------+
-+f+ :ref:`fio::FILE <handle_fio_FILE>`  const? const+
-+-+-------------------------------------------------+
++-+--------------------------+
++f+ :ref:`file <alias-file>` +
++-+--------------------------+
 
 
+function|fio|fstat to be documented
 
-to be documented
-
-
-.. das:function:: fstat ( arg0:fio::FILE const? const implicit; arg1:FStat implicit )  : bool
+.. das:function:: fstat (arg0:fio::FILE const? const implicit; arg1:FStat implicit )  : bool
 
 fstat returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
-+arg1+ :ref:`fio::FStat <handle_fio_FStat>`  implicit           +
++arg1+ :ref:`fio::FStat <handle-fio-FStat>`  implicit           +
 +----+----------------------------------------------------------+
 
 
+function|fio|fstat to be documented
 
-to be documented
+.. das:function:: fstderr ( )  : fio::FILE const? const
 
+fstderr returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
-.. das:function:: fstderr
+arguments are
 
-fstderr returns  :ref:`fio::FILE <handle_fio_FILE>`  const? const
-
-
-
-
-to be documented
++
 
 
-.. das:function:: fstdin
+function|fio|fstderr to be documented
 
-fstdin returns  :ref:`fio::FILE <handle_fio_FILE>`  const? const
+.. das:function:: fstdin ( )  : fio::FILE const? const
 
+fstdin returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
+arguments are
 
-
-to be documented
-
-
-.. das:function:: fstdout
-
-fstdout returns  :ref:`fio::FILE <handle_fio_FILE>`  const? const
++
 
 
+function|fio|fstdin to be documented
+
+.. das:function:: fstdout ( )  : fio::FILE const? const
+
+fstdout returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
+
+arguments are
+
++
 
 
-to be documented
+function|fio|fstdout to be documented
 
+.. das:function:: fwrite (arg0:fio::FILE const? const implicit; arg1:string const ) 
 
-.. das:function:: fwrite ( arg0:fio::FILE const? const implicit; arg1:string const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle_fio_FILE>`  const? const implicit+
++arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +----+----------------------------------------------------------+
 +arg1+string const                                              +
 +----+----------------------------------------------------------+
 
 
+function|fio|fwrite to be documented
 
-to be documented
-
-
-.. das:function:: mkdir ( arg0:string const )  : bool
+.. das:function:: mkdir (arg0:string const )  : bool
 
 mkdir returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +arg0+string const+
 +----+------------+
 
 
+function|fio|mkdir to be documented
 
-to be documented
+.. das:function:: sleep (arg0:uint const ) 
 
-
-.. das:function:: sleep ( arg0:uint const ) 
-
-
-
-function arguments are
+arguments are
 
 +----+----------+
 +arg0+uint const+
 +----+----------+
 
 
+function|fio|sleep to be documented
 
-to be documented
+.. das:function:: stat (path:string const )  : FStat
 
+stat returns  :ref:`fio::FStat <handle-fio-FStat>` 
 
-.. das:function:: stat ( path:string const )  : FStat
-
-stat returns  :ref:`fio::FStat <handle_fio_FStat>` 
-
-
-
-function arguments are
+arguments are
 
 +----+------------+
 +path+string const+
 +----+------------+
 
 
+function|fio|stat to be documented
 
-to be documented
-
-
-.. das:function:: stat ( arg0:string const; arg1:FStat implicit )  : bool
+.. das:function:: stat (arg0:string const; arg1:FStat implicit )  : bool
 
 stat returns bool
 
-
-
-function arguments are
+arguments are
 
 +----+-----------------------------------------------+
 +arg0+string const                                   +
 +----+-----------------------------------------------+
-+arg1+ :ref:`fio::FStat <handle_fio_FStat>`  implicit+
++arg1+ :ref:`fio::FStat <handle-fio-FStat>`  implicit+
 +----+-----------------------------------------------+
 
 
-
-to be documented
-
+function|fio|stat to be documented
 
 
