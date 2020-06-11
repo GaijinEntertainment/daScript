@@ -1977,7 +1977,7 @@ namespace das {
         AstReaderMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ReaderMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("_module");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }
     };
 
