@@ -11,11 +11,11 @@ Classes
 
 .. _struct-json_boost-BetterJsonMacro:
 
-.. das:class:: BetterJsonMacro : AstVariantMacro
+.. das:attribute:: BetterJsonMacro : AstVariantMacro
 
 class|json_boost|BetterJsonMacro to be documented
 
-.. das:method:: BetterJsonMacro.visitExprIsVariant (self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprIsVariant> const )  : ExpressionPtr
+.. das:function:: BetterJsonMacro.visitExprIsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprIsVariant> const)
 
 visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -34,7 +34,7 @@ arguments are
 
 method|json_boost|BetterJsonMacro.visitExprIsVariant to be documented
 
-.. das:method:: BetterJsonMacro.visitExprAsVariant (self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprAsVariant> const )  : ExpressionPtr
+.. das:function:: BetterJsonMacro.visitExprAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprAsVariant> const)
 
 visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -53,7 +53,7 @@ arguments are
 
 method|json_boost|BetterJsonMacro.visitExprAsVariant to be documented
 
-.. das:method:: BetterJsonMacro.visitExprSafeAsVariant (self:AstVariantMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprSafeAsVariant> const )  : ExpressionPtr
+.. das:function:: BetterJsonMacro.visitExprSafeAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprSafeAsVariant> const)
 
 visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -74,11 +74,11 @@ method|json_boost|BetterJsonMacro.visitExprSafeAsVariant to be documented
 
 .. _struct-json_boost-JsonReader:
 
-.. das:class:: JsonReader : AstReaderMacro
+.. das:attribute:: JsonReader : AstReaderMacro
 
 class|json_boost|JsonReader to be documented
 
-.. das:method:: JsonReader.accept (self:AstReaderMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:ast::ExprReader? const; ch:int const; info:LineInfo const )  : bool
+.. das:function:: JsonReader.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
 
 accept returns bool
 
@@ -101,7 +101,7 @@ arguments are
 
 method|json_boost|JsonReader.accept to be documented
 
-.. das:method:: JsonReader.visit (self:AstReaderMacro; prog:ProgramPtr; mod:rtti::Module? const; expr:smart_ptr<ast::ExprReader> const )  : ExpressionPtr
+.. das:function:: JsonReader.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
 
 visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 

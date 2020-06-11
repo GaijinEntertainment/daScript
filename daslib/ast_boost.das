@@ -31,6 +31,13 @@ def describe_bitfield(bf;merger:string = "")
     else
         concept_assert(false,"requires bitfield")
 
+[unsafe]
+def describe_function_short(func:FunctionPtr)
+    var args <- [{for x in func.arguments; "{x.name}:{describe(x._type,false)}" }]
+    var res = "{func.name} ({join(args,";")}) : {describe(func.result,false)}"
+    delete args
+    return res
+
 [export]
 def isExpression(t:TypeDeclPtr; top:bool=true) : bool
     if t==null
@@ -150,7 +157,9 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         fn.result <- new [[TypeDecl() baseType=Type tVoid]]
         var blk <- new [[ExprBlock() at=at]]
         var iblk <- new [[ExprBlock() at=at]]
-        var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros"]]
+        var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros_in_module"]]
+        var ifmn <- new [[ExprConstString() at=at, value:=compiling_module().name]]
+        push(ifm.arguments,ExpressionPtr(ifmn))
         var ife <- new [[ExprIfThenElse() at=at, cond<-ExpressionPtr(ifm), if_true:=ExpressionPtr(iblk)]]
         push(blk.list,ExpressionPtr(ife))
         fn.body <- ExpressionPtr(blk)
@@ -393,7 +402,7 @@ def convert_to_expression ( var value : auto&; at:LineInfo )
 
 [_macro,private]
 def setup
-    if is_compiling_macros()
+    if is_compiling_macros_in_module("ast_boost")
         add_new_function_annotation("macro", new MacroMacro())
         add_new_function_annotation("tag_function",new TagFunctionAnnotation())
         add_new_structure_annotation("function_macro",new SetupFunctionAnnotatoin())

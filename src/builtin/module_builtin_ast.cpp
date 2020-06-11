@@ -2221,6 +2221,10 @@ namespace das {
         }
     }
 
+    char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context ) {
+        return context->stringHeap.allocateString(func->getMangledName());
+    }
+
     class Module_Ast : public Module {
     public:
         template <typename RecAnn>
@@ -2459,6 +2463,8 @@ namespace das {
                 SideEffects::none, "describe_function");
             addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
                 SideEffects::none, "find_bitfield_name");
+            addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
+                SideEffects::none, "get_mangled_name");
             // type conversion functions
             addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
                 SideEffects::none, "das_to_string");

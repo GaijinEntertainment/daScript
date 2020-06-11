@@ -43,5 +43,7 @@ THE SOFTWARE.
    functional.rst
    json.rst
    json_boost.rst
+   regex.rst
+   regex_boost.rst
 
 

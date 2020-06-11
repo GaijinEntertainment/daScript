@@ -66,7 +66,13 @@ JsonValue fields are
 
 structure|json|JsonValue to be documented
 
-.. das:function:: JV (v:array<json::JsonValue?> )  : json::JsonValue?
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_json::JV__hh_array_hh__hh_ptr_hh_JsonValue:
+
+.. das:function:: JV(v: array<json::JsonValue?>)
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -79,7 +85,9 @@ arguments are
 
 function|json|JV to be documented
 
-.. das:function:: JV (v:void? const )  : json::JsonValue?
+.. _function-_at_json::JV__hh_ptr_hh_void_hh_const:
+
+.. das:function:: JV(v: void? const)
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -92,7 +100,9 @@ arguments are
 
 function|json|JV to be documented
 
-.. das:function:: JV (v:table<string;json::JsonValue?> )  : json::JsonValue?
+.. _function-_at_json::JV__hh_table_hh_string_hh__hh_ptr_hh_JsonValue:
+
+.. das:function:: JV(v: table<string;json::JsonValue?>)
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -105,7 +115,9 @@ arguments are
 
 function|json|JV to be documented
 
-.. das:function:: JV (v:bool const )  : json::JsonValue?
+.. _function-_at_json::JV_bool_hh_const:
+
+.. das:function:: JV(v: bool const)
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -118,7 +130,9 @@ arguments are
 
 function|json|JV to be documented
 
-.. das:function:: JV (v:double const )  : json::JsonValue?
+.. _function-_at_json::JV_double_hh_const:
+
+.. das:function:: JV(v: double const)
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -131,7 +145,9 @@ arguments are
 
 function|json|JV to be documented
 
-.. das:function:: JV (v:string const )  : json::JsonValue?
+.. _function-_at_json::JV_string_hh_const:
+
+.. das:function:: JV(v: string const)
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -144,7 +160,9 @@ arguments are
 
 function|json|JV to be documented
 
-.. das:function:: read_json (text:array<uint8> const; error:string& )  : json::JsonValue?
+.. _function-_at_json::read_json__hh_array_hh_uint8_hh_const_string_hh_ref:
+
+.. das:function:: read_json(text: array<uint8> const; error: string&)
 
 read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -159,7 +177,9 @@ arguments are
 
 function|json|read_json to be documented
 
-.. das:function:: read_json (text:string const; error:string& )  : json::JsonValue?
+.. _function-_at_json::read_json_string_hh_const_string_hh_ref:
+
+.. das:function:: read_json(text: string const; error: string&)
 
 read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
@@ -174,7 +194,9 @@ arguments are
 
 function|json|read_json to be documented
 
-.. das:function:: write_json (val:json::JsonValue? const )  : string
+.. _function-_at_json::write_json__hh_ptr_hh_JsonValue_hh_const:
+
+.. das:function:: write_json(val: json::JsonValue? const)
 
 write_json returns string
 

@@ -483,9 +483,11 @@ namespace das {
             result = result->visit(vis);
             result = vis.visit(result.get());
         }
-        vis.preVisitFunctionBody(this, body.get());
-        body = body->visit(vis);
-        body = vis.visitFunctionBody(this, body.get());
+        if ( body ) {
+            vis.preVisitFunctionBody(this, body.get());
+            if ( body ) body = body->visit(vis);
+            if ( body ) body = vis.visitFunctionBody(this, body.get());
+        }
         return vis.visit(this);
     }
 

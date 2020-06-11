@@ -5,7 +5,64 @@
 String manipulation library
 ===========================
 
-.. das:function:: join (it:auto const; separator:string const )  : auto
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_strings::split_string_hh_const_string_hh_const:
+
+.. das:function:: split(text: string const; delim: string const)
+
+split returns array<string>
+
+arguments are
+
++-----+------------+
++text +string const+
++-----+------------+
++delim+string const+
++-----+------------+
+
+
+function|strings|split to be documented
+
+.. _function-_at_strings::split_by_chars_string_hh_const_string_hh_const:
+
+.. das:function:: split_by_chars(text: string const; delim: string const)
+
+split_by_chars returns array<string>
+
+arguments are
+
++-----+------------+
++text +string const+
++-----+------------+
++delim+string const+
++-----+------------+
+
+
+function|strings|split_by_chars to be documented
+
+.. _function-_at_strings::wide_string_hh_const_int_hh_const:
+
+.. das:function:: wide(text: string const; width: int const)
+
+wide returns string
+
+arguments are
+
++-----+------------+
++text +string const+
++-----+------------+
++width+int const   +
++-----+------------+
+
+
+function|strings|wide to be documented
+
+.. _function-_at_strings::join__hh_auto_hh_const_string_hh_const:
+
+.. das:function:: join(it: auto const; separator: string const)
 
 join returns auto
 
@@ -20,7 +77,9 @@ arguments are
 
 function|strings|join to be documented
 
-.. das:function:: split (text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const )  : auto
+.. _function-_at_strings::split_string_hh_const_string_hh_const__hh_block_hh__hh_array_hh_string_hh_const_hh_temporary_hh__rq_arg_hh_:_hh_auto_hh_const:
+
+.. das:function:: split(text: string const; delim: string const; blk: block<(arg:array<string> const#):auto> const)
 
 split returns auto
 
@@ -37,7 +96,9 @@ arguments are
 
 function|strings|split to be documented
 
-.. das:function:: split_by_chars (text:string const; delim:string const; blk:block<(arg:array<string> const#):auto> const )  : auto
+.. _function-_at_strings::split_by_chars_string_hh_const_string_hh_const__hh_block_hh__hh_array_hh_string_hh_const_hh_temporary_hh__rq_arg_hh_:_hh_auto_hh_const:
+
+.. das:function:: split_by_chars(text: string const; delim: string const; blk: block<(arg:array<string> const#):auto> const)
 
 split_by_chars returns auto
 
@@ -53,50 +114,5 @@ arguments are
 
 
 function|strings|split_by_chars to be documented
-
-.. das:function:: split (text:string const; delim:string const )  : array<string>
-
-split returns array<string>
-
-arguments are
-
-+-----+------------+
-+text +string const+
-+-----+------------+
-+delim+string const+
-+-----+------------+
-
-
-function|strings|split to be documented
-
-.. das:function:: split_by_chars (text:string const; delim:string const )  : array<string>
-
-split_by_chars returns array<string>
-
-arguments are
-
-+-----+------------+
-+text +string const+
-+-----+------------+
-+delim+string const+
-+-----+------------+
-
-
-function|strings|split_by_chars to be documented
-
-.. das:function:: wide (text:string const; width:int const )  : string
-
-wide returns string
-
-arguments are
-
-+-----+------------+
-+text +string const+
-+-----+------------+
-+width+int const   +
-+-----+------------+
-
-
-function|strings|wide to be documented
 
 

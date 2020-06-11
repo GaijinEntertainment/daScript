@@ -1766,6 +1766,11 @@ namespace das {
                 error("function not found " + expr->target, candidates, "",
                     expr->at, CompilationError::function_not_found);
             }
+            if (expr->func && expr->func->builtIn) {
+                error("can't get address of builtin function " + expr->func->describe(),  "", "",
+                    expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
             return Visitor::visit(expr);
         }
     // ExprPtr2Ref
@@ -2467,6 +2472,25 @@ namespace das {
                             return make_smart<ExprConstInt>(expr->at, index);
                         } else {
                             error("variant_index variant " + expr->subtrait + " not found in " + expr->typeexpr->describe(), "", "",
+                                expr->at,CompilationError::typeinfo_undefined);
+                        }
+                    }
+                } else if ( expr->trait=="mangled_name" ) {
+                    if ( !expr->subexpr ) {
+                        error("mangled name requires subexpression", "", "",
+                            expr->at,CompilationError::typeinfo_undefined);
+                    } else {
+                        if ( expr->subexpr->rtti_isAddr() ) {
+                            auto eaddr = static_pointer_cast<ExprAddr>(expr->subexpr);
+                            if ( !eaddr->func ) {
+                                error("mangled name of unknown @@function", "", "",
+                                    expr->at,CompilationError::typeinfo_undefined);
+                            } else {
+                                reportAstChanged();
+                                return make_smart<ExprConstString>(expr->at, eaddr->func->getMangledName());
+                            }
+                        } else {
+                            error("unsupported mangled name subexpression ", expr->subexpr->__rtti, "",
                                 expr->at,CompilationError::typeinfo_undefined);
                         }
                     }

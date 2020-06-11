@@ -38,6 +38,10 @@ def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
         concept_assert(false, "not derived from ast::Expression")
         return [[ExpressionPtr]]
 
+[unsafe]
+def FunctionPtr ( fun : Function? ) : FunctionPtr
+    return reinterpret<FunctionPtr> fun
+
 class AstFunctionAnnotation
     def abstract transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
     def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool

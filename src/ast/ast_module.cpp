@@ -253,7 +253,9 @@ namespace das {
     }
 
     bool Module::addFunction ( const FunctionPtr & fn, bool canFail ) {
+        fn->module = this;
         auto mangledName = fn->getMangledName();
+        fn->module = nullptr;
         if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::none) && fn->result->isVoid() ) {
             DAS_FATAL_LOG("can't add function %s to module %s; it has no side effects and no return type\n", mangledName.c_str(), name.c_str() );
             DAS_FATAL_ERROR;

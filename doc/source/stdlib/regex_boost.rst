@@ -1,0 +1,60 @@
+
+.. _stdlib_regex_boost:
+
+=======================
+Boost package for REGEX
+=======================
+
++++++++
+Classes
++++++++
+
+.. _struct-regex_boost-RegexReader:
+
+.. das:attribute:: RegexReader : AstReaderMacro
+
+class|regex_boost|RegexReader to be documented
+
+.. das:function:: RegexReader.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
+
+accept returns bool
+
+arguments are
+
++----+--------------------------------------------------------+
++self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
++----+--------------------------------------------------------+
++prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                   +
++----+--------------------------------------------------------+
++mod + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
++----+--------------------------------------------------------+
++expr+ :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
++----+--------------------------------------------------------+
++ch  +int const                                               +
++----+--------------------------------------------------------+
++info+ :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
++----+--------------------------------------------------------+
+
+
+method|regex_boost|RegexReader.accept to be documented
+
+.. das:function:: RegexReader.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
+
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+arguments are
+
++----+-----------------------------------------------------------------+
++self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
++----+-----------------------------------------------------------------+
++prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                            +
++----+-----------------------------------------------------------------+
++mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
++----+-----------------------------------------------------------------+
++expr+smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
++----+-----------------------------------------------------------------+
+
+
+method|regex_boost|RegexReader.visit to be documented
+
+

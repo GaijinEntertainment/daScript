@@ -647,6 +647,13 @@ namespace das
         return ctx->thisProgram->isCompilingMacros;
     }
 
+    bool is_compiling_macros_in_module ( char * name, Context * ctx ) {
+        if ( !ctx->thisProgram ) return false;
+        if ( !ctx->thisProgram->isCompilingMacros ) return false;
+        if ( ctx->thisProgram->thisModule->name != name ) return false;
+        return true;
+    }
+
     // static storage
 
     das_hash_map<uint32_t, void*> g_static_storage;
@@ -760,6 +767,8 @@ namespace das
             SideEffects::accessExternal, "is_compiling");
         addExtern<DAS_BIND_FUN(is_compiling_macros)>(*this, lib, "is_compiling_macros",
             SideEffects::accessExternal, "is_compiling_macros");
+        addExtern<DAS_BIND_FUN(is_compiling_macros_in_module)>(*this, lib, "is_compiling_macros_in_module",
+            SideEffects::accessExternal, "is_compiling_macros_in_module");
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
                                                         SideEffects::modifyArgumentAndExternal, "builtin_iterator_first");
