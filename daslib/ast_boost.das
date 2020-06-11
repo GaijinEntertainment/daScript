@@ -38,7 +38,7 @@ def isExpression(t:TypeDeclPtr; top:bool=true) : bool
     elif t.dim.length!=0
         return false
     elif t.baseType==Type tHandle
-        if "{t.annotation.annotationModule.name}" == "ast"
+        if "{t.annotation._module.name}" == "ast"
             return starts_with("{t.annotation.name}","Expr")
         else
             return false

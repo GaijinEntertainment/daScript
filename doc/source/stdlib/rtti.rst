@@ -9,40 +9,65 @@ Runtime type information library
 Type aliases
 ++++++++++++
 
-.. das:attribute:: FileAccessPtr = smart_ptr<rtti::FileAccess>
+.. _alias_FileAccessPtr:
+
+.. das:attribute:: FileAccessPtr = FileAccessPtr
 
 to be documented
+
+.. _alias_ProgramFlags:
 
 .. das:attribute:: ProgramFlags is a bitfield
 
-- failToCompile
-- unsafe
-- isCompiling
-- isSimulating
-- isCompilingMacros
-- needMacroModule
++-----------------+-+--+
++failToCompile    +0+1 +
++-----------------+-+--+
++unsafe           +1+2 +
++-----------------+-+--+
++isCompiling      +2+4 +
++-----------------+-+--+
++isSimulating     +3+8 +
++-----------------+-+--+
++isCompilingMacros+4+16+
++-----------------+-+--+
++needMacroModule  +5+32+
++-----------------+-+--+
+
 
 to be documented
 
-.. das:attribute:: RttiValue is a variant type
+.. _alias_RttiValue:
 
-it defines as follows ::
+.. das:attribute:: RttiValueis a variant type
 
- tBool   : bool
- tInt    : int
- tUInt   : uint
- tInt64  : int64
- tUInt64 : uint64
- tFloat  : float
- tDouble : double
- tString : string
- nothing : any
++-------+------+
++tBool  +bool  +
++-------+------+
++tInt   +int   +
++-------+------+
++tUInt  +uint  +
++-------+------+
++tInt64 +int64 +
++-------+------+
++tUInt64+uint64+
++-------+------+
++tFloat +float +
++-------+------+
++tDouble+double+
++-------+------+
++tString+string+
++-------+------+
++nothing+any   +
++-------+------+
+
 
 to be documented
 
 ++++++++++++
 Enumerations
 ++++++++++++
+
+.. _enum_rtti_CompilationError:
 
 .. das:attribute:: CompilationError
 
@@ -261,6 +286,8 @@ to be documented
 +-----------------------------------+-----+
 
 
+.. _enum_rtti_ConstMatters:
+
 .. das:attribute:: ConstMatters
 
 to be documented
@@ -271,6 +298,8 @@ to be documented
 +yes+1+
 +---+-+
 
+
+.. _enum_rtti_RefMatters:
 
 .. das:attribute:: RefMatters
 
@@ -283,6 +312,8 @@ to be documented
 +---+-+
 
 
+.. _enum_rtti_TemporaryMatters:
+
 .. das:attribute:: TemporaryMatters
 
 to be documented
@@ -293,6 +324,8 @@ to be documented
 +yes+1+
 +---+-+
 
+
+.. _enum_rtti_Type:
 
 .. das:attribute:: Type
 
@@ -395,248 +428,454 @@ to be documented
 Handled structures
 ++++++++++++++++++
 
+.. _handle_rtti_Annotation:
+
 .. das:attribute:: Annotation
 
-it defines as follows ::
+Annotation fields are
 
-  _module : rtti::Module?
-  cppName : das_string
-  name    : das_string
++-------+--------------------------------------------------------+
++_module+ :ref:`rtti::Module <handle_rtti_Module>` ?             +
++-------+--------------------------------------------------------+
++cppName+ :ref:`builtin::das_string <handle_builtin_das_string>` +
++-------+--------------------------------------------------------+
++name   + :ref:`builtin::das_string <handle_builtin_das_string>` +
++-------+--------------------------------------------------------+
 
-it has the following properties ::
 
-  isTypeAnnotation           : bool
-  isBasicStructureAnnotation : bool
+Annotation properties are
+
++--------------------------+----+
++isTypeAnnotation          +bool+
++--------------------------+----+
++isBasicStructureAnnotation+bool+
++--------------------------+----+
+
 
 to be documented
 
+
+.. _handle_rtti_AnnotationArgument:
 
 .. das:attribute:: AnnotationArgument
 
-it defines as follows ::
+AnnotationArgument fields are
 
-  fValue    : float
-  iValue    : int
-  name      : das_string
-  sValue    : das_string
-  bValue    : bool
-  basicType : rtti::Type
++---------+--------------------------------------------------------+
++fValue   +float                                                   +
++---------+--------------------------------------------------------+
++iValue   +int                                                     +
++---------+--------------------------------------------------------+
++name     + :ref:`builtin::das_string <handle_builtin_das_string>` +
++---------+--------------------------------------------------------+
++sValue   + :ref:`builtin::das_string <handle_builtin_das_string>` +
++---------+--------------------------------------------------------+
++bValue   +bool                                                    +
++---------+--------------------------------------------------------+
++basicType+ :ref:`rtti::Type <enum_rtti_Type>`                     +
++---------+--------------------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_AnnotationDeclaration:
 
 .. das:attribute:: AnnotationDeclaration
 
-it defines as follows ::
+AnnotationDeclaration fields are
 
-  annotation : smart_ptr<rtti::Annotation>
-  arguments  : rtti::AnnotationArgumentList
++----------+--------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::Annotation <handle_rtti_Annotation>` >             +
++----------+--------------------------------------------------------------------------+
++arguments + :ref:`rtti::AnnotationArgumentList <handle_rtti_AnnotationArgumentList>` +
++----------+--------------------------------------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_BasicStructureAnnotation:
 
 .. das:attribute:: BasicStructureAnnotation
 
-it defines as follows ::
+BasicStructureAnnotation fields are
 
-  cppName : das_string
-  name    : das_string
++-------+--------------------------------------------------------+
++cppName+ :ref:`builtin::das_string <handle_builtin_das_string>` +
++-------+--------------------------------------------------------+
++name   + :ref:`builtin::das_string <handle_builtin_das_string>` +
++-------+--------------------------------------------------------+
 
-it has the following properties ::
 
-  fieldCount : int
+BasicStructureAnnotation properties are
+
++----------+---+
++fieldCount+int+
++----------+---+
+
 
 to be documented
 
+
+.. _handle_rtti_EnumInfo:
 
 .. das:attribute:: EnumInfo
 
-it defines as follows ::
+EnumInfo fields are
 
-  count : uint
-  name  : string
-  hash  : uint
++-----+------+
++count+uint  +
++-----+------+
++name +string+
++-----+------+
++hash +uint  +
++-----+------+
+
 
 to be documented
 
+
+.. _handle_rtti_EnumValueInfo:
 
 .. das:attribute:: EnumValueInfo
 
-it defines as follows ::
+EnumValueInfo fields are
 
-  value : int64
-  name  : string
++-----+------+
++value+int64 +
++-----+------+
++name +string+
++-----+------+
+
 
 to be documented
 
+
+.. _handle_rtti_Error:
 
 .. das:attribute:: Error
 
-it defines as follows ::
+Error fields are
 
-  fixme : das_string
-  at    : rtti::LineInfo
-  what  : das_string
-  extra : das_string
-  cerr  : rtti::CompilationError
++-----+------------------------------------------------------------+
++fixme+ :ref:`builtin::das_string <handle_builtin_das_string>`     +
++-----+------------------------------------------------------------+
++at   + :ref:`rtti::LineInfo <handle_rtti_LineInfo>`               +
++-----+------------------------------------------------------------+
++what + :ref:`builtin::das_string <handle_builtin_das_string>`     +
++-----+------------------------------------------------------------+
++extra+ :ref:`builtin::das_string <handle_builtin_das_string>`     +
++-----+------------------------------------------------------------+
++cerr + :ref:`rtti::CompilationError <enum_rtti_CompilationError>` +
++-----+------------------------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_FileAccess:
 
 .. das:attribute:: FileAccess
 
 to be documented
 
 
+.. _handle_rtti_FileInfo:
+
 .. das:attribute:: FileInfo
 
-it defines as follows ::
+FileInfo fields are
 
-  tabSize      : int
-  name         : das_string
-  sourceLength : uint
++------------+--------------------------------------------------------+
++tabSize     +int                                                     +
++------------+--------------------------------------------------------+
++name        + :ref:`builtin::das_string <handle_builtin_das_string>` +
++------------+--------------------------------------------------------+
++sourceLength+uint                                                    +
++------------+--------------------------------------------------------+
 
-it has the following properties ::
 
-  source : string const
+FileInfo properties are
+
++------+------------+
++source+string const+
++------+------------+
+
 
 to be documented
 
+
+.. _handle_rtti_FuncInfo:
 
 .. das:attribute:: FuncInfo
 
-it defines as follows ::
+FuncInfo fields are
 
-  stackSize : uint
-  result    : rtti::TypeInfo?
-  count     : uint
-  cppName   : string
-  name      : string
-  hash      : uint
-  flags     : uint
++---------+-----------------------------------------------+
++stackSize+uint                                           +
++---------+-----------------------------------------------+
++result   + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>` ?+
++---------+-----------------------------------------------+
++count    +uint                                           +
++---------+-----------------------------------------------+
++cppName  +string                                         +
++---------+-----------------------------------------------+
++name     +string                                         +
++---------+-----------------------------------------------+
++hash     +uint                                           +
++---------+-----------------------------------------------+
++flags    +uint                                           +
++---------+-----------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_LineInfo:
 
 .. das:attribute:: LineInfo
 
-it defines as follows ::
+LineInfo fields are
 
-  last_column : uint
-  line        : uint
-  last_line   : uint
-  column      : uint
-  fileInfo    : rtti::FileInfo?
++-----------+-----------------------------------------------+
++last_column+uint                                           +
++-----------+-----------------------------------------------+
++line       +uint                                           +
++-----------+-----------------------------------------------+
++last_line  +uint                                           +
++-----------+-----------------------------------------------+
++column     +uint                                           +
++-----------+-----------------------------------------------+
++fileInfo   + :ref:`rtti::FileInfo <handle_rtti_FileInfo>` ?+
++-----------+-----------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_Module:
 
 .. das:attribute:: Module
 
-it defines as follows ::
+Module fields are
 
-  name : das_string
++----+--------------------------------------------------------+
++name+ :ref:`builtin::das_string <handle_builtin_das_string>` +
++----+--------------------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_Program:
 
 .. das:attribute:: Program
 
-it defines as follows ::
+Program fields are
 
-  flags  : bitfield<failToCompile;unsafe;isCompiling;isSimulating;isCompilingMacros;needMacroModule>
-  errors : rtti::dasvector`Error
++------+------------------------------------------------------------+
++flags + :ref:`ProgramFlags <alias_ProgramFlags>`                   +
++------+------------------------------------------------------------+
++errors+ :ref:`rtti::dasvector`Error <handle_rtti_dasvector`Error>` +
++------+------------------------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_StructInfo:
 
 .. das:attribute:: StructInfo
 
-it defines as follows ::
+StructInfo fields are
 
-  size        : uint
-  initializer : int
-  count       : uint
-  name        : string
-  hash        : uint
++-----------+------+
++size       +uint  +
++-----------+------+
++initializer+int   +
++-----------+------+
++count      +uint  +
++-----------+------+
++name       +string+
++-----------+------+
++hash       +uint  +
++-----------+------+
+
 
 to be documented
 
+
+.. _handle_rtti_TypeAnnotation:
 
 .. das:attribute:: TypeAnnotation
 
-it defines as follows ::
+TypeAnnotation fields are
 
-  cppName          : das_string
-  annotationModule : rtti::Module?
-  name             : das_string
++-------+--------------------------------------------------------+
++_module+ :ref:`rtti::Module <handle_rtti_Module>` ?             +
++-------+--------------------------------------------------------+
++cppName+ :ref:`builtin::das_string <handle_builtin_das_string>` +
++-------+--------------------------------------------------------+
++name   + :ref:`builtin::das_string <handle_builtin_das_string>` +
++-------+--------------------------------------------------------+
+
 
 to be documented
 
+
+.. _handle_rtti_TypeInfo:
 
 .. das:attribute:: TypeInfo
 
-it defines as follows ::
+TypeInfo fields are
 
-  argTypes   : rtti::TypeInfo??
-  secondType : rtti::TypeInfo?
-  dimSize    : uint
-  enumType   : rtti::EnumInfo?
-  hash       : uint
-  argNames   : string?
-  argCount   : uint
-  basicType  : rtti::Type
-  firstType  : rtti::TypeInfo?
-  structType : rtti::StructInfo?
++----------+---------------------------------------------------+
++argTypes  + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>` ??   +
++----------+---------------------------------------------------+
++secondType+ :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>` ?    +
++----------+---------------------------------------------------+
++dimSize   +uint                                               +
++----------+---------------------------------------------------+
++enumType  + :ref:`rtti::EnumInfo <handle_rtti_EnumInfo>` ?    +
++----------+---------------------------------------------------+
++hash      +uint                                               +
++----------+---------------------------------------------------+
++argNames  +string?                                            +
++----------+---------------------------------------------------+
++argCount  +uint                                               +
++----------+---------------------------------------------------+
++basicType + :ref:`rtti::Type <enum_rtti_Type>`                +
++----------+---------------------------------------------------+
++firstType + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>` ?    +
++----------+---------------------------------------------------+
++structType+ :ref:`rtti::StructInfo <handle_rtti_StructInfo>` ?+
++----------+---------------------------------------------------+
 
-it has the following properties ::
 
-  isConst    : bool
-  annotation : rtti::TypeAnnotation?
-  isRawPod   : bool
-  isRef      : bool
-  isImplicit : bool
-  isRefType  : bool
-  isPod      : bool
-  isTemp     : bool
-  isRefValue : bool
-  canCopy    : bool
+TypeInfo properties are
+
++----------+-----------------------------------------------------------+
++isConst   +bool                                                       +
++----------+-----------------------------------------------------------+
++annotation+ :ref:`rtti::TypeAnnotation <handle_rtti_TypeAnnotation>` ?+
++----------+-----------------------------------------------------------+
++isRawPod  +bool                                                       +
++----------+-----------------------------------------------------------+
++isRef     +bool                                                       +
++----------+-----------------------------------------------------------+
++isImplicit+bool                                                       +
++----------+-----------------------------------------------------------+
++isRefType +bool                                                       +
++----------+-----------------------------------------------------------+
++isPod     +bool                                                       +
++----------+-----------------------------------------------------------+
++isTemp    +bool                                                       +
++----------+-----------------------------------------------------------+
++isRefValue+bool                                                       +
++----------+-----------------------------------------------------------+
++canCopy   +bool                                                       +
++----------+-----------------------------------------------------------+
+
 
 to be documented
 
 
+.. _handle_rtti_VarInfo:
+
 .. das:attribute:: VarInfo
 
-it defines as follows ::
+VarInfo fields are
 
-  argTypes             : rtti::TypeInfo??
-  value                : any
-  secondType           : rtti::TypeInfo?
-  dimSize              : uint
-  enumType             : rtti::EnumInfo?
-  name                 : string
-  hash                 : uint
-  argNames             : string?
-  argCount             : uint
-  sValue               : string
-  offset               : uint
-  basicType            : rtti::Type
-  firstType            : rtti::TypeInfo?
-  annotation_arguments : rtti::AnnotationArguments const? const
-  structType           : rtti::StructInfo?
++--------------------+---------------------------------------------------------------------------------+
++argTypes            + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>` ??                                 +
++--------------------+---------------------------------------------------------------------------------+
++value               +any                                                                              +
++--------------------+---------------------------------------------------------------------------------+
++secondType          + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>` ?                                  +
++--------------------+---------------------------------------------------------------------------------+
++dimSize             +uint                                                                             +
++--------------------+---------------------------------------------------------------------------------+
++enumType            + :ref:`rtti::EnumInfo <handle_rtti_EnumInfo>` ?                                  +
++--------------------+---------------------------------------------------------------------------------+
++name                +string                                                                           +
++--------------------+---------------------------------------------------------------------------------+
++hash                +uint                                                                             +
++--------------------+---------------------------------------------------------------------------------+
++argNames            +string?                                                                          +
++--------------------+---------------------------------------------------------------------------------+
++argCount            +uint                                                                             +
++--------------------+---------------------------------------------------------------------------------+
++sValue              +string                                                                           +
++--------------------+---------------------------------------------------------------------------------+
++offset              +uint                                                                             +
++--------------------+---------------------------------------------------------------------------------+
++basicType           + :ref:`rtti::Type <enum_rtti_Type>`                                              +
++--------------------+---------------------------------------------------------------------------------+
++firstType           + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>` ?                                  +
++--------------------+---------------------------------------------------------------------------------+
++annotation_arguments+ :ref:`rtti::AnnotationArguments <handle_rtti_AnnotationArguments>`  const? const+
++--------------------+---------------------------------------------------------------------------------+
++structType          + :ref:`rtti::StructInfo <handle_rtti_StructInfo>` ?                              +
++--------------------+---------------------------------------------------------------------------------+
 
-it has the following properties ::
 
-  isConst    : bool
-  annotation : rtti::TypeAnnotation?
-  isRawPod   : bool
-  isRef      : bool
-  isImplicit : bool
-  isRefType  : bool
-  isPod      : bool
-  isTemp     : bool
-  isRefValue : bool
-  canCopy    : bool
+VarInfo properties are
+
++----------+-----------------------------------------------------------+
++isConst   +bool                                                       +
++----------+-----------------------------------------------------------+
++annotation+ :ref:`rtti::TypeAnnotation <handle_rtti_TypeAnnotation>` ?+
++----------+-----------------------------------------------------------+
++isRawPod  +bool                                                       +
++----------+-----------------------------------------------------------+
++isRef     +bool                                                       +
++----------+-----------------------------------------------------------+
++isImplicit+bool                                                       +
++----------+-----------------------------------------------------------+
++isRefType +bool                                                       +
++----------+-----------------------------------------------------------+
++isPod     +bool                                                       +
++----------+-----------------------------------------------------------+
++isTemp    +bool                                                       +
++----------+-----------------------------------------------------------+
++isRefValue+bool                                                       +
++----------+-----------------------------------------------------------+
++canCopy   +bool                                                       +
++----------+-----------------------------------------------------------+
+
+
+to be documented
+
+
++++++++++++++
+Handled types
++++++++++++++
+
+.. _handle_rtti_AnnotationArgumentList:
+
+.. das:attribute:: AnnotationArgumentList
+
+to be documented
+
+
+.. _handle_rtti_AnnotationArguments:
+
+.. das:attribute:: AnnotationArguments
+
+to be documented
+
+
+.. _handle_rtti_AnnotationList:
+
+.. das:attribute:: AnnotationList
+
+to be documented
+
+
+.. _handle_rtti_dasvector`Error:
+
+.. das:attribute:: dasvector`Error
 
 to be documented
 
@@ -645,9 +884,9 @@ to be documented
 Generics
 ++++++++
 
-.. das:function:: class_info(cl:auto const)
+.. das:function:: class_info ( cl:auto const )  : rtti::StructInfo const?
 
-class_info returns rtti::StructInfo const?
+class_info returns  :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const?
 
 
 
@@ -676,7 +915,7 @@ RttiValue_nothing returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tU
 to be documented
 
 
-.. das:function:: arg_names(info:rtti::TypeInfo const)
+.. das:function:: arg_names ( info:TypeInfo const )  : iterator<string>
 
 arg_names returns iterator<string>
 
@@ -684,16 +923,16 @@ arg_names returns iterator<string>
 
 function arguments are
 
-+----+--------------------+
-+info+rtti::TypeInfo const+
-+----+--------------------+
++----+----------------------------------------------------+
++info+ :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const+
++----+----------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: arg_names(info:rtti::VarInfo const)
+.. das:function:: arg_names ( info:VarInfo const )  : iterator<string>
 
 arg_names returns iterator<string>
 
@@ -701,69 +940,67 @@ arg_names returns iterator<string>
 
 function arguments are
 
-+----+-------------------+
-+info+rtti::VarInfo const+
-+----+-------------------+
++----+--------------------------------------------------+
++info+ :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const+
++----+--------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: arg_types(info:rtti::TypeInfo const)
+.. das:function:: arg_types ( info:TypeInfo const )  : iterator<rtti::TypeInfo const&>
 
-arg_types returns iterator<rtti::TypeInfo const&>
+arg_types returns iterator< :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const&>
 
 
 
 function arguments are
 
-+----+--------------------+
-+info+rtti::TypeInfo const+
-+----+--------------------+
++----+----------------------------------------------------+
++info+ :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const+
++----+----------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: arg_types(info:rtti::VarInfo const)
+.. das:function:: arg_types ( info:VarInfo const )  : iterator<rtti::TypeInfo const&>
 
-arg_types returns iterator<rtti::TypeInfo const&>
+arg_types returns iterator< :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const&>
 
 
 
 function arguments are
 
-+----+-------------------+
-+info+rtti::VarInfo const+
-+----+-------------------+
++----+--------------------------------------------------+
++info+ :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const+
++----+--------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: basic_struct_for_each_field(arg0:rtti::BasicStructureAnnotation const implicit; arg1:block<(string;string;rtti::TypeInfo const;uint):void> const implicit)
+.. das:function:: basic_struct_for_each_field ( arg0:BasicStructureAnnotation const implicit; arg1:block<(string;string;rtti::TypeInfo const;uint):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+--------------------------------------------------------------------+
-+arg0+rtti::BasicStructureAnnotation const implicit                       +
-+----+--------------------------------------------------------------------+
-+arg1+block<(string;string;rtti::TypeInfo const;uint):void> const implicit+
-+----+--------------------------------------------------------------------+
-+arg2+ const                                                              +
-+----+--------------------------------------------------------------------+
++----+----------------------------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::BasicStructureAnnotation <handle_rtti_BasicStructureAnnotation>`  const implicit       +
++----+----------------------------------------------------------------------------------------------------+
++arg1+block<(string;string; :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const;uint):void> const implicit+
++----+----------------------------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: builtin_is_same_type(arg0:rtti::TypeInfo const? const implicit; arg1:rtti::TypeInfo const? const implicit; arg2:rtti::RefMatters const; arg3:rtti::ConstMatters const; arg4:rtti::TemporaryMatters const; arg5:bool const)
+.. das:function:: builtin_is_same_type ( arg0:rtti::TypeInfo const? const implicit; arg1:rtti::TypeInfo const? const implicit; arg2:RefMatters const; arg3:ConstMatters const; arg4:TemporaryMatters const; arg5:bool const )  : bool
 
 builtin_is_same_type returns bool
 
@@ -771,98 +1008,94 @@ builtin_is_same_type returns bool
 
 function arguments are
 
-+----+------------------------------------+
-+arg0+rtti::TypeInfo const? const implicit+
-+----+------------------------------------+
-+arg1+rtti::TypeInfo const? const implicit+
-+----+------------------------------------+
-+arg2+rtti::RefMatters const              +
-+----+------------------------------------+
-+arg3+rtti::ConstMatters const            +
-+----+------------------------------------+
-+arg4+rtti::TemporaryMatters const        +
-+----+------------------------------------+
-+arg5+bool const                          +
-+----+------------------------------------+
++----+--------------------------------------------------------------------+
++arg0+ :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const? const implicit+
++----+--------------------------------------------------------------------+
++arg1+ :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const? const implicit+
++----+--------------------------------------------------------------------+
++arg2+ :ref:`rtti::RefMatters <enum_rtti_RefMatters>`  const              +
++----+--------------------------------------------------------------------+
++arg3+ :ref:`rtti::ConstMatters <enum_rtti_ConstMatters>`  const          +
++----+--------------------------------------------------------------------+
++arg4+ :ref:`rtti::TemporaryMatters <enum_rtti_TemporaryMatters>`  const  +
++----+--------------------------------------------------------------------+
++arg5+bool const                                                          +
++----+--------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: compile(arg0:string const; arg1:string const; arg2:block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
+.. das:function:: compile ( arg0:string const; arg1:string const; arg2:block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+---------------------------------------------------------------------------+
-+arg0+string const                                                               +
-+----+---------------------------------------------------------------------------+
-+arg1+string const                                                               +
-+----+---------------------------------------------------------------------------+
-+arg2+block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit+
-+----+---------------------------------------------------------------------------+
-+arg3+ const                                                                     +
-+----+---------------------------------------------------------------------------+
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg0+string const                                                                                                                                            +
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg1+string const                                                                                                                                            +
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg2+block<(bool;smart_ptr< :ref:`rtti::Program <handle_rtti_Program>` >; :ref:`builtin::das_string <handle_builtin_das_string>`  const):void> const implicit+
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: compile_file(arg0:string const; arg1:smart_ptr<rtti::FileAccess> const implicit; arg2:block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
+.. das:function:: compile_file ( arg0:string const; arg1:smart_ptr<rtti::FileAccess> const implicit; arg2:block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+---------------------------------------------------------------------------+
-+arg0+string const                                                               +
-+----+---------------------------------------------------------------------------+
-+arg1+smart_ptr<rtti::FileAccess> const implicit                                 +
-+----+---------------------------------------------------------------------------+
-+arg2+block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit+
-+----+---------------------------------------------------------------------------+
-+arg3+ const                                                                     +
-+----+---------------------------------------------------------------------------+
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg0+string const                                                                                                                                            +
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg1+smart_ptr< :ref:`rtti::FileAccess <handle_rtti_FileAccess>` > const implicit                                                                            +
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg2+block<(bool;smart_ptr< :ref:`rtti::Program <handle_rtti_Program>` >; :ref:`builtin::das_string <handle_builtin_das_string>`  const):void> const implicit+
++----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: context_for_each_function(blk:block<(info:rtti::FuncInfo const):void> const)
+.. das:function:: context_for_each_function ( blk:block<(info:rtti::FuncInfo const):void> const ) 
 
 
 
 function arguments are
 
-+---+---------------------------------------------+
-+blk+block<(info:rtti::FuncInfo const):void> const+
-+---+---------------------------------------------+
++---+-----------------------------------------------------------------------------+
++blk+block<(info: :ref:`rtti::FuncInfo <handle_rtti_FuncInfo>`  const):void> const+
++---+-----------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: context_for_each_variable(blk:block<(info:rtti::VarInfo const):void> const)
+.. das:function:: context_for_each_variable ( blk:block<(info:rtti::VarInfo const):void> const ) 
 
 
 
 function arguments are
 
-+---+--------------------------------------------+
-+blk+block<(info:rtti::VarInfo const):void> const+
-+---+--------------------------------------------+
++---+---------------------------------------------------------------------------+
++blk+block<(info: :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const):void> const+
++---+---------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: each_dim(info:rtti::TypeInfo const)
+.. das:function:: each_dim ( info:TypeInfo const )  : iterator<int>
 
 each_dim returns iterator<int>
 
@@ -870,16 +1103,16 @@ each_dim returns iterator<int>
 
 function arguments are
 
-+----+--------------------+
-+info+rtti::TypeInfo const+
-+----+--------------------+
++----+----------------------------------------------------+
++info+ :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const+
++----+----------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: each_dim(info:rtti::VarInfo const)
+.. das:function:: each_dim ( info:VarInfo const )  : iterator<int>
 
 each_dim returns iterator<int>
 
@@ -887,35 +1120,33 @@ each_dim returns iterator<int>
 
 function arguments are
 
-+----+-------------------+
-+info+rtti::VarInfo const+
-+----+-------------------+
++----+--------------------------------------------------+
++info+ :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const+
++----+--------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: get_annotation_argument_value(arg0:rtti::AnnotationArgument const implicit)
+.. das:function:: get_annotation_argument_value ( arg0:AnnotationArgument const implicit )  : RttiValue
 
-get_annotation_argument_value returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
+get_annotation_argument_value returns  :ref:`RttiValue <alias_RttiValue>` 
 
 
 
 function arguments are
 
-+----+---------------------------------------+
-+arg0+rtti::AnnotationArgument const implicit+
-+----+---------------------------------------+
-+arg1+ const                                 +
-+----+---------------------------------------+
++----+---------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::AnnotationArgument <handle_rtti_AnnotationArgument>`  const implicit+
++----+---------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: get_das_type_name(arg0:rtti::Type const)
+.. das:function:: get_das_type_name ( arg0:Type const )  : string
 
 get_das_type_name returns string
 
@@ -923,18 +1154,16 @@ get_das_type_name returns string
 
 function arguments are
 
-+----+----------------+
-+arg0+rtti::Type const+
-+----+----------------+
-+arg1+ const          +
-+----+----------------+
++----+------------------------------------------+
++arg0+ :ref:`rtti::Type <enum_rtti_Type>`  const+
++----+------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: get_dim(arg0:rtti::TypeInfo const implicit; arg1:int const)
+.. das:function:: get_dim ( arg0:TypeInfo const implicit; arg1:int const )  : int
 
 get_dim returns int
 
@@ -942,20 +1171,18 @@ get_dim returns int
 
 function arguments are
 
-+----+-----------------------------+
-+arg0+rtti::TypeInfo const implicit+
-+----+-----------------------------+
-+arg1+int const                    +
-+----+-----------------------------+
-+arg2+ const                       +
-+----+-----------------------------+
++----+-------------------------------------------------------------+
++arg0+ :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const implicit+
++----+-------------------------------------------------------------+
++arg1+int const                                                    +
++----+-------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: get_dim(arg0:rtti::VarInfo const implicit; arg1:int const)
+.. das:function:: get_dim ( arg0:VarInfo const implicit; arg1:int const )  : int
 
 get_dim returns int
 
@@ -963,22 +1190,20 @@ get_dim returns int
 
 function arguments are
 
-+----+----------------------------+
-+arg0+rtti::VarInfo const implicit+
-+----+----------------------------+
-+arg1+int const                   +
-+----+----------------------------+
-+arg2+ const                      +
-+----+----------------------------+
++----+-----------------------------------------------------------+
++arg0+ :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const implicit+
++----+-----------------------------------------------------------+
++arg1+int const                                                  +
++----+-----------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: get_function_info(arg0:int)
+.. das:function:: get_function_info ( arg0:int )  : FuncInfo const&
 
-get_function_info returns rtti::FuncInfo const&
+get_function_info returns  :ref:`rtti::FuncInfo <handle_rtti_FuncInfo>`  const&
 
 
 
@@ -993,9 +1218,9 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_module(arg0:string const)
+.. das:function:: get_module ( arg0:string const )  : rtti::Module?
 
-get_module returns rtti::Module?
+get_module returns  :ref:`rtti::Module <handle_rtti_Module>` ?
 
 
 
@@ -1010,24 +1235,24 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_this_module(arg0:smart_ptr<rtti::Program> const implicit)
+.. das:function:: get_this_module ( arg0:smart_ptr<rtti::Program> const implicit )  : rtti::Module?
 
-get_this_module returns rtti::Module?
+get_this_module returns  :ref:`rtti::Module <handle_rtti_Module>` ?
 
 
 
 function arguments are
 
-+----+---------------------------------------+
-+arg0+smart_ptr<rtti::Program> const implicit+
-+----+---------------------------------------+
++----+----------------------------------------------------------------------+
++arg0+smart_ptr< :ref:`rtti::Program <handle_rtti_Program>` > const implicit+
++----+----------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: get_total_functions()
+.. das:function:: get_total_functions (  )  : int
 
 get_total_functions returns int
 
@@ -1035,16 +1260,14 @@ get_total_functions returns int
 
 function arguments are
 
-+----+------+
-+arg0+ const+
-+----+------+
++
 
 
 
 to be documented
 
 
-.. das:function:: get_total_variables()
+.. das:function:: get_total_variables (  )  : int
 
 get_total_variables returns int
 
@@ -1052,18 +1275,16 @@ get_total_variables returns int
 
 function arguments are
 
-+----+------+
-+arg0+ const+
-+----+------+
++
 
 
 
 to be documented
 
 
-.. das:function:: get_variable_info(arg0:int)
+.. das:function:: get_variable_info ( arg0:int )  : VarInfo const&
 
-get_variable_info returns rtti::VarInfo const&
+get_variable_info returns  :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const&
 
 
 
@@ -1078,24 +1299,24 @@ function arguments are
 to be documented
 
 
-.. das:function:: get_variable_value(arg0:rtti::VarInfo const implicit)
+.. das:function:: get_variable_value ( arg0:VarInfo const implicit )  : RttiValue
 
-get_variable_value returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
+get_variable_value returns  :ref:`RttiValue <alias_RttiValue>` 
 
 
 
 function arguments are
 
-+----+----------------------------+
-+arg0+rtti::VarInfo const implicit+
-+----+----------------------------+
++----+-----------------------------------------------------------+
++arg0+ :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const implicit+
++----+-----------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: is_compatible_cast(a:rtti::StructInfo const; b:rtti::StructInfo const)
+.. das:function:: is_compatible_cast ( a:StructInfo const; b:StructInfo const )  : bool
 
 is_compatible_cast returns bool
 
@@ -1103,18 +1324,18 @@ is_compatible_cast returns bool
 
 function arguments are
 
-+-+----------------------+
-+a+rtti::StructInfo const+
-+-+----------------------+
-+b+rtti::StructInfo const+
-+-+----------------------+
++-+--------------------------------------------------------+
++a+ :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const+
++-+--------------------------------------------------------+
++b+ :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const+
++-+--------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: is_compatible_cast(arg0:rtti::StructInfo const? const implicit; arg1:rtti::StructInfo const? const implicit)
+.. das:function:: is_compatible_cast ( arg0:rtti::StructInfo const? const implicit; arg1:rtti::StructInfo const? const implicit )  : bool
 
 is_compatible_cast returns bool
 
@@ -1122,18 +1343,18 @@ is_compatible_cast returns bool
 
 function arguments are
 
-+----+--------------------------------------+
-+arg0+rtti::StructInfo const? const implicit+
-+----+--------------------------------------+
-+arg1+rtti::StructInfo const? const implicit+
-+----+--------------------------------------+
++----+------------------------------------------------------------------------+
++arg0+ :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const? const implicit+
++----+------------------------------------------------------------------------+
++arg1+ :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const? const implicit+
++----+------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: is_same_type(a:rtti::TypeInfo const; b:rtti::TypeInfo const; refMatters:rtti::RefMatters const; constMatters:rtti::ConstMatters const; temporaryMatters:rtti::TemporaryMatters const; topLevel:bool const)
+.. das:function:: is_same_type ( a:TypeInfo const; b:TypeInfo const; refMatters:RefMatters const; constMatters:ConstMatters const; temporaryMatters:TemporaryMatters const; topLevel:bool const )  : bool
 
 is_same_type returns bool
 
@@ -1141,28 +1362,28 @@ is_same_type returns bool
 
 function arguments are
 
-+----------------+----------------------------+
-+a               +rtti::TypeInfo const        +
-+----------------+----------------------------+
-+b               +rtti::TypeInfo const        +
-+----------------+----------------------------+
-+refMatters      +rtti::RefMatters const      +
-+----------------+----------------------------+
-+constMatters    +rtti::ConstMatters const    +
-+----------------+----------------------------+
-+temporaryMatters+rtti::TemporaryMatters const+
-+----------------+----------------------------+
-+topLevel        +bool const                  +
-+----------------+----------------------------+
++----------------+------------------------------------------------------------------+
++a               + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const              +
++----------------+------------------------------------------------------------------+
++b               + :ref:`rtti::TypeInfo <handle_rtti_TypeInfo>`  const              +
++----------------+------------------------------------------------------------------+
++refMatters      + :ref:`rtti::RefMatters <enum_rtti_RefMatters>`  const            +
++----------------+------------------------------------------------------------------+
++constMatters    + :ref:`rtti::ConstMatters <enum_rtti_ConstMatters>`  const        +
++----------------+------------------------------------------------------------------+
++temporaryMatters+ :ref:`rtti::TemporaryMatters <enum_rtti_TemporaryMatters>`  const+
++----------------+------------------------------------------------------------------+
++topLevel        +bool const                                                        +
++----------------+------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: make_file_access(arg0:string const)
+.. das:function:: make_file_access ( arg0:string const )  : smart_ptr<rtti::FileAccess>
 
-make_file_access returns smart_ptr<rtti::FileAccess>
+make_file_access returns smart_ptr< :ref:`rtti::FileAccess <handle_rtti_FileAccess>` >
 
 
 
@@ -1171,184 +1392,164 @@ function arguments are
 +----+------------+
 +arg0+string const+
 +----+------------+
-+arg1+ const      +
-+----+------------+
 
 
 
 to be documented
 
 
-.. das:function:: module_for_each_annotation(arg0:rtti::Module? const implicit; arg1:block<(rtti::Annotation const):void> const implicit)
+.. das:function:: module_for_each_annotation ( arg0:rtti::Module? const implicit; arg1:block<(rtti::Annotation const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+---------------------------------------------------+
-+arg0+rtti::Module? const implicit                       +
-+----+---------------------------------------------------+
-+arg1+block<(rtti::Annotation const):void> const implicit+
-+----+---------------------------------------------------+
-+arg2+ const                                             +
-+----+---------------------------------------------------+
++----+-------------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle_rtti_Module>` ? const implicit                           +
++----+-------------------------------------------------------------------------------------+
++arg1+block<( :ref:`rtti::Annotation <handle_rtti_Annotation>`  const):void> const implicit+
++----+-------------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: module_for_each_enumeration(arg0:rtti::Module? const implicit; arg1:block<(rtti::EnumInfo const):void> const implicit)
+.. das:function:: module_for_each_enumeration ( arg0:rtti::Module? const implicit; arg1:block<(rtti::EnumInfo const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+-------------------------------------------------+
-+arg0+rtti::Module? const implicit                     +
-+----+-------------------------------------------------+
-+arg1+block<(rtti::EnumInfo const):void> const implicit+
-+----+-------------------------------------------------+
-+arg2+ const                                           +
-+----+-------------------------------------------------+
++----+---------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle_rtti_Module>` ? const implicit                       +
++----+---------------------------------------------------------------------------------+
++arg1+block<( :ref:`rtti::EnumInfo <handle_rtti_EnumInfo>`  const):void> const implicit+
++----+---------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: module_for_each_function(arg0:rtti::Module? const implicit; arg1:block<(rtti::FuncInfo const):void> const implicit)
+.. das:function:: module_for_each_function ( arg0:rtti::Module? const implicit; arg1:block<(rtti::FuncInfo const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+-------------------------------------------------+
-+arg0+rtti::Module? const implicit                     +
-+----+-------------------------------------------------+
-+arg1+block<(rtti::FuncInfo const):void> const implicit+
-+----+-------------------------------------------------+
-+arg2+ const                                           +
-+----+-------------------------------------------------+
++----+---------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle_rtti_Module>` ? const implicit                       +
++----+---------------------------------------------------------------------------------+
++arg1+block<( :ref:`rtti::FuncInfo <handle_rtti_FuncInfo>`  const):void> const implicit+
++----+---------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: module_for_each_generic(arg0:rtti::Module? const implicit; arg1:block<(rtti::FuncInfo const):void> const implicit)
+.. das:function:: module_for_each_generic ( arg0:rtti::Module? const implicit; arg1:block<(rtti::FuncInfo const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+-------------------------------------------------+
-+arg0+rtti::Module? const implicit                     +
-+----+-------------------------------------------------+
-+arg1+block<(rtti::FuncInfo const):void> const implicit+
-+----+-------------------------------------------------+
-+arg2+ const                                           +
-+----+-------------------------------------------------+
++----+---------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle_rtti_Module>` ? const implicit                       +
++----+---------------------------------------------------------------------------------+
++arg1+block<( :ref:`rtti::FuncInfo <handle_rtti_FuncInfo>`  const):void> const implicit+
++----+---------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: module_for_each_global(arg0:rtti::Module? const implicit; arg1:block<(rtti::VarInfo const):void> const implicit)
+.. das:function:: module_for_each_global ( arg0:rtti::Module? const implicit; arg1:block<(rtti::VarInfo const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+------------------------------------------------+
-+arg0+rtti::Module? const implicit                    +
-+----+------------------------------------------------+
-+arg1+block<(rtti::VarInfo const):void> const implicit+
-+----+------------------------------------------------+
-+arg2+ const                                          +
-+----+------------------------------------------------+
++----+-------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle_rtti_Module>` ? const implicit                     +
++----+-------------------------------------------------------------------------------+
++arg1+block<( :ref:`rtti::VarInfo <handle_rtti_VarInfo>`  const):void> const implicit+
++----+-------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: module_for_each_structure(arg0:rtti::Module? const implicit; arg1:block<(rtti::StructInfo const):void> const implicit)
+.. das:function:: module_for_each_structure ( arg0:rtti::Module? const implicit; arg1:block<(rtti::StructInfo const):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+---------------------------------------------------+
-+arg0+rtti::Module? const implicit                       +
-+----+---------------------------------------------------+
-+arg1+block<(rtti::StructInfo const):void> const implicit+
-+----+---------------------------------------------------+
-+arg2+ const                                             +
-+----+---------------------------------------------------+
++----+-------------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle_rtti_Module>` ? const implicit                           +
++----+-------------------------------------------------------------------------------------+
++arg1+block<( :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const):void> const implicit+
++----+-------------------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: program_for_each_module(arg0:smart_ptr<rtti::Program> const implicit; arg1:block<(rtti::Module?):void> const implicit)
+.. das:function:: program_for_each_module ( arg0:smart_ptr<rtti::Program> const implicit; arg1:block<(rtti::Module?):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+------------------------------------------+
-+arg0+smart_ptr<rtti::Program> const implicit   +
-+----+------------------------------------------+
-+arg1+block<(rtti::Module?):void> const implicit+
-+----+------------------------------------------+
-+arg2+ const                                    +
-+----+------------------------------------------+
++----+------------------------------------------------------------------------+
++arg0+smart_ptr< :ref:`rtti::Program <handle_rtti_Program>` > const implicit  +
++----+------------------------------------------------------------------------+
++arg1+block<( :ref:`rtti::Module <handle_rtti_Module>` ?):void> const implicit+
++----+------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: program_for_each_registered_module(arg0:block<(rtti::Module?):void> const implicit)
+.. das:function:: program_for_each_registered_module ( arg0:block<(rtti::Module?):void> const implicit ) 
 
 
 
 function arguments are
 
-+----+------------------------------------------+
-+arg0+block<(rtti::Module?):void> const implicit+
-+----+------------------------------------------+
-+arg1+ const                                    +
-+----+------------------------------------------+
++----+------------------------------------------------------------------------+
++arg0+block<( :ref:`rtti::Module <handle_rtti_Module>` ?):void> const implicit+
++----+------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: rtti_builtin_structure_for_each_annotation(arg0:rtti::StructInfo const implicit; arg1:block<> const implicit)
+.. das:function:: rtti_builtin_structure_for_each_annotation ( arg0:StructInfo const implicit; arg1:block<> const implicit ) 
 
 
 
 function arguments are
 
-+----+-------------------------------+
-+arg0+rtti::StructInfo const implicit+
-+----+-------------------------------+
-+arg1+block<> const implicit         +
-+----+-------------------------------+
-+arg2+ const                         +
-+----+-------------------------------+
++----+-----------------------------------------------------------------+
++arg0+ :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const implicit+
++----+-----------------------------------------------------------------+
++arg1+block<> const implicit                                           +
++----+-----------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: set_file_source(arg0:smart_ptr<rtti::FileAccess> const implicit; arg1:string const; arg2:string const)
+.. das:function:: set_file_source ( arg0:smart_ptr<rtti::FileAccess> const implicit; arg1:string const; arg2:string const )  : bool
 
 set_file_source returns bool
 
@@ -1356,32 +1557,30 @@ set_file_source returns bool
 
 function arguments are
 
-+----+------------------------------------------+
-+arg0+smart_ptr<rtti::FileAccess> const implicit+
-+----+------------------------------------------+
-+arg1+string const                              +
-+----+------------------------------------------+
-+arg2+string const                              +
-+----+------------------------------------------+
-+arg3+ const                                    +
-+----+------------------------------------------+
++----+----------------------------------------------------------------------------+
++arg0+smart_ptr< :ref:`rtti::FileAccess <handle_rtti_FileAccess>` > const implicit+
++----+----------------------------------------------------------------------------+
++arg1+string const                                                                +
++----+----------------------------------------------------------------------------+
++arg2+string const                                                                +
++----+----------------------------------------------------------------------------+
 
 
 
 to be documented
 
 
-.. das:function:: structure_for_each_annotation(st:rtti::StructInfo const; subexpr:block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
+.. das:function:: structure_for_each_annotation ( st:StructInfo const; subexpr:block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const ) 
 
 
 
 function arguments are
 
-+-------+-----------------------------------------------------------------------------------+
-+st     +rtti::StructInfo const                                                             +
-+-------+-----------------------------------------------------------------------------------+
-+subexpr+block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const+
-+-------+-----------------------------------------------------------------------------------+
++-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++st     + :ref:`rtti::StructInfo <handle_rtti_StructInfo>`  const                                                                                                        +
++-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++subexpr+block<(ann: :ref:`rtti::Annotation <handle_rtti_Annotation>`  const;args: :ref:`rtti::AnnotationArguments <handle_rtti_AnnotationArguments>`  const):void> const+
++-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
 

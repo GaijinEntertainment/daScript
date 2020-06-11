@@ -873,7 +873,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(list)>("list");
-            addField<DAS_BIND_MANAGED_FIELD(module)>("enumModule");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module","module");
             addField<DAS_BIND_MANAGED_FIELD(external)>("external");
             addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
         }
@@ -882,7 +882,7 @@ namespace das {
     TypeDeclPtr makeTypeDeclFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "TypeDeclFlags";
-        ft->argNames = { "ref", "constant", "temporary", "implicit",
+        ft->argNames = { "ref", "constant", "temporary", "_implicit",
             "removeRef", "removeConstant", "removeDim",
             "removeTemporary", "explicitConst", "aotAlias", "smartPtr" };
         return ft;
@@ -911,6 +911,8 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(canCopy)>("canCopy","canCopy");
             addProperty<DAS_BIND_MANAGED_PROP(canMove)>("canMove","canMove");
             addProperty<DAS_BIND_MANAGED_PROP(isVoid)>("isVoid","isVoid");
+            addProperty<DAS_BIND_MANAGED_PROP(isAuto)>("isAuto","isAuto");
+            addProperty<DAS_BIND_MANAGED_PROP(isAlias)>("isAlias","isAlias");
             addProperty<DAS_BIND_MANAGED_PROP(isCtorType)>("isCtorType","isCtorType");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf","getSizeOf");
@@ -933,7 +935,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("_type");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
@@ -1049,7 +1051,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(type)>("_type");
+            addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(source)>("source");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");

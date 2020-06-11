@@ -619,7 +619,7 @@ class PrintVisitor : AstVisitor
             print("\"{escape(str)}\"")
 // const enumeraiton
     def override preVisitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : void
-        let enumModule = expr.enumType.enumModule
+        let enumModule = expr.enumType._module
         if enumModule!=null & !empty(enumModule.name)
             print("{enumModule.name}::")
         print("{expr.enumType.name} {expr.value}")

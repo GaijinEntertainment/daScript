@@ -17,9 +17,139 @@ var
 def output(text:string)
     fwrite(doc_file,text)
 
-def describe_type(td:TypeDeclPtr)
-    let tp = describe(td,false,false)
+def describe_type_short(td:TypeDeclPtr)
+    if !empty(td.alias) & !td.isAuto & !td.isAlias
+        return string(td.alias)
+    let tp = describe(td,false,false,false)
     return replace(tp,"$::","")
+
+def describe_type(td:TypeDeclPtr)
+    return build_string() <| $ (var writer)
+        if !empty(td.alias) & !td.isAuto & !td.isAlias
+            write(writer," :ref:`{td.alias} <{alias_label_name(td)}>` ")
+            return
+        let baseType = td.baseType
+        if baseType==Type alias
+            if !empty(td.alias)
+                write(writer,td.alias)
+            else
+                write(writer,"alias")
+        elif baseType==Type autoinfer
+            write(writer,"auto")
+            if !empty(td.alias)
+                write(writer,"({td.alias})")
+        elif baseType==Type tHandle
+            write(writer," :ref:`{module_name(td.annotation._module)}::{td.annotation.name} <{handle_label_name(td.annotation)}>` ")
+        elif baseType==Type tStructure
+            write(writer," :ref:`{module_name(td.structType._module)}::{td.structType.name} <{struct_label_name(td.structType)}>` ")
+        elif baseType==Type tEnumeration | baseType==Type tEnumeration8 | baseType==Type tEnumeration16
+            write(writer," :ref:`{module_name(td.enumType._module)}::{td.enumType.name} <{enum_label_name(td.enumType)}>` ")
+        elif baseType==Type tPointer
+            if td.flags.smartPtr
+                write(writer,"smart_ptr<")
+            if td.firstType!=null
+                write(writer,describe_type(td.firstType))
+            else
+                write(writer,"void")
+            write(writer,td.flags.smartPtr ? ">" : "?")
+        elif baseType==Type tArray
+            write(writer,"array")
+            if td.firstType!=null
+                write(writer,"<")
+                write(writer,describe_type(td.firstType))
+                write(writer,">")
+        elif baseType==Type tTable
+            write(writer,"table")
+            if td.firstType!=null
+                write(writer,"<")
+                write(writer,describe_type(td.firstType))
+                write(writer,";")
+                write(writer,describe_type(td.secondType))
+                write(writer,">")
+        elif baseType==Type tIterator
+            write(writer,"iterator")
+            if td.firstType!=null
+                write(writer,"<")
+                write(writer,describe_type(td.firstType))
+                write(writer,">")
+        elif baseType==Type tBlock | baseType==Type tFunction | baseType==Type tLambda
+            write(writer,das_to_string(baseType))
+            write(writer,"<")
+            if td.argTypes.length!=0
+                write(writer,"(")
+                if td.argNames.length!=0
+                    var first = true
+                    for at,an in td.argTypes,td.argNames
+                        if first
+                            first = false
+                        else
+                            write(writer,";")
+                        write(writer,an)
+                        write(writer,":")
+                        write(writer,describe_type(at))
+                else
+                    var first = true
+                    for at in td.argTypes
+                        if first
+                            first = false
+                        else
+                            write(writer,";")
+                        write(writer,describe_type(at))
+                write(writer,")")
+                if td.firstType!=null
+                    write(writer,":")
+                    write(writer,describe_type(td.firstType))
+            write(writer,">")
+        elif baseType==Type tTuple | baseType==Type tVariant
+            write(writer,das_to_string(baseType))
+            write(writer,"<")
+            if td.argTypes.length!=0
+                if td.argNames.length!=0
+                    var first = true
+                    for at,an in td.argTypes,td.argNames
+                        if first
+                            first = false
+                        else
+                            write(writer,";")
+                        write(writer,an)
+                        write(writer,":")
+                        write(writer,describe_type(at))
+                else
+                    var first = true
+                    for at in td.argTypes
+                        if first
+                            first = false
+                        else
+                            write(writer,";")
+                        write(writer,describe_type(at))
+            write(writer,">")
+        elif baseType==Type tBitfield
+            write(writer,das_to_string(baseType))
+            write(writer,"<")
+            var first = true
+            for an in td.argNames
+                if first
+                    first = false
+                else
+                    write(writer,";")
+                write(writer,an)
+            write(writer,">")
+        else
+            write(writer,das_to_string(baseType))
+        if td.flags.constant
+            write(writer," const")
+        for d in td.dim
+            write(writer,"[")
+            write(writer,d)
+            write(writer,"]")
+        if td.flags.ref
+            write(writer,"&")
+        if td.flags.temporary
+            write(writer,"#")
+        if td.flags._implicit
+            write(writer," implicit")
+        if td.flags.explicitConst
+            write(writer,"!")
 
 def make_header(name,lab:string)
     let wide = length(name)
@@ -54,6 +184,9 @@ def output_table(tab:array<array<string>>)
     output_table_separator(wid)
     output("\n")
 
+def alias_label_name(td:TypeDeclPtr)
+    return "alias_{td.alias}"
+
 def document_typedefs(mod:Module?)
     var any = false
     for_each_typedef(mod) <| $(name, value)
@@ -64,26 +197,37 @@ def document_typedefs(mod:Module?)
     output("Type aliases\n")
     output("++++++++++++\n\n")
     for_each_typedef(mod) <| $(name, value)
+        output(".. _{alias_label_name(value)}:\n\n")
         output(".. das:attribute:: {name}")
         if value.baseType==Type tBitfield
             output(" is a bitfield\n\n")
-            for bit in value.argNames
-                output("- {bit}\n")
+            var tab : array<array<string>>
+            for an,bit in value.argNames,range(0,32)
+                var line : array<string>
+                push(line,string(an))
+                push(line,string(bit))
+                push(line,string(1 << bit))
+                emplace(tab,line)
+            output_table(tab)
             output("\n")
         elif value.baseType==Type tVariant
-            output(" is a variant type\n\n")
-            output("it defines as follows ::\n\n")
-            var w  = 0
-            for nn in value.argNames
-                w = max(w,length(nn))
-            for n,t in value.argNames,value.argTypes
-                output(" {wide(string(n),w)} : {describe_type(t)}\n")
+            output("is a variant type\n\n")
+            var tab : array<array<string>>
+            for an,at in value.argNames,value.argTypes
+                var line : array<string>
+                push(line,string(an))
+                push(line,describe_type(at))
+                emplace(tab,line)
+            output_table(tab)
             output("\n")
         else
-            output(" = {describe_type(value)}\n")
+            output(" = {describe_type_short(value)}\n")
             output("\n")
         output("to be documented\n")
         output("\n")
+
+def enum_label_name(value)
+    return "enum_{module_name(value._module)}_{value.name}"
 
 def document_enumerations(mod:Module?)
     var any = false
@@ -95,6 +239,7 @@ def document_enumerations(mod:Module?)
     output("Enumerations\n")
     output("++++++++++++\n\n")
     for_each_enumeration(mod) <| $(value)
+        output(".. _{enum_label_name(value)}:\n\n")
         output(".. das:attribute:: {value.name}\n\n")
         output("to be documented\n\n")
         var tab : array<array<string>>
@@ -126,6 +271,7 @@ def document_classes(mod:Module?)
     for_each_structure(mod) <| $(value)
         if !value.flags.isClass
             return
+        output(".. _{struct_label_name(value)}:\n\n")
         output(".. das:class:: {value.name}")
         if value.parent!=null
             output(" : {value.parent.name}")
@@ -136,7 +282,7 @@ def document_classes(mod:Module?)
             if !is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
                 w = max(w,length(fld.name))
         if w != 0
-            output("it defines as follows ::\n\n")
+            output("it defines as follows\n\n")
             for fld in value.fields
                 if !is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
                     output("  {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
@@ -144,7 +290,7 @@ def document_classes(mod:Module?)
         for fld in value.fields
             if is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
                 output(".. das:method:: {value.name}.{fld.name}")
-                output(" (")
+                output(" ( ")
                 var first = true
                 for an,at in fld._type.argNames,fld._type.argTypes
                     if argument_needs_documenting(at)
@@ -152,25 +298,30 @@ def document_classes(mod:Module?)
                             first = false
                         else
                             output("; ")
-                        output("{an}:{describe_type(at)}")
-                output(")")
+                        output("{an}:{describe_type_short(at)}")
+                output(" ) ")
+                if fld._type.firstType!=null & !fld._type.firstType.isVoid
+                    output( " : {describe_type_short(fld._type.firstType)}")
                 output(" \n\n")
                 if fld._type.firstType != null & !fld._type.firstType.isVoid
                     output("{fld.name} returns {describe_type(fld._type.firstType)}\n\n")
                 if fld._type.argTypes.length > 1
                     var tab : array<array<string>>
                     for an,at in fld._type.argNames,fld._type.argTypes
-                        if string(an)!="self"
+                        if argument_needs_documenting(at)
                             var line : array<string>
                             push(line,string(an))
                             push(line,describe_type(at))
                             emplace(tab,line)
-                    output("function arguments are\n\n")
+                    output("method arguments are\n\n")
                     output_table(tab)
                     output("\n")
                 output("to be documented\n\n")
                 output("\n")
         output("\n")
+
+def struct_label_name(value)
+    return "struct-{module_name(value._module)}-{value.name}"
 
 def document_structures(mod:Module?)
     var any = false
@@ -186,19 +337,29 @@ def document_structures(mod:Module?)
     for_each_structure(mod) <| $(value)
         if value.flags.isClass | value.flags.generated
             return
+        output(".. _{struct_label_name(value)}:\n\n")
         output(".. das:attribute:: {value.name}")
         if value.parent!=null
             output(" : {value.parent.name}")
         output("\n\n")
-        output("it defines as follows ::\n\n")
-        var w  = 0
+        var tab : array<array<string>>
         for fld in value.fields
-            w = max(w,length(fld.name))
-        for fld in value.fields
-            output("  {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
+            var line : array<string>
+            push(line,string(fld.name))
+            push(line,describe_type(fld._type))
+            emplace(tab,line)
+        output("{value.name} fields are\n\n")
+        output_table(tab)
         output("\n")
         output("to be documented\n\n")
         output("\n")
+
+def module_name(mod)
+    let mn = string(mod.name)
+    return mn=="$" ? "builtin" : mn
+
+def handle_label_name(value)
+    return "handle_{module_name(value._module)}_{value.name}"
 
 [unsafe]
 def document_structure_annotations(mod:Module?)
@@ -215,31 +376,60 @@ def document_structure_annotations(mod:Module?)
     module_for_each_annotation(mod) <| $(value)
         if !value.isBasicStructureAnnotation
             return
+        output(".. _{handle_label_name(value)}:\n\n")
         output(".. das:attribute:: {value.name}\n\n")
-        var w  = 0
+        var any_fields = false
+        var any_props = false
         var ann = reinterpret<BasicStructureAnnotation?> value
         for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
             if offset != -1u
-                w = max(w,length(name))
-        if w >0
-            output("it defines as follows ::\n\n")
+                any_fields = true
+            else
+                any_props = true
+        if any_fields
+            var tab : array<array<string>>
             for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
                 if offset != -1u
-                    output("  {wide(name,w)} : {describe_type(xtype)}\n")
+                    var line : array<string>
+                    push(line,name)
+                    push(line,describe_type(xtype))
+                    emplace(tab,line)
+            output("{value.name} fields are\n\n")
+            output_table(tab)
             output("\n")
-        w = 0
-        for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
-            if offset == -1u
-                w = max(w,length(name))
-        if w >0
-            output("it has the following properties ::\n\n")
+        if any_props
+            var tab : array<array<string>>
             for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
                 if offset == -1u
-                    output("  {wide(name,w)} : {describe_type(xtype)}\n")
+                    var line : array<string>
+                    push(line,name)
+                    push(line,describe_type(xtype))
+                    emplace(tab,line)
+            output("{value.name} properties are\n\n")
+            output_table(tab)
             output("\n")
         output("to be documented\n\n")
         output("\n")
 
+[unsafe]
+def document_annotations(mod:Module?)
+    var any = false
+    module_for_each_annotation(mod) <| $(value)
+        if !value.isTypeAnnotation | value.isBasicStructureAnnotation
+            return
+        any = true
+    if !any
+        return
+    output("+++++++++++++\n")
+    output("Handled types\n")
+    output("+++++++++++++\n\n")
+    module_for_each_annotation(mod) <| $(value)
+        if !value.isTypeAnnotation | value.isBasicStructureAnnotation
+            return
+        output(".. _{handle_label_name(value)}:\n\n")
+        output(".. das:attribute:: {value.name}\n\n")
+        output("to be documented\n\n")
+        output("\n")
 
 def function_needs_documenting(func:FunctionPtr)
     if func.flags.generated
@@ -285,7 +475,7 @@ def function_needs_documenting(func:FunctionPtr)
 def document_function(func:FunctionPtr)
     output(".. das:function:: {func.name}")
     if func.arguments.length != 0
-        output("(")
+        output(" ( ")
         var first = true
         for arg in func.arguments
             if argument_needs_documenting(arg._type)
@@ -293,8 +483,10 @@ def document_function(func:FunctionPtr)
                     first = false
                 else
                     output("; ")
-                output("{arg.name}:{describe_type(arg._type)}")
-        output(")")
+                output("{arg.name}:{describe_type_short(arg._type)}")
+        output(" ) ")
+        if func.result!=null & !func.result.isVoid
+            output( " : {describe_type_short(func.result)}")
     output("\n\n")
     if func.result != null & !func.result.isVoid
         output("{func.name} returns {describe_type(func.result)}\n\n")
@@ -305,10 +497,11 @@ def document_function(func:FunctionPtr)
     if func.arguments.length !=0
         var tab : array<array<string>>
         for arg in func.arguments
-            var line : array<string>
-            push(line,string(arg.name))
-            push(line,describe_type(arg._type))
-            emplace(tab,line)
+            if argument_needs_documenting(arg._type)
+                var line : array<string>
+                push(line,string(arg.name))
+                push(line,describe_type(arg._type))
+                emplace(tab,line)
         output("function arguments are\n\n")
         output_table(tab)
         output("\n")
@@ -359,6 +552,7 @@ def document(name:string;mod:Module?;fname:string)
     document_enumerations(mod)
     document_structures(mod)
     document_structure_annotations(mod)
+    document_annotations(mod)
     document_classes(mod)
     document_generics(mod)
     document_functions(mod)
