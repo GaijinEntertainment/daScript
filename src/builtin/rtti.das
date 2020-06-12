@@ -86,7 +86,7 @@ def class_info ( cl ) : StructInfo const?
         return null
 
 [unsafe]
-def RttiValue_nothing
+def RttiValue_nothing : RttiValue
     var t : RttiValue
     set_variant_index(t, typeinfo(variant_index<nothing> t))
     return t

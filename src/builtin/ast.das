@@ -498,3 +498,12 @@ def add_new_reader_macro ( name:string; someClassPtr )
     var ann <- make_reader_macro(name, someClassPtr)
     this_module() |> add_reader_macro(ann)
     delete ann
+
+def find_module(name:string) : Module?
+    var rm : Module?
+    program_for_each_module(this_program()) <| $ ( mod )
+        if string(mod.name)==name
+            rm = mod
+    verify(rm!=null,"module not found")
+    return rm
+

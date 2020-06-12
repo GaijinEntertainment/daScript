@@ -454,9 +454,11 @@ arguments are
 
 function|fio|dir to be documented
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++
+OS thread helper
+++++++++++++++++
+
+  *  :ref:`sleep (arg0:uint const) : void <function-_at_fio_c__c_sleep_uint_hh_const>` 
 
 .. _function-_at_fio_c__c_sleep_uint_hh_const:
 

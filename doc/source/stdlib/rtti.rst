@@ -879,7 +879,7 @@ Uncategorized
 
 .. das:function:: RttiValue_nothing()
 
-RttiValue_nothing returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
+RttiValue_nothing returns  :ref:`RttiValue <alias-RttiValue>` 
 
 function|rtti|RttiValue_nothing to be documented
 

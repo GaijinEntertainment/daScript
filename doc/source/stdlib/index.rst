@@ -45,5 +45,6 @@ THE SOFTWARE.
    json_boost.rst
    regex.rst
    regex_boost.rst
+   rst.rst
 
 
