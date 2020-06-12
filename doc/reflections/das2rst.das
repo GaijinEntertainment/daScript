@@ -33,10 +33,10 @@ dot|normalize|fast_normalize)$%%);
 def document_module_builtin(root:string)
     var mod = get_module("$")
     var groups <- [{DocGroup
-        hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin*%%));
-        hide_group(group_by_regex("Internal pointer arithmetics", mod, %regex~i_das_*%%));
-        hide_group(group_by_regex("Internal clone infrastructure", mod, %regex~clone*%%));
-        hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize*%%));
+        hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%));
+        hide_group(group_by_regex("Internal pointer arithmetics", mod, %regex~i_das_%%));
+        hide_group(group_by_regex("Internal clone infrastructure", mod, %regex~clone%%));
+        hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%));
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|reserve|each|emplace|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|sort|to_array|to_table|to_array_move|
@@ -46,11 +46,11 @@ to_table_move)$%%);
 chop|delete_string|ends_with|escape|find_first_of|format|peek|repeat|set|slice|starts_with|empty|replace|reverse|
 strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|to_upper|to_upper_in_place|unescape)$%%);
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%);
-        group_by_regex("Heap reporting", mod, %regex~(heap*|string_heap*)%%);
+        group_by_regex("Heap reporting", mod, %regex~(heap|string_heap)%%);
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
-        group_by_regex("GC0 infrastructure", mod, %regex~gc0*%%);
-        group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr*|get_ptr$)%%);
-        group_by_regex("Macro infrastructure", mod, %regex~is_compiling*%%);
+        group_by_regex("GC0 infrastructure", mod, %regex~gc0%%);
+        group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr|get_ptr$)%%);
+        group_by_regex("Macro infrastructure", mod, %regex~is_compiling%%);
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info)$%%);
         group_by_regex("System infastructure", mod, %regex~(panic|print|terminate|breakpoint|stackwalk|get_das_root|get_clock)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash)$%%);
@@ -61,10 +61,11 @@ strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|
 def document_module_fio(root:string)
     var mod = get_module("fio")
     var groups <- [{DocGroup
-        hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin*%%));
+        hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%));
         group_by_regex("File manipulation", mod, %regex~(f|stat$)%%);
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name)$%%);
-        group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir)$%%)
+        group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir)$%%);
+        group_by_regex("OS thread helper", mod, %regex~(sleep)$%%)
     }]
     document("File input output library",mod,"{root}/fio.rst",groups)
 
@@ -164,6 +165,19 @@ def document_module_regex_boost(root:string)
     }]
     document("Boost package for REGEX",mod,"{root}/regex_boost.rst",groups)
 
+def document_module_regex_rst(root:string)
+    var mod = find_module("rst")
+    var groups <- [{DocGroup
+        group_by_regex("Document writers", mod, %regex~document%%);
+        group_by_regex("Descriptions", mod, %regex~describe%%);
+        group_by_regex("Label makers", mod, %regex~\w+_label_name%%);
+        group_by_regex("RST section makers", mod, %regex~make%%);
+        group_by_regex("Documentation queries", mod, %regex~.+_needs%%);
+        group_by_regex("Group operations", mod, %regex~.*group%%);
+        group_by_regex("Naming helpers", mod, %regex~(topic|module_name)$%%)
+    }]
+    document("Documentation generator",mod,"{root}/rst.rst",groups)
+
 [export]
 def test
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -184,4 +198,5 @@ def test
     document_module_json_boost(root)
     document_module_regex(root)
     document_module_regex_boost(root)
+    document_module_regex_rst(root)
     return true

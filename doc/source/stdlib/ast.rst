@@ -8212,6 +8212,21 @@ arguments are
 
 function|ast|find_bitfield_name to be documented
 
+.. _function-_at_ast_c__c_find_module_string_hh_const:
+
+.. das:function:: find_module(name: string const)
+
+find_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
+
+arguments are
+
++----+------------+
++name+string const+
++----+------------+
+
+
+function|ast|find_module to be documented
+
 .. _function-_at_ast_c__c_for_each_enumeration__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Enumeration_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: for_each_enumeration(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Enumeration>):void> const implicit)

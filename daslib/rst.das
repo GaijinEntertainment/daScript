@@ -209,11 +209,13 @@ def make_header(name,lab:string)
     let wide = length(name)
     return ".. _stdlib_{lab}:\n\n{builtin`::repeat("=",wide)}\n{name}\n{builtin`::repeat("=",wide)}\n\n"
 
+[private]
 def write_table_separator(var writer:StringBuilderWriter; wid:array<int>)
     for x in wid
         write(writer,"+{builtin`::repeat("-",x)}")
     write(writer,"+\n")
 
+[private]
 def write_table_line(var writer:StringBuilderWriter;line:array<string>;wid:array<int>)
     for x,l in wid,line
         write(writer,"+{wide(l,x)}")
@@ -558,9 +560,10 @@ def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
                 if grp.hidden
                     document_warning(doc_file,"This group of functions is hidden. It will not be in the final documentation.")
                 for func in grp.func
-                    let descr = describe_function_short(FunctionPtr(func))
-                    var labn = function_label_name(FunctionPtr(func))
-                    fwrite(doc_file,"  * {make_ref(labn,descr)}\n")
+                    if !key_exists(tab,func)
+                        let descr = describe_function_short(FunctionPtr(func))
+                        var labn = function_label_name(FunctionPtr(func))
+                        fwrite(doc_file,"  * {make_ref(labn,descr)}\n")
                 fwrite(doc_file,"\n")
                 for func in grp.func
                     if tab[func]
@@ -591,14 +594,6 @@ def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
             first_function = false
         document_function(doc_file,mod,func)
 
-def find_module(name:string) : Module?
-    var rm : Module?
-    program_for_each_module(this_program()) <| $ ( mod )
-        if string(mod.name)==name
-            rm = mod
-    verify(rm!=null,"module not found")
-    return rm
-
 struct DocGroup
     name : string
     func : array<Function?>
@@ -611,7 +606,7 @@ def debug_group(var group:DocGroup)
         print("\t{describe_function_short(FunctionPtr(func))}\n")
     return <- group
 
-def append_by_regex(var group:DocGroup; mod:Module?; var reg:Regex)
+def append_to_group_by_regex(var group:DocGroup; mod:Module?; var reg:Regex)
     for_each_function(mod, "") <| $(func)
         if function_needs_documenting(func)
             if regex_match(reg,string(func.name)) != -1
@@ -623,7 +618,7 @@ def append_by_regex(var group:DocGroup; mod:Module?; var reg:Regex)
 
 def group_by_regex(name:string; mod:Module?; var reg:Regex)
     var group <- [[DocGroup name=name, hidden=false]]
-    append_by_regex(group,mod,reg)
+    append_to_group_by_regex(group,mod,reg)
     return <- group
 
 def hide_group(var group:DocGroup)

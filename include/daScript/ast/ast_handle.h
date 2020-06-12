@@ -70,6 +70,8 @@ namespace das
         enum class FactoryNodeType {
             getField
         ,   getFieldR2V
+        ,   getFieldPtr
+        ,   getFieldPtrR2V
         ,   safeGetField
         ,   safeGetFieldPtr
         };
@@ -135,9 +137,12 @@ namespace das
                 switch ( nt ) {
                     case FactoryNodeType::getField:
                         return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
+                    case FactoryNodeType::getFieldPtr:
+                        return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
                     case FactoryNodeType::safeGetField:
                     case FactoryNodeType::safeGetFieldPtr:
                     case FactoryNodeType::getFieldR2V:
+                    case FactoryNodeType::getFieldPtrR2V:
                         DAS_ASSERTF(0, "property requested property type, which is meaningless for the non-ref"
                                     "we should not be here, since property can't have ref type"
                                     "daScript compiler will later report missing node error");

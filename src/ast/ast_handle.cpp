@@ -36,7 +36,11 @@ namespace das {
             const LineInfo & at, const ExpressionPtr & value ) const {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {
-            return it->second.factory(FactoryNodeType::getField,context,at,value);
+            if ( value->type->isPointer() ) {
+                return it->second.factory(FactoryNodeType::getFieldPtr,context,at,value);
+            } else {
+                return it->second.factory(FactoryNodeType::getField,context,at,value);
+            }
         } else {
             return nullptr;
         }
@@ -47,7 +51,11 @@ namespace das {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {
             auto itT = it->second.decl;
-            return it->second.factory(FactoryNodeType::getFieldR2V,context,at,value);
+            if ( value->type->isPointer() ) {
+                return it->second.factory(FactoryNodeType::getFieldPtrR2V,context,at,value);
+            } else {
+                return it->second.factory(FactoryNodeType::getFieldR2V,context,at,value);
+            }
         } else {
             return nullptr;
         }
@@ -117,6 +125,10 @@ namespace das {
                 return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset);
             case FactoryNodeType::getFieldR2V:
                 return context.code->makeValueNode<SimNode_FieldDerefR2V>(baseType,at,simV,offset);
+            case FactoryNodeType::getFieldPtr:
+                return context.code->makeNode<SimNode_PtrFieldDeref>(at,simV,offset);
+            case FactoryNodeType::getFieldPtrR2V:
+                return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(baseType,at,simV,offset);
             case FactoryNodeType::safeGetField:
                 return context.code->makeNode<SimNode_SafeFieldDeref>(at,simV,offset);
             case FactoryNodeType::safeGetFieldPtr:

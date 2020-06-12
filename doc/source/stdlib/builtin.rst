@@ -2380,7 +2380,6 @@ function|builtin|unescape to be documented
 String builder
 ++++++++++++++
 
-  *  :ref:`build_string (arg0:block\<($::StringBuilderWriter):void\> const implicit;arg1: const) : string <function-_at__builtin__c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const>` 
   *  :ref:`write (arg0:$::StringBuilderWriter;arg1:any) : void <function-_at__builtin__c__c_write__hh_handle_hh_StringBuilderWriter_any>` 
   *  :ref:`write_char (arg0:$::StringBuilderWriter implicit;arg1:int const) : void <function-_at__builtin__c__c_write_char__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const>` 
   *  :ref:`write_chars (arg0:$::StringBuilderWriter implicit;arg1:int const;arg2:int const) : void <function-_at__builtin__c__c_write_chars__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const_int_hh_const>` 
