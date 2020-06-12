@@ -47,6 +47,9 @@ any_annotation|builtin|float4x4 to be documented
 Internal builtin functions
 ++++++++++++++++++++++++++
 
+.. warning:: 
+  This group of functions is hidden. It will not be in the final documentation.
+
   *  :ref:`builtin_strdup (arg0:any) : void <function-_at__builtin__c__c_builtin_strdup_any>` 
   *  :ref:`builtin_string_split (arg0:string const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : void <function-_at__builtin__c__c_builtin_string_split_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
   *  :ref:`builtin_string_split_by_char (arg0:string const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : void <function-_at__builtin__c__c_builtin_string_split_by_char_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
@@ -104,6 +107,9 @@ function|builtin|builtin_string_split_by_char to be documented
 ++++++++++++++++++++++++++++
 Internal pointer arithmetics
 ++++++++++++++++++++++++++++
+
+.. warning:: 
+  This group of functions is hidden. It will not be in the final documentation.
 
   *  :ref:`i_das_ptr_add (arg0:void? const implicit;arg1:int const;arg2:int const) : void? <function-_at__builtin__c__c_i_das_ptr_add__hh_ptr_hh_const_hh_implicit_int_hh_const_int_hh_const>` 
   *  :ref:`i_das_ptr_dec (arg0:void?& implicit;arg1:int const) : void <function-_at__builtin__c__c_i_das_ptr_dec__hh_ptr_hh_ref_hh_implicit_int_hh_const>` 
@@ -255,6 +261,9 @@ function|builtin|i_das_ptr_sub to be documented
 +++++++++++++++++++++++++++++
 Internal clone infrastructure
 +++++++++++++++++++++++++++++
+
+.. warning:: 
+  This group of functions is hidden. It will not be in the final documentation.
 
   *  :ref:`clone (a:$::das_string -const;b:string const) : void <function-_at__builtin__c__c_clone__hh_handle_hh_das_string_string_hh_const>` 
   *  :ref:`clone_string (arg0:string const;arg1: const) : string <function-_at__builtin__c__c_clone_string_string_hh_const__hh_const>` 
@@ -416,6 +425,9 @@ function|builtin|clone_to_move to be documented
 ++++++++++++++++++++++++++++++++
 Internal finalize infrastructure
 ++++++++++++++++++++++++++++++++
+
+.. warning:: 
+  This group of functions is hidden. It will not be in the final documentation.
 
   *  :ref:`finalize (a:array\<auto(TT)\> -const) : auto <function-_at__builtin__c__c_finalize__hh_array_hh__hh_auto>` 
   *  :ref:`finalize (a:table\<auto(TK);auto(TV)\> -const) : auto <function-_at__builtin__c__c_finalize__hh_table_hh__hh_auto_hh__hh_auto>` 

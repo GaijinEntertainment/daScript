@@ -600,27 +600,44 @@ enumeration|ast|SideEffects to be documented
 Handled structures
 ++++++++++++++++++
 
+.. _handle-ast-EnumEntry:
+
+.. das:attribute:: EnumEntry
+
+EnumEntry fields are
+
++-----+-----------------------------------------------------------+
++value+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----+-----------------------------------------------------------+
++at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++-----+-----------------------------------------------------------+
++name + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++-----+-----------------------------------------------------------+
+
+
+structure_annotation|ast|EnumEntry to be documented
+
 .. _handle-ast-Enumeration:
 
 .. das:attribute:: Enumeration
 
 Enumeration fields are
 
-+--------+------------------------------------------------------------------------------------------------------------------------+
-+_module + :ref:`rtti::Module <handle-rtti-Module>` ?                                                                             +
-+--------+------------------------------------------------------------------------------------------------------------------------+
-+at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                                           +
-+--------+------------------------------------------------------------------------------------------------------------------------+
-+cppName + :ref:`builtin::das_string <handle-builtin-das_string>`                                                                 +
-+--------+------------------------------------------------------------------------------------------------------------------------+
-+list    + :ref:`ast::dasvector`pair`das_string`smart_ptr`Expression <handle-ast-dasvector`pair`das_string`smart_ptr`Expression>` +
-+--------+------------------------------------------------------------------------------------------------------------------------+
-+name    + :ref:`builtin::das_string <handle-builtin-das_string>`                                                                 +
-+--------+------------------------------------------------------------------------------------------------------------------------+
-+external+bool                                                                                                                    +
-+--------+------------------------------------------------------------------------------------------------------------------------+
-+baseType+ :ref:`rtti::Type <enum-rtti-Type>`                                                                                     +
-+--------+------------------------------------------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------+
++_module + :ref:`rtti::Module <handle-rtti-Module>` ?                       +
++--------+------------------------------------------------------------------+
++at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                     +
++--------+------------------------------------------------------------------+
++cppName + :ref:`builtin::das_string <handle-builtin-das_string>`           +
++--------+------------------------------------------------------------------+
++list    + :ref:`ast::dasvector`EnumEntry <handle-ast-dasvector`EnumEntry>` +
++--------+------------------------------------------------------------------+
++name    + :ref:`builtin::das_string <handle-builtin-das_string>`           +
++--------+------------------------------------------------------------------+
++external+bool                                                              +
++--------+------------------------------------------------------------------+
++baseType+ :ref:`rtti::Type <enum-rtti-Type>`                               +
++--------+------------------------------------------------------------------+
 
 
 structure_annotation|ast|Enumeration to be documented
@@ -3602,6 +3619,12 @@ Handled types
 
 any_annotation|ast|MakeStruct to be documented
 
+.. _handle-ast-dasvector`EnumEntry:
+
+.. das:attribute:: dasvector`EnumEntry
+
+any_annotation|ast|dasvector`EnumEntry to be documented
+
 .. _handle-ast-dasvector`FieldDeclaration:
 
 .. das:attribute:: dasvector`FieldDeclaration
@@ -3631,12 +3654,6 @@ any_annotation|ast|dasvector`das_string to be documented
 .. das:attribute:: dasvector`int
 
 any_annotation|ast|dasvector`int to be documented
-
-.. _handle-ast-dasvector`pair`das_string`smart_ptr`Expression:
-
-.. das:attribute:: dasvector`pair`das_string`smart_ptr`Expression
-
-any_annotation|ast|dasvector`pair`das_string`smart_ptr`Expression to be documented
 
 .. _handle-ast-dasvector`pair`uint`uint:
 

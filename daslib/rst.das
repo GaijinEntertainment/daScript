@@ -295,8 +295,8 @@ def document_enumeration(doc_file:file;mod:Module?;value)
     var tab : array<array<string>>
     for en in value.list
         var line : array<string>
-        push(line,string(en._0))
-        push(line,describe(en._1))
+        push(line,string(en.name))
+        push(line,describe(en.value))
         emplace(tab,line)
     fwrite(doc_file,make_table(tab))
     document_topic(doc_file,topic("enumeration",mod,string(value.name)))
@@ -529,6 +529,10 @@ def function_needs_documenting(func:FunctionPtr)
         return false
     return true
 
+def document_warning(doc_file:file;issue:string)
+    fwrite(doc_file,make_domain("warning"))
+    fwrite(doc_file,"\n  {issue}\n\n")
+
 def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
     let argNames <- [{for arg in func.arguments; string(arg.name)}]
     let argTypes <- [{for arg in func.arguments; get_ptr(arg._type)}]
@@ -538,8 +542,7 @@ def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
     if func.result != null & !func.result.isVoid
         fwrite(doc_file,"{func.name} returns {describe_type(func.result)}\n\n")
     if func.flags.unsafeOperation
-        fwrite(doc_file,make_domain("warning"))
-        fwrite(doc_file,"\n  This is unsafe operation.\n\n")
+        document_warning(doc_file,"This is unsafe operation.")
     document_function_arguments(doc_file,argNames,argTypes)
     document_topic(doc_file,topic("function",mod,"{func.name}"))
 
@@ -552,6 +555,8 @@ def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
                     tab[func] = true
             else
                 fwrite(doc_file,make_group(grp.name))
+                if grp.hidden
+                    document_warning(doc_file,"This group of functions is hidden. It will not be in the final documentation.")
                 for func in grp.func
                     let descr = describe_function_short(FunctionPtr(func))
                     var labn = function_label_name(FunctionPtr(func))

@@ -17,6 +17,7 @@ namespace das {
 MAKE_TYPE_FACTORY(TypeDecl,TypeDecl)
 MAKE_TYPE_FACTORY(FieldDeclaration, Structure::FieldDeclaration)
 MAKE_TYPE_FACTORY(Structure,Structure)
+MAKE_TYPE_FACTORY(EnumEntry,Enumeration::EnumEntry)
 MAKE_TYPE_FACTORY(Enumeration,Enumeration)
 MAKE_TYPE_FACTORY(Expression,Expression)
 MAKE_TYPE_FACTORY(Function,Function)
@@ -861,6 +862,25 @@ namespace das {
     struct AstModuleGroupAnnotation : ManagedStructureAnnotation<ModuleGroup,false> {
         AstModuleGroupAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ModuleGroup", ml) {
+        }
+    };
+
+/*
+            struct EnumEntry {
+            string          name;
+            LineInfo        at;
+            ExpressionPtr   value;
+        };
+*/
+
+    struct AstEnumEntryAnnotation : ManagedStructureAnnotation <Enumeration::EnumEntry> {
+        AstEnumEntryAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("EnumEntry", ml) {
+        }
+        void init () {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
         }
     };
 
@@ -2282,6 +2302,8 @@ namespace das {
             addAnnotation(sta);
             auto fta = make_smart<AstFieldDeclarationAnnotation>(lib);
             addAnnotation(fta);
+            auto ene = make_smart<AstEnumEntryAnnotation>(lib);
+            addAnnotation(ene);
             auto ena = make_smart<AstEnumerationAnnotation>(lib);
             addAnnotation(ena);
             auto fna = make_smart<AstFunctionAnnotation>(lib);
@@ -2293,6 +2315,7 @@ namespace das {
             initRecAnnotation(tda, lib);
             initRecAnnotation(sta, lib);
             initRecAnnotation(fta, lib);
+            initRecAnnotation(ene, lib);
             initRecAnnotation(ena, lib);
             initRecAnnotation(exa, lib);
             initRecAnnotation(fna, lib);

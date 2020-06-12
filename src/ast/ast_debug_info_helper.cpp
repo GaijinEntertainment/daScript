@@ -52,8 +52,8 @@ namespace das {
         uint32_t i = 0;
         for ( auto & ev : en.list ) {
             eni->fields[i] = (EnumValueInfo *) debugInfo->allocate(sizeof(EnumValueInfo));
-            eni->fields[i]->name = debugInfo->allocateName(ev.first);
-            eni->fields[i]->value = !ev.second ? -1 : getConstExprIntOrUInt(ev.second);
+            eni->fields[i]->name = debugInfo->allocateName(ev.name);
+            eni->fields[i]->value = !ev.value ? -1 : getConstExprIntOrUInt(ev.value);
             i ++;
         }
         eni->hash = hash_blockz32((uint8_t *)mangledName.c_str());

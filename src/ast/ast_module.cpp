@@ -502,8 +502,8 @@ namespace das {
                 }
                 if ( flags & VerifyBuiltinFlags::verifyEnumFields ) {
                     for ( auto & fd : en->list ) {
-                        if ( !isValidBuiltinName(fd.first) ) {
-                            DAS_FATAL_LOG("%s.%s - structure field has incorrect name. expecting snake_case\n", en->name.c_str(), fd.first.c_str());
+                        if ( !isValidBuiltinName(fd.name) ) {
+                            DAS_FATAL_LOG("%s.%s - enumeration field has incorrect name. expecting snake_case\n", en->name.c_str(), fd.name.c_str());
                             failed = true;
                         }
                     }

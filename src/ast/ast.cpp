@@ -105,44 +105,48 @@ namespace das {
 
 
     pair<ExpressionPtr,bool> Enumeration::find ( const string & na ) const {
-        auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
-            return arg.first == na;
+        auto it = find_if(list.begin(), list.end(), [&](const EnumEntry & arg){
+            return arg.name == na;
         });
         return it!=list.end() ?
-            pair<ExpressionPtr,bool>(it->second,true) :
+            pair<ExpressionPtr,bool>(it->value,true) :
             pair<ExpressionPtr,bool>(nullptr,false);
     }
 
     int64_t Enumeration::find ( const string & na, int64_t def ) const {
-        auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
-            return arg.first == na;
+        auto it = find_if(list.begin(), list.end(), [&](const EnumEntry & arg){
+            return arg.name == na;
         });
-        return it!=list.end() ? getConstExprIntOrUInt(it->second) : def;
+        return it!=list.end() ? getConstExprIntOrUInt(it->value) : def;
     }
 
     string Enumeration::find ( int64_t va, const string & def ) const {
         for ( const auto & it : list ) {
-            if ( getConstExprIntOrUInt(it.second)==va ) {
-                return it.first;
+            if ( getConstExprIntOrUInt(it.value)==va ) {
+                return it.name;
             }
         }
         return def;
     }
 
-    bool Enumeration::add ( const string & f ) {
-        return add(f, nullptr);
+    bool Enumeration::add ( const string & f, const LineInfo & att ) {
+        return add(f, nullptr, att);
     }
 
-    bool Enumeration::addI ( const string & f, int64_t value ) {
-        return add(f, make_smart<ExprConstInt64>(value));
+    bool Enumeration::addI ( const string & f, int64_t value, const LineInfo & att ) {
+        return add(f, make_smart<ExprConstInt64>(value),att);
     }
 
-    bool Enumeration::add ( const string & na, const ExpressionPtr & expr ) {
-        auto it = find_if(list.begin(), list.end(), [&](const pair<string,ExpressionPtr> & arg){
-            return arg.first == na;
+    bool Enumeration::add ( const string & na, const ExpressionPtr & expr, const LineInfo & att ) {
+        auto it = find_if(list.begin(), list.end(), [&](const EnumEntry & arg){
+            return arg.name == na;
         });
         if ( it == list.end() ) {
-            list.emplace_back(na, expr);
+            EnumEntry ena;
+            ena.name = na;
+            ena.value = expr;
+            ena.at = att;
+            list.push_back(ena);
             return true;
         } else {
             return false;
@@ -2342,9 +2346,9 @@ namespace das {
         size_t count = 0;
         size_t total = penum->list.size();
         for ( auto & itf : penum->list ) {
-            vis.preVisitEnumerationValue(penum, itf.first, itf.second.get(), count==total);
-            if ( itf.second ) itf.second = itf.second->visit(vis);
-            itf.second = vis.visitEnumerationValue(penum, itf.first, itf.second.get(), count==total);
+            vis.preVisitEnumerationValue(penum, itf.name, itf.value.get(), count==total);
+            if ( itf.value ) itf.value = itf.value->visit(vis);
+            itf.value = vis.visitEnumerationValue(penum, itf.name, itf.value.get(), count==total);
             count ++;
         }
         return vis.visit(penum);

@@ -6965,7 +6965,7 @@ yyreduce:
 #line 1887 "ds_parser.ypp"
     {
         das_checkName(*(yyvsp[-1].s),tokAt((yylsp[-1])));
-        if ( !(yyvsp[-2].pEnum)->add(*(yyvsp[-1].s)) ) {
+        if ( !(yyvsp[-2].pEnum)->add(*(yyvsp[-1].s),nullptr,tokAt((yylsp[-1]))) ) {
             das_yyerror("enumeration alread declared " + *(yyvsp[-1].s), tokAt((yylsp[-1])),
                 CompilationError::enumeration_value_already_declared);
         }
@@ -6979,7 +6979,7 @@ yyreduce:
 #line 1896 "ds_parser.ypp"
     {
         das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
-        if ( !(yyvsp[-4].pEnum)->add(*(yyvsp[-3].s),ExpressionPtr((yyvsp[-1].pExpression))) ) {
+        if ( !(yyvsp[-4].pEnum)->add(*(yyvsp[-3].s),ExpressionPtr((yyvsp[-1].pExpression)),tokAt((yylsp[-3]))) ) {
             das_yyerror("enumeration value alread declared " + *(yyvsp[-3].s), tokAt((yylsp[-3])),
                 CompilationError::enumeration_value_already_declared);
         }
@@ -7008,7 +7008,7 @@ yyreduce:
     {
         das_checkName(*(yyvsp[-3].s),tokAt((yylsp[-3])));
         auto pEnum = EnumerationPtr((yyvsp[-1].pEnum));
-        pEnum->at = tokAt((yylsp[-4]));
+        pEnum->at = tokAt((yylsp[-3]));
         pEnum->name = *(yyvsp[-3].s);
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*(yyvsp[-3].s),tokAt((yylsp[-1])),
@@ -7024,7 +7024,7 @@ yyreduce:
     {
         das_checkName(*(yyvsp[-5].s),tokAt((yylsp[-5])));
         auto pEnum = EnumerationPtr((yyvsp[-1].pEnum));
-        pEnum->at = tokAt((yylsp[-6]));
+        pEnum->at = tokAt((yylsp[-5]));
         pEnum->name = *(yyvsp[-5].s);
         pEnum->baseType = (yyvsp[-3].type);
         if ( !g_Program->addEnumeration(pEnum) ) {

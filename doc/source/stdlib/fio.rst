@@ -72,24 +72,14 @@ FStat properties are
 
 structure_annotation|fio|FStat to be documented
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++++++++
+Internal builtin functions
+++++++++++++++++++++++++++
 
-.. _function-_at_fio_c__c_base_name_string_hh_const__hh_const:
+.. warning:: 
+  This group of functions is hidden. It will not be in the final documentation.
 
-.. das:function:: base_name(arg0: string const)
-
-base_name returns string
-
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
-
-
-function|fio|base_name to be documented
+  *  :ref:`builtin_dir (arg0:string const;arg1:block\<\> const implicit;arg2: const) : void <function-_at_fio_c__c_builtin_dir_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
 
 .. _function-_at_fio_c__c_builtin_dir_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
 
@@ -106,20 +96,28 @@ arguments are
 
 function|fio|builtin_dir to be documented
 
-.. _function-_at_fio_c__c_dir_name_string_hh_const__hh_const:
++++++++++++++++++
+File manipulation
++++++++++++++++++
 
-.. das:function:: dir_name(arg0: string const)
-
-dir_name returns string
-
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
-
-
-function|fio|dir_name to be documented
+  *  :ref:`fclose (arg0:fio::FILE const? const implicit;arg1: const) : void <function-_at_fio_c__c_fclose__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`feof (arg0:fio::FILE const? const implicit) : bool <function-_at_fio_c__c_feof__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit>` 
+  *  :ref:`fgets (arg0:fio::FILE const? const implicit;arg1: const) : string <function-_at_fio_c__c_fgets__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`fmap (arg0:fio::FILE const? const implicit;arg1:block\<(string const#):void\> const implicit;arg2: const) : void <function-_at_fio_c__c_fmap__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`fopen (arg0:string const;arg1:string const) : fio::FILE const? const <function-_at_fio_c__c_fopen_string_hh_const_string_hh_const>` 
+  *  :ref:`fopen (name:string const;mode:string const;blk:block\<(f:fio::FILE const? const):void\> const) : void <function-_at_fio_c__c_fopen_string_hh_const_string_hh_const__hh_block_hh__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh__rq_f_hh__c_void_hh_const>` 
+  *  :ref:`fprint (arg0:fio::FILE const? const implicit;arg1:string const;arg2: const) : void <function-_at_fio_c__c_fprint__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const>` 
+  *  :ref:`fread (arg0:fio::FILE const? const implicit;arg1: const) : string <function-_at_fio_c__c_fread__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`fstat (f:fio::FILE const? const) : fio::FStat <function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const>` 
+  *  :ref:`fstat (arg0:fio::FILE const? const implicit;arg1:fio::FStat implicit) : bool <function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit>` 
+  *  :ref:`fstderr () : fio::FILE const? const <function-_at_fio_c__c_fstderr>` 
+  *  :ref:`fstdin () : fio::FILE const? const <function-_at_fio_c__c_fstdin>` 
+  *  :ref:`fstdout () : fio::FILE const? const <function-_at_fio_c__c_fstdout>` 
+  *  :ref:`fwrite (arg0:fio::FILE const? const implicit;arg1:string const;arg2: const) : void <function-_at_fio_c__c_fwrite__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const>` 
+  *  :ref:`stat (path:string const) : fio::FStat <function-_at_fio_c__c_stat_string_hh_const>` 
+  *  :ref:`stat (arg0:string const;arg1:fio::FStat implicit) : bool <function-_at_fio_c__c_stat_string_hh_const__hh_handle_hh_FStat_hh_implicit>` 
+  *  :ref:`fload (f:fio::FILE const? const;buf:auto(BufType) const -const) : auto <function-_at_fio_c__c_fload__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const>` 
+  *  :ref:`fsave (f:fio::FILE const? const;buf:auto(BufType) const) : auto <function-_at_fio_c__c_fsave__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const>` 
 
 .. _function-_at_fio_c__c_fclose__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
 
@@ -314,34 +312,6 @@ arguments are
 
 function|fio|fwrite to be documented
 
-.. _function-_at_fio_c__c_mkdir_string_hh_const:
-
-.. das:function:: mkdir(arg0: string const)
-
-mkdir returns bool
-
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
-
-
-function|fio|mkdir to be documented
-
-.. _function-_at_fio_c__c_sleep_uint_hh_const:
-
-.. das:function:: sleep(arg0: uint const)
-
-arguments are
-
-+----+----------+
-+arg0+uint const+
-+----+----------+
-
-
-function|fio|sleep to be documented
-
 .. _function-_at_fio_c__c_stat_string_hh_const:
 
 .. das:function:: stat(path: string const)
@@ -373,23 +343,6 @@ arguments are
 
 
 function|fio|stat to be documented
-
-.. _function-_at_fio_c__c_dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh__c_void_hh_const:
-
-.. das:function:: dir(path: string const; blk: block<(filename:string const):void> const)
-
-dir returns auto
-
-arguments are
-
-+----+-----------------------------------------+
-+path+string const                             +
-+----+-----------------------------------------+
-+blk +block<(filename:string const):void> const+
-+----+-----------------------------------------+
-
-
-function|fio|dir to be documented
 
 .. _function-_at_fio_c__c_fload__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
 
@@ -424,5 +377,98 @@ arguments are
 
 
 function|fio|fsave to be documented
+
++++++++++++++++++
+Path manipulation
++++++++++++++++++
+
+  *  :ref:`base_name (arg0:string const;arg1: const) : string <function-_at_fio_c__c_base_name_string_hh_const__hh_const>` 
+  *  :ref:`dir_name (arg0:string const;arg1: const) : string <function-_at_fio_c__c_dir_name_string_hh_const__hh_const>` 
+
+.. _function-_at_fio_c__c_base_name_string_hh_const__hh_const:
+
+.. das:function:: base_name(arg0: string const)
+
+base_name returns string
+
+arguments are
+
++----+------------+
++arg0+string const+
++----+------------+
+
+
+function|fio|base_name to be documented
+
+.. _function-_at_fio_c__c_dir_name_string_hh_const__hh_const:
+
+.. das:function:: dir_name(arg0: string const)
+
+dir_name returns string
+
+arguments are
+
++----+------------+
++arg0+string const+
++----+------------+
+
+
+function|fio|dir_name to be documented
+
+++++++++++++++++++++++
+Directory manipulation
+++++++++++++++++++++++
+
+  *  :ref:`mkdir (arg0:string const) : bool <function-_at_fio_c__c_mkdir_string_hh_const>` 
+  *  :ref:`dir (path:string const;blk:block\<(filename:string const):void\> const) : auto <function-_at_fio_c__c_dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh__c_void_hh_const>` 
+
+.. _function-_at_fio_c__c_mkdir_string_hh_const:
+
+.. das:function:: mkdir(arg0: string const)
+
+mkdir returns bool
+
+arguments are
+
++----+------------+
++arg0+string const+
++----+------------+
+
+
+function|fio|mkdir to be documented
+
+.. _function-_at_fio_c__c_dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh__c_void_hh_const:
+
+.. das:function:: dir(path: string const; blk: block<(filename:string const):void> const)
+
+dir returns auto
+
+arguments are
+
++----+-----------------------------------------+
++path+string const                             +
++----+-----------------------------------------+
++blk +block<(filename:string const):void> const+
++----+-----------------------------------------+
+
+
+function|fio|dir to be documented
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_fio_c__c_sleep_uint_hh_const:
+
+.. das:function:: sleep(arg0: uint const)
+
+arguments are
+
++----+----------+
++arg0+uint const+
++----+----------+
+
+
+function|fio|sleep to be documented
 
 

@@ -1886,7 +1886,7 @@ enum_list
     }
     |   enum_list[pE] NAME[name] ';' {
         das_checkName(*$name,tokAt(@name));
-        if ( !$pE->add(*$name) ) {
+        if ( !$pE->add(*$name,nullptr,tokAt(@name)) ) {
             das_yyerror("enumeration alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
         }
@@ -1895,7 +1895,7 @@ enum_list
     }
     |   enum_list[pE] NAME[name] '=' expr[value] ';' {
         das_checkName(*$name,tokAt(@name));
-        if ( !$pE->add(*$name,ExpressionPtr($value)) ) {
+        if ( !$pE->add(*$name,ExpressionPtr($value),tokAt(@name)) ) {
             das_yyerror("enumeration value alread declared " + *$name, tokAt(@name),
                 CompilationError::enumeration_value_already_declared);
         }
@@ -1930,7 +1930,7 @@ enum_declaration
     :   DAS_ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
         das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
-        pEnum->at = tokAt(@loc);
+        pEnum->at = tokAt(@name);
         pEnum->name = *$name;
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
@@ -1941,7 +1941,7 @@ enum_declaration
     |   DAS_ENUM[loc] NAME[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
         das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
-        pEnum->at = tokAt(@loc);
+        pEnum->at = tokAt(@name);
         pEnum->name = *$name;
         pEnum->baseType = $ebt;
         if ( !g_Program->addEnumeration(pEnum) ) {

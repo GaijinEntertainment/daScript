@@ -523,6 +523,8 @@ float* and double
   *  :ref:`sin (arg0:float2) : float2 <function-_at_math_c__c_sin_float2>` 
   *  :ref:`sin (arg0:float3) : float3 <function-_at_math_c__c_sin_float3>` 
   *  :ref:`sin (arg0:float4) : float4 <function-_at_math_c__c_sin_float4>` 
+  *  :ref:`sincos (arg0:double const;arg1:double& implicit;arg2:double& implicit) : void <function-_at_math_c__c_sincos_double_hh_const_double_hh_ref_hh_implicit_double_hh_ref_hh_implicit>` 
+  *  :ref:`sincos (arg0:float const;arg1:float& implicit;arg2:float& implicit) : void <function-_at_math_c__c_sincos_float_hh_const_float_hh_ref_hh_implicit_float_hh_ref_hh_implicit>` 
   *  :ref:`sqrt (arg0:double const) : double <function-_at_math_c__c_sqrt_double_hh_const>` 
   *  :ref:`sqrt (arg0:float) : float <function-_at_math_c__c_sqrt_float>` 
   *  :ref:`sqrt (arg0:float2) : float2 <function-_at_math_c__c_sqrt_float2>` 
@@ -1709,6 +1711,40 @@ arguments are
 
 function|math|sin to be documented
 
+.. _function-_at_math_c__c_sincos_double_hh_const_double_hh_ref_hh_implicit_double_hh_ref_hh_implicit:
+
+.. das:function:: sincos(arg0: double const; arg1: double& implicit; arg2: double& implicit)
+
+arguments are
+
++----+----------------+
++arg0+double const    +
++----+----------------+
++arg1+double& implicit+
++----+----------------+
++arg2+double& implicit+
++----+----------------+
+
+
+function|math|sincos to be documented
+
+.. _function-_at_math_c__c_sincos_float_hh_const_float_hh_ref_hh_implicit_float_hh_ref_hh_implicit:
+
+.. das:function:: sincos(arg0: float const; arg1: float& implicit; arg2: float& implicit)
+
+arguments are
+
++----+---------------+
++arg0+float const    +
++----+---------------+
++arg1+float& implicit+
++----+---------------+
++arg2+float& implicit+
++----+---------------+
+
+
+function|math|sincos to be documented
+
 .. _function-_at_math_c__c_sqrt_double_hh_const:
 
 .. das:function:: sqrt(arg0: double const)
@@ -1883,6 +1919,14 @@ float* only
   *  :ref:`roundi (arg0:float2) : int2 <function-_at_math_c__c_roundi_float2>` 
   *  :ref:`roundi (arg0:float3) : int3 <function-_at_math_c__c_roundi_float3>` 
   *  :ref:`roundi (arg0:float4) : int4 <function-_at_math_c__c_roundi_float4>` 
+  *  :ref:`rsqrt (arg0:float) : float <function-_at_math_c__c_rsqrt_float>` 
+  *  :ref:`rsqrt (arg0:float2) : float2 <function-_at_math_c__c_rsqrt_float2>` 
+  *  :ref:`rsqrt (arg0:float3) : float3 <function-_at_math_c__c_rsqrt_float3>` 
+  *  :ref:`rsqrt (arg0:float4) : float4 <function-_at_math_c__c_rsqrt_float4>` 
+  *  :ref:`rsqrt_est (arg0:float) : float <function-_at_math_c__c_rsqrt_est_float>` 
+  *  :ref:`rsqrt_est (arg0:float2) : float2 <function-_at_math_c__c_rsqrt_est_float2>` 
+  *  :ref:`rsqrt_est (arg0:float3) : float3 <function-_at_math_c__c_rsqrt_est_float3>` 
+  *  :ref:`rsqrt_est (arg0:float4) : float4 <function-_at_math_c__c_rsqrt_est_float4>` 
   *  :ref:`trunci (arg0:float) : int <function-_at_math_c__c_trunci_float>` 
   *  :ref:`trunci (arg0:float2) : int2 <function-_at_math_c__c_trunci_float2>` 
   *  :ref:`trunci (arg0:float3) : int3 <function-_at_math_c__c_trunci_float3>` 
@@ -2196,6 +2240,126 @@ arguments are
 
 function|math|roundi to be documented
 
+.. _function-_at_math_c__c_rsqrt_float:
+
+.. das:function:: rsqrt(arg0: float)
+
+rsqrt returns float
+
+arguments are
+
++----+-----+
++arg0+float+
++----+-----+
+
+
+function|math|rsqrt to be documented
+
+.. _function-_at_math_c__c_rsqrt_float2:
+
+.. das:function:: rsqrt(arg0: float2)
+
+rsqrt returns float2
+
+arguments are
+
++----+------+
++arg0+float2+
++----+------+
+
+
+function|math|rsqrt to be documented
+
+.. _function-_at_math_c__c_rsqrt_float3:
+
+.. das:function:: rsqrt(arg0: float3)
+
+rsqrt returns float3
+
+arguments are
+
++----+------+
++arg0+float3+
++----+------+
+
+
+function|math|rsqrt to be documented
+
+.. _function-_at_math_c__c_rsqrt_float4:
+
+.. das:function:: rsqrt(arg0: float4)
+
+rsqrt returns float4
+
+arguments are
+
++----+------+
++arg0+float4+
++----+------+
+
+
+function|math|rsqrt to be documented
+
+.. _function-_at_math_c__c_rsqrt_est_float:
+
+.. das:function:: rsqrt_est(arg0: float)
+
+rsqrt_est returns float
+
+arguments are
+
++----+-----+
++arg0+float+
++----+-----+
+
+
+function|math|rsqrt_est to be documented
+
+.. _function-_at_math_c__c_rsqrt_est_float2:
+
+.. das:function:: rsqrt_est(arg0: float2)
+
+rsqrt_est returns float2
+
+arguments are
+
++----+------+
++arg0+float2+
++----+------+
+
+
+function|math|rsqrt_est to be documented
+
+.. _function-_at_math_c__c_rsqrt_est_float3:
+
+.. das:function:: rsqrt_est(arg0: float3)
+
+rsqrt_est returns float3
+
+arguments are
+
++----+------+
++arg0+float3+
++----+------+
+
+
+function|math|rsqrt_est to be documented
+
+.. _function-_at_math_c__c_rsqrt_est_float4:
+
+.. das:function:: rsqrt_est(arg0: float4)
+
+rsqrt_est returns float4
+
+arguments are
+
++----+------+
++arg0+float4+
++----+------+
+
+
+function|math|rsqrt_est to be documented
+
 .. _function-_at_math_c__c_trunci_float:
 
 .. das:function:: trunci(arg0: float)
@@ -2256,160 +2420,17 @@ arguments are
 
 function|math|trunci to be documented
 
-+++++++++++++++
-Noise functions
-+++++++++++++++
++++++++++++
+float3 only
++++++++++++
 
-  *  :ref:`uint32_hash (arg0:uint const) : uint <function-_at_math_c__c_uint32_hash_uint_hh_const>` 
-  *  :ref:`uint_noise_1D (arg0:int const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_1D_int_hh_const_uint_hh_const>` 
-  *  :ref:`uint_noise_2D (arg0:int2 const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_2D_int2_hh_const_uint_hh_const>` 
-  *  :ref:`uint_noise_3D (arg0:int3 const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_3D_int3_hh_const_uint_hh_const>` 
-
-.. _function-_at_math_c__c_uint32_hash_uint_hh_const:
-
-.. das:function:: uint32_hash(arg0: uint const)
-
-uint32_hash returns uint
-
-arguments are
-
-+----+----------+
-+arg0+uint const+
-+----+----------+
-
-
-function|math|uint32_hash to be documented
-
-.. _function-_at_math_c__c_uint_noise_1D_int_hh_const_uint_hh_const:
-
-.. das:function:: uint_noise_1D(arg0: int const; arg1: uint const)
-
-uint_noise_1D returns uint
-
-arguments are
-
-+----+----------+
-+arg0+int const +
-+----+----------+
-+arg1+uint const+
-+----+----------+
-
-
-function|math|uint_noise_1D to be documented
-
-.. _function-_at_math_c__c_uint_noise_2D_int2_hh_const_uint_hh_const:
-
-.. das:function:: uint_noise_2D(arg0: int2 const; arg1: uint const)
-
-uint_noise_2D returns uint
-
-arguments are
-
-+----+----------+
-+arg0+int2 const+
-+----+----------+
-+arg1+uint const+
-+----+----------+
-
-
-function|math|uint_noise_2D to be documented
-
-.. _function-_at_math_c__c_uint_noise_3D_int3_hh_const_uint_hh_const:
-
-.. das:function:: uint_noise_3D(arg0: int3 const; arg1: uint const)
-
-uint_noise_3D returns uint
-
-arguments are
-
-+----+----------+
-+arg0+int3 const+
-+----+----------+
-+arg1+uint const+
-+----+----------+
-
-
-function|math|uint_noise_3D to be documented
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_math_c__c_clamp_float_float_float:
-
-.. das:function:: clamp(arg0: float; arg1: float; arg2: float)
-
-clamp returns float
-
-arguments are
-
-+----+-----+
-+arg0+float+
-+----+-----+
-+arg1+float+
-+----+-----+
-+arg2+float+
-+----+-----+
-
-
-function|math|clamp to be documented
-
-.. _function-_at_math_c__c_clamp_float2_float2_float2:
-
-.. das:function:: clamp(arg0: float2; arg1: float2; arg2: float2)
-
-clamp returns float2
-
-arguments are
-
-+----+------+
-+arg0+float2+
-+----+------+
-+arg1+float2+
-+----+------+
-+arg2+float2+
-+----+------+
-
-
-function|math|clamp to be documented
-
-.. _function-_at_math_c__c_clamp_float3_float3_float3:
-
-.. das:function:: clamp(arg0: float3; arg1: float3; arg2: float3)
-
-clamp returns float3
-
-arguments are
-
-+----+------+
-+arg0+float3+
-+----+------+
-+arg1+float3+
-+----+------+
-+arg2+float3+
-+----+------+
-
-
-function|math|clamp to be documented
-
-.. _function-_at_math_c__c_clamp_float4_float4_float4:
-
-.. das:function:: clamp(arg0: float4; arg1: float4; arg2: float4)
-
-clamp returns float4
-
-arguments are
-
-+----+------+
-+arg0+float4+
-+----+------+
-+arg1+float4+
-+----+------+
-+arg2+float4+
-+----+------+
-
-
-function|math|clamp to be documented
+  *  :ref:`cross (arg0:float3 const;arg1:float3 const) : float3 <function-_at_math_c__c_cross_float3_hh_const_float3_hh_const>` 
+  *  :ref:`distance (arg0:float3 const;arg1:float3 const) : float <function-_at_math_c__c_distance_float3_hh_const_float3_hh_const>` 
+  *  :ref:`distance_sq (arg0:float3 const;arg1:float3 const) : float <function-_at_math_c__c_distance_sq_float3_hh_const_float3_hh_const>` 
+  *  :ref:`inv_distance (arg0:float3 const;arg1:float3 const) : float <function-_at_math_c__c_inv_distance_float3_hh_const_float3_hh_const>` 
+  *  :ref:`inv_distance_sq (arg0:float3 const;arg1:float3 const) : float <function-_at_math_c__c_inv_distance_sq_float3_hh_const_float3_hh_const>` 
+  *  :ref:`reflect (arg0:float3 const;arg1:float3 const) : float3 <function-_at_math_c__c_reflect_float3_hh_const_float3_hh_const>` 
+  *  :ref:`refract (arg0:float3 const;arg1:float3 const;arg2:float const;arg3:float3&) : bool <function-_at_math_c__c_refract_float3_hh_const_float3_hh_const_float_hh_const_float3_hh_ref>` 
 
 .. _function-_at_math_c__c_cross_float3_hh_const_float3_hh_const:
 
@@ -2461,6 +2482,104 @@ arguments are
 
 
 function|math|distance_sq to be documented
+
+.. _function-_at_math_c__c_inv_distance_float3_hh_const_float3_hh_const:
+
+.. das:function:: inv_distance(arg0: float3 const; arg1: float3 const)
+
+inv_distance returns float
+
+arguments are
+
++----+------------+
++arg0+float3 const+
++----+------------+
++arg1+float3 const+
++----+------------+
+
+
+function|math|inv_distance to be documented
+
+.. _function-_at_math_c__c_inv_distance_sq_float3_hh_const_float3_hh_const:
+
+.. das:function:: inv_distance_sq(arg0: float3 const; arg1: float3 const)
+
+inv_distance_sq returns float
+
+arguments are
+
++----+------------+
++arg0+float3 const+
++----+------------+
++arg1+float3 const+
++----+------------+
+
+
+function|math|inv_distance_sq to be documented
+
+.. _function-_at_math_c__c_reflect_float3_hh_const_float3_hh_const:
+
+.. das:function:: reflect(arg0: float3 const; arg1: float3 const)
+
+reflect returns float3
+
+arguments are
+
++----+------------+
++arg0+float3 const+
++----+------------+
++arg1+float3 const+
++----+------------+
+
+
+function|math|reflect to be documented
+
+.. _function-_at_math_c__c_refract_float3_hh_const_float3_hh_const_float_hh_const_float3_hh_ref:
+
+.. das:function:: refract(arg0: float3 const; arg1: float3 const; arg2: float const; arg3: float3&)
+
+refract returns bool
+
+arguments are
+
++----+------------+
++arg0+float3 const+
++----+------------+
++arg1+float3 const+
++----+------------+
++arg2+float const +
++----+------------+
++arg3+float3&     +
++----+------------+
+
+
+function|math|refract to be documented
+
+++++++++++++++++++++++
+float2, float3, float4
+++++++++++++++++++++++
+
+  *  :ref:`dot (arg0:float2 const;arg1:float2 const) : float <function-_at_math_c__c_dot_float2_hh_const_float2_hh_const>` 
+  *  :ref:`dot (arg0:float3 const;arg1:float3 const) : float <function-_at_math_c__c_dot_float3_hh_const_float3_hh_const>` 
+  *  :ref:`dot (arg0:float4 const;arg1:float4 const) : float <function-_at_math_c__c_dot_float4_hh_const_float4_hh_const>` 
+  *  :ref:`fast_normalize (arg0:float2 const) : float2 <function-_at_math_c__c_fast_normalize_float2_hh_const>` 
+  *  :ref:`fast_normalize (arg0:float3 const) : float3 <function-_at_math_c__c_fast_normalize_float3_hh_const>` 
+  *  :ref:`fast_normalize (arg0:float4 const) : float4 <function-_at_math_c__c_fast_normalize_float4_hh_const>` 
+  *  :ref:`inv_length (arg0:float2 const) : float <function-_at_math_c__c_inv_length_float2_hh_const>` 
+  *  :ref:`inv_length (arg0:float3 const) : float <function-_at_math_c__c_inv_length_float3_hh_const>` 
+  *  :ref:`inv_length (arg0:float4 const) : float <function-_at_math_c__c_inv_length_float4_hh_const>` 
+  *  :ref:`inv_length_sq (arg0:float2 const) : float <function-_at_math_c__c_inv_length_sq_float2_hh_const>` 
+  *  :ref:`inv_length_sq (arg0:float3 const) : float <function-_at_math_c__c_inv_length_sq_float3_hh_const>` 
+  *  :ref:`inv_length_sq (arg0:float4 const) : float <function-_at_math_c__c_inv_length_sq_float4_hh_const>` 
+  *  :ref:`length (arg0:float2 const) : float <function-_at_math_c__c_length_float2_hh_const>` 
+  *  :ref:`length (arg0:float3 const) : float <function-_at_math_c__c_length_float3_hh_const>` 
+  *  :ref:`length (arg0:float4 const) : float <function-_at_math_c__c_length_float4_hh_const>` 
+  *  :ref:`length_sq (arg0:float2 const) : float <function-_at_math_c__c_length_sq_float2_hh_const>` 
+  *  :ref:`length_sq (arg0:float3 const) : float <function-_at_math_c__c_length_sq_float3_hh_const>` 
+  *  :ref:`length_sq (arg0:float4 const) : float <function-_at_math_c__c_length_sq_float4_hh_const>` 
+  *  :ref:`normalize (arg0:float2 const) : float2 <function-_at_math_c__c_normalize_float2_hh_const>` 
+  *  :ref:`normalize (arg0:float3 const) : float3 <function-_at_math_c__c_normalize_float3_hh_const>` 
+  *  :ref:`normalize (arg0:float4 const) : float4 <function-_at_math_c__c_normalize_float4_hh_const>` 
 
 .. _function-_at_math_c__c_dot_float2_hh_const_float2_hh_const:
 
@@ -2557,40 +2676,6 @@ arguments are
 
 
 function|math|fast_normalize to be documented
-
-.. _function-_at_math_c__c_inv_distance_float3_hh_const_float3_hh_const:
-
-.. das:function:: inv_distance(arg0: float3 const; arg1: float3 const)
-
-inv_distance returns float
-
-arguments are
-
-+----+------------+
-+arg0+float3 const+
-+----+------------+
-+arg1+float3 const+
-+----+------------+
-
-
-function|math|inv_distance to be documented
-
-.. _function-_at_math_c__c_inv_distance_sq_float3_hh_const_float3_hh_const:
-
-.. das:function:: inv_distance_sq(arg0: float3 const; arg1: float3 const)
-
-inv_distance_sq returns float
-
-arguments are
-
-+----+------------+
-+arg0+float3 const+
-+----+------------+
-+arg1+float3 const+
-+----+------------+
-
-
-function|math|inv_distance_sq to be documented
 
 .. _function-_at_math_c__c_inv_length_float2_hh_const:
 
@@ -2771,6 +2856,222 @@ arguments are
 
 
 function|math|length_sq to be documented
+
+.. _function-_at_math_c__c_normalize_float2_hh_const:
+
+.. das:function:: normalize(arg0: float2 const)
+
+normalize returns float2
+
+arguments are
+
++----+------------+
++arg0+float2 const+
++----+------------+
+
+
+function|math|normalize to be documented
+
+.. _function-_at_math_c__c_normalize_float3_hh_const:
+
+.. das:function:: normalize(arg0: float3 const)
+
+normalize returns float3
+
+arguments are
+
++----+------------+
++arg0+float3 const+
++----+------------+
+
+
+function|math|normalize to be documented
+
+.. _function-_at_math_c__c_normalize_float4_hh_const:
+
+.. das:function:: normalize(arg0: float4 const)
+
+normalize returns float4
+
+arguments are
+
++----+------------+
++arg0+float4 const+
++----+------------+
+
+
+function|math|normalize to be documented
+
++++++++++++++++
+Noise functions
++++++++++++++++
+
+  *  :ref:`uint32_hash (arg0:uint const) : uint <function-_at_math_c__c_uint32_hash_uint_hh_const>` 
+  *  :ref:`uint_noise_1D (arg0:int const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_1D_int_hh_const_uint_hh_const>` 
+  *  :ref:`uint_noise_2D (arg0:int2 const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_2D_int2_hh_const_uint_hh_const>` 
+  *  :ref:`uint_noise_3D (arg0:int3 const;arg1:uint const) : uint <function-_at_math_c__c_uint_noise_3D_int3_hh_const_uint_hh_const>` 
+
+.. _function-_at_math_c__c_uint32_hash_uint_hh_const:
+
+.. das:function:: uint32_hash(arg0: uint const)
+
+uint32_hash returns uint
+
+arguments are
+
++----+----------+
++arg0+uint const+
++----+----------+
+
+
+function|math|uint32_hash to be documented
+
+.. _function-_at_math_c__c_uint_noise_1D_int_hh_const_uint_hh_const:
+
+.. das:function:: uint_noise_1D(arg0: int const; arg1: uint const)
+
+uint_noise_1D returns uint
+
+arguments are
+
++----+----------+
++arg0+int const +
++----+----------+
++arg1+uint const+
++----+----------+
+
+
+function|math|uint_noise_1D to be documented
+
+.. _function-_at_math_c__c_uint_noise_2D_int2_hh_const_uint_hh_const:
+
+.. das:function:: uint_noise_2D(arg0: int2 const; arg1: uint const)
+
+uint_noise_2D returns uint
+
+arguments are
+
++----+----------+
++arg0+int2 const+
++----+----------+
++arg1+uint const+
++----+----------+
+
+
+function|math|uint_noise_2D to be documented
+
+.. _function-_at_math_c__c_uint_noise_3D_int3_hh_const_uint_hh_const:
+
+.. das:function:: uint_noise_3D(arg0: int3 const; arg1: uint const)
+
+uint_noise_3D returns uint
+
+arguments are
+
++----+----------+
++arg0+int3 const+
++----+----------+
++arg1+uint const+
++----+----------+
+
+
+function|math|uint_noise_3D to be documented
+
+++++++++++++++
+lerp/mad/clamp
+++++++++++++++
+
+  *  :ref:`clamp (arg0:float;arg1:float;arg2:float) : float <function-_at_math_c__c_clamp_float_float_float>` 
+  *  :ref:`clamp (arg0:float2;arg1:float2;arg2:float2) : float2 <function-_at_math_c__c_clamp_float2_float2_float2>` 
+  *  :ref:`clamp (arg0:float3;arg1:float3;arg2:float3) : float3 <function-_at_math_c__c_clamp_float3_float3_float3>` 
+  *  :ref:`clamp (arg0:float4;arg1:float4;arg2:float4) : float4 <function-_at_math_c__c_clamp_float4_float4_float4>` 
+  *  :ref:`lerp (arg0:float;arg1:float;arg2:float) : float <function-_at_math_c__c_lerp_float_float_float>` 
+  *  :ref:`lerp (arg0:float2;arg1:float2;arg2:float2) : float2 <function-_at_math_c__c_lerp_float2_float2_float2>` 
+  *  :ref:`lerp (arg0:float3;arg1:float3;arg2:float3) : float3 <function-_at_math_c__c_lerp_float3_float3_float3>` 
+  *  :ref:`lerp (arg0:float4;arg1:float4;arg2:float4) : float4 <function-_at_math_c__c_lerp_float4_float4_float4>` 
+  *  :ref:`mad (arg0:float;arg1:float;arg2:float) : float <function-_at_math_c__c_mad_float_float_float>` 
+  *  :ref:`mad (arg0:float2;arg1:float;arg2:float2) : float2 <function-_at_math_c__c_mad_float2_float_float2>` 
+  *  :ref:`mad (arg0:float2;arg1:float2;arg2:float2) : float2 <function-_at_math_c__c_mad_float2_float2_float2>` 
+  *  :ref:`mad (arg0:float3;arg1:float;arg2:float3) : float3 <function-_at_math_c__c_mad_float3_float_float3>` 
+  *  :ref:`mad (arg0:float3;arg1:float3;arg2:float3) : float3 <function-_at_math_c__c_mad_float3_float3_float3>` 
+  *  :ref:`mad (arg0:float4;arg1:float;arg2:float4) : float4 <function-_at_math_c__c_mad_float4_float_float4>` 
+  *  :ref:`mad (arg0:float4;arg1:float4;arg2:float4) : float4 <function-_at_math_c__c_mad_float4_float4_float4>` 
+
+.. _function-_at_math_c__c_clamp_float_float_float:
+
+.. das:function:: clamp(arg0: float; arg1: float; arg2: float)
+
+clamp returns float
+
+arguments are
+
++----+-----+
++arg0+float+
++----+-----+
++arg1+float+
++----+-----+
++arg2+float+
++----+-----+
+
+
+function|math|clamp to be documented
+
+.. _function-_at_math_c__c_clamp_float2_float2_float2:
+
+.. das:function:: clamp(arg0: float2; arg1: float2; arg2: float2)
+
+clamp returns float2
+
+arguments are
+
++----+------+
++arg0+float2+
++----+------+
++arg1+float2+
++----+------+
++arg2+float2+
++----+------+
+
+
+function|math|clamp to be documented
+
+.. _function-_at_math_c__c_clamp_float3_float3_float3:
+
+.. das:function:: clamp(arg0: float3; arg1: float3; arg2: float3)
+
+clamp returns float3
+
+arguments are
+
++----+------+
++arg0+float3+
++----+------+
++arg1+float3+
++----+------+
++arg2+float3+
++----+------+
+
+
+function|math|clamp to be documented
+
+.. _function-_at_math_c__c_clamp_float4_float4_float4:
+
+.. das:function:: clamp(arg0: float4; arg1: float4; arg2: float4)
+
+clamp returns float4
+
+arguments are
+
++----+------+
++arg0+float4+
++----+------+
++arg1+float4+
++----+------+
++arg2+float4+
++----+------+
+
+
+function|math|clamp to be documented
 
 .. _function-_at_math_c__c_lerp_float_float_float:
 
@@ -2980,242 +3281,5 @@ arguments are
 
 
 function|math|mad to be documented
-
-.. _function-_at_math_c__c_normalize_float2_hh_const:
-
-.. das:function:: normalize(arg0: float2 const)
-
-normalize returns float2
-
-arguments are
-
-+----+------------+
-+arg0+float2 const+
-+----+------------+
-
-
-function|math|normalize to be documented
-
-.. _function-_at_math_c__c_normalize_float3_hh_const:
-
-.. das:function:: normalize(arg0: float3 const)
-
-normalize returns float3
-
-arguments are
-
-+----+------------+
-+arg0+float3 const+
-+----+------------+
-
-
-function|math|normalize to be documented
-
-.. _function-_at_math_c__c_normalize_float4_hh_const:
-
-.. das:function:: normalize(arg0: float4 const)
-
-normalize returns float4
-
-arguments are
-
-+----+------------+
-+arg0+float4 const+
-+----+------------+
-
-
-function|math|normalize to be documented
-
-.. _function-_at_math_c__c_reflect_float3_hh_const_float3_hh_const:
-
-.. das:function:: reflect(arg0: float3 const; arg1: float3 const)
-
-reflect returns float3
-
-arguments are
-
-+----+------------+
-+arg0+float3 const+
-+----+------------+
-+arg1+float3 const+
-+----+------------+
-
-
-function|math|reflect to be documented
-
-.. _function-_at_math_c__c_refract_float3_hh_const_float3_hh_const_float_hh_const_float3_hh_ref:
-
-.. das:function:: refract(arg0: float3 const; arg1: float3 const; arg2: float const; arg3: float3&)
-
-refract returns bool
-
-arguments are
-
-+----+------------+
-+arg0+float3 const+
-+----+------------+
-+arg1+float3 const+
-+----+------------+
-+arg2+float const +
-+----+------------+
-+arg3+float3&     +
-+----+------------+
-
-
-function|math|refract to be documented
-
-.. _function-_at_math_c__c_rsqrt_float:
-
-.. das:function:: rsqrt(arg0: float)
-
-rsqrt returns float
-
-arguments are
-
-+----+-----+
-+arg0+float+
-+----+-----+
-
-
-function|math|rsqrt to be documented
-
-.. _function-_at_math_c__c_rsqrt_float2:
-
-.. das:function:: rsqrt(arg0: float2)
-
-rsqrt returns float2
-
-arguments are
-
-+----+------+
-+arg0+float2+
-+----+------+
-
-
-function|math|rsqrt to be documented
-
-.. _function-_at_math_c__c_rsqrt_float3:
-
-.. das:function:: rsqrt(arg0: float3)
-
-rsqrt returns float3
-
-arguments are
-
-+----+------+
-+arg0+float3+
-+----+------+
-
-
-function|math|rsqrt to be documented
-
-.. _function-_at_math_c__c_rsqrt_float4:
-
-.. das:function:: rsqrt(arg0: float4)
-
-rsqrt returns float4
-
-arguments are
-
-+----+------+
-+arg0+float4+
-+----+------+
-
-
-function|math|rsqrt to be documented
-
-.. _function-_at_math_c__c_rsqrt_est_float:
-
-.. das:function:: rsqrt_est(arg0: float)
-
-rsqrt_est returns float
-
-arguments are
-
-+----+-----+
-+arg0+float+
-+----+-----+
-
-
-function|math|rsqrt_est to be documented
-
-.. _function-_at_math_c__c_rsqrt_est_float2:
-
-.. das:function:: rsqrt_est(arg0: float2)
-
-rsqrt_est returns float2
-
-arguments are
-
-+----+------+
-+arg0+float2+
-+----+------+
-
-
-function|math|rsqrt_est to be documented
-
-.. _function-_at_math_c__c_rsqrt_est_float3:
-
-.. das:function:: rsqrt_est(arg0: float3)
-
-rsqrt_est returns float3
-
-arguments are
-
-+----+------+
-+arg0+float3+
-+----+------+
-
-
-function|math|rsqrt_est to be documented
-
-.. _function-_at_math_c__c_rsqrt_est_float4:
-
-.. das:function:: rsqrt_est(arg0: float4)
-
-rsqrt_est returns float4
-
-arguments are
-
-+----+------+
-+arg0+float4+
-+----+------+
-
-
-function|math|rsqrt_est to be documented
-
-.. _function-_at_math_c__c_sincos_double_hh_const_double_hh_ref_hh_implicit_double_hh_ref_hh_implicit:
-
-.. das:function:: sincos(arg0: double const; arg1: double& implicit; arg2: double& implicit)
-
-arguments are
-
-+----+----------------+
-+arg0+double const    +
-+----+----------------+
-+arg1+double& implicit+
-+----+----------------+
-+arg2+double& implicit+
-+----+----------------+
-
-
-function|math|sincos to be documented
-
-.. _function-_at_math_c__c_sincos_float_hh_const_float_hh_ref_hh_implicit_float_hh_ref_hh_implicit:
-
-.. das:function:: sincos(arg0: float const; arg1: float& implicit; arg2: float& implicit)
-
-arguments are
-
-+----+---------------+
-+arg0+float const    +
-+----+---------------+
-+arg1+float& implicit+
-+----+---------------+
-+arg2+float& implicit+
-+----+---------------+
-
-
-function|math|sincos to be documented
 
 

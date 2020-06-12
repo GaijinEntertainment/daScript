@@ -100,11 +100,17 @@ namespace das
 
     class Enumeration : public ptr_ref_count {
     public:
+        struct EnumEntry {
+            string          name;
+            LineInfo        at;
+            ExpressionPtr   value;
+        };
+    public:
         Enumeration() = default;
         Enumeration( const string & na ) : name(na) {}
-        bool add ( const string & f );
-        bool add ( const string & f, const ExpressionPtr & expr );
-        bool addI ( const string & f, int64_t value );
+        bool add ( const string & f, const LineInfo & at );
+        bool add ( const string & f, const ExpressionPtr & expr, const LineInfo & at );
+        bool addI ( const string & f, int64_t value, const LineInfo & at );
         string describe() const { return name; }
         string getMangledName() const;
         int64_t find ( const string & na, int64_t def ) const;
@@ -114,13 +120,13 @@ namespace das
         Type getEnumType() const;
         TypeDeclPtr makeEnumType() const;
     public:
-        string          name;
-        string          cppName;
-        LineInfo        at;
-        vector<pair<string,ExpressionPtr>> list;
-        Module *        module = nullptr;
-        bool            external = false;
-        Type            baseType = Type::tInt;
+        string              name;
+        string              cppName;
+        LineInfo            at;
+        vector<EnumEntry>   list;
+        Module *            module = nullptr;
+        bool                external = false;
+        Type                baseType = Type::tInt;
     };
 
     class Structure : public ptr_ref_count {

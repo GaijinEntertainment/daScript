@@ -18,9 +18,15 @@ def document_module_math(root:string)
     var mod = get_module("math")
     var groups <- [{DocGroup
         group_by_regex("all numerics (uint*, int*, float*, double)", mod, %regex~(min|max)$%%);
-        group_by_regex("float* and double", mod, %regex~(abs|acos|asin|atan|atan2|cos|sin|tan|exp|log|exp2|log2|pow|sqrt|rcp|ceil|floor|abs|saturate)$%%);
-        group_by_regex("float* only", mod, %regex~(atan2_est|rcp_est|ceili|floori|roundi|trunci)$%%);
-        group_by_regex("Noise functions", mod, %regex~(uint32_hash|uint_noise_1D|uint_noise_2D|uint_noise_3D)$%%)
+        group_by_regex("float* and double", mod, %regex~(abs|acos|asin|atan|atan2|cos|sin|tan|exp|log|exp2|
+log2|pow|sqrt|rcp|ceil|floor|abs|saturate|sincos)$%%);
+        group_by_regex("float* only", mod, %regex~(atan2_est|rcp_est|ceili|floori|roundi|trunci|rsqrt|rsqrt_est)$%%);
+        group_by_regex("float3 only", mod, %regex~(cross|reflect|refract|distance|distance_sq|
+inv_distance|inv_distance_sq)$%%);
+        group_by_regex("float2, float3, float4", mod, %regex~(length|length_sq|inv_length|inv_length_sq|
+dot|normalize|fast_normalize)$%%);
+        group_by_regex("Noise functions", mod, %regex~(uint32_hash|uint_noise_1D|uint_noise_2D|uint_noise_3D)$%%);
+        group_by_regex("lerp/mad/clamp", mod, %regex~(lerp|mad|clamp)$%%)
     }]
     document("Math library",mod,"{root}/math.rst",groups)
 
@@ -55,15 +61,17 @@ strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|
 def document_module_fio(root:string)
     var mod = get_module("fio")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin*%%));
+        group_by_regex("File manipulation", mod, %regex~(f|stat$)%%);
+        group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name)$%%);
+        group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir)$%%)
     }]
     document("File input output library",mod,"{root}/fio.rst",groups)
 
 def document_module_random(root:string)
     var mod = get_module("random")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("stub1", mod, %regex~(stub1)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
     document("Random generator library",mod,"{root}/random.rst",groups)

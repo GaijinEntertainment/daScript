@@ -364,7 +364,7 @@ def walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:LineInfo 
         eval = int(* reinterpret<uint16?> data)
     else
         panic("unsupported enumeration")
-    return ExpressionPtr(new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval]._0]])
+    return ExpressionPtr(new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]])
 
 [unsafe,private]
 def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
