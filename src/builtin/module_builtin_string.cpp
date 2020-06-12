@@ -336,6 +336,7 @@ namespace das
         for ( auto & tok : words ) {
             tokens.push_back(tok.c_str());
         }
+        if ( tokens.empty() ) tokens.push_back("");
         Array arr;
         arr.data = (char *) tokens.data();
         arr.capacity = arr.size = uint32_t(tokens.size());
@@ -373,6 +374,7 @@ namespace das
         for ( auto & tok : words ) {
             tokens.push_back(tok.c_str());
         }
+        if ( tokens.empty() ) tokens.push_back("");
         Array arr;
         arr.data = (char *) tokens.data();
         arr.capacity = arr.size = uint32_t(tokens.size());

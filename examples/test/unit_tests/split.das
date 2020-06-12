@@ -2,7 +2,8 @@ require daslib/strings
 
 [sideeffects]
 def expect0(a)
-    assert(length(a)==0)
+    assert(length(a)==1)
+    assert(a[0]=="")
 
 [sideeffects]
 def expect1(a)
@@ -42,6 +43,7 @@ def test
     split("one","") <| $ ( a )
         expect3o(a)
     expect0(split("",""))
+    expect0(split("","."))
     expect1(split("one",","))
     expect2(split("one,two",","))
     expect3(split("one-->two-->three","-->"))
@@ -49,7 +51,9 @@ def test
 
     // empty
     let es <- split("","/")
-    assert(length(es)==0)
+    assert(length(es)==1)
+    let ese <- split("","")
+    assert(length(ese)==1)
     // e0
     let e0 <- split("/","/")
     assert(length(e0)==2)
