@@ -26,7 +26,7 @@ arguments are
 +----+------------+
 
 
-function|uriparser|escape_uri to be documented
+|function-uriparser-escape_uri|
 
 .. _function-_at_uriparser_c__c_file_name_to_uri_string_hh_const__hh_const:
 
@@ -41,7 +41,7 @@ arguments are
 +----+------------+
 
 
-function|uriparser|file_name_to_uri to be documented
+|function-uriparser-file_name_to_uri|
 
 .. _function-_at_uriparser_c__c_unescape_uri_string_hh_const__hh_const:
 
@@ -56,7 +56,7 @@ arguments are
 +----+------------+
 
 
-function|uriparser|unescape_uri to be documented
+|function-uriparser-unescape_uri|
 
 .. _function-_at_uriparser_c__c_unix_file_name_to_uri_string_hh_const__hh_const:
 
@@ -71,7 +71,7 @@ arguments are
 +----+------------+
 
 
-function|uriparser|unix_file_name_to_uri to be documented
+|function-uriparser-unix_file_name_to_uri|
 
 .. _function-_at_uriparser_c__c_uri_to_file_name_string_hh_const__hh_const:
 
@@ -86,7 +86,7 @@ arguments are
 +----+------------+
 
 
-function|uriparser|uri_to_file_name to be documented
+|function-uriparser-uri_to_file_name|
 
 .. _function-_at_uriparser_c__c_uri_to_unix_file_name_string_hh_const__hh_const:
 
@@ -101,7 +101,7 @@ arguments are
 +----+------------+
 
 
-function|uriparser|uri_to_unix_file_name to be documented
+|function-uriparser-uri_to_unix_file_name|
 
 .. _function-_at_uriparser_c__c_uri_to_windows_file_name_string_hh_const__hh_const:
 
@@ -116,7 +116,7 @@ arguments are
 +----+------------+
 
 
-function|uriparser|uri_to_windows_file_name to be documented
+|function-uriparser-uri_to_windows_file_name|
 
 .. _function-_at_uriparser_c__c_windows_file_name_to_uri_string_hh_const__hh_const:
 
@@ -131,6 +131,6 @@ arguments are
 +----+------------+
 
 
-function|uriparser|windows_file_name_to_uri to be documented
+|function-uriparser-windows_file_name_to_uri|
 
 

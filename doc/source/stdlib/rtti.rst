@@ -13,13 +13,13 @@ TypeAliases
 
 .. das:attribute:: AnnotationPtr = smart_ptr<rtti::Annotation>
 
-typedef|rtti|AnnotationPtr to be documented
+|typedef-rtti-AnnotationPtr|
 
 .. _alias-FileAccessPtr:
 
 .. das:attribute:: FileAccessPtr = smart_ptr<rtti::FileAccess>
 
-typedef|rtti|FileAccessPtr to be documented
+|typedef-rtti-FileAccessPtr|
 
 .. _alias-ProgramFlags:
 
@@ -40,7 +40,7 @@ typedef|rtti|FileAccessPtr to be documented
 +-----------------+-+--+
 
 
-typedef|rtti|ProgramFlags to be documented
+|typedef-rtti-ProgramFlags|
 
 .. _alias-RttiValue:
 
@@ -67,13 +67,13 @@ typedef|rtti|ProgramFlags to be documented
 +-------+------+
 
 
-typedef|rtti|RttiValue to be documented
+|typedef-rtti-RttiValue|
 
 .. _alias-TypeAnnotationPtr:
 
 .. das:attribute:: TypeAnnotationPtr = smart_ptr<rtti::TypeAnnotation>
 
-typedef|rtti|TypeAnnotationPtr to be documented
+|typedef-rtti-TypeAnnotationPtr|
 
 ++++++++++++
 Enumerations
@@ -296,7 +296,7 @@ Enumerations
 +-----------------------------------+-----+
 
 
-enumeration|rtti|CompilationError to be documented
+|enumeration-rtti-CompilationError|
 
 .. _enum-rtti-ConstMatters:
 
@@ -309,7 +309,7 @@ enumeration|rtti|CompilationError to be documented
 +---+-+
 
 
-enumeration|rtti|ConstMatters to be documented
+|enumeration-rtti-ConstMatters|
 
 .. _enum-rtti-RefMatters:
 
@@ -322,7 +322,7 @@ enumeration|rtti|ConstMatters to be documented
 +---+-+
 
 
-enumeration|rtti|RefMatters to be documented
+|enumeration-rtti-RefMatters|
 
 .. _enum-rtti-TemporaryMatters:
 
@@ -335,7 +335,7 @@ enumeration|rtti|RefMatters to be documented
 +---+-+
 
 
-enumeration|rtti|TemporaryMatters to be documented
+|enumeration-rtti-TemporaryMatters|
 
 .. _enum-rtti-Type:
 
@@ -434,7 +434,7 @@ enumeration|rtti|TemporaryMatters to be documented
 +--------------+--+
 
 
-enumeration|rtti|Type to be documented
+|enumeration-rtti-Type|
 
 ++++++++++++++++++
 Handled structures
@@ -464,7 +464,7 @@ Annotation properties are
 +--------------------------+----+
 
 
-structure_annotation|rtti|Annotation to be documented
+|structure_annotation-rtti-Annotation|
 
 .. _handle-rtti-AnnotationArgument:
 
@@ -487,7 +487,7 @@ AnnotationArgument fields are
 +---------+--------------------------------------------------------+
 
 
-structure_annotation|rtti|AnnotationArgument to be documented
+|structure_annotation-rtti-AnnotationArgument|
 
 .. _handle-rtti-AnnotationDeclaration:
 
@@ -502,7 +502,7 @@ AnnotationDeclaration fields are
 +----------+--------------------------------------------------------------------------+
 
 
-structure_annotation|rtti|AnnotationDeclaration to be documented
+|structure_annotation-rtti-AnnotationDeclaration|
 
 .. _handle-rtti-BasicStructureAnnotation:
 
@@ -524,7 +524,7 @@ BasicStructureAnnotation properties are
 +----------+---+
 
 
-structure_annotation|rtti|BasicStructureAnnotation to be documented
+|structure_annotation-rtti-BasicStructureAnnotation|
 
 .. _handle-rtti-EnumInfo:
 
@@ -541,7 +541,7 @@ EnumInfo fields are
 +-----+------+
 
 
-structure_annotation|rtti|EnumInfo to be documented
+|structure_annotation-rtti-EnumInfo|
 
 .. _handle-rtti-EnumValueInfo:
 
@@ -556,7 +556,7 @@ EnumValueInfo fields are
 +-----+------+
 
 
-structure_annotation|rtti|EnumValueInfo to be documented
+|structure_annotation-rtti-EnumValueInfo|
 
 .. _handle-rtti-Error:
 
@@ -577,13 +577,13 @@ Error fields are
 +-----+------------------------------------------------------------+
 
 
-structure_annotation|rtti|Error to be documented
+|structure_annotation-rtti-Error|
 
 .. _handle-rtti-FileAccess:
 
 .. das:attribute:: FileAccess
 
-structure_annotation|rtti|FileAccess to be documented
+|structure_annotation-rtti-FileAccess|
 
 .. _handle-rtti-FileInfo:
 
@@ -607,7 +607,7 @@ FileInfo properties are
 +------+------------+
 
 
-structure_annotation|rtti|FileInfo to be documented
+|structure_annotation-rtti-FileInfo|
 
 .. _handle-rtti-FuncInfo:
 
@@ -632,7 +632,7 @@ FuncInfo fields are
 +---------+-----------------------------------------------+
 
 
-structure_annotation|rtti|FuncInfo to be documented
+|structure_annotation-rtti-FuncInfo|
 
 .. _handle-rtti-LineInfo:
 
@@ -653,7 +653,7 @@ LineInfo fields are
 +-----------+-----------------------------------------------+
 
 
-structure_annotation|rtti|LineInfo to be documented
+|structure_annotation-rtti-LineInfo|
 
 .. _handle-rtti-Module:
 
@@ -666,7 +666,7 @@ Module fields are
 +----+--------------------------------------------------------+
 
 
-structure_annotation|rtti|Module to be documented
+|structure_annotation-rtti-Module|
 
 .. _handle-rtti-Program:
 
@@ -681,7 +681,7 @@ Program fields are
 +------+------------------------------------------------------------+
 
 
-structure_annotation|rtti|Program to be documented
+|structure_annotation-rtti-Program|
 
 .. _handle-rtti-StructInfo:
 
@@ -702,7 +702,7 @@ StructInfo fields are
 +-----------+------+
 
 
-structure_annotation|rtti|StructInfo to be documented
+|structure_annotation-rtti-StructInfo|
 
 .. _handle-rtti-TypeAnnotation:
 
@@ -719,7 +719,7 @@ TypeAnnotation fields are
 +-------+--------------------------------------------------------+
 
 
-structure_annotation|rtti|TypeAnnotation to be documented
+|structure_annotation-rtti-TypeAnnotation|
 
 .. _handle-rtti-TypeInfo:
 
@@ -775,7 +775,7 @@ TypeInfo properties are
 +----------+-----------------------------------------------------------+
 
 
-structure_annotation|rtti|TypeInfo to be documented
+|structure_annotation-rtti-TypeInfo|
 
 .. _handle-rtti-VarInfo:
 
@@ -841,7 +841,7 @@ VarInfo properties are
 +----------+-----------------------------------------------------------+
 
 
-structure_annotation|rtti|VarInfo to be documented
+|structure_annotation-rtti-VarInfo|
 
 +++++++++++++
 Handled types
@@ -851,25 +851,25 @@ Handled types
 
 .. das:attribute:: AnnotationArgumentList
 
-any_annotation|rtti|AnnotationArgumentList to be documented
+|any_annotation-rtti-AnnotationArgumentList|
 
 .. _handle-rtti-AnnotationArguments:
 
 .. das:attribute:: AnnotationArguments
 
-any_annotation|rtti|AnnotationArguments to be documented
+|any_annotation-rtti-AnnotationArguments|
 
 .. _handle-rtti-AnnotationList:
 
 .. das:attribute:: AnnotationList
 
-any_annotation|rtti|AnnotationList to be documented
+|any_annotation-rtti-AnnotationList|
 
 .. _handle-rtti-dasvector`Error:
 
 .. das:attribute:: dasvector`Error
 
-any_annotation|rtti|dasvector`Error to be documented
+|any_annotation-rtti-dasvector`Error|
 
 +++++++++++++
 Uncategorized
@@ -881,7 +881,7 @@ Uncategorized
 
 RttiValue_nothing returns  :ref:`RttiValue <alias-RttiValue>` 
 
-function|rtti|RttiValue_nothing to be documented
+|function-rtti-RttiValue_nothing|
 
 .. _function-_at_rtti_c__c_arg_names__hh_handle_hh_TypeInfo_hh_const:
 
@@ -896,7 +896,7 @@ arguments are
 +----+----------------------------------------------------+
 
 
-function|rtti|arg_names to be documented
+|function-rtti-arg_names|
 
 .. _function-_at_rtti_c__c_arg_names__hh_handle_hh_VarInfo_hh_const:
 
@@ -911,7 +911,7 @@ arguments are
 +----+--------------------------------------------------+
 
 
-function|rtti|arg_names to be documented
+|function-rtti-arg_names|
 
 .. _function-_at_rtti_c__c_arg_types__hh_handle_hh_TypeInfo_hh_const:
 
@@ -926,7 +926,7 @@ arguments are
 +----+----------------------------------------------------+
 
 
-function|rtti|arg_types to be documented
+|function-rtti-arg_types|
 
 .. _function-_at_rtti_c__c_arg_types__hh_handle_hh_VarInfo_hh_const:
 
@@ -941,7 +941,7 @@ arguments are
 +----+--------------------------------------------------+
 
 
-function|rtti|arg_types to be documented
+|function-rtti-arg_types|
 
 .. _function-_at_rtti_c__c_basic_struct_for_each_field__hh_handle_hh_BasicStructureAnnotation_hh_const_hh_implicit__hh_block_hh_string_hh_string_hh__hh_handle_hh_TypeInfo_hh_const_hh_uint_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -956,7 +956,7 @@ arguments are
 +----+----------------------------------------------------------------------------------------------------+
 
 
-function|rtti|basic_struct_for_each_field to be documented
+|function-rtti-basic_struct_for_each_field|
 
 .. _function-_at_rtti_c__c_builtin_is_same_type__hh_ptr_hh__hh_handle_hh_TypeInfo_hh_const_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_TypeInfo_hh_const_hh_const_hh_implicit__hh_enum_hh_rtti_c__c_RefMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_ConstMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_TemporaryMatters_hh_int_hh_const_bool_hh_const:
 
@@ -981,7 +981,7 @@ arguments are
 +----+--------------------------------------------------------------------+
 
 
-function|rtti|builtin_is_same_type to be documented
+|function-rtti-builtin_is_same_type|
 
 .. _function-_at_rtti_c__c_compile_string_hh_const_string_hh_const__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -998,7 +998,7 @@ arguments are
 +----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
-function|rtti|compile to be documented
+|function-rtti-compile|
 
 .. _function-_at_rtti_c__c_compile_file_string_hh_const__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1015,7 +1015,7 @@ arguments are
 +----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
-function|rtti|compile_file to be documented
+|function-rtti-compile_file|
 
 .. _function-_at_rtti_c__c_context_for_each_function__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
 
@@ -1028,7 +1028,7 @@ arguments are
 +---+-----------------------------------------------------------------------------+
 
 
-function|rtti|context_for_each_function to be documented
+|function-rtti-context_for_each_function|
 
 .. _function-_at_rtti_c__c_context_for_each_variable__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
 
@@ -1041,7 +1041,7 @@ arguments are
 +---+---------------------------------------------------------------------------+
 
 
-function|rtti|context_for_each_variable to be documented
+|function-rtti-context_for_each_variable|
 
 .. _function-_at_rtti_c__c_each_dim__hh_handle_hh_TypeInfo_hh_const:
 
@@ -1056,7 +1056,7 @@ arguments are
 +----+----------------------------------------------------+
 
 
-function|rtti|each_dim to be documented
+|function-rtti-each_dim|
 
 .. _function-_at_rtti_c__c_each_dim__hh_handle_hh_VarInfo_hh_const:
 
@@ -1071,7 +1071,7 @@ arguments are
 +----+--------------------------------------------------+
 
 
-function|rtti|each_dim to be documented
+|function-rtti-each_dim|
 
 .. _function-_at_rtti_c__c_get_annotation_argument_value__hh_handle_hh_AnnotationArgument_hh_const_hh_implicit__hh_const:
 
@@ -1086,7 +1086,7 @@ arguments are
 +----+---------------------------------------------------------------------------------+
 
 
-function|rtti|get_annotation_argument_value to be documented
+|function-rtti-get_annotation_argument_value|
 
 .. _function-_at_rtti_c__c_get_das_type_name__hh_enum_hh_rtti_c__c_Type_hh_int_hh_const__hh_const:
 
@@ -1101,7 +1101,7 @@ arguments are
 +----+------------------------------------------+
 
 
-function|rtti|get_das_type_name to be documented
+|function-rtti-get_das_type_name|
 
 .. _function-_at_rtti_c__c_get_dim__hh_handle_hh_TypeInfo_hh_const_hh_implicit_int_hh_const__hh_const:
 
@@ -1118,7 +1118,7 @@ arguments are
 +----+-------------------------------------------------------------+
 
 
-function|rtti|get_dim to be documented
+|function-rtti-get_dim|
 
 .. _function-_at_rtti_c__c_get_dim__hh_handle_hh_VarInfo_hh_const_hh_implicit_int_hh_const__hh_const:
 
@@ -1135,7 +1135,7 @@ arguments are
 +----+-----------------------------------------------------------+
 
 
-function|rtti|get_dim to be documented
+|function-rtti-get_dim|
 
 .. _function-_at_rtti_c__c_get_function_info_int:
 
@@ -1150,7 +1150,7 @@ arguments are
 +----+---+
 
 
-function|rtti|get_function_info to be documented
+|function-rtti-get_function_info|
 
 .. _function-_at_rtti_c__c_get_module_string_hh_const:
 
@@ -1165,7 +1165,7 @@ arguments are
 +----+------------+
 
 
-function|rtti|get_module to be documented
+|function-rtti-get_module|
 
 .. _function-_at_rtti_c__c_get_this_module__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit:
 
@@ -1180,7 +1180,7 @@ arguments are
 +----+----------------------------------------------------------------------+
 
 
-function|rtti|get_this_module to be documented
+|function-rtti-get_this_module|
 
 .. _function-_at_rtti_c__c_get_total_functions__hh_const:
 
@@ -1188,7 +1188,7 @@ function|rtti|get_this_module to be documented
 
 get_total_functions returns int
 
-function|rtti|get_total_functions to be documented
+|function-rtti-get_total_functions|
 
 .. _function-_at_rtti_c__c_get_total_variables__hh_const:
 
@@ -1196,7 +1196,7 @@ function|rtti|get_total_functions to be documented
 
 get_total_variables returns int
 
-function|rtti|get_total_variables to be documented
+|function-rtti-get_total_variables|
 
 .. _function-_at_rtti_c__c_get_variable_info_int:
 
@@ -1211,7 +1211,7 @@ arguments are
 +----+---+
 
 
-function|rtti|get_variable_info to be documented
+|function-rtti-get_variable_info|
 
 .. _function-_at_rtti_c__c_get_variable_value__hh_handle_hh_VarInfo_hh_const_hh_implicit:
 
@@ -1226,7 +1226,7 @@ arguments are
 +----+-----------------------------------------------------------+
 
 
-function|rtti|get_variable_value to be documented
+|function-rtti-get_variable_value|
 
 .. _function-_at_rtti_c__c_is_compatible_cast__hh_handle_hh_StructInfo_hh_const__hh_handle_hh_StructInfo_hh_const:
 
@@ -1243,7 +1243,7 @@ arguments are
 +-+--------------------------------------------------------+
 
 
-function|rtti|is_compatible_cast to be documented
+|function-rtti-is_compatible_cast|
 
 .. _function-_at_rtti_c__c_is_compatible_cast__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit:
 
@@ -1260,7 +1260,7 @@ arguments are
 +----+------------------------------------------------------------------------+
 
 
-function|rtti|is_compatible_cast to be documented
+|function-rtti-is_compatible_cast|
 
 .. _function-_at_rtti_c__c_is_same_type__hh_handle_hh_TypeInfo_hh_const__hh_handle_hh_TypeInfo_hh_const__hh_enum_hh_rtti_c__c_RefMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_ConstMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_TemporaryMatters_hh_int_hh_const_bool_hh_const:
 
@@ -1285,7 +1285,7 @@ arguments are
 +----------------+------------------------------------------------------------------+
 
 
-function|rtti|is_same_type to be documented
+|function-rtti-is_same_type|
 
 .. _function-_at_rtti_c__c_make_file_access_string_hh_const__hh_const:
 
@@ -1300,7 +1300,7 @@ arguments are
 +----+------------+
 
 
-function|rtti|make_file_access to be documented
+|function-rtti-make_file_access|
 
 .. _function-_at_rtti_c__c_module_for_each_annotation__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1315,7 +1315,7 @@ arguments are
 +----+-------------------------------------------------------------------------------------+
 
 
-function|rtti|module_for_each_annotation to be documented
+|function-rtti-module_for_each_annotation|
 
 .. _function-_at_rtti_c__c_module_for_each_enumeration__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_EnumInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1330,7 +1330,7 @@ arguments are
 +----+---------------------------------------------------------------------------------+
 
 
-function|rtti|module_for_each_enumeration to be documented
+|function-rtti-module_for_each_enumeration|
 
 .. _function-_at_rtti_c__c_module_for_each_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1345,7 +1345,7 @@ arguments are
 +----+---------------------------------------------------------------------------------+
 
 
-function|rtti|module_for_each_function to be documented
+|function-rtti-module_for_each_function|
 
 .. _function-_at_rtti_c__c_module_for_each_generic__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1360,7 +1360,7 @@ arguments are
 +----+---------------------------------------------------------------------------------+
 
 
-function|rtti|module_for_each_generic to be documented
+|function-rtti-module_for_each_generic|
 
 .. _function-_at_rtti_c__c_module_for_each_global__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1375,7 +1375,7 @@ arguments are
 +----+-------------------------------------------------------------------------------+
 
 
-function|rtti|module_for_each_global to be documented
+|function-rtti-module_for_each_global|
 
 .. _function-_at_rtti_c__c_module_for_each_structure__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_handle_hh_StructInfo_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1390,7 +1390,7 @@ arguments are
 +----+-------------------------------------------------------------------------------------+
 
 
-function|rtti|module_for_each_structure to be documented
+|function-rtti-module_for_each_structure|
 
 .. _function-_at_rtti_c__c_program_for_each_module__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_block_hh__hh_ptr_hh__hh_handle_hh_Module_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1405,7 +1405,7 @@ arguments are
 +----+------------------------------------------------------------------------+
 
 
-function|rtti|program_for_each_module to be documented
+|function-rtti-program_for_each_module|
 
 .. _function-_at_rtti_c__c_program_for_each_registered_module__hh_block_hh__hh_ptr_hh__hh_handle_hh_Module_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1418,7 +1418,7 @@ arguments are
 +----+------------------------------------------------------------------------+
 
 
-function|rtti|program_for_each_registered_module to be documented
+|function-rtti-program_for_each_registered_module|
 
 .. _function-_at_rtti_c__c_rtti_builtin_structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const_hh_implicit__hh_block_hh_const_hh_implicit__hh_const:
 
@@ -1433,7 +1433,7 @@ arguments are
 +----+-----------------------------------------------------------------+
 
 
-function|rtti|rtti_builtin_structure_for_each_annotation to be documented
+|function-rtti-rtti_builtin_structure_for_each_annotation|
 
 .. _function-_at_rtti_c__c_set_file_source__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit_string_hh_const_string_hh_const__hh_const:
 
@@ -1452,7 +1452,7 @@ arguments are
 +----+----------------------------------------------------------------------------+
 
 
-function|rtti|set_file_source to be documented
+|function-rtti-set_file_source|
 
 .. _function-_at_rtti_c__c_structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh__hh_handle_hh_AnnotationArguments_hh_const_hh__rq_ann_hh__rq_args_hh__c_void_hh_const:
 
@@ -1467,7 +1467,7 @@ arguments are
 +-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
-function|rtti|structure_for_each_annotation to be documented
+|function-rtti-structure_for_each_annotation|
 
 .. _function-_at_rtti_c__c_class_info__hh_auto_hh_const:
 
@@ -1482,6 +1482,6 @@ arguments are
 +--+----------+
 
 
-function|rtti|class_info to be documented
+|function-rtti-class_info|
 
 

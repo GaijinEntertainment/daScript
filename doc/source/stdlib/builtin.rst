@@ -13,7 +13,7 @@ Handled structures
 
 .. das:attribute:: StringBuilderWriter
 
-structure_annotation|builtin|StringBuilderWriter to be documented
+|structure_annotation-builtin-StringBuilderWriter|
 
 +++++++++++++
 Handled types
@@ -23,25 +23,25 @@ Handled types
 
 .. das:attribute:: clock
 
-any_annotation|builtin|clock to be documented
+|any_annotation-builtin-clock|
 
 .. _handle-builtin-das_string:
 
 .. das:attribute:: das_string
 
-any_annotation|builtin|das_string to be documented
+|any_annotation-builtin-das_string|
 
 .. _handle-builtin-float3x4:
 
 .. das:attribute:: float3x4
 
-any_annotation|builtin|float3x4 to be documented
+|any_annotation-builtin-float3x4|
 
 .. _handle-builtin-float4x4:
 
 .. das:attribute:: float4x4
 
-any_annotation|builtin|float4x4 to be documented
+|any_annotation-builtin-float4x4|
 
 ++++++++++++++++++++++++++
 Internal builtin functions
@@ -68,7 +68,7 @@ arguments are
 +----+---+
 
 
-function|builtin|builtin_strdup to be documented
+|function-builtin-builtin_strdup|
 
 .. _function-_at__builtin__c__c_builtin_string_split_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
 
@@ -85,7 +85,7 @@ arguments are
 +----+----------------------+
 
 
-function|builtin|builtin_string_split to be documented
+|function-builtin-builtin_string_split|
 
 .. _function-_at__builtin__c__c_builtin_string_split_by_char_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
 
@@ -102,7 +102,7 @@ arguments are
 +----+----------------------+
 
 
-function|builtin|builtin_string_split_by_char to be documented
+|function-builtin-builtin_string_split_by_char|
 
 ++++++++++++++++++++++++++++
 Internal pointer arithmetics
@@ -139,7 +139,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|i_das_ptr_add to be documented
+|function-builtin-i_das_ptr_add|
 
 .. _function-_at__builtin__c__c_i_das_ptr_dec__hh_ptr_hh_ref_hh_implicit_int_hh_const:
 
@@ -157,7 +157,7 @@ arguments are
 +----+---------------+
 
 
-function|builtin|i_das_ptr_dec to be documented
+|function-builtin-i_das_ptr_dec|
 
 .. _function-_at__builtin__c__c_i_das_ptr_diff__hh_ptr_hh_const_hh_implicit__hh_ptr_hh_const_hh_implicit_int_hh_const:
 
@@ -176,7 +176,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|i_das_ptr_diff to be documented
+|function-builtin-i_das_ptr_diff|
 
 .. _function-_at__builtin__c__c_i_das_ptr_inc__hh_ptr_hh_ref_hh_implicit_int_hh_const:
 
@@ -194,7 +194,7 @@ arguments are
 +----+---------------+
 
 
-function|builtin|i_das_ptr_inc to be documented
+|function-builtin-i_das_ptr_inc|
 
 .. _function-_at__builtin__c__c_i_das_ptr_set_add__hh_ptr_hh_ref_hh_implicit_int_hh_const_int_hh_const:
 
@@ -214,7 +214,7 @@ arguments are
 +----+---------------+
 
 
-function|builtin|i_das_ptr_set_add to be documented
+|function-builtin-i_das_ptr_set_add|
 
 .. _function-_at__builtin__c__c_i_das_ptr_set_sub__hh_ptr_hh_ref_hh_implicit_int_hh_const_int_hh_const:
 
@@ -234,7 +234,7 @@ arguments are
 +----+---------------+
 
 
-function|builtin|i_das_ptr_set_sub to be documented
+|function-builtin-i_das_ptr_set_sub|
 
 .. _function-_at__builtin__c__c_i_das_ptr_sub__hh_ptr_hh_ref_hh_implicit_int_hh_const_int_hh_const:
 
@@ -256,7 +256,7 @@ arguments are
 +----+---------------+
 
 
-function|builtin|i_das_ptr_sub to be documented
+|function-builtin-i_das_ptr_sub|
 
 +++++++++++++++++++++++++++++
 Internal clone infrastructure
@@ -288,7 +288,7 @@ arguments are
 +-+--------------------------------------------------------+
 
 
-function|builtin|clone to be documented
+|function-builtin-clone|
 
 .. _function-_at__builtin__c__c_clone_string_string_hh_const__hh_const:
 
@@ -303,7 +303,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|clone_string to be documented
+|function-builtin-clone_string|
 
 .. _function-_at__builtin__c__c_clone__hh_array_hh__hh_auto__hh_array_hh__hh_alias_hh_TT_hh_const:
 
@@ -320,7 +320,7 @@ arguments are
 +-+---------------+
 
 
-function|builtin|clone to be documented
+|function-builtin-clone|
 
 .. _function-_at__builtin__c__c_clone__hh_array_hh__hh_auto__hh_array_hh__hh_alias_hh_TT_hh_const_hh_temporary:
 
@@ -337,7 +337,7 @@ arguments are
 +-+----------------+
 
 
-function|builtin|clone to be documented
+|function-builtin-clone|
 
 .. _function-_at__builtin__c__c_clone__hh_table_hh__hh_auto_hh__hh_auto__hh_table_hh__hh_alias_hh_KT_hh__hh_alias_hh_VT_hh_const:
 
@@ -354,7 +354,7 @@ arguments are
 +-+------------------------+
 
 
-function|builtin|clone to be documented
+|function-builtin-clone|
 
 .. _function-_at__builtin__c__c_clone__hh_table_hh__hh_auto_hh__hh_auto__hh_table_hh__hh_alias_hh_KT_hh__hh_alias_hh_VT_hh_const_hh_temporary:
 
@@ -371,7 +371,7 @@ arguments are
 +-+------------------------+
 
 
-function|builtin|clone to be documented
+|function-builtin-clone|
 
 .. _function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const:
 
@@ -388,7 +388,7 @@ arguments are
 +-+----------+
 
 
-function|builtin|clone_dim to be documented
+|function-builtin-clone_dim|
 
 .. _function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const_hh_temporary:
 
@@ -405,7 +405,7 @@ arguments are
 +-+-----------+
 
 
-function|builtin|clone_dim to be documented
+|function-builtin-clone_dim|
 
 .. _function-_at__builtin__c__c_clone_to_move__hh_auto_hh_const:
 
@@ -420,7 +420,7 @@ arguments are
 +---------+--------------+
 
 
-function|builtin|clone_to_move to be documented
+|function-builtin-clone_to_move|
 
 ++++++++++++++++++++++++++++++++
 Internal finalize infrastructure
@@ -446,7 +446,7 @@ arguments are
 +-+---------------+
 
 
-function|builtin|finalize to be documented
+|function-builtin-finalize|
 
 .. _function-_at__builtin__c__c_finalize__hh_table_hh__hh_auto_hh__hh_auto:
 
@@ -461,7 +461,7 @@ arguments are
 +-+------------------------+
 
 
-function|builtin|finalize to be documented
+|function-builtin-finalize|
 
 .. _function-_at__builtin__c__c_finalize_dim__hh_auto_hh_-1:
 
@@ -476,7 +476,7 @@ arguments are
 +-+------------+
 
 
-function|builtin|finalize_dim to be documented
+|function-builtin-finalize_dim|
 
 ++++++++++
 Containers
@@ -553,7 +553,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|capacity to be documented
+|function-builtin-capacity|
 
 .. _function-_at__builtin__c__c_capacity__hh_table_hh_const_hh_implicit:
 
@@ -568,7 +568,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|capacity to be documented
+|function-builtin-capacity|
 
 .. _function-_at__builtin__c__c_clear__hh_array_hh_implicit__hh_const:
 
@@ -581,7 +581,7 @@ arguments are
 +----+--------------+
 
 
-function|builtin|clear to be documented
+|function-builtin-clear|
 
 .. _function-_at__builtin__c__c_clear__hh_table_hh_implicit__hh_const:
 
@@ -594,7 +594,7 @@ arguments are
 +----+--------------+
 
 
-function|builtin|clear to be documented
+|function-builtin-clear|
 
 .. _function-_at__builtin__c__c_find_string_hh_const_string_hh_const:
 
@@ -611,7 +611,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|find to be documented
+|function-builtin-find|
 
 .. _function-_at__builtin__c__c_find_string_hh_const_string_hh_const_int_hh_const__hh_const:
 
@@ -630,7 +630,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|find to be documented
+|function-builtin-find|
 
 .. _function-_at__builtin__c__c_length__hh_array_hh_const_hh_implicit:
 
@@ -645,7 +645,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|length to be documented
+|function-builtin-length|
 
 .. _function-_at__builtin__c__c_length__hh_handle_hh_das_string_hh_implicit:
 
@@ -660,7 +660,7 @@ arguments are
 +----+-----------------------------------------------------------------+
 
 
-function|builtin|length to be documented
+|function-builtin-length|
 
 .. _function-_at__builtin__c__c_length__hh_table_hh_const_hh_implicit:
 
@@ -675,7 +675,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|length to be documented
+|function-builtin-length|
 
 .. _function-_at__builtin__c__c_length_string_hh_const__hh_const:
 
@@ -690,7 +690,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|length to be documented
+|function-builtin-length|
 
 .. _function-_at__builtin__c__c_resize__hh_handle_hh_das_string_hh_implicit_int_hh_const:
 
@@ -705,7 +705,7 @@ arguments are
 +----+-----------------------------------------------------------------+
 
 
-function|builtin|resize to be documented
+|function-builtin-resize|
 
 .. _function-_at__builtin__c__c_each__hh_array_hh__hh_auto_hh_const:
 
@@ -723,7 +723,7 @@ arguments are
 +-+---------------------+
 
 
-function|builtin|each to be documented
+|function-builtin-each|
 
 .. _function-_at__builtin__c__c_each__hh_auto_hh_const_hh_-1:
 
@@ -741,7 +741,7 @@ arguments are
 +-+------------------+
 
 
-function|builtin|each to be documented
+|function-builtin-each|
 
 .. _function-_at__builtin__c__c_each__hh_lambda_hh__hh_auto_hh__rq_arg_hh__c_bool_hh_const:
 
@@ -756,7 +756,7 @@ arguments are
 +---+-----------------------------------+
 
 
-function|builtin|each to be documented
+|function-builtin-each|
 
 .. _function-_at__builtin__c__c_each_range_hh_const:
 
@@ -771,7 +771,7 @@ arguments are
 +---+-----------+
 
 
-function|builtin|each to be documented
+|function-builtin-each|
 
 .. _function-_at__builtin__c__c_each_string_hh_const:
 
@@ -789,7 +789,7 @@ arguments are
 +---+------------+
 
 
-function|builtin|each to be documented
+|function-builtin-each|
 
 .. _function-_at__builtin__c__c_each_enum__hh_auto_hh_const:
 
@@ -804,7 +804,7 @@ arguments are
 +--+--------------+
 
 
-function|builtin|each_enum to be documented
+|function-builtin-each_enum|
 
 .. _function-_at__builtin__c__c_each_ref__hh_lambda_hh__hh_ptr_hh__hh_auto_hh__rq_arg_hh__c_bool_hh_const:
 
@@ -819,7 +819,7 @@ arguments are
 +---+------------------------------------+
 
 
-function|builtin|each_ref to be documented
+|function-builtin-each_ref|
 
 .. _function-_at__builtin__c__c_emplace__hh_array_hh__hh_auto__hh_alias_hh_numT_int_hh_const:
 
@@ -838,7 +838,7 @@ arguments are
 +-----+-----------------+
 
 
-function|builtin|emplace to be documented
+|function-builtin-emplace|
 
 .. _function-_at__builtin__c__c_erase__hh_array_hh__hh_auto_int_hh_const:
 
@@ -855,7 +855,7 @@ arguments are
 +---+-----------------+
 
 
-function|builtin|erase to be documented
+|function-builtin-erase|
 
 .. _function-_at__builtin__c__c_erase__hh_table_hh__hh_auto_hh__hh_auto__hh_alias_hh_keyT_hh_const:
 
@@ -872,7 +872,7 @@ arguments are
 +---+----------------------------+
 
 
-function|builtin|erase to be documented
+|function-builtin-erase|
 
 .. _function-_at__builtin__c__c_find__hh_table_hh__hh_auto_hh__hh_auto_hh_const__hh_alias_hh_keyT_hh_const:
 
@@ -892,7 +892,7 @@ arguments are
 +---+----------------------------------+
 
 
-function|builtin|find to be documented
+|function-builtin-find|
 
 .. _function-_at__builtin__c__c_find__hh_table_hh__hh_auto_hh__hh_auto_hh_const__hh_alias_hh_keyT_hh_const__hh_block_hh__hh_ptr_hh__hh_alias_hh_valT_hh_const_hh__rq_p_hh__c_void_hh_const:
 
@@ -911,7 +911,7 @@ arguments are
 +---+----------------------------------+
 
 
-function|builtin|find to be documented
+|function-builtin-find|
 
 .. _function-_at__builtin__c__c_find__hh_table_hh__hh_auto_hh__hh_auto_hh_const_hh_temporary__hh_alias_hh_keyT_hh_const:
 
@@ -928,7 +928,7 @@ arguments are
 +---+-----------------------------------+
 
 
-function|builtin|find to be documented
+|function-builtin-find|
 
 .. _function-_at__builtin__c__c_find_for_edit__hh_table_hh__hh_auto_hh__hh_auto__hh_alias_hh_keyT_hh_const:
 
@@ -948,7 +948,7 @@ arguments are
 +---+----------------------------+
 
 
-function|builtin|find_for_edit to be documented
+|function-builtin-find_for_edit|
 
 .. _function-_at__builtin__c__c_find_for_edit__hh_table_hh__hh_auto_hh__hh_auto__hh_alias_hh_keyT_hh_const__hh_block_hh__hh_ptr_hh__hh_alias_hh_valT_hh__rq_p_hh__c_void_hh_const:
 
@@ -967,7 +967,7 @@ arguments are
 +---+----------------------------+
 
 
-function|builtin|find_for_edit to be documented
+|function-builtin-find_for_edit|
 
 .. _function-_at__builtin__c__c_find_for_edit_if_exists__hh_table_hh__hh_auto_hh__hh_auto__hh_alias_hh_keyT_hh_const__hh_block_hh__hh_ptr_hh__hh_alias_hh_valT_hh__rq_p_hh__c_void_hh_const:
 
@@ -986,7 +986,7 @@ arguments are
 +---+----------------------------+
 
 
-function|builtin|find_for_edit_if_exists to be documented
+|function-builtin-find_for_edit_if_exists|
 
 .. _function-_at__builtin__c__c_find_if_exists__hh_table_hh__hh_auto_hh__hh_auto_hh_const__hh_alias_hh_keyT_hh_const__hh_block_hh__hh_ptr_hh__hh_alias_hh_valT_hh_const_hh__rq_p_hh__c_void_hh_const:
 
@@ -1005,7 +1005,7 @@ arguments are
 +---+----------------------------------+
 
 
-function|builtin|find_if_exists to be documented
+|function-builtin-find_if_exists|
 
 .. _function-_at__builtin__c__c_find_index__hh_array_hh__hh_auto_hh_const_hh_implicit__hh_alias_hh_TT_hh_const:
 
@@ -1022,7 +1022,7 @@ arguments are
 +---+------------------------------+
 
 
-function|builtin|find_index to be documented
+|function-builtin-find_index|
 
 .. _function-_at__builtin__c__c_find_index__hh_auto_hh_const_hh_implicit_hh_-1__hh_alias_hh_TT_hh_const:
 
@@ -1039,7 +1039,7 @@ arguments are
 +---+---------------------------+
 
 
-function|builtin|find_index to be documented
+|function-builtin-find_index|
 
 .. _function-_at__builtin__c__c_find_index_if__hh_array_hh__hh_auto_hh_const_hh_implicit__hh_block_hh__hh_alias_hh_TT_hh_const_hh__rq_key_hh__c_bool_hh_const:
 
@@ -1056,7 +1056,7 @@ arguments are
 +---+--------------------------------+
 
 
-function|builtin|find_index_if to be documented
+|function-builtin-find_index_if|
 
 .. _function-_at__builtin__c__c_find_index_if__hh_auto_hh_const_hh_implicit_hh_-1__hh_block_hh__hh_alias_hh_TT_hh_const_hh__rq_key_hh__c_bool_hh_const:
 
@@ -1073,7 +1073,7 @@ arguments are
 +---+--------------------------------+
 
 
-function|builtin|find_index_if to be documented
+|function-builtin-find_index_if|
 
 .. _function-_at__builtin__c__c_has_value__hh_auto_hh_const__hh_auto_hh_const:
 
@@ -1090,7 +1090,7 @@ arguments are
 +---+----------+
 
 
-function|builtin|has_value to be documented
+|function-builtin-has_value|
 
 .. _function-_at__builtin__c__c_key_exists__hh_table_hh__hh_auto_hh__hh_auto_hh_const__hh_alias_hh_keyT_hh_const:
 
@@ -1107,7 +1107,7 @@ arguments are
 +---+----------------------------------+
 
 
-function|builtin|key_exists to be documented
+|function-builtin-key_exists|
 
 .. _function-_at__builtin__c__c_keys__hh_table_hh__hh_auto_hh__hh_auto_hh_const:
 
@@ -1122,7 +1122,7 @@ arguments are
 +-+----------------------------------+
 
 
-function|builtin|keys to be documented
+|function-builtin-keys|
 
 .. _function-_at__builtin__c__c_length__hh_auto_hh_const_hh_-1:
 
@@ -1137,7 +1137,7 @@ arguments are
 +-+--------------+
 
 
-function|builtin|length to be documented
+|function-builtin-length|
 
 .. _function-_at__builtin__c__c_lock__hh_table_hh__hh_auto_hh__hh_auto_hh_const__hh_block_hh__hh_table_hh__hh_alias_hh_keyT_hh__hh_alias_hh_valT_hh_const_hh_temporary_hh__rq_t_hh__c_void_hh_const:
 
@@ -1154,7 +1154,7 @@ arguments are
 +---+---------------------------------------------+
 
 
-function|builtin|lock to be documented
+|function-builtin-lock|
 
 .. _function-_at__builtin__c__c_lock__hh_table_hh__hh_auto_hh__hh_auto_hh_const_hh_temporary__hh_block_hh__hh_table_hh__hh_alias_hh_keyT_hh__hh_alias_hh_valT_hh_const_hh_temporary_hh__rq_t_hh__c_void_hh_const:
 
@@ -1171,7 +1171,7 @@ arguments are
 +---+---------------------------------------------+
 
 
-function|builtin|lock to be documented
+|function-builtin-lock|
 
 .. _function-_at__builtin__c__c_lock_forever__hh_table_hh__hh_auto_hh__hh_auto:
 
@@ -1186,7 +1186,7 @@ arguments are
 +---+----------------------------+
 
 
-function|builtin|lock_forever to be documented
+|function-builtin-lock_forever|
 
 .. _function-_at__builtin__c__c_next__hh_iterator_hh__hh_auto_hh_const__hh_alias_hh_TT_hh_ref:
 
@@ -1203,7 +1203,7 @@ arguments are
 +-----+------------------------+
 
 
-function|builtin|next to be documented
+|function-builtin-next|
 
 .. _function-_at__builtin__c__c_nothing__hh_iterator_hh__hh_auto:
 
@@ -1218,7 +1218,7 @@ arguments are
 +--+------------------+
 
 
-function|builtin|nothing to be documented
+|function-builtin-nothing|
 
 .. _function-_at__builtin__c__c_pop__hh_array_hh__hh_auto:
 
@@ -1233,7 +1233,7 @@ arguments are
 +---+-----------------+
 
 
-function|builtin|pop to be documented
+|function-builtin-pop|
 
 .. _function-_at__builtin__c__c_push__hh_array_hh__hh_auto__hh_alias_hh_numT_hh_const_int_hh_const:
 
@@ -1252,7 +1252,7 @@ arguments are
 +-----+-----------------+
 
 
-function|builtin|push to be documented
+|function-builtin-push|
 
 .. _function-_at__builtin__c__c_push_clone__hh_array_hh__hh_auto__hh_alias_hh_numT_hh_const_int_hh_const:
 
@@ -1271,7 +1271,7 @@ arguments are
 +-----+-----------------+
 
 
-function|builtin|push_clone to be documented
+|function-builtin-push_clone|
 
 .. _function-_at__builtin__c__c_reserve__hh_array_hh__hh_auto_int_hh_const:
 
@@ -1288,7 +1288,7 @@ arguments are
 +-------+-----------------+
 
 
-function|builtin|reserve to be documented
+|function-builtin-reserve|
 
 .. _function-_at__builtin__c__c_resize__hh_array_hh__hh_auto_int_hh_const:
 
@@ -1305,7 +1305,7 @@ arguments are
 +-------+-----------------+
 
 
-function|builtin|resize to be documented
+|function-builtin-resize|
 
 .. _function-_at__builtin__c__c_sort__hh_array_hh__hh_auto:
 
@@ -1320,7 +1320,7 @@ arguments are
 +-+---------------+
 
 
-function|builtin|sort to be documented
+|function-builtin-sort|
 
 .. _function-_at__builtin__c__c_sort__hh_array_hh__hh_auto__hh_block_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_x_hh__rq_y_hh__c_bool_hh_const:
 
@@ -1337,7 +1337,7 @@ arguments are
 +---+-----------------------------------------+
 
 
-function|builtin|sort to be documented
+|function-builtin-sort|
 
 .. _function-_at__builtin__c__c_sort__hh_auto_hh_-1:
 
@@ -1352,7 +1352,7 @@ arguments are
 +-+------------+
 
 
-function|builtin|sort to be documented
+|function-builtin-sort|
 
 .. _function-_at__builtin__c__c_sort__hh_auto_hh_-1__hh_block_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_x_hh__rq_y_hh__c_bool_hh_const:
 
@@ -1369,7 +1369,7 @@ arguments are
 +---+-----------------------------------------+
 
 
-function|builtin|sort to be documented
+|function-builtin-sort|
 
 .. _function-_at__builtin__c__c_to_array__hh_auto_hh_const_hh_-1:
 
@@ -1384,7 +1384,7 @@ arguments are
 +-+------------------+
 
 
-function|builtin|to_array to be documented
+|function-builtin-to_array|
 
 .. _function-_at__builtin__c__c_to_array__hh_iterator_hh__hh_auto_hh_const:
 
@@ -1399,7 +1399,7 @@ arguments are
 +--+------------------------+
 
 
-function|builtin|to_array to be documented
+|function-builtin-to_array|
 
 .. _function-_at__builtin__c__c_to_array_move__hh_auto_hh_-1:
 
@@ -1414,7 +1414,7 @@ arguments are
 +-+------------+
 
 
-function|builtin|to_array_move to be documented
+|function-builtin-to_array_move|
 
 .. _function-_at__builtin__c__c_to_table__hh_tuple_hh__hh_auto_hh__hh_auto_hh_const_hh_-1:
 
@@ -1429,7 +1429,7 @@ arguments are
 +-+--------------------------------------+
 
 
-function|builtin|to_table to be documented
+|function-builtin-to_table|
 
 .. _function-_at__builtin__c__c_to_table_move__hh_tuple_hh__hh_auto_hh__hh_auto_hh_-1:
 
@@ -1444,7 +1444,7 @@ arguments are
 +-+--------------------------------+
 
 
-function|builtin|to_table_move to be documented
+|function-builtin-to_table_move|
 
 .. _function-_at__builtin__c__c_values__hh_table_hh__hh_auto_hh__hh_auto_hh_const_hh_explicitconst:
 
@@ -1459,7 +1459,7 @@ arguments are
 +-+-----------------------------------+
 
 
-function|builtin|values to be documented
+|function-builtin-values|
 
 .. _function-_at__builtin__c__c_values__hh_table_hh__hh_auto_hh__hh_auto_hh_explicitconst:
 
@@ -1474,7 +1474,7 @@ arguments are
 +-+-----------------------------+
 
 
-function|builtin|values to be documented
+|function-builtin-values|
 
 ++++++++++++++++++++
 Character set groups
@@ -1498,7 +1498,7 @@ arguments are
 +----+---------+
 
 
-function|builtin|is_alpha to be documented
+|function-builtin-is_alpha|
 
 .. _function-_at__builtin__c__c_is_char_in_set_int_hh_const_uint_hh_const_hh_implicit_hh_8:
 
@@ -1515,7 +1515,7 @@ arguments are
 +----+----------------------+
 
 
-function|builtin|is_char_in_set to be documented
+|function-builtin-is_char_in_set|
 
 .. _function-_at__builtin__c__c_is_number_int_hh_const:
 
@@ -1530,7 +1530,7 @@ arguments are
 +----+---------+
 
 
-function|builtin|is_number to be documented
+|function-builtin-is_number|
 
 .. _function-_at__builtin__c__c_is_white_space_int_hh_const:
 
@@ -1545,7 +1545,7 @@ arguments are
 +----+---------+
 
 
-function|builtin|is_white_space to be documented
+|function-builtin-is_white_space|
 
 +++++++++++++++++++
 String manipulation
@@ -1612,7 +1612,7 @@ arguments are
 +----+-----------------------------------------------------------------+
 
 
-function|builtin|append to be documented
+|function-builtin-append|
 
 .. _function-_at__builtin__c__c_append_string_hh_const_int_hh_const__hh_const:
 
@@ -1632,7 +1632,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|append to be documented
+|function-builtin-append|
 
 .. _function-_at__builtin__c__c_as_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const:
 
@@ -1647,7 +1647,7 @@ arguments are
 +----+---------------------------+
 
 
-function|builtin|as_string to be documented
+|function-builtin-as_string|
 
 .. _function-_at__builtin__c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1662,7 +1662,7 @@ arguments are
 +----+-------------------------------------------------------------------------------------------------------+
 
 
-function|builtin|build_string to be documented
+|function-builtin-build_string|
 
 .. _function-_at__builtin__c__c_character_at_string_hh_const_int_hh_const__hh_const:
 
@@ -1679,7 +1679,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|character_at to be documented
+|function-builtin-character_at|
 
 .. _function-_at__builtin__c__c_character_uat_string_hh_const_int_hh_const:
 
@@ -1699,7 +1699,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|character_uat to be documented
+|function-builtin-character_uat|
 
 .. _function-_at__builtin__c__c_chop_string_hh_const_int_hh_const_int_hh_const__hh_const:
 
@@ -1721,7 +1721,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|chop to be documented
+|function-builtin-chop|
 
 .. _function-_at__builtin__c__c_delete_string_string_hh_ref_hh_implicit__hh_const:
 
@@ -1737,7 +1737,7 @@ arguments are
 +----+----------------+
 
 
-function|builtin|delete_string to be documented
+|function-builtin-delete_string|
 
 .. _function-_at__builtin__c__c_empty__hh_handle_hh_das_string_hh_const_hh_implicit:
 
@@ -1752,7 +1752,7 @@ arguments are
 +----+-----------------------------------------------------------------------+
 
 
-function|builtin|empty to be documented
+|function-builtin-empty|
 
 .. _function-_at__builtin__c__c_empty__hh_iterator_hh_const_hh_implicit:
 
@@ -1767,7 +1767,7 @@ arguments are
 +----+-----------------------+
 
 
-function|builtin|empty to be documented
+|function-builtin-empty|
 
 .. _function-_at__builtin__c__c_empty_string_hh_const:
 
@@ -1782,7 +1782,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|empty to be documented
+|function-builtin-empty|
 
 .. _function-_at__builtin__c__c_ends_with__hh_handle_hh_das_string_hh_const_hh_implicit_string_hh_const__hh_const:
 
@@ -1799,7 +1799,7 @@ arguments are
 +----+-----------------------------------------------------------------------+
 
 
-function|builtin|ends_with to be documented
+|function-builtin-ends_with|
 
 .. _function-_at__builtin__c__c_ends_with_string_hh_const_string_hh_const__hh_const:
 
@@ -1816,7 +1816,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|ends_with to be documented
+|function-builtin-ends_with|
 
 .. _function-_at__builtin__c__c_escape_string_hh_const__hh_const:
 
@@ -1831,7 +1831,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|escape to be documented
+|function-builtin-escape|
 
 .. _function-_at__builtin__c__c_find_first_of_string_hh_const_int_hh_const__hh_const:
 
@@ -1848,7 +1848,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|find_first_of to be documented
+|function-builtin-find_first_of|
 
 .. _function-_at__builtin__c__c_find_first_of_string_hh_const_string_hh_const__hh_const:
 
@@ -1865,7 +1865,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|find_first_of to be documented
+|function-builtin-find_first_of|
 
 .. _function-_at__builtin__c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_double_hh_const:
 
@@ -1882,7 +1882,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_float_hh_const:
 
@@ -1899,7 +1899,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int_hh_const:
 
@@ -1916,7 +1916,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int64_hh_const:
 
@@ -1933,7 +1933,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint_hh_const:
 
@@ -1950,7 +1950,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint64_hh_const:
 
@@ -1967,7 +1967,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format_string_hh_const_double_hh_const__hh_const:
 
@@ -1984,7 +1984,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format_string_hh_const_float_hh_const__hh_const:
 
@@ -2001,7 +2001,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format_string_hh_const_int_hh_const__hh_const:
 
@@ -2018,7 +2018,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format_string_hh_const_int64_hh_const__hh_const:
 
@@ -2035,7 +2035,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format_string_hh_const_uint_hh_const__hh_const:
 
@@ -2052,7 +2052,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_format_string_hh_const_uint64_hh_const__hh_const:
 
@@ -2069,7 +2069,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|format to be documented
+|function-builtin-format|
 
 .. _function-_at__builtin__c__c_peek__hh_handle_hh_das_string_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -2084,7 +2084,7 @@ arguments are
 +----+-----------------------------------------------------------------------+
 
 
-function|builtin|peek to be documented
+|function-builtin-peek|
 
 .. _function-_at__builtin__c__c_repeat_string_hh_const_int_hh_const__hh_const:
 
@@ -2101,7 +2101,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|repeat to be documented
+|function-builtin-repeat|
 
 .. _function-_at__builtin__c__c_replace_string_hh_const_string_hh_const_string_hh_const__hh_const:
 
@@ -2120,7 +2120,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|replace to be documented
+|function-builtin-replace|
 
 .. _function-_at__builtin__c__c_reverse_string_hh_const__hh_const:
 
@@ -2135,7 +2135,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|reverse to be documented
+|function-builtin-reverse|
 
 .. _function-_at__builtin__c__c_set__hh_handle_hh_das_string_hh_implicit_string_hh_const:
 
@@ -2150,7 +2150,7 @@ arguments are
 +----+-----------------------------------------------------------------+
 
 
-function|builtin|set to be documented
+|function-builtin-set|
 
 .. _function-_at__builtin__c__c_slice_string_hh_const_int_hh_const__hh_const:
 
@@ -2167,7 +2167,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|slice to be documented
+|function-builtin-slice|
 
 .. _function-_at__builtin__c__c_slice_string_hh_const_int_hh_const_int_hh_const__hh_const:
 
@@ -2186,7 +2186,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|slice to be documented
+|function-builtin-slice|
 
 .. _function-_at__builtin__c__c_starts_with_string_hh_const_string_hh_const__hh_const:
 
@@ -2203,7 +2203,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|starts_with to be documented
+|function-builtin-starts_with|
 
 .. _function-_at__builtin__c__c_strip_string_hh_const__hh_const:
 
@@ -2218,7 +2218,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|strip to be documented
+|function-builtin-strip|
 
 .. _function-_at__builtin__c__c_strip_left_string_hh_const__hh_const:
 
@@ -2233,7 +2233,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|strip_left to be documented
+|function-builtin-strip_left|
 
 .. _function-_at__builtin__c__c_strip_right_string_hh_const__hh_const:
 
@@ -2248,7 +2248,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|strip_right to be documented
+|function-builtin-strip_right|
 
 .. _function-_at__builtin__c__c_to_char_int_hh_const__hh_const:
 
@@ -2263,7 +2263,7 @@ arguments are
 +----+---------+
 
 
-function|builtin|to_char to be documented
+|function-builtin-to_char|
 
 .. _function-_at__builtin__c__c_to_float_string_hh_const:
 
@@ -2278,7 +2278,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|to_float to be documented
+|function-builtin-to_float|
 
 .. _function-_at__builtin__c__c_to_int_string_hh_const:
 
@@ -2293,7 +2293,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|to_int to be documented
+|function-builtin-to_int|
 
 .. _function-_at__builtin__c__c_to_lower_string_hh_const__hh_const:
 
@@ -2308,7 +2308,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|to_lower to be documented
+|function-builtin-to_lower|
 
 .. _function-_at__builtin__c__c_to_lower_in_place_string_hh_const:
 
@@ -2326,7 +2326,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|to_lower_in_place to be documented
+|function-builtin-to_lower_in_place|
 
 .. _function-_at__builtin__c__c_to_upper_string_hh_const__hh_const:
 
@@ -2341,7 +2341,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|to_upper to be documented
+|function-builtin-to_upper|
 
 .. _function-_at__builtin__c__c_to_upper_in_place_string_hh_const:
 
@@ -2359,7 +2359,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|to_upper_in_place to be documented
+|function-builtin-to_upper_in_place|
 
 .. _function-_at__builtin__c__c_unescape_string_hh_const__hh_const:
 
@@ -2374,7 +2374,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|unescape to be documented
+|function-builtin-unescape|
 
 ++++++++++++++
 String builder
@@ -2398,7 +2398,7 @@ arguments are
 +----+--------------------------------------------------------------------------+
 
 
-function|builtin|write to be documented
+|function-builtin-write|
 
 .. _function-_at__builtin__c__c_write_char__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const:
 
@@ -2413,7 +2413,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|write_char to be documented
+|function-builtin-write_char|
 
 .. _function-_at__builtin__c__c_write_chars__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const_int_hh_const:
 
@@ -2430,7 +2430,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|write_chars to be documented
+|function-builtin-write_chars|
 
 .. _function-_at__builtin__c__c_write_escape_string__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const:
 
@@ -2445,7 +2445,7 @@ arguments are
 +----+-----------------------------------------------------------------------------------+
 
 
-function|builtin|write_escape_string to be documented
+|function-builtin-write_escape_string|
 
 ++++++++++++++
 Heap reporting
@@ -2467,7 +2467,7 @@ Heap reporting
 
 heap_bytes_allocated returns uint
 
-function|builtin|heap_bytes_allocated to be documented
+|function-builtin-heap_bytes_allocated|
 
 .. _function-_at__builtin__c__c_heap_depth__hh_const:
 
@@ -2475,7 +2475,7 @@ function|builtin|heap_bytes_allocated to be documented
 
 heap_depth returns int
 
-function|builtin|heap_depth to be documented
+|function-builtin-heap_depth|
 
 .. _function-_at__builtin__c__c_heap_high_watermark__hh_const:
 
@@ -2483,13 +2483,13 @@ function|builtin|heap_depth to be documented
 
 heap_high_watermark returns uint
 
-function|builtin|heap_high_watermark to be documented
+|function-builtin-heap_high_watermark|
 
 .. _function-_at__builtin__c__c_heap_report__hh_const:
 
 .. das:function:: heap_report()
 
-function|builtin|heap_report to be documented
+|function-builtin-heap_report|
 
 .. _function-_at__builtin__c__c_string_heap_bytes_allocated__hh_const:
 
@@ -2497,7 +2497,7 @@ function|builtin|heap_report to be documented
 
 string_heap_bytes_allocated returns uint
 
-function|builtin|string_heap_bytes_allocated to be documented
+|function-builtin-string_heap_bytes_allocated|
 
 .. _function-_at__builtin__c__c_string_heap_collect__hh_const__hh_const:
 
@@ -2506,7 +2506,7 @@ function|builtin|string_heap_bytes_allocated to be documented
 .. warning:: 
   This is unsafe operation.
 
-function|builtin|string_heap_collect to be documented
+|function-builtin-string_heap_collect|
 
 .. _function-_at__builtin__c__c_string_heap_depth__hh_const:
 
@@ -2514,7 +2514,7 @@ function|builtin|string_heap_collect to be documented
 
 string_heap_depth returns int
 
-function|builtin|string_heap_depth to be documented
+|function-builtin-string_heap_depth|
 
 .. _function-_at__builtin__c__c_string_heap_high_watermark__hh_const:
 
@@ -2522,13 +2522,13 @@ function|builtin|string_heap_depth to be documented
 
 string_heap_high_watermark returns uint
 
-function|builtin|string_heap_high_watermark to be documented
+|function-builtin-string_heap_high_watermark|
 
 .. _function-_at__builtin__c__c_string_heap_report__hh_const:
 
 .. das:function:: string_heap_report()
 
-function|builtin|string_heap_report to be documented
+|function-builtin-string_heap_report|
 
 ++++++++++++++++++++++
 Vector and matrix math
@@ -2549,7 +2549,7 @@ Vector and matrix math
 
 float3x4 returns  :ref:`builtin::float3x4 <handle-builtin-float3x4>` 
 
-function|builtin|float3x4 to be documented
+|function-builtin-float3x4|
 
 .. _function-_at__builtin__c__c_float4x4:
 
@@ -2557,7 +2557,7 @@ function|builtin|float3x4 to be documented
 
 float4x4 returns  :ref:`builtin::float4x4 <handle-builtin-float4x4>` 
 
-function|builtin|float4x4 to be documented
+|function-builtin-float4x4|
 
 .. _function-_at__builtin__c__c_identity__hh_handle_hh_float3x4_hh_implicit:
 
@@ -2570,7 +2570,7 @@ arguments are
 +----+-------------------------------------------------------------+
 
 
-function|builtin|identity to be documented
+|function-builtin-identity|
 
 .. _function-_at__builtin__c__c_identity__hh_handle_hh_float4x4_hh_implicit:
 
@@ -2583,7 +2583,7 @@ arguments are
 +----+-------------------------------------------------------------+
 
 
-function|builtin|identity to be documented
+|function-builtin-identity|
 
 .. _function-_at__builtin__c__c_inverse__hh_handle_hh_float3x4_hh_const_hh_implicit:
 
@@ -2598,7 +2598,7 @@ arguments are
 +----+-------------------------------------------------------------------+
 
 
-function|builtin|inverse to be documented
+|function-builtin-inverse|
 
 .. _function-_at__builtin__c__c_rotate__hh_handle_hh_float3x4_hh_const_hh_implicit_float3_hh_const:
 
@@ -2615,7 +2615,7 @@ arguments are
 +----+-------------------------------------------------------------------+
 
 
-function|builtin|rotate to be documented
+|function-builtin-rotate|
 
 .. _function-_at__builtin__c__c_translation_float3_hh_const:
 
@@ -2630,7 +2630,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|translation to be documented
+|function-builtin-translation|
 
 .. _function-_at__builtin__c__c_transpose__hh_handle_hh_float4x4_hh_const_hh_implicit:
 
@@ -2645,7 +2645,7 @@ arguments are
 +----+-------------------------------------------------------------------+
 
 
-function|builtin|transpose to be documented
+|function-builtin-transpose|
 
 ++++++++++++++++++
 GC0 infrastructure
@@ -2661,7 +2661,7 @@ GC0 infrastructure
 
 .. das:function:: gc0_reset()
 
-function|builtin|gc0_reset to be documented
+|function-builtin-gc0_reset|
 
 .. _function-_at__builtin__c__c_gc0_restore_ptr_string_hh_const__hh_const:
 
@@ -2676,7 +2676,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|gc0_restore_ptr to be documented
+|function-builtin-gc0_restore_ptr|
 
 .. _function-_at__builtin__c__c_gc0_restore_smart_ptr_string_hh_const__hh_const:
 
@@ -2691,7 +2691,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|gc0_restore_smart_ptr to be documented
+|function-builtin-gc0_restore_smart_ptr|
 
 .. _function-_at__builtin__c__c_gc0_save_ptr_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_const__hh_const:
 
@@ -2706,7 +2706,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|gc0_save_ptr to be documented
+|function-builtin-gc0_save_ptr|
 
 .. _function-_at__builtin__c__c_gc0_save_smart_ptr_string_hh_const__hh_smart_ptr_hh_void_hh_const_hh_implicit__hh_const__hh_const:
 
@@ -2721,7 +2721,7 @@ arguments are
 +----+------------------------------+
 
 
-function|builtin|gc0_save_smart_ptr to be documented
+|function-builtin-gc0_save_smart_ptr|
 
 ++++++++++++++++++++++++
 Smart ptr infrastructure
@@ -2745,7 +2745,7 @@ arguments are
 +----+-------------------------+
 
 
-function|builtin|smart_ptr_clone to be documented
+|function-builtin-smart_ptr_clone|
 
 .. _function-_at__builtin__c__c_smart_ptr_clone__hh_smart_ptr_hh_void_hh_ref_hh_implicit__hh_smart_ptr_hh_void_hh_const_hh_implicit:
 
@@ -2760,7 +2760,7 @@ arguments are
 +----+------------------------------+
 
 
-function|builtin|smart_ptr_clone to be documented
+|function-builtin-smart_ptr_clone|
 
 .. _function-_at__builtin__c__c_smart_ptr_use_count__hh_smart_ptr_hh_void_hh_const_hh_implicit:
 
@@ -2775,7 +2775,7 @@ arguments are
 +----+------------------------------+
 
 
-function|builtin|smart_ptr_use_count to be documented
+|function-builtin-smart_ptr_use_count|
 
 .. _function-_at__builtin__c__c_get_ptr__hh_smart_ptr_hh__hh_auto_hh_const:
 
@@ -2790,7 +2790,7 @@ arguments are
 +---+-------------------------+
 
 
-function|builtin|get_ptr to be documented
+|function-builtin-get_ptr|
 
 ++++++++++++++++++++
 Macro infrastructure
@@ -2806,7 +2806,7 @@ Macro infrastructure
 
 is_compiling returns bool
 
-function|builtin|is_compiling to be documented
+|function-builtin-is_compiling|
 
 .. _function-_at__builtin__c__c_is_compiling_macros__hh_const:
 
@@ -2814,7 +2814,7 @@ function|builtin|is_compiling to be documented
 
 is_compiling_macros returns bool
 
-function|builtin|is_compiling_macros to be documented
+|function-builtin-is_compiling_macros|
 
 .. _function-_at__builtin__c__c_is_compiling_macros_in_module_string_hh_const__hh_const:
 
@@ -2829,7 +2829,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|is_compiling_macros_in_module to be documented
+|function-builtin-is_compiling_macros_in_module|
 
 ++++++++
 Profiler
@@ -2843,7 +2843,7 @@ Profiler
 
 .. das:function:: dump_profile_info()
 
-function|builtin|dump_profile_info to be documented
+|function-builtin-dump_profile_info|
 
 .. _function-_at__builtin__c__c_profile_int_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
 
@@ -2862,13 +2862,13 @@ arguments are
 +----+----------------------+
 
 
-function|builtin|profile to be documented
+|function-builtin-profile|
 
 .. _function-_at__builtin__c__c_reset_profiler__hh_const:
 
 .. das:function:: reset_profiler()
 
-function|builtin|reset_profiler to be documented
+|function-builtin-reset_profiler|
 
 ++++++++++++++++++++
 System infastructure
@@ -2886,7 +2886,7 @@ System infastructure
 
 .. das:function:: breakpoint()
 
-function|builtin|breakpoint to be documented
+|function-builtin-breakpoint|
 
 .. _function-_at__builtin__c__c_get_clock:
 
@@ -2894,7 +2894,7 @@ function|builtin|breakpoint to be documented
 
 get_clock returns  :ref:`builtin::clock <handle-builtin-clock>` 
 
-function|builtin|get_clock to be documented
+|function-builtin-get_clock|
 
 .. _function-_at__builtin__c__c_get_das_root__hh_const:
 
@@ -2902,7 +2902,7 @@ function|builtin|get_clock to be documented
 
 get_das_root returns string
 
-function|builtin|get_das_root to be documented
+|function-builtin-get_das_root|
 
 .. _function-_at__builtin__c__c_panic_string_hh_const__hh_const:
 
@@ -2915,7 +2915,7 @@ arguments are
 +----+------------+
 
 
-function|builtin|panic to be documented
+|function-builtin-panic|
 
 .. _function-_at__builtin__c__c_print_string_hh_const__hh_const:
 
@@ -2928,19 +2928,19 @@ arguments are
 +----+------------+
 
 
-function|builtin|print to be documented
+|function-builtin-print|
 
 .. _function-_at__builtin__c__c_stackwalk__hh_const__hh_const:
 
 .. das:function:: stackwalk()
 
-function|builtin|stackwalk to be documented
+|function-builtin-stackwalk|
 
 .. _function-_at__builtin__c__c_terminate__hh_const:
 
 .. das:function:: terminate()
 
-function|builtin|terminate to be documented
+|function-builtin-terminate|
 
 +++++++++++++++++++
 Memory manipulation
@@ -2965,7 +2965,7 @@ arguments are
 +----+---+
 
 
-function|builtin|hash to be documented
+|function-builtin-hash|
 
 .. _function-_at__builtin__c__c_memcmp__hh_ptr_hh_const_hh_implicit__hh_ptr_hh_const_hh_implicit_int_hh_const:
 
@@ -2987,7 +2987,7 @@ arguments are
 +----+--------------------+
 
 
-function|builtin|memcmp to be documented
+|function-builtin-memcmp|
 
 .. _function-_at__builtin__c__c_set_variant_index__hh_variant_hh_implicit_int_hh_const:
 
@@ -3005,7 +3005,7 @@ arguments are
 +----+------------------+
 
 
-function|builtin|set_variant_index to be documented
+|function-builtin-set_variant_index|
 
 .. _function-_at__builtin__c__c_variant_index__hh_variant_hh_const_hh_implicit:
 
@@ -3020,7 +3020,7 @@ arguments are
 +----+------------------------+
 
 
-function|builtin|variant_index to be documented
+|function-builtin-variant_index|
 
 .. _function-_at__builtin__c__c_intptr__hh_ptr_hh_void_hh_const:
 
@@ -3035,7 +3035,7 @@ arguments are
 +-+-----------+
 
 
-function|builtin|intptr to be documented
+|function-builtin-intptr|
 
 +++++++++++++++++
 Binary serializer
@@ -3059,7 +3059,7 @@ arguments are
 +----+------------------+
 
 
-function|builtin|binary_load to be documented
+|function-builtin-binary_load|
 
 .. _function-_at__builtin__c__c_binary_save__hh_auto_hh_const__hh_block_hh__hh_array_hh_uint8_hh_const_hh__rq_data_hh__c_void_hh_const:
 
@@ -3076,6 +3076,6 @@ arguments are
 +-------+-------------------------------------------+
 
 
-function|builtin|binary_save to be documented
+|function-builtin-binary_save|
 
 

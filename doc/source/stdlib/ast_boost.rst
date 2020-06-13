@@ -13,7 +13,7 @@ Classes
 
 .. das:attribute:: BetterRttiVisitor : AstVariantMacro
 
-class|ast_boost|BetterRttiVisitor to be documented
+|class-ast_boost-BetterRttiVisitor|
 
 .. das:function:: BetterRttiVisitor.visitExprIsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprIsVariant> const)
 
@@ -32,7 +32,7 @@ arguments are
 +----+-----------------------------------------------------------------------+
 
 
-method|ast_boost|BetterRttiVisitor.visitExprIsVariant to be documented
+|method-ast_boost-BetterRttiVisitor.visitExprIsVariant|
 
 .. das:function:: BetterRttiVisitor.visitExprAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprAsVariant> const)
 
@@ -51,7 +51,7 @@ arguments are
 +----+-----------------------------------------------------------------------+
 
 
-method|ast_boost|BetterRttiVisitor.visitExprAsVariant to be documented
+|method-ast_boost-BetterRttiVisitor.visitExprAsVariant|
 
 .. das:function:: BetterRttiVisitor.visitExprSafeAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprSafeAsVariant> const)
 
@@ -70,13 +70,13 @@ arguments are
 +----+-------------------------------------------------------------------------------+
 
 
-method|ast_boost|BetterRttiVisitor.visitExprSafeAsVariant to be documented
+|method-ast_boost-BetterRttiVisitor.visitExprSafeAsVariant|
 
 .. _struct-ast_boost-MacroMacro:
 
 .. das:attribute:: MacroMacro : AstFunctionAnnotation
 
-class|ast_boost|MacroMacro to be documented
+|class-ast_boost-MacroMacro|
 
 .. das:function:: MacroMacro.transform(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCall>; errors: das_string)
 
@@ -93,7 +93,7 @@ arguments are
 +------+----------------------------------------------------------------------+
 
 
-method|ast_boost|MacroMacro.transform to be documented
+|method-ast_boost-MacroMacro.transform|
 
 .. das:function:: MacroMacro.apply(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -114,7 +114,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|MacroMacro.apply to be documented
+|method-ast_boost-MacroMacro.apply|
 
 .. das:function:: MacroMacro.finish(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
 
@@ -137,13 +137,13 @@ arguments are
 +--------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|MacroMacro.finish to be documented
+|method-ast_boost-MacroMacro.finish|
 
 .. _struct-ast_boost-SetupAnyAnnotation:
 
 .. das:attribute:: SetupAnyAnnotation : AstStructureAnnotation
 
-class|ast_boost|SetupAnyAnnotation to be documented
+|class-ast_boost-SetupAnyAnnotation|
 
 it defines as follows
 
@@ -169,7 +169,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupAnyAnnotation.apply to be documented
+|method-ast_boost-SetupAnyAnnotation.apply|
 
 .. das:function:: SetupAnyAnnotation.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -190,7 +190,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupAnyAnnotation.finish to be documented
+|method-ast_boost-SetupAnyAnnotation.finish|
 
 .. das:function:: SetupAnyAnnotation.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -205,13 +205,13 @@ arguments are
 +----+----------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupAnyAnnotation.setup_call to be documented
+|method-ast_boost-SetupAnyAnnotation.setup_call|
 
 .. _struct-ast_boost-SetupFunctionAnnotatoin:
 
 .. das:attribute:: SetupFunctionAnnotatoin : SetupAnyAnnotation
 
-class|ast_boost|SetupFunctionAnnotatoin to be documented
+|class-ast_boost-SetupFunctionAnnotatoin|
 
 it defines as follows
 
@@ -237,7 +237,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupFunctionAnnotatoin.apply to be documented
+|method-ast_boost-SetupFunctionAnnotatoin.apply|
 
 .. das:function:: SetupFunctionAnnotatoin.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -258,7 +258,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupFunctionAnnotatoin.finish to be documented
+|method-ast_boost-SetupFunctionAnnotatoin.finish|
 
 .. das:function:: SetupFunctionAnnotatoin.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -273,13 +273,13 @@ arguments are
 +----+----------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupFunctionAnnotatoin.setup_call to be documented
+|method-ast_boost-SetupFunctionAnnotatoin.setup_call|
 
 .. _struct-ast_boost-SetupReaderMacro:
 
 .. das:attribute:: SetupReaderMacro : SetupAnyAnnotation
 
-class|ast_boost|SetupReaderMacro to be documented
+|class-ast_boost-SetupReaderMacro|
 
 it defines as follows
 
@@ -305,7 +305,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupReaderMacro.apply to be documented
+|method-ast_boost-SetupReaderMacro.apply|
 
 .. das:function:: SetupReaderMacro.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -326,7 +326,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupReaderMacro.finish to be documented
+|method-ast_boost-SetupReaderMacro.finish|
 
 .. das:function:: SetupReaderMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -341,13 +341,13 @@ arguments are
 +----+----------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupReaderMacro.setup_call to be documented
+|method-ast_boost-SetupReaderMacro.setup_call|
 
 .. _struct-ast_boost-SetupVariantMacro:
 
 .. das:attribute:: SetupVariantMacro : SetupAnyAnnotation
 
-class|ast_boost|SetupVariantMacro to be documented
+|class-ast_boost-SetupVariantMacro|
 
 it defines as follows
 
@@ -373,7 +373,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupVariantMacro.apply to be documented
+|method-ast_boost-SetupVariantMacro.apply|
 
 .. das:function:: SetupVariantMacro.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -394,7 +394,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupVariantMacro.finish to be documented
+|method-ast_boost-SetupVariantMacro.finish|
 
 .. das:function:: SetupVariantMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -409,13 +409,13 @@ arguments are
 +----+----------------------------------------------------------------------------+
 
 
-method|ast_boost|SetupVariantMacro.setup_call to be documented
+|method-ast_boost-SetupVariantMacro.setup_call|
 
 .. _struct-ast_boost-TagFunctionAnnotation:
 
 .. das:attribute:: TagFunctionAnnotation : AstFunctionAnnotation
 
-class|ast_boost|TagFunctionAnnotation to be documented
+|class-ast_boost-TagFunctionAnnotation|
 
 .. das:function:: TagFunctionAnnotation.transform(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCall>; errors: das_string)
 
@@ -432,7 +432,7 @@ arguments are
 +------+----------------------------------------------------------------------+
 
 
-method|ast_boost|TagFunctionAnnotation.transform to be documented
+|method-ast_boost-TagFunctionAnnotation.transform|
 
 .. das:function:: TagFunctionAnnotation.apply(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -453,7 +453,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|TagFunctionAnnotation.apply to be documented
+|method-ast_boost-TagFunctionAnnotation.apply|
 
 .. das:function:: TagFunctionAnnotation.finish(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
 
@@ -476,13 +476,13 @@ arguments are
 +--------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|TagFunctionAnnotation.finish to be documented
+|method-ast_boost-TagFunctionAnnotation.finish|
 
 .. _struct-ast_boost-TagFunctionMacro:
 
 .. das:attribute:: TagFunctionMacro : SetupAnyAnnotation
 
-class|ast_boost|TagFunctionMacro to be documented
+|class-ast_boost-TagFunctionMacro|
 
 it defines as follows
 
@@ -509,7 +509,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|TagFunctionMacro.apply to be documented
+|method-ast_boost-TagFunctionMacro.apply|
 
 .. das:function:: TagFunctionMacro.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -530,7 +530,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|TagFunctionMacro.finish to be documented
+|method-ast_boost-TagFunctionMacro.finish|
 
 .. das:function:: TagFunctionMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -545,13 +545,13 @@ arguments are
 +----+----------------------------------------------------------------------------+
 
 
-method|ast_boost|TagFunctionMacro.setup_call to be documented
+|method-ast_boost-TagFunctionMacro.setup_call|
 
 .. _struct-ast_boost-TagStructureAnnotation:
 
 .. das:attribute:: TagStructureAnnotation : AstStructureAnnotation
 
-class|ast_boost|TagStructureAnnotation to be documented
+|class-ast_boost-TagStructureAnnotation|
 
 .. das:function:: TagStructureAnnotation.apply(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -572,7 +572,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|TagStructureAnnotation.apply to be documented
+|method-ast_boost-TagStructureAnnotation.apply|
 
 .. das:function:: TagStructureAnnotation.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -593,7 +593,7 @@ arguments are
 +------+--------------------------------------------------------------------------------+
 
 
-method|ast_boost|TagStructureAnnotation.finish to be documented
+|method-ast_boost-TagStructureAnnotation.finish|
 
 +++++++++++++
 Uncategorized
@@ -612,7 +612,7 @@ arguments are
 +----+--------------------------------------------------------------------------------+
 
 
-function|ast_boost|describe to be documented
+|function-ast_boost-describe|
 
 .. _function-_at_ast_boost_c__c_describe__hh_handle_hh_AnnotationDeclaration_hh_const:
 
@@ -627,7 +627,7 @@ arguments are
 +---+------------------------------------------------------------------------------+
 
 
-function|ast_boost|describe to be documented
+|function-ast_boost-describe|
 
 .. _function-_at_ast_boost_c__c_describe__hh_handle_hh_AnnotationList_hh_const:
 
@@ -642,7 +642,7 @@ arguments are
 +----+----------------------------------------------------------------+
 
 
-function|ast_boost|describe to be documented
+|function-ast_boost-describe|
 
 .. _function-_at_ast_boost_c__c_describe_function_short__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const:
 
@@ -657,7 +657,7 @@ arguments are
 +----+----------------------------------------+
 
 
-function|ast_boost|describe_function_short to be documented
+|function-ast_boost-describe_function_short|
 
 .. _function-_at_ast_boost_c__c_find_arg_string_hh_const__hh_handle_hh_AnnotationArgumentList_hh_const:
 
@@ -674,7 +674,7 @@ arguments are
 +----+--------------------------------------------------------------------------------+
 
 
-function|ast_boost|find_arg to be documented
+|function-ast_boost-find_arg|
 
 .. _function-_at_ast_boost_c__c_isExpression__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_bool_hh_const:
 
@@ -691,7 +691,7 @@ arguments are
 +---+----------------------------------------+
 
 
-function|ast_boost|isExpression to be documented
+|function-ast_boost-isExpression|
 
 .. _function-_at_ast_boost_c__c_is_class_method__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const:
 
@@ -708,7 +708,7 @@ arguments are
 +-----+------------------------------------------+
 
 
-function|ast_boost|is_class_method to be documented
+|function-ast_boost-is_class_method|
 
 .. _function-_at_ast_boost_c__c_is_same_or_inherited__hh_ptr_hh__hh_handle_hh_Structure_hh_const__hh_ptr_hh__hh_handle_hh_Structure_hh_const:
 
@@ -725,7 +725,7 @@ arguments are
 +------+-----------------------------------------------------+
 
 
-function|ast_boost|is_same_or_inherited to be documented
+|function-ast_boost-is_same_or_inherited|
 
 .. _function-_at_ast_boost_c__c_setup_macro_string_hh_const__hh_handle_hh_LineInfo_hh_const:
 
@@ -742,7 +742,7 @@ arguments are
 +----+----------------------------------------------------+
 
 
-function|ast_boost|setup_macro to be documented
+|function-ast_boost-setup_macro|
 
 .. _function-_at_ast_boost_c__c_convert_to_expression__hh_auto_hh_ref__hh_handle_hh_LineInfo_hh_const:
 
@@ -759,7 +759,7 @@ arguments are
 +-----+----------------------------------------------------+
 
 
-function|ast_boost|convert_to_expression to be documented
+|function-ast_boost-convert_to_expression|
 
 .. _function-_at_ast_boost_c__c_describe_bitfield__hh_auto_hh_const_string_hh_const:
 
@@ -776,7 +776,7 @@ arguments are
 +------+------------+
 
 
-function|ast_boost|describe_bitfield to be documented
+|function-ast_boost-describe_bitfield|
 
 .. _function-_at_ast_boost_c__c_setup_tag_annotation_string_hh_const_string_hh_const__hh_auto_hh_const:
 
@@ -795,6 +795,6 @@ arguments are
 +--------+------------+
 
 
-function|ast_boost|setup_tag_annotation to be documented
+|function-ast_boost-setup_tag_annotation|
 
 

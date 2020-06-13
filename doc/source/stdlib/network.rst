@@ -13,7 +13,7 @@ Handled structures
 
 .. das:attribute:: NetworkServer
 
-structure_annotation|network|NetworkServer to be documented
+|structure_annotation-network-NetworkServer|
 
 +++++++
 Classes
@@ -23,7 +23,7 @@ Classes
 
 .. das:attribute:: Server
 
-class|network|Server to be documented
+|class-network-Server|
 
 it defines as follows
 
@@ -43,7 +43,7 @@ arguments are
 +----+------------------------------------------------+
 
 
-method|network|Server.init to be documented
+|method-network-Server.init|
 
 .. das:function:: Server.restore(self: Server; shared_orphan: smart_ptr<network::NetworkServer>&)
 
@@ -56,7 +56,7 @@ arguments are
 +-------------+--------------------------------------------------------------------------+
 
 
-method|network|Server.restore to be documented
+|method-network-Server.restore|
 
 .. das:function:: Server.save(self: Server; shared_orphan: smart_ptr<network::NetworkServer>&)
 
@@ -69,29 +69,29 @@ arguments are
 +-------------+--------------------------------------------------------------------------+
 
 
-method|network|Server.save to be documented
+|method-network-Server.save|
 
 .. das:function:: Server.has_session(self: Server)
 
 has_session returns bool
 
-method|network|Server.has_session to be documented
+|method-network-Server.has_session|
 
 .. das:function:: Server.is_open(self: Server)
 
 is_open returns bool
 
-method|network|Server.is_open to be documented
+|method-network-Server.is_open|
 
 .. das:function:: Server.is_connected(self: Server)
 
 is_connected returns bool
 
-method|network|Server.is_connected to be documented
+|method-network-Server.is_connected|
 
 .. das:function:: Server.tick(self: Server)
 
-method|network|Server.tick to be documented
+|method-network-Server.tick|
 
 .. das:function:: Server.send(self: Server; data: uint8? const; size: int const)
 
@@ -108,15 +108,15 @@ arguments are
 +----+------------------------------------------------+
 
 
-method|network|Server.send to be documented
+|method-network-Server.send|
 
 .. das:function:: Server.onConnect(self: Server)
 
-method|network|Server.onConnect to be documented
+|method-network-Server.onConnect|
 
 .. das:function:: Server.onDisconnect(self: Server)
 
-method|network|Server.onDisconnect to be documented
+|method-network-Server.onDisconnect|
 
 .. das:function:: Server.onData(self: Server; buf: uint8? const; size: int const)
 
@@ -131,7 +131,7 @@ arguments are
 +----+------------------------------------------------+
 
 
-method|network|Server.onData to be documented
+|method-network-Server.onData|
 
 .. das:function:: Server.onError(self: Server; msg: string const; code: int const)
 
@@ -146,7 +146,7 @@ arguments are
 +----+------------------------------------------------+
 
 
-method|network|Server.onError to be documented
+|method-network-Server.onError|
 
 .. das:function:: Server.onLog(self: Server; msg: string const)
 
@@ -159,7 +159,7 @@ arguments are
 +----+------------------------------------------------+
 
 
-method|network|Server.onLog to be documented
+|method-network-Server.onLog|
 
 +++++++++++++
 Uncategorized
@@ -180,7 +180,7 @@ arguments are
 +----+------------------------------------------------------------------------+
 
 
-function|network|make_server to be documented
+|function-network-make_server|
 
 .. _function-_at_network_c__c_server_init__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit_int_hh_const__hh_const:
 
@@ -197,7 +197,7 @@ arguments are
 +----+----------------------------------------------------------------------------------------+
 
 
-function|network|server_init to be documented
+|function-network-server_init|
 
 .. _function-_at_network_c__c_server_is_connected__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
 
@@ -212,7 +212,7 @@ arguments are
 +----+----------------------------------------------------------------------------------------+
 
 
-function|network|server_is_connected to be documented
+|function-network-server_is_connected|
 
 .. _function-_at_network_c__c_server_is_open__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
 
@@ -227,7 +227,7 @@ arguments are
 +----+----------------------------------------------------------------------------------------+
 
 
-function|network|server_is_open to be documented
+|function-network-server_is_open|
 
 .. _function-_at_network_c__c_server_restore__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
@@ -244,7 +244,7 @@ arguments are
 +----+----------------------------------------------------------------------------------------+
 
 
-function|network|server_restore to be documented
+|function-network-server_restore|
 
 .. _function-_at_network_c__c_server_send__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_ptr_hh_uint8_hh_const_hh_implicit_int_hh_const__hh_const:
 
@@ -263,7 +263,7 @@ arguments are
 +----+----------------------------------------------------------------------------------------+
 
 
-function|network|server_send to be documented
+|function-network-server_send|
 
 .. _function-_at_network_c__c_server_tick__hh_smart_ptr_hh__hh_handle_hh_NetworkServer_hh_const_hh_implicit__hh_const:
 
@@ -276,6 +276,6 @@ arguments are
 +----+----------------------------------------------------------------------------------------+
 
 
-function|network|server_tick to be documented
+|function-network-server_tick|
 
 

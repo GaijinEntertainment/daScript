@@ -13,7 +13,7 @@ Classes
 
 .. das:attribute:: RegexReader : AstReaderMacro
 
-class|regex_boost|RegexReader to be documented
+|class-regex_boost-RegexReader|
 
 .. das:function:: RegexReader.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
 
@@ -36,7 +36,7 @@ arguments are
 +----+--------------------------------------------------------+
 
 
-method|regex_boost|RegexReader.accept to be documented
+|method-regex_boost-RegexReader.accept|
 
 .. das:function:: RegexReader.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
 
@@ -55,6 +55,6 @@ arguments are
 +----+-----------------------------------------------------------------+
 
 
-method|regex_boost|RegexReader.visit to be documented
+|method-regex_boost-RegexReader.visit|
 
 

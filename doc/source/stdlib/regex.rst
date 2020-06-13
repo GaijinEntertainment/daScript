@@ -13,7 +13,7 @@ TypeAliases
 
 .. das:attribute:: CharSet = uint[8]
 
-typedef|regex|CharSet to be documented
+|typedef-regex-CharSet|
 
 .. _alias-MaybeReNode:
 
@@ -26,7 +26,7 @@ typedef|regex|CharSet to be documented
 +-------+---------------------------------------------+
 
 
-typedef|regex|MaybeReNode to be documented
+|typedef-regex-MaybeReNode|
 
 ++++++++++++
 Enumerations
@@ -59,7 +59,7 @@ Enumerations
 +--------+-+
 
 
-enumeration|regex|ReOp to be documented
+|enumeration-regex-ReOp|
 
 .. _struct-regex-ReNode:
 
@@ -100,7 +100,7 @@ ReNode fields are
 +-------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
-structure|regex|ReNode to be documented
+|structure-regex-ReNode|
 
 .. _struct-regex-Regex:
 
@@ -123,7 +123,7 @@ Regex fields are
 +-----------+---------------------------------------------+
 
 
-structure|regex|Regex to be documented
+|structure-regex-Regex|
 
 +++++++++++++
 Uncategorized
@@ -140,7 +140,7 @@ arguments are
 +----+--------------------------------+
 
 
-function|regex|debug_set to be documented
+|function-regex-debug_set|
 
 .. _function-_at_regex_c__c_is_valid_Regex:
 
@@ -155,7 +155,7 @@ arguments are
 +--+------------------------------------------+
 
 
-function|regex|is_valid to be documented
+|function-regex-is_valid|
 
 .. _function-_at_regex_c__c_re_early_out_uint_hh_8__hh_ptr_hh_ReNode_hh_const:
 
@@ -172,7 +172,7 @@ arguments are
 +----+---------------------------------------------------+
 
 
-function|regex|re_early_out to be documented
+|function-regex-re_early_out|
 
 .. _function-_at_regex_c__c_regex_compile_Regex:
 
@@ -187,7 +187,7 @@ arguments are
 +--+------------------------------------------+
 
 
-function|regex|regex_compile to be documented
+|function-regex-regex_compile|
 
 .. _function-_at_regex_c__c_regex_compile_Regex_string_hh_const:
 
@@ -204,7 +204,7 @@ arguments are
 +----+------------------------------------------+
 
 
-function|regex|regex_compile to be documented
+|function-regex-regex_compile|
 
 .. _function-_at_regex_c__c_regex_compile_string_hh_const:
 
@@ -219,7 +219,7 @@ arguments are
 +----+------------+
 
 
-function|regex|regex_compile to be documented
+|function-regex-regex_compile|
 
 .. _function-_at_regex_c__c_regex_debug_Regex_hh_const:
 
@@ -232,7 +232,7 @@ arguments are
 +-----+------------------------------------------------+
 
 
-function|regex|regex_debug to be documented
+|function-regex-regex_debug|
 
 .. _function-_at_regex_c__c_regex_foreach_Regex_string_hh_const__hh_block_hh_range_hh_const_hh__rq_at_hh__c_bool_hh_const:
 
@@ -249,7 +249,7 @@ arguments are
 +-----+------------------------------------------+
 
 
-function|regex|regex_foreach to be documented
+|function-regex-regex_foreach|
 
 .. _function-_at_regex_c__c_regex_group_Regex_hh_const_int_hh_const_string_hh_const:
 
@@ -268,7 +268,7 @@ arguments are
 +-----+------------------------------------------------+
 
 
-function|regex|regex_group to be documented
+|function-regex-regex_group|
 
 .. _function-_at_regex_c__c_regex_match_Regex_string_hh_const_int_hh_const:
 
@@ -287,6 +287,6 @@ arguments are
 +------+------------------------------------------+
 
 
-function|regex|regex_match to be documented
+|function-regex-regex_match|
 
 

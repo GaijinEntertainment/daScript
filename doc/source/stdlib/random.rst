@@ -22,7 +22,7 @@ arguments are
 +----+--------------+
 
 
-function|random|random_float to be documented
+|function-random-random_float|
 
 .. _function-_at_random_c__c_random_float4_int4_hh_ref_hh_implicit:
 
@@ -37,7 +37,7 @@ arguments are
 +----+--------------+
 
 
-function|random|random_float4 to be documented
+|function-random-random_float4|
 
 .. _function-_at_random_c__c_random_in_unit_disk_int4_hh_ref_hh_implicit:
 
@@ -52,7 +52,7 @@ arguments are
 +----+--------------+
 
 
-function|random|random_in_unit_disk to be documented
+|function-random-random_in_unit_disk|
 
 .. _function-_at_random_c__c_random_in_unit_sphere_int4_hh_ref_hh_implicit:
 
@@ -67,7 +67,7 @@ arguments are
 +----+--------------+
 
 
-function|random|random_in_unit_sphere to be documented
+|function-random-random_in_unit_sphere|
 
 .. _function-_at_random_c__c_random_int_int4_hh_ref_hh_implicit:
 
@@ -82,7 +82,7 @@ arguments are
 +----+--------------+
 
 
-function|random|random_int to be documented
+|function-random-random_int|
 
 .. _function-_at_random_c__c_random_int4_int4_hh_ref_hh_implicit:
 
@@ -97,7 +97,7 @@ arguments are
 +----+--------------+
 
 
-function|random|random_int4 to be documented
+|function-random-random_int4|
 
 .. _function-_at_random_c__c_random_seed_int_hh_const:
 
@@ -112,7 +112,7 @@ arguments are
 +----+---------+
 
 
-function|random|random_seed to be documented
+|function-random-random_seed|
 
 .. _function-_at_random_c__c_random_unit_vector_int4_hh_ref_hh_implicit:
 
@@ -127,6 +127,6 @@ arguments are
 +----+--------------+
 
 
-function|random|random_unit_vector to be documented
+|function-random-random_unit_vector|
 
 

@@ -28,7 +28,7 @@ TypeAliases
 +-------+---------------------------------------------------------------+
 
 
-typedef|json|JsValue to be documented
+|typedef-json-JsValue|
 
 .. _alias-Token:
 
@@ -49,7 +49,7 @@ typedef|json|JsValue to be documented
 +-------+------+
 
 
-typedef|json|Token to be documented
+|typedef-json-Token|
 
 .. _struct-json-JsonValue:
 
@@ -64,7 +64,7 @@ JsonValue fields are
 +-----+--------------------------------+
 
 
-structure|json|JsonValue to be documented
+|structure-json-JsonValue|
 
 +++++++++++++
 Uncategorized
@@ -83,7 +83,7 @@ arguments are
 +-+--------------------------------------------------------+
 
 
-function|json|JV to be documented
+|function-json-JV|
 
 .. _function-_at_json_c__c_JV__hh_ptr_hh_void_hh_const:
 
@@ -98,7 +98,7 @@ arguments are
 +-+-----------+
 
 
-function|json|JV to be documented
+|function-json-JV|
 
 .. _function-_at_json_c__c_JV__hh_table_hh_string_hh__hh_ptr_hh_JsonValue:
 
@@ -113,7 +113,7 @@ arguments are
 +-+---------------------------------------------------------------+
 
 
-function|json|JV to be documented
+|function-json-JV|
 
 .. _function-_at_json_c__c_JV_bool_hh_const:
 
@@ -128,7 +128,7 @@ arguments are
 +-+----------+
 
 
-function|json|JV to be documented
+|function-json-JV|
 
 .. _function-_at_json_c__c_JV_double_hh_const:
 
@@ -143,7 +143,7 @@ arguments are
 +-+------------+
 
 
-function|json|JV to be documented
+|function-json-JV|
 
 .. _function-_at_json_c__c_JV_string_hh_const:
 
@@ -158,7 +158,7 @@ arguments are
 +-+------------+
 
 
-function|json|JV to be documented
+|function-json-JV|
 
 .. _function-_at_json_c__c_read_json__hh_array_hh_uint8_hh_const_string_hh_ref:
 
@@ -175,7 +175,7 @@ arguments are
 +-----+------------------+
 
 
-function|json|read_json to be documented
+|function-json-read_json|
 
 .. _function-_at_json_c__c_read_json_string_hh_const_string_hh_ref:
 
@@ -192,7 +192,7 @@ arguments are
 +-----+------------+
 
 
-function|json|read_json to be documented
+|function-json-read_json|
 
 .. _function-_at_json_c__c_write_json__hh_ptr_hh_JsonValue_hh_const:
 
@@ -207,6 +207,6 @@ arguments are
 +---+-------------------------------------------------------+
 
 
-function|json|write_json to be documented
+|function-json-write_json|
 
 

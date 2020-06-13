@@ -13,6 +13,9 @@ let
     log_documentation = true
     show_hidden_groups = true
 
+var
+    topic_root = ""
+
 def module_name(mod)
     let mn = string(mod.name)
     return mn=="$" ? "builtin" : mn
@@ -239,11 +242,21 @@ def make_table(tab:array<array<string>>)
         write(writer,"\n\n")
 
 def topic(category:string;mod:Module?;name:string)
-    return "{category}|{module_name(mod)}|{name}"
+    return "|{category}-{module_name(mod)}-{name}|"
 
 def document_topic(doc_file:file;topic:string)
-    // todo: this is where we look for topic, and if found embed text
-    fwrite(doc_file,"{topic} to be documented\n\n")
+    let topic_file_name = "{topic_root}/{slice(topic,1,-1)}.rst"
+    var st : FStat
+    if stat(topic_file_name,st)
+        fopen(topic_file_name,"rb") <| $ ( topic_file )
+            if topic_file!=null
+                let instxt = fread(topic_file)
+                fwrite(doc_file,instxt)
+                fwrite(doc_file,"\n")
+            else
+                panic("can't open {topic_file_name}")
+    else
+        fwrite(doc_file,"{topic}\n\n")
 
 def document_bitfield(doc_file:file; value:TypeDeclPtr)
     var tab : array<array<string>>
@@ -625,7 +638,47 @@ def hide_group(var group:DocGroup)
     group.hidden = true
     return <- group
 
-def document(name:string;mod:Module?;fname:string;groups:array<DocGroup>)
+[private]
+def generate_topic_stub(var tab:table<string;bool>;doc_file:file;topic:string)
+    if !tab[topic]
+        tab[topic] = true
+        fwrite(doc_file,".. {topic} replace:: to be documented\n\n" )
+
+[private]
+def generate_substitute_stub(mod:Module?;substname:string)
+    var st : FStat
+    if stat(substname,st)   // this is actually 'see if it exists'
+        return
+    fopen(substname,"wb") <| $ ( stub_file )
+        if stub_file!=null
+            var tab:table<string;bool>
+            // typedefs
+            for_each_typedef(mod) <| $(name, value)
+                generate_topic_stub(tab,stub_file,topic("typedef",mod,name))
+            // enumerations
+            for_each_enumeration(mod) <| $(value)
+                generate_topic_stub(tab,stub_file,topic("enumeration",mod,string(value.name)))
+            // structure everything
+            for_each_structure(mod) <| $(value)
+                if  value.flags.isClass
+                    // classes and methods
+                    generate_topic_stub(tab,stub_file,topic("class",mod,string(value.name)))
+                    for fld in value.fields
+                        if is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
+                            generate_topic_stub(tab,stub_file,topic("method",mod,"{value.name}.{fld.name}"))
+                elif !value.flags.generated
+                    // structures
+                    generate_topic_stub(tab,stub_file,topic("structure",mod,string(value.name)))
+            for_each_function(mod, "") <| $(func)
+                if function_needs_documenting(func)
+                    generate_topic_stub(tab,stub_file,topic("function",mod,"{func.name}"))
+            for_each_generic(mod) <| $(func)
+                if function_needs_documenting(func)
+                    generate_topic_stub(tab,stub_file,topic("function",mod,"{func.name}"))
+        else
+            panic("can't generate stub at {substname}\n")
+
+def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGroup>)
     static_if log_documentation
         print("Documenting {name} into {fname}\n")
     if mod==null
@@ -636,6 +689,9 @@ def document(name:string;mod:Module?;fname:string;groups:array<DocGroup>)
     fwrite(doc_file,"\n")
     let mod_name = string(mod.name)
     fwrite(doc_file,make_header(name,mod_name))
+    if length(substname)!=0
+        fwrite(doc_file,".. include:: {substname}\n\n")
+        generate_substitute_stub(mod,substname)
     document_typedefs(doc_file,mod)
     document_enumerations(doc_file,mod)
     document_structures(doc_file,mod)

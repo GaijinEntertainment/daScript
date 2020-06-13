@@ -13,7 +13,7 @@ Classes
 
 .. das:attribute:: BetterJsonMacro : AstVariantMacro
 
-class|json_boost|BetterJsonMacro to be documented
+|class-json_boost-BetterJsonMacro|
 
 .. das:function:: BetterJsonMacro.visitExprIsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprIsVariant> const)
 
@@ -32,7 +32,7 @@ arguments are
 +----+-----------------------------------------------------------------------+
 
 
-method|json_boost|BetterJsonMacro.visitExprIsVariant to be documented
+|method-json_boost-BetterJsonMacro.visitExprIsVariant|
 
 .. das:function:: BetterJsonMacro.visitExprAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprAsVariant> const)
 
@@ -51,7 +51,7 @@ arguments are
 +----+-----------------------------------------------------------------------+
 
 
-method|json_boost|BetterJsonMacro.visitExprAsVariant to be documented
+|method-json_boost-BetterJsonMacro.visitExprAsVariant|
 
 .. das:function:: BetterJsonMacro.visitExprSafeAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprSafeAsVariant> const)
 
@@ -70,13 +70,13 @@ arguments are
 +----+-------------------------------------------------------------------------------+
 
 
-method|json_boost|BetterJsonMacro.visitExprSafeAsVariant to be documented
+|method-json_boost-BetterJsonMacro.visitExprSafeAsVariant|
 
 .. _struct-json_boost-JsonReader:
 
 .. das:attribute:: JsonReader : AstReaderMacro
 
-class|json_boost|JsonReader to be documented
+|class-json_boost-JsonReader|
 
 .. das:function:: JsonReader.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
 
@@ -99,7 +99,7 @@ arguments are
 +----+--------------------------------------------------------+
 
 
-method|json_boost|JsonReader.accept to be documented
+|method-json_boost-JsonReader.accept|
 
 .. das:function:: JsonReader.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
 
@@ -118,6 +118,6 @@ arguments are
 +----+-----------------------------------------------------------------+
 
 
-method|json_boost|JsonReader.visit to be documented
+|method-json_boost-JsonReader.visit|
 
 

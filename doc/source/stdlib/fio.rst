@@ -13,7 +13,7 @@ TypeAliases
 
 .. das:attribute:: file = fio::FILE const?
 
-typedef|fio|file to be documented
+|typedef-fio-file|
 
 .. _struct-fio-df_header:
 
@@ -30,7 +30,7 @@ df_header fields are
 +-----+----+
 
 
-structure|fio|df_header to be documented
+|structure-fio-df_header|
 
 ++++++++++++++++++
 Handled structures
@@ -40,7 +40,7 @@ Handled structures
 
 .. das:attribute:: FILE
 
-structure_annotation|fio|FILE to be documented
+|structure_annotation-fio-FILE|
 
 .. _handle-fio-FStat:
 
@@ -70,7 +70,7 @@ FStat properties are
 +------+----------------------------------------------+
 
 
-structure_annotation|fio|FStat to be documented
+|structure_annotation-fio-FStat|
 
 ++++++++++++++++++++++++++
 Internal builtin functions
@@ -94,7 +94,7 @@ arguments are
 +----+----------------------+
 
 
-function|fio|builtin_dir to be documented
+|function-fio-builtin_dir|
 
 +++++++++++++++++
 File manipulation
@@ -130,7 +130,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|fclose to be documented
+|function-fio-fclose|
 
 .. _function-_at_fio_c__c_feof__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit:
 
@@ -145,7 +145,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|feof to be documented
+|function-fio-feof|
 
 .. _function-_at_fio_c__c_fgets__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
 
@@ -160,7 +160,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|fgets to be documented
+|function-fio-fgets|
 
 .. _function-_at_fio_c__c_fmap__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -175,7 +175,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|fmap to be documented
+|function-fio-fmap|
 
 .. _function-_at_fio_c__c_fopen_string_hh_const_string_hh_const:
 
@@ -192,7 +192,7 @@ arguments are
 +----+------------+
 
 
-function|fio|fopen to be documented
+|function-fio-fopen|
 
 .. _function-_at_fio_c__c_fopen_string_hh_const_string_hh_const__hh_block_hh__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh__rq_f_hh__c_void_hh_const:
 
@@ -209,7 +209,7 @@ arguments are
 +----+------------------------------------------------+
 
 
-function|fio|fopen to be documented
+|function-fio-fopen|
 
 .. _function-_at_fio_c__c_fprint__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const:
 
@@ -224,7 +224,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|fprint to be documented
+|function-fio-fprint|
 
 .. _function-_at_fio_c__c_fread__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
 
@@ -239,7 +239,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|fread to be documented
+|function-fio-fread|
 
 .. _function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const:
 
@@ -254,7 +254,7 @@ arguments are
 +-+--------------------------+
 
 
-function|fio|fstat to be documented
+|function-fio-fstat|
 
 .. _function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit:
 
@@ -271,7 +271,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|fstat to be documented
+|function-fio-fstat|
 
 .. _function-_at_fio_c__c_fstderr:
 
@@ -279,7 +279,7 @@ function|fio|fstat to be documented
 
 fstderr returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
-function|fio|fstderr to be documented
+|function-fio-fstderr|
 
 .. _function-_at_fio_c__c_fstdin:
 
@@ -287,7 +287,7 @@ function|fio|fstderr to be documented
 
 fstdin returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
-function|fio|fstdin to be documented
+|function-fio-fstdin|
 
 .. _function-_at_fio_c__c_fstdout:
 
@@ -295,7 +295,7 @@ function|fio|fstdin to be documented
 
 fstdout returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
-function|fio|fstdout to be documented
+|function-fio-fstdout|
 
 .. _function-_at_fio_c__c_fwrite__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const__hh_const:
 
@@ -310,7 +310,7 @@ arguments are
 +----+----------------------------------------------------------+
 
 
-function|fio|fwrite to be documented
+|function-fio-fwrite|
 
 .. _function-_at_fio_c__c_stat_string_hh_const:
 
@@ -325,7 +325,7 @@ arguments are
 +----+------------+
 
 
-function|fio|stat to be documented
+|function-fio-stat|
 
 .. _function-_at_fio_c__c_stat_string_hh_const__hh_handle_hh_FStat_hh_implicit:
 
@@ -342,7 +342,7 @@ arguments are
 +----+-----------------------------------------------+
 
 
-function|fio|stat to be documented
+|function-fio-stat|
 
 .. _function-_at_fio_c__c_fload__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
 
@@ -359,7 +359,7 @@ arguments are
 +---+--------------------------+
 
 
-function|fio|fload to be documented
+|function-fio-fload|
 
 .. _function-_at_fio_c__c_fsave__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
 
@@ -376,7 +376,7 @@ arguments are
 +---+--------------------------+
 
 
-function|fio|fsave to be documented
+|function-fio-fsave|
 
 +++++++++++++++++
 Path manipulation
@@ -398,7 +398,7 @@ arguments are
 +----+------------+
 
 
-function|fio|base_name to be documented
+|function-fio-base_name|
 
 .. _function-_at_fio_c__c_dir_name_string_hh_const__hh_const:
 
@@ -413,7 +413,7 @@ arguments are
 +----+------------+
 
 
-function|fio|dir_name to be documented
+|function-fio-dir_name|
 
 ++++++++++++++++++++++
 Directory manipulation
@@ -435,7 +435,7 @@ arguments are
 +----+------------+
 
 
-function|fio|mkdir to be documented
+|function-fio-mkdir|
 
 .. _function-_at_fio_c__c_dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh__c_void_hh_const:
 
@@ -452,7 +452,7 @@ arguments are
 +----+-----------------------------------------+
 
 
-function|fio|dir to be documented
+|function-fio-dir|
 
 ++++++++++++++++
 OS thread helper
@@ -471,6 +471,6 @@ arguments are
 +----+----------+
 
 
-function|fio|sleep to be documented
+|function-fio-sleep|
 
 

@@ -5,6 +5,8 @@
 Math library
 ============
 
+.. include:: C:\Users\Boris\Work\yzg/doc/source/stdlib/detail/math.rst
+
 ++++++++++++++++++++++++++++++++++++++++++
 all numerics (uint*, int*, float*, double)
 ++++++++++++++++++++++++++++++++++++++++++
@@ -49,7 +51,7 @@ arguments are
 +----+------+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_float_float:
 
@@ -66,7 +68,7 @@ arguments are
 +----+-----+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_float2_float2:
 
@@ -83,7 +85,7 @@ arguments are
 +----+------+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_float3_float3:
 
@@ -100,7 +102,7 @@ arguments are
 +----+------+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_float4_float4:
 
@@ -117,7 +119,7 @@ arguments are
 +----+------+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_int_int:
 
@@ -134,7 +136,7 @@ arguments are
 +----+---+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_int2_int2:
 
@@ -151,7 +153,7 @@ arguments are
 +----+----+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_int3_int3:
 
@@ -168,7 +170,7 @@ arguments are
 +----+----+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_int4_int4:
 
@@ -185,7 +187,7 @@ arguments are
 +----+----+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_int64_int64:
 
@@ -202,7 +204,7 @@ arguments are
 +----+-----+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_uint_uint:
 
@@ -219,7 +221,7 @@ arguments are
 +----+----+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_max_uint64_uint64:
 
@@ -236,7 +238,7 @@ arguments are
 +----+------+
 
 
-function|math|max to be documented
+|function-math-max|
 
 .. _function-_at_math_c__c_min_double_double:
 
@@ -253,7 +255,7 @@ arguments are
 +----+------+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_float_float:
 
@@ -270,7 +272,7 @@ arguments are
 +----+-----+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_float2_float2:
 
@@ -287,7 +289,7 @@ arguments are
 +----+------+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_float3_float3:
 
@@ -304,7 +306,7 @@ arguments are
 +----+------+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_float4_float4:
 
@@ -321,7 +323,7 @@ arguments are
 +----+------+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_int_int:
 
@@ -338,7 +340,7 @@ arguments are
 +----+---+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_int2_int2:
 
@@ -355,7 +357,7 @@ arguments are
 +----+----+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_int3_int3:
 
@@ -372,7 +374,7 @@ arguments are
 +----+----+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_int4_int4:
 
@@ -389,7 +391,7 @@ arguments are
 +----+----+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_int64_int64:
 
@@ -406,7 +408,7 @@ arguments are
 +----+-----+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_uint_uint:
 
@@ -423,7 +425,7 @@ arguments are
 +----+----+
 
 
-function|math|min to be documented
+|function-math-min|
 
 .. _function-_at_math_c__c_min_uint64_uint64:
 
@@ -440,7 +442,7 @@ arguments are
 +----+------+
 
 
-function|math|min to be documented
+|function-math-min|
 
 +++++++++++++++++
 float* and double
@@ -549,7 +551,7 @@ arguments are
 +----+------------+
 
 
-function|math|abs to be documented
+|function-math-abs|
 
 .. _function-_at_math_c__c_abs_float:
 
@@ -564,7 +566,7 @@ arguments are
 +----+-----+
 
 
-function|math|abs to be documented
+|function-math-abs|
 
 .. _function-_at_math_c__c_abs_float2:
 
@@ -579,7 +581,7 @@ arguments are
 +----+------+
 
 
-function|math|abs to be documented
+|function-math-abs|
 
 .. _function-_at_math_c__c_abs_float3:
 
@@ -594,7 +596,7 @@ arguments are
 +----+------+
 
 
-function|math|abs to be documented
+|function-math-abs|
 
 .. _function-_at_math_c__c_abs_float4:
 
@@ -609,7 +611,7 @@ arguments are
 +----+------+
 
 
-function|math|abs to be documented
+|function-math-abs|
 
 .. _function-_at_math_c__c_acos_double_hh_const:
 
@@ -624,7 +626,7 @@ arguments are
 +----+------------+
 
 
-function|math|acos to be documented
+|function-math-acos|
 
 .. _function-_at_math_c__c_acos_float:
 
@@ -639,7 +641,7 @@ arguments are
 +----+-----+
 
 
-function|math|acos to be documented
+|function-math-acos|
 
 .. _function-_at_math_c__c_acos_float2:
 
@@ -654,7 +656,7 @@ arguments are
 +----+------+
 
 
-function|math|acos to be documented
+|function-math-acos|
 
 .. _function-_at_math_c__c_acos_float3:
 
@@ -669,7 +671,7 @@ arguments are
 +----+------+
 
 
-function|math|acos to be documented
+|function-math-acos|
 
 .. _function-_at_math_c__c_acos_float4:
 
@@ -684,7 +686,7 @@ arguments are
 +----+------+
 
 
-function|math|acos to be documented
+|function-math-acos|
 
 .. _function-_at_math_c__c_asin_double_hh_const:
 
@@ -699,7 +701,7 @@ arguments are
 +----+------------+
 
 
-function|math|asin to be documented
+|function-math-asin|
 
 .. _function-_at_math_c__c_asin_float:
 
@@ -714,7 +716,7 @@ arguments are
 +----+-----+
 
 
-function|math|asin to be documented
+|function-math-asin|
 
 .. _function-_at_math_c__c_asin_float2:
 
@@ -729,7 +731,7 @@ arguments are
 +----+------+
 
 
-function|math|asin to be documented
+|function-math-asin|
 
 .. _function-_at_math_c__c_asin_float3:
 
@@ -744,7 +746,7 @@ arguments are
 +----+------+
 
 
-function|math|asin to be documented
+|function-math-asin|
 
 .. _function-_at_math_c__c_asin_float4:
 
@@ -759,7 +761,7 @@ arguments are
 +----+------+
 
 
-function|math|asin to be documented
+|function-math-asin|
 
 .. _function-_at_math_c__c_atan_double_hh_const:
 
@@ -774,7 +776,7 @@ arguments are
 +----+------------+
 
 
-function|math|atan to be documented
+|function-math-atan|
 
 .. _function-_at_math_c__c_atan_float:
 
@@ -789,7 +791,7 @@ arguments are
 +----+-----+
 
 
-function|math|atan to be documented
+|function-math-atan|
 
 .. _function-_at_math_c__c_atan_float2:
 
@@ -804,7 +806,7 @@ arguments are
 +----+------+
 
 
-function|math|atan to be documented
+|function-math-atan|
 
 .. _function-_at_math_c__c_atan_float3:
 
@@ -819,7 +821,7 @@ arguments are
 +----+------+
 
 
-function|math|atan to be documented
+|function-math-atan|
 
 .. _function-_at_math_c__c_atan_float4:
 
@@ -834,7 +836,7 @@ arguments are
 +----+------+
 
 
-function|math|atan to be documented
+|function-math-atan|
 
 .. _function-_at_math_c__c_atan2_double_hh_const_double_hh_const:
 
@@ -851,7 +853,7 @@ arguments are
 +----+------------+
 
 
-function|math|atan2 to be documented
+|function-math-atan2|
 
 .. _function-_at_math_c__c_atan2_float_float:
 
@@ -868,7 +870,7 @@ arguments are
 +----+-----+
 
 
-function|math|atan2 to be documented
+|function-math-atan2|
 
 .. _function-_at_math_c__c_atan2_float2_float2:
 
@@ -885,7 +887,7 @@ arguments are
 +----+------+
 
 
-function|math|atan2 to be documented
+|function-math-atan2|
 
 .. _function-_at_math_c__c_atan2_float3_float3:
 
@@ -902,7 +904,7 @@ arguments are
 +----+------+
 
 
-function|math|atan2 to be documented
+|function-math-atan2|
 
 .. _function-_at_math_c__c_atan2_float4_float4:
 
@@ -919,7 +921,7 @@ arguments are
 +----+------+
 
 
-function|math|atan2 to be documented
+|function-math-atan2|
 
 .. _function-_at_math_c__c_ceil_float:
 
@@ -934,7 +936,7 @@ arguments are
 +----+-----+
 
 
-function|math|ceil to be documented
+|function-math-ceil|
 
 .. _function-_at_math_c__c_ceil_float2:
 
@@ -949,7 +951,7 @@ arguments are
 +----+------+
 
 
-function|math|ceil to be documented
+|function-math-ceil|
 
 .. _function-_at_math_c__c_ceil_float3:
 
@@ -964,7 +966,7 @@ arguments are
 +----+------+
 
 
-function|math|ceil to be documented
+|function-math-ceil|
 
 .. _function-_at_math_c__c_ceil_float4:
 
@@ -979,7 +981,7 @@ arguments are
 +----+------+
 
 
-function|math|ceil to be documented
+|function-math-ceil|
 
 .. _function-_at_math_c__c_cos_double_hh_const:
 
@@ -994,7 +996,7 @@ arguments are
 +----+------------+
 
 
-function|math|cos to be documented
+|function-math-cos|
 
 .. _function-_at_math_c__c_cos_float:
 
@@ -1009,7 +1011,7 @@ arguments are
 +----+-----+
 
 
-function|math|cos to be documented
+|function-math-cos|
 
 .. _function-_at_math_c__c_cos_float2:
 
@@ -1024,7 +1026,7 @@ arguments are
 +----+------+
 
 
-function|math|cos to be documented
+|function-math-cos|
 
 .. _function-_at_math_c__c_cos_float3:
 
@@ -1039,7 +1041,7 @@ arguments are
 +----+------+
 
 
-function|math|cos to be documented
+|function-math-cos|
 
 .. _function-_at_math_c__c_cos_float4:
 
@@ -1054,7 +1056,7 @@ arguments are
 +----+------+
 
 
-function|math|cos to be documented
+|function-math-cos|
 
 .. _function-_at_math_c__c_exp_double_hh_const:
 
@@ -1069,7 +1071,7 @@ arguments are
 +----+------------+
 
 
-function|math|exp to be documented
+|function-math-exp|
 
 .. _function-_at_math_c__c_exp_float:
 
@@ -1084,7 +1086,7 @@ arguments are
 +----+-----+
 
 
-function|math|exp to be documented
+|function-math-exp|
 
 .. _function-_at_math_c__c_exp_float2:
 
@@ -1099,7 +1101,7 @@ arguments are
 +----+------+
 
 
-function|math|exp to be documented
+|function-math-exp|
 
 .. _function-_at_math_c__c_exp_float3:
 
@@ -1114,7 +1116,7 @@ arguments are
 +----+------+
 
 
-function|math|exp to be documented
+|function-math-exp|
 
 .. _function-_at_math_c__c_exp_float4:
 
@@ -1129,7 +1131,7 @@ arguments are
 +----+------+
 
 
-function|math|exp to be documented
+|function-math-exp|
 
 .. _function-_at_math_c__c_exp2_double_hh_const:
 
@@ -1144,7 +1146,7 @@ arguments are
 +----+------------+
 
 
-function|math|exp2 to be documented
+|function-math-exp2|
 
 .. _function-_at_math_c__c_exp2_float:
 
@@ -1159,7 +1161,7 @@ arguments are
 +----+-----+
 
 
-function|math|exp2 to be documented
+|function-math-exp2|
 
 .. _function-_at_math_c__c_exp2_float2:
 
@@ -1174,7 +1176,7 @@ arguments are
 +----+------+
 
 
-function|math|exp2 to be documented
+|function-math-exp2|
 
 .. _function-_at_math_c__c_exp2_float3:
 
@@ -1189,7 +1191,7 @@ arguments are
 +----+------+
 
 
-function|math|exp2 to be documented
+|function-math-exp2|
 
 .. _function-_at_math_c__c_exp2_float4:
 
@@ -1204,7 +1206,7 @@ arguments are
 +----+------+
 
 
-function|math|exp2 to be documented
+|function-math-exp2|
 
 .. _function-_at_math_c__c_floor_float:
 
@@ -1219,7 +1221,7 @@ arguments are
 +----+-----+
 
 
-function|math|floor to be documented
+|function-math-floor|
 
 .. _function-_at_math_c__c_floor_float2:
 
@@ -1234,7 +1236,7 @@ arguments are
 +----+------+
 
 
-function|math|floor to be documented
+|function-math-floor|
 
 .. _function-_at_math_c__c_floor_float3:
 
@@ -1249,7 +1251,7 @@ arguments are
 +----+------+
 
 
-function|math|floor to be documented
+|function-math-floor|
 
 .. _function-_at_math_c__c_floor_float4:
 
@@ -1264,7 +1266,7 @@ arguments are
 +----+------+
 
 
-function|math|floor to be documented
+|function-math-floor|
 
 .. _function-_at_math_c__c_log_double_hh_const:
 
@@ -1279,7 +1281,7 @@ arguments are
 +----+------------+
 
 
-function|math|log to be documented
+|function-math-log|
 
 .. _function-_at_math_c__c_log_float:
 
@@ -1294,7 +1296,7 @@ arguments are
 +----+-----+
 
 
-function|math|log to be documented
+|function-math-log|
 
 .. _function-_at_math_c__c_log_float2:
 
@@ -1309,7 +1311,7 @@ arguments are
 +----+------+
 
 
-function|math|log to be documented
+|function-math-log|
 
 .. _function-_at_math_c__c_log_float3:
 
@@ -1324,7 +1326,7 @@ arguments are
 +----+------+
 
 
-function|math|log to be documented
+|function-math-log|
 
 .. _function-_at_math_c__c_log_float4:
 
@@ -1339,7 +1341,7 @@ arguments are
 +----+------+
 
 
-function|math|log to be documented
+|function-math-log|
 
 .. _function-_at_math_c__c_log2_double_hh_const:
 
@@ -1354,7 +1356,7 @@ arguments are
 +----+------------+
 
 
-function|math|log2 to be documented
+|function-math-log2|
 
 .. _function-_at_math_c__c_log2_float:
 
@@ -1369,7 +1371,7 @@ arguments are
 +----+-----+
 
 
-function|math|log2 to be documented
+|function-math-log2|
 
 .. _function-_at_math_c__c_log2_float2:
 
@@ -1384,7 +1386,7 @@ arguments are
 +----+------+
 
 
-function|math|log2 to be documented
+|function-math-log2|
 
 .. _function-_at_math_c__c_log2_float3:
 
@@ -1399,7 +1401,7 @@ arguments are
 +----+------+
 
 
-function|math|log2 to be documented
+|function-math-log2|
 
 .. _function-_at_math_c__c_log2_float4:
 
@@ -1414,7 +1416,7 @@ arguments are
 +----+------+
 
 
-function|math|log2 to be documented
+|function-math-log2|
 
 .. _function-_at_math_c__c_pow_double_hh_const_double_hh_const:
 
@@ -1431,7 +1433,7 @@ arguments are
 +----+------------+
 
 
-function|math|pow to be documented
+|function-math-pow|
 
 .. _function-_at_math_c__c_pow_float_float:
 
@@ -1448,7 +1450,7 @@ arguments are
 +----+-----+
 
 
-function|math|pow to be documented
+|function-math-pow|
 
 .. _function-_at_math_c__c_pow_float2_float2:
 
@@ -1465,7 +1467,7 @@ arguments are
 +----+------+
 
 
-function|math|pow to be documented
+|function-math-pow|
 
 .. _function-_at_math_c__c_pow_float3_float3:
 
@@ -1482,7 +1484,7 @@ arguments are
 +----+------+
 
 
-function|math|pow to be documented
+|function-math-pow|
 
 .. _function-_at_math_c__c_pow_float4_float4:
 
@@ -1499,7 +1501,7 @@ arguments are
 +----+------+
 
 
-function|math|pow to be documented
+|function-math-pow|
 
 .. _function-_at_math_c__c_rcp_double_hh_const:
 
@@ -1514,7 +1516,7 @@ arguments are
 +----+------------+
 
 
-function|math|rcp to be documented
+|function-math-rcp|
 
 .. _function-_at_math_c__c_rcp_float:
 
@@ -1529,7 +1531,7 @@ arguments are
 +----+-----+
 
 
-function|math|rcp to be documented
+|function-math-rcp|
 
 .. _function-_at_math_c__c_rcp_float2:
 
@@ -1544,7 +1546,7 @@ arguments are
 +----+------+
 
 
-function|math|rcp to be documented
+|function-math-rcp|
 
 .. _function-_at_math_c__c_rcp_float3:
 
@@ -1559,7 +1561,7 @@ arguments are
 +----+------+
 
 
-function|math|rcp to be documented
+|function-math-rcp|
 
 .. _function-_at_math_c__c_rcp_float4:
 
@@ -1574,7 +1576,7 @@ arguments are
 +----+------+
 
 
-function|math|rcp to be documented
+|function-math-rcp|
 
 .. _function-_at_math_c__c_saturate_float:
 
@@ -1589,7 +1591,7 @@ arguments are
 +----+-----+
 
 
-function|math|saturate to be documented
+|function-math-saturate|
 
 .. _function-_at_math_c__c_saturate_float2:
 
@@ -1604,7 +1606,7 @@ arguments are
 +----+------+
 
 
-function|math|saturate to be documented
+|function-math-saturate|
 
 .. _function-_at_math_c__c_saturate_float3:
 
@@ -1619,7 +1621,7 @@ arguments are
 +----+------+
 
 
-function|math|saturate to be documented
+|function-math-saturate|
 
 .. _function-_at_math_c__c_saturate_float4:
 
@@ -1634,7 +1636,7 @@ arguments are
 +----+------+
 
 
-function|math|saturate to be documented
+|function-math-saturate|
 
 .. _function-_at_math_c__c_sin_double_hh_const:
 
@@ -1649,7 +1651,7 @@ arguments are
 +----+------------+
 
 
-function|math|sin to be documented
+|function-math-sin|
 
 .. _function-_at_math_c__c_sin_float:
 
@@ -1664,7 +1666,7 @@ arguments are
 +----+-----+
 
 
-function|math|sin to be documented
+|function-math-sin|
 
 .. _function-_at_math_c__c_sin_float2:
 
@@ -1679,7 +1681,7 @@ arguments are
 +----+------+
 
 
-function|math|sin to be documented
+|function-math-sin|
 
 .. _function-_at_math_c__c_sin_float3:
 
@@ -1694,7 +1696,7 @@ arguments are
 +----+------+
 
 
-function|math|sin to be documented
+|function-math-sin|
 
 .. _function-_at_math_c__c_sin_float4:
 
@@ -1709,7 +1711,7 @@ arguments are
 +----+------+
 
 
-function|math|sin to be documented
+|function-math-sin|
 
 .. _function-_at_math_c__c_sincos_double_hh_const_double_hh_ref_hh_implicit_double_hh_ref_hh_implicit:
 
@@ -1726,7 +1728,7 @@ arguments are
 +----+----------------+
 
 
-function|math|sincos to be documented
+|function-math-sincos|
 
 .. _function-_at_math_c__c_sincos_float_hh_const_float_hh_ref_hh_implicit_float_hh_ref_hh_implicit:
 
@@ -1743,7 +1745,7 @@ arguments are
 +----+---------------+
 
 
-function|math|sincos to be documented
+|function-math-sincos|
 
 .. _function-_at_math_c__c_sqrt_double_hh_const:
 
@@ -1758,7 +1760,7 @@ arguments are
 +----+------------+
 
 
-function|math|sqrt to be documented
+|function-math-sqrt|
 
 .. _function-_at_math_c__c_sqrt_float:
 
@@ -1773,7 +1775,7 @@ arguments are
 +----+-----+
 
 
-function|math|sqrt to be documented
+|function-math-sqrt|
 
 .. _function-_at_math_c__c_sqrt_float2:
 
@@ -1788,7 +1790,7 @@ arguments are
 +----+------+
 
 
-function|math|sqrt to be documented
+|function-math-sqrt|
 
 .. _function-_at_math_c__c_sqrt_float3:
 
@@ -1803,7 +1805,7 @@ arguments are
 +----+------+
 
 
-function|math|sqrt to be documented
+|function-math-sqrt|
 
 .. _function-_at_math_c__c_sqrt_float4:
 
@@ -1818,7 +1820,7 @@ arguments are
 +----+------+
 
 
-function|math|sqrt to be documented
+|function-math-sqrt|
 
 .. _function-_at_math_c__c_tan_double_hh_const:
 
@@ -1833,7 +1835,7 @@ arguments are
 +----+------------+
 
 
-function|math|tan to be documented
+|function-math-tan|
 
 .. _function-_at_math_c__c_tan_float:
 
@@ -1848,7 +1850,7 @@ arguments are
 +----+-----+
 
 
-function|math|tan to be documented
+|function-math-tan|
 
 .. _function-_at_math_c__c_tan_float2:
 
@@ -1863,7 +1865,7 @@ arguments are
 +----+------+
 
 
-function|math|tan to be documented
+|function-math-tan|
 
 .. _function-_at_math_c__c_tan_float3:
 
@@ -1878,7 +1880,7 @@ arguments are
 +----+------+
 
 
-function|math|tan to be documented
+|function-math-tan|
 
 .. _function-_at_math_c__c_tan_float4:
 
@@ -1893,7 +1895,7 @@ arguments are
 +----+------+
 
 
-function|math|tan to be documented
+|function-math-tan|
 
 +++++++++++
 float* only
@@ -1947,7 +1949,7 @@ arguments are
 +----+-----+
 
 
-function|math|atan2_est to be documented
+|function-math-atan2_est|
 
 .. _function-_at_math_c__c_atan2_est_float2_float2:
 
@@ -1964,7 +1966,7 @@ arguments are
 +----+------+
 
 
-function|math|atan2_est to be documented
+|function-math-atan2_est|
 
 .. _function-_at_math_c__c_atan2_est_float3_float3:
 
@@ -1981,7 +1983,7 @@ arguments are
 +----+------+
 
 
-function|math|atan2_est to be documented
+|function-math-atan2_est|
 
 .. _function-_at_math_c__c_atan2_est_float4_float4:
 
@@ -1998,7 +2000,7 @@ arguments are
 +----+------+
 
 
-function|math|atan2_est to be documented
+|function-math-atan2_est|
 
 .. _function-_at_math_c__c_ceili_float:
 
@@ -2013,7 +2015,7 @@ arguments are
 +----+-----+
 
 
-function|math|ceili to be documented
+|function-math-ceili|
 
 .. _function-_at_math_c__c_ceili_float2:
 
@@ -2028,7 +2030,7 @@ arguments are
 +----+------+
 
 
-function|math|ceili to be documented
+|function-math-ceili|
 
 .. _function-_at_math_c__c_ceili_float3:
 
@@ -2043,7 +2045,7 @@ arguments are
 +----+------+
 
 
-function|math|ceili to be documented
+|function-math-ceili|
 
 .. _function-_at_math_c__c_ceili_float4:
 
@@ -2058,7 +2060,7 @@ arguments are
 +----+------+
 
 
-function|math|ceili to be documented
+|function-math-ceili|
 
 .. _function-_at_math_c__c_floori_float:
 
@@ -2073,7 +2075,7 @@ arguments are
 +----+-----+
 
 
-function|math|floori to be documented
+|function-math-floori|
 
 .. _function-_at_math_c__c_floori_float2:
 
@@ -2088,7 +2090,7 @@ arguments are
 +----+------+
 
 
-function|math|floori to be documented
+|function-math-floori|
 
 .. _function-_at_math_c__c_floori_float3:
 
@@ -2103,7 +2105,7 @@ arguments are
 +----+------+
 
 
-function|math|floori to be documented
+|function-math-floori|
 
 .. _function-_at_math_c__c_floori_float4:
 
@@ -2118,7 +2120,7 @@ arguments are
 +----+------+
 
 
-function|math|floori to be documented
+|function-math-floori|
 
 .. _function-_at_math_c__c_rcp_est_float:
 
@@ -2133,7 +2135,7 @@ arguments are
 +----+-----+
 
 
-function|math|rcp_est to be documented
+|function-math-rcp_est|
 
 .. _function-_at_math_c__c_rcp_est_float2:
 
@@ -2148,7 +2150,7 @@ arguments are
 +----+------+
 
 
-function|math|rcp_est to be documented
+|function-math-rcp_est|
 
 .. _function-_at_math_c__c_rcp_est_float3:
 
@@ -2163,7 +2165,7 @@ arguments are
 +----+------+
 
 
-function|math|rcp_est to be documented
+|function-math-rcp_est|
 
 .. _function-_at_math_c__c_rcp_est_float4:
 
@@ -2178,7 +2180,7 @@ arguments are
 +----+------+
 
 
-function|math|rcp_est to be documented
+|function-math-rcp_est|
 
 .. _function-_at_math_c__c_roundi_float:
 
@@ -2193,7 +2195,7 @@ arguments are
 +----+-----+
 
 
-function|math|roundi to be documented
+|function-math-roundi|
 
 .. _function-_at_math_c__c_roundi_float2:
 
@@ -2208,7 +2210,7 @@ arguments are
 +----+------+
 
 
-function|math|roundi to be documented
+|function-math-roundi|
 
 .. _function-_at_math_c__c_roundi_float3:
 
@@ -2223,7 +2225,7 @@ arguments are
 +----+------+
 
 
-function|math|roundi to be documented
+|function-math-roundi|
 
 .. _function-_at_math_c__c_roundi_float4:
 
@@ -2238,7 +2240,7 @@ arguments are
 +----+------+
 
 
-function|math|roundi to be documented
+|function-math-roundi|
 
 .. _function-_at_math_c__c_rsqrt_float:
 
@@ -2253,7 +2255,7 @@ arguments are
 +----+-----+
 
 
-function|math|rsqrt to be documented
+|function-math-rsqrt|
 
 .. _function-_at_math_c__c_rsqrt_float2:
 
@@ -2268,7 +2270,7 @@ arguments are
 +----+------+
 
 
-function|math|rsqrt to be documented
+|function-math-rsqrt|
 
 .. _function-_at_math_c__c_rsqrt_float3:
 
@@ -2283,7 +2285,7 @@ arguments are
 +----+------+
 
 
-function|math|rsqrt to be documented
+|function-math-rsqrt|
 
 .. _function-_at_math_c__c_rsqrt_float4:
 
@@ -2298,7 +2300,7 @@ arguments are
 +----+------+
 
 
-function|math|rsqrt to be documented
+|function-math-rsqrt|
 
 .. _function-_at_math_c__c_rsqrt_est_float:
 
@@ -2313,7 +2315,7 @@ arguments are
 +----+-----+
 
 
-function|math|rsqrt_est to be documented
+|function-math-rsqrt_est|
 
 .. _function-_at_math_c__c_rsqrt_est_float2:
 
@@ -2328,7 +2330,7 @@ arguments are
 +----+------+
 
 
-function|math|rsqrt_est to be documented
+|function-math-rsqrt_est|
 
 .. _function-_at_math_c__c_rsqrt_est_float3:
 
@@ -2343,7 +2345,7 @@ arguments are
 +----+------+
 
 
-function|math|rsqrt_est to be documented
+|function-math-rsqrt_est|
 
 .. _function-_at_math_c__c_rsqrt_est_float4:
 
@@ -2358,7 +2360,7 @@ arguments are
 +----+------+
 
 
-function|math|rsqrt_est to be documented
+|function-math-rsqrt_est|
 
 .. _function-_at_math_c__c_trunci_float:
 
@@ -2373,7 +2375,7 @@ arguments are
 +----+-----+
 
 
-function|math|trunci to be documented
+|function-math-trunci|
 
 .. _function-_at_math_c__c_trunci_float2:
 
@@ -2388,7 +2390,7 @@ arguments are
 +----+------+
 
 
-function|math|trunci to be documented
+|function-math-trunci|
 
 .. _function-_at_math_c__c_trunci_float3:
 
@@ -2403,7 +2405,7 @@ arguments are
 +----+------+
 
 
-function|math|trunci to be documented
+|function-math-trunci|
 
 .. _function-_at_math_c__c_trunci_float4:
 
@@ -2418,7 +2420,7 @@ arguments are
 +----+------+
 
 
-function|math|trunci to be documented
+|function-math-trunci|
 
 +++++++++++
 float3 only
@@ -2447,7 +2449,7 @@ arguments are
 +----+------------+
 
 
-function|math|cross to be documented
+|function-math-cross|
 
 .. _function-_at_math_c__c_distance_float3_hh_const_float3_hh_const:
 
@@ -2464,7 +2466,7 @@ arguments are
 +----+------------+
 
 
-function|math|distance to be documented
+|function-math-distance|
 
 .. _function-_at_math_c__c_distance_sq_float3_hh_const_float3_hh_const:
 
@@ -2481,7 +2483,7 @@ arguments are
 +----+------------+
 
 
-function|math|distance_sq to be documented
+|function-math-distance_sq|
 
 .. _function-_at_math_c__c_inv_distance_float3_hh_const_float3_hh_const:
 
@@ -2498,7 +2500,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_distance to be documented
+|function-math-inv_distance|
 
 .. _function-_at_math_c__c_inv_distance_sq_float3_hh_const_float3_hh_const:
 
@@ -2515,7 +2517,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_distance_sq to be documented
+|function-math-inv_distance_sq|
 
 .. _function-_at_math_c__c_reflect_float3_hh_const_float3_hh_const:
 
@@ -2532,7 +2534,10 @@ arguments are
 +----+------------+
 
 
-function|math|reflect to be documented
+returns vector representing reflection of arg0 from arg1 same as ::
+
+    def reflect(v, n: float3)
+        return v - 2. * dot(v, n) * n
 
 .. _function-_at_math_c__c_refract_float3_hh_const_float3_hh_const_float_hh_const_float3_hh_ref:
 
@@ -2553,7 +2558,15 @@ arguments are
 +----+------------+
 
 
-function|math|refract to be documented
+returns vector representing reflection of arg0 from arg1 same as ::
+
+    def refract(v, n: float3; nint: float; outRefracted: float3&)
+        let dt = dot(v, n)
+        let discr = 1. - nint * nint * (1. - dt * dt)
+        if discr > 0.
+            outRefracted = nint * (v - n * dt) - n * sqrt(discr)
+            return true
+        return false
 
 ++++++++++++++++++++++
 float2, float3, float4
@@ -2596,7 +2609,7 @@ arguments are
 +----+------------+
 
 
-function|math|dot to be documented
+|function-math-dot|
 
 .. _function-_at_math_c__c_dot_float3_hh_const_float3_hh_const:
 
@@ -2613,7 +2626,7 @@ arguments are
 +----+------------+
 
 
-function|math|dot to be documented
+|function-math-dot|
 
 .. _function-_at_math_c__c_dot_float4_hh_const_float4_hh_const:
 
@@ -2630,7 +2643,7 @@ arguments are
 +----+------------+
 
 
-function|math|dot to be documented
+|function-math-dot|
 
 .. _function-_at_math_c__c_fast_normalize_float2_hh_const:
 
@@ -2645,7 +2658,7 @@ arguments are
 +----+------------+
 
 
-function|math|fast_normalize to be documented
+|function-math-fast_normalize|
 
 .. _function-_at_math_c__c_fast_normalize_float3_hh_const:
 
@@ -2660,7 +2673,7 @@ arguments are
 +----+------------+
 
 
-function|math|fast_normalize to be documented
+|function-math-fast_normalize|
 
 .. _function-_at_math_c__c_fast_normalize_float4_hh_const:
 
@@ -2675,7 +2688,7 @@ arguments are
 +----+------------+
 
 
-function|math|fast_normalize to be documented
+|function-math-fast_normalize|
 
 .. _function-_at_math_c__c_inv_length_float2_hh_const:
 
@@ -2690,7 +2703,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_length to be documented
+|function-math-inv_length|
 
 .. _function-_at_math_c__c_inv_length_float3_hh_const:
 
@@ -2705,7 +2718,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_length to be documented
+|function-math-inv_length|
 
 .. _function-_at_math_c__c_inv_length_float4_hh_const:
 
@@ -2720,7 +2733,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_length to be documented
+|function-math-inv_length|
 
 .. _function-_at_math_c__c_inv_length_sq_float2_hh_const:
 
@@ -2735,7 +2748,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_length_sq to be documented
+|function-math-inv_length_sq|
 
 .. _function-_at_math_c__c_inv_length_sq_float3_hh_const:
 
@@ -2750,7 +2763,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_length_sq to be documented
+|function-math-inv_length_sq|
 
 .. _function-_at_math_c__c_inv_length_sq_float4_hh_const:
 
@@ -2765,7 +2778,7 @@ arguments are
 +----+------------+
 
 
-function|math|inv_length_sq to be documented
+|function-math-inv_length_sq|
 
 .. _function-_at_math_c__c_length_float2_hh_const:
 
@@ -2780,7 +2793,7 @@ arguments are
 +----+------------+
 
 
-function|math|length to be documented
+|function-math-length|
 
 .. _function-_at_math_c__c_length_float3_hh_const:
 
@@ -2795,7 +2808,7 @@ arguments are
 +----+------------+
 
 
-function|math|length to be documented
+|function-math-length|
 
 .. _function-_at_math_c__c_length_float4_hh_const:
 
@@ -2810,7 +2823,7 @@ arguments are
 +----+------------+
 
 
-function|math|length to be documented
+|function-math-length|
 
 .. _function-_at_math_c__c_length_sq_float2_hh_const:
 
@@ -2825,7 +2838,7 @@ arguments are
 +----+------------+
 
 
-function|math|length_sq to be documented
+|function-math-length_sq|
 
 .. _function-_at_math_c__c_length_sq_float3_hh_const:
 
@@ -2840,7 +2853,7 @@ arguments are
 +----+------------+
 
 
-function|math|length_sq to be documented
+|function-math-length_sq|
 
 .. _function-_at_math_c__c_length_sq_float4_hh_const:
 
@@ -2855,7 +2868,7 @@ arguments are
 +----+------------+
 
 
-function|math|length_sq to be documented
+|function-math-length_sq|
 
 .. _function-_at_math_c__c_normalize_float2_hh_const:
 
@@ -2870,7 +2883,7 @@ arguments are
 +----+------------+
 
 
-function|math|normalize to be documented
+|function-math-normalize|
 
 .. _function-_at_math_c__c_normalize_float3_hh_const:
 
@@ -2885,7 +2898,7 @@ arguments are
 +----+------------+
 
 
-function|math|normalize to be documented
+|function-math-normalize|
 
 .. _function-_at_math_c__c_normalize_float4_hh_const:
 
@@ -2900,7 +2913,7 @@ arguments are
 +----+------------+
 
 
-function|math|normalize to be documented
+|function-math-normalize|
 
 +++++++++++++++
 Noise functions
@@ -2924,7 +2937,7 @@ arguments are
 +----+----------+
 
 
-function|math|uint32_hash to be documented
+|function-math-uint32_hash|
 
 .. _function-_at_math_c__c_uint_noise_1D_int_hh_const_uint_hh_const:
 
@@ -2941,7 +2954,7 @@ arguments are
 +----+----------+
 
 
-function|math|uint_noise_1D to be documented
+|function-math-uint_noise_1D|
 
 .. _function-_at_math_c__c_uint_noise_2D_int2_hh_const_uint_hh_const:
 
@@ -2958,7 +2971,7 @@ arguments are
 +----+----------+
 
 
-function|math|uint_noise_2D to be documented
+|function-math-uint_noise_2D|
 
 .. _function-_at_math_c__c_uint_noise_3D_int3_hh_const_uint_hh_const:
 
@@ -2975,7 +2988,7 @@ arguments are
 +----+----------+
 
 
-function|math|uint_noise_3D to be documented
+|function-math-uint_noise_3D|
 
 ++++++++++++++
 lerp/mad/clamp
@@ -3014,7 +3027,7 @@ arguments are
 +----+-----+
 
 
-function|math|clamp to be documented
+|function-math-clamp|
 
 .. _function-_at_math_c__c_clamp_float2_float2_float2:
 
@@ -3033,7 +3046,7 @@ arguments are
 +----+------+
 
 
-function|math|clamp to be documented
+|function-math-clamp|
 
 .. _function-_at_math_c__c_clamp_float3_float3_float3:
 
@@ -3052,7 +3065,7 @@ arguments are
 +----+------+
 
 
-function|math|clamp to be documented
+|function-math-clamp|
 
 .. _function-_at_math_c__c_clamp_float4_float4_float4:
 
@@ -3071,7 +3084,7 @@ arguments are
 +----+------+
 
 
-function|math|clamp to be documented
+|function-math-clamp|
 
 .. _function-_at_math_c__c_lerp_float_float_float:
 
@@ -3090,7 +3103,7 @@ arguments are
 +----+-----+
 
 
-function|math|lerp to be documented
+|function-math-lerp|
 
 .. _function-_at_math_c__c_lerp_float2_float2_float2:
 
@@ -3109,7 +3122,7 @@ arguments are
 +----+------+
 
 
-function|math|lerp to be documented
+|function-math-lerp|
 
 .. _function-_at_math_c__c_lerp_float3_float3_float3:
 
@@ -3128,7 +3141,7 @@ arguments are
 +----+------+
 
 
-function|math|lerp to be documented
+|function-math-lerp|
 
 .. _function-_at_math_c__c_lerp_float4_float4_float4:
 
@@ -3147,7 +3160,7 @@ arguments are
 +----+------+
 
 
-function|math|lerp to be documented
+|function-math-lerp|
 
 .. _function-_at_math_c__c_mad_float_float_float:
 
@@ -3166,7 +3179,7 @@ arguments are
 +----+-----+
 
 
-function|math|mad to be documented
+|function-math-mad|
 
 .. _function-_at_math_c__c_mad_float2_float_float2:
 
@@ -3185,7 +3198,7 @@ arguments are
 +----+------+
 
 
-function|math|mad to be documented
+|function-math-mad|
 
 .. _function-_at_math_c__c_mad_float2_float2_float2:
 
@@ -3204,7 +3217,7 @@ arguments are
 +----+------+
 
 
-function|math|mad to be documented
+|function-math-mad|
 
 .. _function-_at_math_c__c_mad_float3_float_float3:
 
@@ -3223,7 +3236,7 @@ arguments are
 +----+------+
 
 
-function|math|mad to be documented
+|function-math-mad|
 
 .. _function-_at_math_c__c_mad_float3_float3_float3:
 
@@ -3242,7 +3255,7 @@ arguments are
 +----+------+
 
 
-function|math|mad to be documented
+|function-math-mad|
 
 .. _function-_at_math_c__c_mad_float4_float_float4:
 
@@ -3261,7 +3274,7 @@ arguments are
 +----+------+
 
 
-function|math|mad to be documented
+|function-math-mad|
 
 .. _function-_at_math_c__c_mad_float4_float4_float4:
 
@@ -3280,6 +3293,6 @@ arguments are
 +----+------+
 
 
-function|math|mad to be documented
+|function-math-mad|
 
 

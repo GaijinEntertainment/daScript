@@ -24,7 +24,7 @@ arguments are
 +-----+------------+
 
 
-function|strings|split to be documented
+|function-strings-split|
 
 .. _function-_at_strings_c__c_split_by_chars_string_hh_const_string_hh_const:
 
@@ -41,7 +41,7 @@ arguments are
 +-----+------------+
 
 
-function|strings|split_by_chars to be documented
+|function-strings-split_by_chars|
 
 .. _function-_at_strings_c__c_wide_string_hh_const_int_hh_const:
 
@@ -58,7 +58,7 @@ arguments are
 +-----+------------+
 
 
-function|strings|wide to be documented
+|function-strings-wide|
 
 .. _function-_at_strings_c__c_join__hh_auto_hh_const_string_hh_const:
 
@@ -75,7 +75,7 @@ arguments are
 +---------+------------+
 
 
-function|strings|join to be documented
+|function-strings-join|
 
 .. _function-_at_strings_c__c_split_string_hh_const_string_hh_const__hh_block_hh__hh_array_hh_string_hh_const_hh_temporary_hh__rq_arg_hh__c__hh_auto_hh_const:
 
@@ -94,7 +94,7 @@ arguments are
 +-----+--------------------------------------------+
 
 
-function|strings|split to be documented
+|function-strings-split|
 
 .. _function-_at_strings_c__c_split_by_chars_string_hh_const_string_hh_const__hh_block_hh__hh_array_hh_string_hh_const_hh_temporary_hh__rq_arg_hh__c__hh_auto_hh_const:
 
@@ -113,6 +113,6 @@ arguments are
 +-----+--------------------------------------------+
 
 
-function|strings|split_by_chars to be documented
+|function-strings-split_by_chars|
 
 

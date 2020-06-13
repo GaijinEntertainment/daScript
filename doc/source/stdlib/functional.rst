@@ -22,7 +22,7 @@ arguments are
 +--+----------+
 
 
-function|functional|all to be documented
+|function-functional-all|
 
 .. _function-_at_functional_c__c_any__hh_auto_hh_const:
 
@@ -37,7 +37,7 @@ arguments are
 +--+----------+
 
 
-function|functional|any to be documented
+|function-functional-any|
 
 .. _function-_at_functional_c__c_count_int_int:
 
@@ -54,7 +54,7 @@ arguments are
 +-----+---+
 
 
-function|functional|count to be documented
+|function-functional-count|
 
 .. _function-_at_functional_c__c_cycle__hh_iterator_hh__hh_auto:
 
@@ -69,7 +69,7 @@ arguments are
 +---+------------------+
 
 
-function|functional|cycle to be documented
+|function-functional-cycle|
 
 .. _function-_at_functional_c__c_echo__hh_auto_string_hh_const:
 
@@ -86,7 +86,7 @@ arguments are
 +-----+------------+
 
 
-function|functional|echo to be documented
+|function-functional-echo|
 
 .. _function-_at_functional_c__c_filter__hh_iterator_hh__hh_auto__hh_function_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c_bool_hh_const:
 
@@ -103,7 +103,7 @@ arguments are
 +---+------------------------------------+
 
 
-function|functional|filter to be documented
+|function-functional-filter|
 
 .. _function-_at_functional_c__c_filter__hh_iterator_hh__hh_auto__hh_lambda_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c_bool_hh_const:
 
@@ -120,7 +120,7 @@ arguments are
 +---+----------------------------------+
 
 
-function|functional|filter to be documented
+|function-functional-filter|
 
 .. _function-_at_functional_c__c_is_equal__hh_auto_hh_const__hh_auto_hh_const:
 
@@ -137,7 +137,7 @@ arguments are
 +-+----------+
 
 
-function|functional|is_equal to be documented
+|function-functional-is_equal|
 
 .. _function-_at_functional_c__c_is_not_equal__hh_auto_hh_const__hh_auto_hh_const:
 
@@ -154,7 +154,7 @@ arguments are
 +-+----------+
 
 
-function|functional|is_not_equal to be documented
+|function-functional-is_not_equal|
 
 .. _function-_at_functional_c__c_islice__hh_iterator_hh__hh_auto_int_hh_const_int_hh_const:
 
@@ -173,7 +173,7 @@ arguments are
 +-----+------------------+
 
 
-function|functional|islice to be documented
+|function-functional-islice|
 
 .. _function-_at_functional_c__c_map__hh_iterator_hh__hh_auto__hh_function_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c__hh_auto_hh_const:
 
@@ -190,7 +190,7 @@ arguments are
 +---+----------------------------------------+
 
 
-function|functional|map to be documented
+|function-functional-map|
 
 .. _function-_at_functional_c__c_map__hh_iterator_hh__hh_auto__hh_lambda_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c__hh_auto_hh_const:
 
@@ -207,7 +207,7 @@ arguments are
 +---+--------------------------------------+
 
 
-function|functional|map to be documented
+|function-functional-map|
 
 .. _function-_at_functional_c__c_not__hh_auto_hh_const:
 
@@ -222,7 +222,7 @@ arguments are
 +-+----------+
 
 
-function|functional|not to be documented
+|function-functional-not|
 
 .. _function-_at_functional_c__c_reduce__hh_iterator_hh__hh_auto_hh_const__hh_block_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_left_hh__rq_right_hh__c__hh_alias_hh_TT_hh_const_hh_const:
 
@@ -239,7 +239,7 @@ arguments are
 +---+----------------------------------------------------+
 
 
-function|functional|reduce to be documented
+|function-functional-reduce|
 
 .. _function-_at_functional_c__c_reduce__hh_iterator_hh__hh_auto_hh_const__hh_function_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_left_hh__rq_right_hh__c__hh_alias_hh_TT_hh_const_hh_const:
 
@@ -256,7 +256,7 @@ arguments are
 +---+-------------------------------------------------------+
 
 
-function|functional|reduce to be documented
+|function-functional-reduce|
 
 .. _function-_at_functional_c__c_reduce__hh_iterator_hh__hh_auto_hh_const__hh_lambda_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_left_hh__rq_right_hh__c__hh_alias_hh_TT_hh_const_hh_const:
 
@@ -273,7 +273,7 @@ arguments are
 +---+-----------------------------------------------------+
 
 
-function|functional|reduce to be documented
+|function-functional-reduce|
 
 .. _function-_at_functional_c__c_repeat__hh_auto_hh_const_int:
 
@@ -290,7 +290,7 @@ arguments are
 +-----+--------------+
 
 
-function|functional|repeat to be documented
+|function-functional-repeat|
 
 .. _function-_at_functional_c__c_sum__hh_iterator_hh__hh_auto_hh_const:
 
@@ -305,6 +305,6 @@ arguments are
 +--+------------------------+
 
 
-function|functional|sum to be documented
+|function-functional-sum|
 
 
