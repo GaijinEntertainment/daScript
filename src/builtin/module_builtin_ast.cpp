@@ -124,6 +124,7 @@ MAKE_TYPE_FACTORY(ExprMakeBlock,ExprMakeBlock);
 MAKE_TYPE_FACTORY(ExprMakeGenerator,ExprMakeGenerator);
 MAKE_TYPE_FACTORY(ExprMemZero,ExprMemZero);
 MAKE_TYPE_FACTORY(ExprReader,ExprReader);
+MAKE_TYPE_FACTORY(ExprUnsafe,ExprUnsafe);
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
@@ -851,6 +852,13 @@ namespace das {
         }
     };
 
+    struct AstExprUnsafeAnnotation : AstExpressionAnnotation<ExprUnsafe> {
+        AstExprUnsafeAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprUnsafe> ("ExprUnsafe", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(body)>("body");
+        }
+    };
+
      // TYPE STUFF
 
     struct AstModuleLibraryAnnotation : ManagedStructureAnnotation<ModuleLibrary,false> {
@@ -1471,6 +1479,7 @@ namespace das {
         IMPL_ADAPT(ExprMakeGenerator);
         IMPL_ADAPT(ExprMemZero);
         IMPL_ADAPT(ExprReader);
+        IMPL_ADAPT(ExprUnsafe);
     }
 // whole program
     void VisitorAdapter::preVisitProgram ( Program * expr )
@@ -1780,6 +1789,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprMakeGenerator);
     IMPL_BIND_EXPR(ExprMemZero);
     IMPL_BIND_EXPR(ExprReader);
+    IMPL_BIND_EXPR(ExprUnsafe);
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
@@ -2434,6 +2444,7 @@ namespace das {
             addAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
             addAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
             addAnnotation(make_smart<AstExprReaderAnnotation>(lib));
+            addAnnotation(make_smart<AstExprUnsafeAnnotation>(lib));
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",

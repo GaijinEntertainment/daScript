@@ -165,6 +165,7 @@ namespace das {
         DECL_VISIT(ExprMakeGenerator);
         DECL_VISIT(ExprMemZero);
         DECL_VISIT(ExprReader);
+        DECL_VISIT(ExprUnsafe);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override;
@@ -378,6 +379,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprMakeGenerator);
         IMPL_BIND_EXPR(ExprMemZero);
         IMPL_BIND_EXPR(ExprReader);
+        IMPL_BIND_EXPR(ExprUnsafe);
     };
 
 #undef FN_PREVISIT

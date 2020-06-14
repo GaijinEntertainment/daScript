@@ -424,6 +424,9 @@ class AstVisitor
 // reader
     def abstract preVisitExprReader(expr:smart_ptr<ExprReader>) : void
     def abstract visitExprReader(expr:smart_ptr<ExprReader>) : ExpressionPtr
+// unsafe
+    def abstract preVisitExprUnsafe(expr:smart_ptr<ExprUnsafe>) : void
+    def abstract visitExprUnsafe(expr:smart_ptr<ExprUnsafe>) : ExpressionPtr
 
 def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
