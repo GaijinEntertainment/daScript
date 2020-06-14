@@ -23,7 +23,7 @@ Assignment
     exp := exp '<-' exp
     exp := exp ':=' exp
 
-daScript implements 3 kind of assignment: the normal assignment(=)::
+daScript implements 3 kind of assignment: the copy assignment(=)::
 
     a = 10
 
@@ -34,7 +34,7 @@ daScript implements 3 kind of assignment: the normal assignment(=)::
     a <- b
 
 move assignment nullifies source (b)
-It's main purpose is to correctly move ownership, and optimize copying if you don't need source for heay types (such as arrays, tables).
+It's main purpose is to correctly move ownership, and optimize copying if you don't need source for heavy types (such as arrays, tables).
 Some external handled types can be non assignable, but still moveable;
 
     var
@@ -46,7 +46,7 @@ Some external handled types can be non assignable, but still moveable;
 Clone assignment is syntactic sugar for calling clone(var a: auto&; b: auto&) if it exists or basic assignment for POD types.
 It is also implemented for das_string, array and table types, and creates 'deep' copy.
 
-Some external handled types can be non assignable, but still copyable;
+Some external handled types can be non assignable, but still cloneable;
 
 ----------------
 Operators
@@ -67,6 +67,7 @@ Operators
     exp := exp_cond '?' exp1 ':' exp2
 
 conditionally evaluate an expression depending on the result of an expression.
+if expr_cond is true, only expr1 will be evaluated. similarly if false - only expr2.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ?? Null-coalescing operator
@@ -76,27 +77,25 @@ conditionally evaluate an expression depending on the result of an expression.
     pair: ?? Operator; Operators
 
 ::
-    
+
     exp := exp1 '??' exp2
 
 
-Conditionally evaluate an expression2 depending on the result of an expression1. 
+Conditionally evaluate an expression2 depending on the result of an expression1.
 Given code is equivalent to:
 
 ::
 
-    exp := (exp1 '!=' null) '?' deref(exp1) ':' exp2
+    exp := (exp1 '!=' null) '?' *exp1 ':' exp2
 
 
 It evaluates expressions until the first non-null value
-(just like || operators for the first 'true' one).
+(just like | operators for the first 'true' one).
 
-Operator precendence is also follows C# design, so that ?? has
-lower priority than ||
-
+Operator precedence is also follows C# design, so that ?? has lower priority than |
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-?. - Null-propagation operator
+?. and ?[ - Null-propagation operator
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. index::
@@ -107,7 +106,7 @@ lower priority than ||
     exp := value '?.' key
 
 
-If value is not null exists, return deref of field 'key' for struct, else return null.
+If value is not null exists, return dereference of the field 'key' for struct, otherwise returns null.
 
 ::
 
@@ -138,6 +137,13 @@ If value is not null exists, return deref of field 'key' for struct, else return
         b?.fooPtr?.fooData ?? idummy = 4 // will return reference to b.fooPtr.fooData
         assert(b.fooPtr.fooData == 4 & idummy == 3)
 
+Additionally null propagation of index ?[ can be used with tables::
+
+	var tab <- {{ "one"=>1; "two"=> 2 }}
+	let i = tab?["three"] ?? 3
+	print("i = {i}\n")
+
+It checks both container pointer and availability of the key.
 
 ^^^^^^^^^^^^^
 Arithmetic
@@ -151,7 +157,7 @@ Arithmetic
     exp:= 'exp' op 'exp'
 
 daScript supports the standard arithmetic operators ``+, -, *, / and %``.
-Other than that is also supports compact operators (``+=, -=, *=, /=, %=, ^=, <<=, >>=``) and
+Other than that is also supports compact operators (``+=, -=, *=, /=, %=``) and
 increment and decrement operators(++ and --);::
 
     a += 2
@@ -161,7 +167,7 @@ increment and decrement operators(++ and --);::
     // is the same as writing
     x = x + 1
 
-All operators work normally with (u)int* and float* and double.
+All operators are defined for numeric and vector types, i.e (u)int* and float* and double.
 
 ^^^^^^^^^^^^^
 Relational
@@ -174,7 +180,7 @@ Relational
 
     exp:= 'exp' op 'exp'
 
-Relational operators in daScript are : ``==, <, <=, <, <=, !=``
+Relational operators in daScript are : ``==, <, <=, >, >=, !=``
 
 These operators return true if the expression is false and a value different than true if the
 expression is true.
@@ -191,14 +197,17 @@ Logical
     exp := exp op exp
     exp := '!' exp
 
-Logical operators in daScript are : ``&, |, !``
+Logical operators in daScript are : ``&, |, ^, !, &=, |=, ^=``
 
 The operator ``&`` (logical and) returns false if its first argument is false, otherwise returns
 its second argument.
 The operator ``|`` (logical or) returns its first argument if is different than false, otherwise
 returns the second argument.
 
-It is important to understand, that it won't nesessariy 'evaluates' all arguments.
+The operator ``^`` (logical exclusive or) returns true if arguments are different, and false otherwise.
+
+It is important to understand, that & and | would not necessarily 'evaluates' all arguments.
+Unlike C++ equivalents &= and |= would also cancel evaluation of the right side.
 
 The '!' operator will return false if the given value to negate was true or false otherwise.
 
@@ -214,8 +223,8 @@ Bitwise Operators
     exp:= 'exp' op 'exp'
     exp := '~' exp
 
-daScript supports the standard C-like bitwise operators ``&, |, ^, ~, <<, >>``.
-Those operators only work on (unsigned) integer values.
+daScript supports the standard C-like bitwise operators ``&, |, ^, ~, <<, >>, <<<, >>>``.
+Those operators only work on integer values.
 
 ^^^^^^^^^^^^^^^^^^^
 Pipe Operators
@@ -229,7 +238,7 @@ Pipe Operators
     exp:= 'exp' |> 'exp'
     exp:= 'exp' <| 'exp'
 
-daScript supports pipe operators. Pipe operator is similar to 'call' expression with other expresion is first argument.
+daScript supports pipe operators. Pipe operator is similar to 'call' expression with other expression is first argument.
 
 ::
 
@@ -258,9 +267,11 @@ Operators precedence
     pair: Operators precedence; Operators
 
 +--------------------------------------------------------------+-----------+
-| ``post++  post--  .   ->  ?.``                               | highest   |
+| ``post++  post--  .   ->  ?. ?[ *(deref)``                   | highest   |
 +--------------------------------------------------------------+-----------+
 | ``|>  <|``                                                   |           |
++--------------------------------------------------------------+-----------+
+| ``is  as``                                                   |           |
 +--------------------------------------------------------------+-----------+
 | ``-  +  ~  !   ++  --``                                      |           |
 +--------------------------------------------------------------+-----------+
@@ -286,17 +297,19 @@ Operators precedence
 +--------------------------------------------------------------+-----------+
 | ``+=  =  -=  /=  *=  %=  &=  |=  ^=  <<=  >>=  <- <<<= >>>=``| ...       |
 +--------------------------------------------------------------+-----------+
+| =>                                                           |           |
++--------------------------------------------------------------+-----------+
 | ``',' comma``                                                | lowest    |
 +--------------------------------------------------------------+-----------+
 
 .. _struct_contructor:
 
 ------------------
-Struct Constructor
+Struct Initializer
 ------------------
 
 .. index::
-    single: Struct Contructor
+    single: Struct Initializer
 
 ::
 
@@ -310,11 +323,11 @@ Struct Constructor
 (see :ref:`Structs <structs>`).
 
 -----------------
-Array Contructor
+Array Initializer
 -----------------
 
 .. index::
-    single: Array Constructor
+    single: Array Initializer
 
 ::
 
@@ -329,3 +342,5 @@ Creates a new fixed size array::
 Arrays can be also created with array comprehensions::
 
     let q <- [[ for x in range(0, 10); x * x ]]
+
+(see :ref:`Arrays <arrays>`).

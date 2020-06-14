@@ -19,7 +19,7 @@ daScript's storage types (which can't be manipulated with, but can be used as st
 
 daScript's other types are::
 
-    string, das_string, struct, pointers, references, block, lambda, function pointer, array, table
+    string, das_string, struct, pointers, references, block, lambda, function pointer, array, table, tuple, variant, iterator, bitfield
 
 
 all daScript's types are initialized with zero memory by default.
@@ -114,19 +114,38 @@ Arrays are simple sequence of objects. There are static arrays (fixed size), and
 Struct
 --------
 
-Structs are record of data of other types (including structs), similair to C language.
-All structs (as well as other non-POD types, except strings) will be passed by reference
+Structs are record of data of other types (including structs), similar to C language.
+All structs (as well as other non-POD types, except strings) are passed by reference
 
 (see :ref:`Structs <structs>`).
+
+--------
+Variant
+--------
+
+Variant is special anonymous data type similar to structure, however only one field exists at a time.
+Its possible to query or assign variant type, as well as active field value.
+
+(see :ref:`Variants <variants>`).
 
 --------
 Tuple
 --------
 
-Tuple are anonimous record of data of other types (including structs), similair to C++ std::tuple.
+Tuple are anonymous record of data of other types (including structs), similar to C++ std::tuple.
 All tuples (as well as other non-POD types, except strings) will be passed by reference
 
 (see :ref:`Tuples <tuples>`).
+
+--------
+Bitfield
+--------
+
+Bitfield is an anonymous data type, similar to enumeration. Each field explicitly represents one bit,
+and storage type is always uint. Queries on individual bits are available on variants,
+as well as binary logical operations.
+
+(see :ref:`Bitfields <bitfields>`).
 
 --------
 Function
@@ -137,8 +156,7 @@ Functions are similar to those in most other languages::
     def twice(a: int): int
         return a + a
 
-However, there are generic (templated) functions, which will be 'instantiated' during compilation of call to them.
-::
+However, there are generic (templated) functions, which will be 'instantiated' during function call type inference::
 
     def twice(a)
         return a + a
@@ -152,8 +170,7 @@ However, there are generic (templated) functions, which will be 'instantiated' d
 Reference
 --------------
 
-References are types that 'references' (points) some other data.
-::
+References are types that 'references' (points) some other data::
 
     def twice(a: int&)
         a = a + a
@@ -168,29 +185,29 @@ Pointers
 --------------
 
 Pointers are types that 'references' (points) some other data, but can be null (points to nothing).
-In order to work with actual value, one need to dereference using deref builtin function them or use safe navigation operators.
-deref will panic, if null pointer is passed to it.
+In order to work with actual value, one need to dereference using dereference or safe navigation operators.
+dereference will panic, if null pointer is passed to it.
 Pointers can be created using new operator, or with C++ environment.
 ::
 
     def twice(a: int&)
         a = a + a
     def twicePointer(a: int?)
-        twice(deref(a))
-  
+        twice(*a)
+
     struct Foo
         x: int
 
     def getX(foo: Foo?)  // it returns either foo.x or -1, if foo is null
        return foo?.x ?? -1
-    
+
 All structs are always passed to functions arguments as references.
 
 -----------
 Iterators
 -----------
 
-Iterator is an entity which can be travered, and associated data retrived.
-It is similar to C++ iterators.
+Iterator is a sequence which can be traversed, and associated data retrieved.
+It shares some similarities with C++ iterators.
 
 (see :ref:`Iterators <iterators>`).
