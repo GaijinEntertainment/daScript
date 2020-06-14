@@ -1,4 +1,4 @@
-returns vector representing reflection of arg0 from arg1 same as ::
+returns vector representing refractoin of vector v from normal n same as ::
 
     def refract(v, n: float3; nint: float; outRefracted: float3&)
         let dt = dot(v, n)

@@ -616,6 +616,19 @@ namespace das
         virtual string getAotBasicName() const override {
             return cppName.empty() ? name : cppName;
         }
+        FunctionPtr arg ( const char * argName ) {
+            DAS_ASSERT(arguments.size()==1);
+            arguments[0]->name = argName;
+            return this;
+        }
+        FunctionPtr args ( initializer_list<const char *> argList ) {
+            DAS_ASSERT(argList.size()==arguments.size());
+            int argIndex = 0;
+            for ( const char * arg : argList ) {
+                arguments[argIndex++]->name = arg;
+            }
+            return this;
+        }
     public:
         string cppName;
     };
