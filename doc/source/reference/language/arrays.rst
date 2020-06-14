@@ -75,3 +75,23 @@ resize can potentially create new array elements. Those elements will be initial
 reserve is there for performance reasons. Generally array capacity doubles, if exceeded.
 Reserve allows to specify exact known capacity, and significantly reduce the overhead of multiple push operations.
 
+Its possible to iterate over an array via regular for loop::
+
+	for x in [[int[] 1;2;3;4]]
+		print("x = {x}\n")
+
+Additionally a collection of unsafe iterators is provided::
+
+  def each ( a : auto(TT)[] ) : iterator<TT&>
+  def each ( a : array<auto(TT)> ) : iterator<TT&>
+
+The reason both are unsafe operation is that they do not capture an array.
+
+Search functions are available for both static and dynamic arrays::
+
+  def find_index ( arr : array<auto(TT)> implicit; key : TT )
+  def find_index ( arr : auto(TT)[] implicit; key : TT )
+  def find_index_if ( arr : array<auto(TT)> implicit; blk : block<(key:TT):bool> )
+  def find_index_if ( arr : auto(TT)[] implicit; blk : block<(key:TT):bool> )
+
+
