@@ -72,6 +72,7 @@ namespace das {
     }
 
     bool Server::init ( int port ) {
+        errno = 0;
         server_fd = socket(AF_INET, SOCK_STREAM, 0);
         if ( !server_fd ) {
             onError("can't socket", errno);
@@ -119,6 +120,7 @@ namespace das {
     }
 
     bool Server::send_msg ( char * data, int size ) {
+        errno = 0;
         if ( client_fd <= 0 ) {
             onError("can't send, not conencted", -1);
             return false;
@@ -146,6 +148,7 @@ namespace das {
     }
 
     void Server::tick() {
+        errno = 0;
         if ( client_fd==0 ) {
             struct sockaddr_in address;
             int addrlen = sizeof(address);
@@ -186,6 +189,7 @@ namespace das {
     }
 
     Server::~Server() {
+        errno = 0;
         if ( client_fd >0 ) {
             closesocket(client_fd);
         }
