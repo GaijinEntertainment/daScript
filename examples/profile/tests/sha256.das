@@ -28,11 +28,11 @@ def toHex(hash:uint[8])
             format(writer,"%08x",i)
     return st
 
-[unsafe]
 def digestBlock(data:uint?; var hash:uint[8])
     var digest:uint[64]
     for j in range(0,16)
-        digest[j] = data[j]
+        unsafe
+            digest[j] = data[j]
     for j in range(16,64)
         let v0 = digest[j-15]
         let s0 = (v0 >>> 7u) ^ (v0 >>> 18u) ^ (v0>>3u)
@@ -71,7 +71,6 @@ def digestBlock(data:uint?; var hash:uint[8])
     hash[6] += g
     hash[7] += h
 
-[unsafe]
 def sha256(msg:array<uint8>)
     var hash = [[uint
         0x6a09e667;
@@ -85,7 +84,8 @@ def sha256(msg:array<uint8>)
     ]]
     let len = length(msg) / 64
     for i in range(0,len)
-        digestBlock(reinterpret<uint?>(addr(msg[i*64])),hash)
+        unsafe
+            digestBlock(reinterpret<uint?>(addr(msg[i*64])),hash)
     return toHex(hash)
 
 [export]

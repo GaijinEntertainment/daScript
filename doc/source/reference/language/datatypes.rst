@@ -19,7 +19,8 @@ daScript's storage types (which can't be manipulated with, but can be used as st
 
 daScript's other types are::
 
-    string, das_string, struct, pointers, references, block, lambda, function pointer, array, table, tuple, variant, iterator, bitfield
+    string, das_string, struct, pointers, references, block, lambda, function pointer,
+    array, table, tuple, variant, iterator, bitfield
 
 
 all daScript's types are initialized with zero memory by default.

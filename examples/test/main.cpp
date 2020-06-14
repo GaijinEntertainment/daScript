@@ -36,7 +36,7 @@ bool compilation_fail_test ( const string & fn, bool ) {
     ModuleGroup dummyLibGroup;
     if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
         if ( program->failed() ) {
-            // we allow circular module dependency to fly throug
+            // we allow circular module dependency to fly through
             if ( program->errors.size()==1 ) {
                 if ( program->errors[0].cerr==CompilationError::module_not_found ) {
                     if ( fn.find("circular_module_dependency")!=string::npos ) {
@@ -389,14 +389,18 @@ int main( int argc, char * argv[] ) {
     return 0;
 #endif
 #if 0 // Debug this one test
-    #define TEST_NAME   "/examples/test/array_reader_example.das"
+
+    #define TEST_NAME   "/doc/reflections/das2rst.das"
+
+    // #define TEST_NAME   "/examples/test/array_reader_example.das"
     // #define TEST_NAME   "/examples/test/hello_world.das"
+    // #define TEST_NAME   "/examples/test/apply_macro_example.das"
     // #define TEST_NAME   "/examples/test/regex_lite.das"
     // #define TEST_NAME   "/examples/test/dict_pg.das"
     // #define TEST_NAME   "/examples/test/hint_macros.das"
     // #define TEST_NAME   "/examples/test/json_example.das"
     // #define TEST_NAME   "/examples/test/ast_print.das"
-    // #define TEST_NAME   "/examples/test/unit_tests/fun.das"
+    // #define TEST_NAME   "/examples/test/unit_tests/handle.das"
     // debug_unit_test(TEST_PATH TEST_NAME,16,23,false);
     unit_test(getDasRoot() +  TEST_NAME,false);
     // unit_test(getDasRoot() +  TEST_NAME,true);

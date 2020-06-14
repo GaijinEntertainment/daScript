@@ -65,14 +65,13 @@ def insert(var mRoot:Node? &; x: int)
     	equal = new [[Node x=x, y=random_int(seed)]]
     mRoot = merge(lower, equal, greater)
 
-[unsafe]
 def erase_raw(var mRoot:Node? &; x: int)
     var lower, equal, greater : Node?
     split(mRoot, lower, equal, greater, x)
     mRoot = merge(lower, greater)
-    delete equal
+    unsafe
+        delete equal
 
-[unsafe]
 def main
     var tree:Node?
     var cur = 5
@@ -86,7 +85,8 @@ def main
             tree |> erase_raw(cur)
         elif a == 2
             res += (tree |> hasValue(cur)) ? 1 : 0
-	delete tree
+    unsafe
+	    delete tree
     return res
 
 struct Pair
@@ -127,13 +127,12 @@ def insertNaive(var mRoot:Node? &; x: int)
     	splited.equal = new [[Node x=x, y=random_int(seed)]]
     mRoot = merge(splited.lower, splited.equal, splited.greater)
 
-[unsafe]
 def erase_rawNaive(var mRoot:Node? &; x: int)
     var splited = splitNaive(mRoot, x)
     mRoot = merge(splited.lower, splited.greater)
-    delete splited.equal
+    unsafe
+        delete splited.equal
 
-[unsafe]
 def mainNaive
     var tree:Node?
     var cur = 5
@@ -147,7 +146,8 @@ def mainNaive
             tree |> erase_rawNaive(cur)
         elif a == 2
             res += (tree |> hasValueNaive(cur)) ? 1 : 0
-	delete tree
+    unsafe
+	    delete tree
     return res
 
 [export]
