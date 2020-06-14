@@ -4,7 +4,7 @@ struct Foo
     a : array<int>
     b : string
 
-[export, unsafe]
+[export]
 def test
     let sa <- [{int 1;2;3;4}]
     let sb <- [{int 1;2;3}]

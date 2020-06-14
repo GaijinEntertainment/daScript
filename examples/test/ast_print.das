@@ -17,7 +17,6 @@ let
         (FunctionFlags exports) |
         (FunctionFlags privateFunction) |
         (FunctionFlags unsafeDeref) |
-        (FunctionFlags unsafe) |
         (FunctionFlags unsafeOperation) |
         (FunctionFlags _generator) )
 
@@ -661,7 +660,7 @@ def add(a,b:int)
     print("a={a} b={b}")
     return a + b + add_extra
 
-[sideeffects,export,unsafe]
+[sideeffects,export]
 def allExpr(arg:int)
     // ExprStringBuilder
     var sb = "arg = {arg}\n"
@@ -744,8 +743,9 @@ def allExpr(arg:int)
     print("nop")
     label 1:
     // ExprRef2Ptr
-    let aacomp = addr(acomp)
-    print("{aacomp}")
+    unsafe
+        let aacomp = addr(acomp)
+        print("{aacomp}")
     // ExprAddr
     let eaddr = @@add
     print("{eaddr}")
@@ -771,10 +771,12 @@ def allExpr(arg:int)
     let easc = new [[auto 1;2;3;4]]
     print("{easc}")
     // ExprCast
-    let aaf = reinterpret<float> aa
-    print("{aaf}")
+    unsafe
+        let aaf = reinterpret<float> aa
+        print("{aaf}")
     // ExprDelete
-    delete pFoo1
+    unsafe
+        delete pFoo1
     // ExprSwizzle
     var fsw = float4(1,2,3,4)
     fsw = fsw.yyzx

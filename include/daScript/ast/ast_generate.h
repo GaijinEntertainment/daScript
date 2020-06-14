@@ -173,13 +173,13 @@ namespace das {
                 ...block_body...    // with finally section removed
      */
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, bool needYield, bool isUnsafe );
+                                        const StructurePtr & ls, bool needYield );
 
     /*
         local function, i.e.
          def __localfunction_function_at_line_xxx(...block_args...)
      */
-    FunctionPtr generateLocalFunction ( const string & lambdaName, ExprBlock * block,bool isUnsafe );
+    FunctionPtr generateLocalFunction ( const string & lambdaName, ExprBlock * block );
 
     /*
         lambda finalizer, i.e.
@@ -188,7 +188,7 @@ namespace das {
                 ...block_finally...
      */
     FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
-                                         const StructurePtr & ls, bool isUnsafe );
+                                         const StructurePtr & ls );
 
     /*
          [[__lambda_at_line_xxx

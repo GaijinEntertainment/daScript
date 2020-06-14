@@ -71,11 +71,12 @@ struct Float2Int
     fv:float
     iv:uint
 
-[sideeffects,unsafe]
+[sideeffects]
 def test_reinterpret()
     let f2i = [[Int2Float iv=0x3f400000,fv=1.0]]
-    let i2f = reinterpret<Float2Int>(f2i)
-    assert(i2f.fv==0.75 & i2f.iv==0x3f800000)
+    unsafe
+        let i2f = reinterpret<Float2Int>(f2i)
+        assert(i2f.fv==0.75 & i2f.iv==0x3f800000)
     return true
 
 [export]

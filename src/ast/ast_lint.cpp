@@ -54,6 +54,9 @@ namespace das {
         } else if ( expr->rtti_isFor() ) {
             auto fr = static_pointer_cast<ExprFor>(expr);
             return exprReturns(fr->body);
+        } else if ( expr->rtti_isUnsafe() ) {
+            auto us = static_pointer_cast<ExprUnsafe>(expr);
+            return exprReturns(us->body);
         }
         return false;
     }
@@ -75,12 +78,12 @@ namespace das {
             checkUnsafe = program->policies.no_unsafe;
         }
     protected:
-        void verifyOnlyFastAot ( Function * func, const LineInfo & at ) {
+        void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
             if ( !checkOnlyFastAot ) return;
-            if ( func && func->builtIn ) {
-                auto bif = (BuiltInFunction *) func;
+            if ( _func && _func->builtIn ) {
+                auto bif = (BuiltInFunction *) _func;
                 if ( bif->cppName.empty() ) {
-                    program->error(func->describe() + " has no cppName while onlyFastAot option is set", "", "", at,
+                    program->error(_func->describe() + " has no cppName while onlyFastAot option is set", "", "", at,
                                    CompilationError::only_fast_aot_no_cpp_name );
                 }
             }
@@ -261,24 +264,30 @@ namespace das {
                     expr->at, CompilationError::assert_with_side_effects);
             }
         }
+        virtual void preVisit ( ExprUnsafe * expr ) override {
+            auto fnMod = func->fromGeneric ? func->fromGeneric->module : func->module;
+            if ( fnMod == program->thisModule.get() ) {
+                anyUnsafe = true;
+                if ( checkUnsafe ) {
+                    program->error("unsafe function " + func->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
+                        expr->at, CompilationError::unsafe_function);
+                }
+            }
+        }
         bool isValidFunctionName(const string & str) const {
             return !isCppKeyword(str);
         }
-
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
+            func = fn;
             if (!isValidFunctionName(fn->name)) {
                 program->error("invalid function name " + fn->name, "", "",
                     fn->at, CompilationError::invalid_name );
             }
-            auto fnMod = fn->fromGeneric ? fn->fromGeneric->module : fn->module;
-            if ( fnMod == program->thisModule.get() ) {
-                anyUnsafe |= fn->unsafe;
-                if ( fn->unsafe && checkUnsafe ) {
-                    program->error("unsafe function " + fn->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
-                        fn->at, CompilationError::unsafe_function);
-                }
-            }
+        }
+        virtual FunctionPtr visit ( Function * fn ) override {
+            func = nullptr;
+            return Visitor::visit(fn);
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
@@ -303,6 +312,7 @@ namespace das {
         }
     public:
         ProgramPtr program;
+        Function * func = nullptr;
         bool anyUnsafe = false;
     };
 

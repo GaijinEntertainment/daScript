@@ -3,30 +3,34 @@
 var
     g_t = 2
 
-[unsafe]
+[unsafe_operation]
 def ret_ref : auto &
     var qq : auto & = g_t
-    return qq
+    unsafe
+        return qq
 
-[unsafe]
+[unsafe_operation]
 def ret_safe_ref(var a:auto&) : auto&
-    return a
+    unsafe
+        return a
 
 def add2(bl:block<int&>)
     invoke(bl) += 2
 
-[export,unsafe]
+[export]
 def test
-    var x = ret_ref()
-    var xx : int& = ret_safe_ref(x)
-    assert(xx==2)
-    var z : int & = ret_ref()
-    assert(x==2 & z==2)
-    ret_ref() = 3
-    assert(x==2 & z==3)
-    xx = 4
-    assert(x==4 & z==3 & xx==4)
-    add2() <| $():auto&
-        return x
-    assert(x==6)
+    unsafe
+        var x = ret_ref()
+        var xx : int& = ret_safe_ref(x)
+        assert(xx==2)
+        var z : int & = ret_ref()
+        assert(x==2 & z==2)
+        ret_ref() = 3
+        assert(x==2 & z==3)
+        xx = 4
+        assert(x==4 & z==3 & xx==4)
+        add2() <| $():auto&
+            unsafe
+                return x
+        assert(x==6)
     return true

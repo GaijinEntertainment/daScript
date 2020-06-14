@@ -64,18 +64,19 @@ def test_foo
     delFoo = 0
     delFoo3D = 0
 
-[unsafe]
 def test_foo_ptr
     var f = new Foo()
     f->ups()
     assert(f.x==-1 & f.y==-1)
     assert(delFoo==0 & delFoo3D==0)
-    delete f
+    unsafe
+        delete f
     assert(delFoo==1 & delFoo3D==0)
     f = cast<Foo?> new Foo3D()
     f->ups()
     assert(f.x==-2 & f.y==-2)
-    delete f
+    unsafe
+        delete f
     assert(delFoo==2 & delFoo3D==1)
     delFoo = 0
     delFoo3D = 0

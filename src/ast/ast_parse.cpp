@@ -235,6 +235,7 @@ namespace das {
             program->inferTypes(logs, libGroup);
             if ( !program->failed() ) {
                 program->lint(libGroup);
+                program->foldUnsafe();
                 if (program->getOptimize()) {
                     program->optimize(logs,libGroup);
                 } else {

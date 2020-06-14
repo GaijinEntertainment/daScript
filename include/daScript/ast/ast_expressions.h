@@ -767,6 +767,18 @@ namespace das
         LineInfo                visibility;
     };
 
+    struct ExprUnsafe : Expression {
+        ExprUnsafe() { __rtti = "ExprUnsafe"; };
+        ExprUnsafe(const LineInfo & a)
+            : Expression(a) { __rtti = "ExprUnsafe"; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual uint32_t getEvalFlags() const override;
+        virtual bool rtti_isUnsafe() const override { return true; }
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr   body;
+    };
+
     struct ExprWhile : Expression {
         ExprWhile() { __rtti = "ExprWhile"; };
         ExprWhile(const LineInfo & a)

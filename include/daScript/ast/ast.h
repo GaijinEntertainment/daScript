@@ -392,6 +392,7 @@ namespace das
         virtual bool rtti_isContinue() const { return false; }
         virtual bool rtti_isBlock() const { return false; }
         virtual bool rtti_isWith() const { return false; }
+        virtual bool rtti_isUnsafe() const { return false; }
         virtual bool rtti_isVar() const { return false; }
         virtual bool rtti_isR2V() const { return false; }
         virtual bool rtti_isRef2Ptr() const { return false; }
@@ -559,15 +560,16 @@ namespace das
                 bool    copyOnReturn : 1;
                 bool    moveOnReturn : 1;
                 bool    exports : 1;
+
                 bool    init : 1;
                 bool    addr : 1;
                 bool    used : 1;
                 bool    fastCall : 1;
                 bool    knownSideEffects : 1;
                 bool    hasToRunAtCompileTime : 1;
-                bool    unsafe : 1;
                 bool    unsafeOperation : 1;
                 bool    unsafeDeref : 1;
+
                 bool    hasMakeBlock : 1;
                 bool    aotNeedPrologue : 1;
                 bool    noAot : 1;
@@ -576,6 +578,7 @@ namespace das
                 bool    generated : 1;
                 bool    privateFunction : 1;
                 bool    generator : 1;
+
                 bool    lambda : 1;
                 bool    firstArgReturnType : 1;
                 bool    isClassMethod : 1;
@@ -976,6 +979,7 @@ namespace das
         void inferTypesDirty(TextWriter & logs);
         void lint ( ModuleGroup & libGroup );
         void checkSideEffects();
+        void foldUnsafe();
         bool optimizationRefFolding();
         bool optimizationConstFolding();
         bool optimizationBlockFolding();

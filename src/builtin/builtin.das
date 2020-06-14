@@ -1,12 +1,14 @@
 options indenting=4
 options remove_unused_symbols=false
 
-[unsafe,generic]
+[generic]
 def intptr ( p : void? ) : uint64
 	static_if typeinfo(sizeof p)==4
-		return uint64(reinterpret<uint> p)
+        unsafe
+		    return uint64(reinterpret<uint> p)
 	else
-		return reinterpret<uint64> p
+        unsafe
+		    return reinterpret<uint64> p
 
 def resize(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_resize(Arr,newSize,typeinfo(sizeof type<numT>))
@@ -60,13 +62,13 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):
     else
         return false
 
-[unsafe_operation,unsafe]
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT const?
-    return reinterpret<valT const?>(__builtin_table_find(Tab,at))
+    unsafe
+        return reinterpret<valT const?>(__builtin_table_find(Tab,at))
 
-[unsafe]
 def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT):valT const?#
-    return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
+    unsafe
+        return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
 
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
@@ -99,7 +101,6 @@ def binary_load(var obj; data:array<uint8>)
     concept_assert(typeinfo(is_ref_type obj),"can only serialize ref types")
     _builtin_binary_load(obj,data)
 
-[unsafe]    // when cloning smart-ptr
 def clone_to_move(clone_src:auto(TT)) : TT -const
     var clone_dest : TT
     clone_dest := clone_src
@@ -157,60 +158,60 @@ def values(var a:table<auto(keyT);auto(valT)> =const) : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
 
-[unsafe]
 def finalize_dim(var a : auto(TT)[])
     static_if typeinfo(can_delete type<TT>)
         for aV in a
-            delete aV
+            unsafe
+                delete aV
     else
         concept_assert(false,"can't finalize this array")
 
-[unsafe]
 def finalize(var a:array<auto(TT)>)
     static_if typeinfo(can_delete type<TT>)
         for aV in a
-            delete aV
+            unsafe
+                delete aV
     __builtin_array_free(a,typeinfo(sizeof type<TT>))
 
-[unsafe]
 def finalize(var a:table<auto(TK);auto(TV)>)
     static_if typeinfo(can_delete type<TV>)
         for aV in values(a)
-            delete aV
+            unsafe
+                delete aV
     __builtin_table_free(a,typeinfo(sizeof type<TK>),typeinfo(sizeof type<TV>))
 
 // temporal
 
-[unsafe]
 def lock ( Tab : table<auto(keyT);auto(valT)>; blk : block<(t : table<keyT;valT>#):void >  )
     __builtin_table_lock(Tab)
-    invoke(blk,reinterpret<table<auto(keyT);auto(valT)> const implicit>(Tab))
+    unsafe
+        invoke(blk,reinterpret<table<auto(keyT);auto(valT)> const implicit>(Tab))
     __builtin_table_unlock(Tab)
 
-[unsafe]
 def lock ( Tab : table<auto(keyT);auto(valT)>#; blk : block<(t : table<keyT;valT>#):void >  )
     invoke(blk,Tab)
 
-[unsafe]
 def lock_forever ( var Tab : table<auto(keyT);auto(valT)> ) : table<keyT;valT> #
     __builtin_table_lock(Tab)
-    return <- reinterpret<table<keyT;valT> #>(Tab)
+    unsafe
+        return <- reinterpret<table<keyT;valT> #>(Tab)
 
 // functional
 
-[unsafe]
 def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
     static_if !typeinfo(can_copy type<TT>)
         concept_assert(false, "requires type which can be copied")
     static_elif typeinfo(is_ref_value type<TT>)
         var pValue : TT - & ?
-        if _builtin_iterator_iterate(it, addr(pValue))
-            value = *pValue
-            return true
-        else
-            return false
+        unsafe
+            if _builtin_iterator_iterate(it, addr(pValue))
+                value = *pValue
+                return true
+            else
+                return false
     else
-        return _builtin_iterator_iterate(it, addr(value))
+        unsafe
+            return _builtin_iterator_iterate(it, addr(value))
 
 [generic]
 def each ( rng : range ) : iterator<int>
@@ -224,12 +225,13 @@ def each ( str : string ) : iterator<int>
     _builtin_make_string_iterator(it,str)
     return <- it
 
-[unsafe,unsafe_operation]
+[unsafe_operation]
 def each ( a : auto(TT)[] ) : iterator<TT&>
-    var parr : void? = reinterpret<void?>(addr(a[0]))
-    var it : iterator<TT&>
-    _builtin_make_fixed_array_iterator(it,parr,typeinfo(dim a),typeinfo(sizeof type<TT>))
-    return <- it
+    unsafe
+        var parr : void? = reinterpret<void?>(addr(a[0]))
+        var it : iterator<TT&>
+        _builtin_make_fixed_array_iterator(it,parr,typeinfo(dim a),typeinfo(sizeof type<TT>))
+        return <- it
 
 [unsafe_operation]
 def each ( a : array<auto(TT)> ) : iterator<TT&>
@@ -258,48 +260,29 @@ def nothing( var it : iterator<auto(TT)> ) : iterator<TT>
     _builtin_make_nil_iterator(it)
     return <- it
 
-[unsafe]
 def to_array ( it : iterator<auto(TT)> ) : array<TT -const -&>
     var arr : array<TT -const -&>
     for x in it
         push_clone(arr,x)
-/*
-    // this is here to show internal implementation of the 'for' loop with iterator
-    static_if typeinfo(is_ref_value type<TT>)
-        var rkey : TT -const -&?
-        var pkey : void? = reinterpret<void?>(addr(rkey))
-        var loop = _builtin_iterator_first(it,pkey)
-        while loop
-            push(arr,deref(rkey))
-            loop = _builtin_iterator_next(it,pkey)
-        _builtin_iterator_close(it,pkey)
-    else
-        var rkey : TT
-        var pkey : void? = reinterpret<void?>(addr(rkey))
-        var loop = _builtin_iterator_first(it,pkey)
-        while loop
-            push(arr,rkey)
-            loop = _builtin_iterator_next(it,pkey)
-        _builtin_iterator_close(it,pkey)
-*/
     return <- arr
 
-[unsafe]
 def to_array(a:auto(TT)[]) : array<TT -const>
     var arr : array<TT -const>
     resize(arr,length(a))
-    reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) := a
+    unsafe
+        reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) := a
     return <- arr
 
-[unsafe]
 def to_array_move(var a:auto(TT)[]) : array<TT -const>
     var arr : array<TT -const>
     static_if typeinfo(can_copy a)
         resize(arr,length(a))
-        reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) = a
+        unsafe
+            reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) = a
     static_elif typeinfo(can_move a)
         resize(arr,length(a))
-        reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) <- a
+        unsafe
+            reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) <- a
     else
         concept_assert(false,"this array can't be copied or moved")
     return <- arr
@@ -322,54 +305,64 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT
         concept_assert(false,"this array can't be copied or moved")
     return <- tab
 
-[unsafe]
 def sort ( var a : auto(TT)[] )
     static_if typeinfo(is_numeric_comparable type<TT>)
-        __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
+        unsafe
+            __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
     static_elif typeinfo(is_vector type<TT>)
         concept_assert(false,"there is no default compare function for vectors")
     static_elif typeinfo(is_string type<TT>)
-        __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
+        unsafe
+            __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
-        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
-            return x < y
+        unsafe
+            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                return x < y
 
-[unsafe]
 def sort ( var a : array<auto(TT)> )
     __builtin_array_lock(a)
     static_if typeinfo(is_numeric_comparable type<TT>)
-        __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
+        unsafe
+            __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
     static_elif typeinfo(is_vector type<TT>)
         concept_assert(false,"there is no default compare function for vectors")
     static_elif typeinfo(is_string type<TT>)
-        __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
+        unsafe
+            __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
-        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
-            return x < y
+        unsafe
+            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                return x < y
     __builtin_array_unlock(a)
 
-[unsafe]
 def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
-        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+        unsafe
+            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     static_elif typeinfo(is_vector type<TT>)
-        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+        unsafe
+            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     static_elif typeinfo(is_string type<TT>)
-        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+        unsafe
+            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     else
-        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+        unsafe
+            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
 
-[unsafe]
 def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
     __builtin_array_lock(a)
     static_if typeinfo(is_numeric_comparable type<TT>)
-        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+        unsafe
+            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     static_elif typeinfo(is_vector type<TT>)
-        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+        unsafe
+            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     static_elif typeinfo(is_string type<TT>)
-        __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+        unsafe
+            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     else
-        __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+        unsafe
+            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
     __builtin_array_unlock(a)
 
 def find_index ( arr : array<auto(TT)> implicit; key : TT )
@@ -406,7 +399,7 @@ def has_value ( a; key )
         concept_assert(false,"can't iterate over source. has_value is meaningless")
         return false
 
-[unsafe]
 def get_ptr ( src : smart_ptr<auto(TT)> ) : TT?
-    return reinterpret<TT?>(src)
+    unsafe
+        return reinterpret<TT?> src
 

@@ -2,7 +2,7 @@ def panic_time(msg)
     panic(msg)
     return false
 
-[export, unsafe]
+[export]
 def test
     var libertad = true
     libertad = libertad | panic_time("do not panic")

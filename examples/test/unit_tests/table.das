@@ -1,4 +1,3 @@
-[unsafe]
 def test_find
     let const_tab <- {{ "one"=>1; "two"=>2 }}
     find(const_tab,"one") <| $(num:int?)
@@ -25,11 +24,12 @@ def test_find
         assert(deref(num)==4)
         deref(num) = 5
     assert(deref(find(tab,"one"))==5)
-    deref(find_for_edit(tab,"one"))=1
-    assert(deref(find_for_edit(tab,"one"))==1)
+    unsafe
+        deref(find_for_edit(tab,"one"))=1
+        assert(deref(find_for_edit(tab,"one"))==1)
     return true
 
-[export,unsafe]
+[export]
 def test : bool
     test_find()
 

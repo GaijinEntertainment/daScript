@@ -1,7 +1,7 @@
 struct Foo
     a : int
 
-[sideeffects,unsafe]
+[sideeffects]
 def buggy(skip:bool)
     var in scope a = new Foo
     if skip

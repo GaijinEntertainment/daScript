@@ -7,8 +7,8 @@ typedef
 def mks ()
     return [[TestObjectSmartPtr]]
 
-[export,unsafe]
+[export]
 def test
     let p <- mks()
-    verify((reinterpret<TestObjectSmart?> p)==null)
+    verify(get_ptr(p)==null)
     return true

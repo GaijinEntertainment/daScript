@@ -1,4 +1,4 @@
-[export,unsafe]
+[export]
 def test
     // regular to-array
     let d = [[ int 1; 2; 3; 4 ]]
@@ -11,16 +11,20 @@ def test
     for x,y in range(0,5),to_array(each(range(0,5)))
         assert(x==y)
     // static array
-    for x,y in d,each(d)
-        assert(x==y)
+    unsafe
+        for x,y in d,each(d)
+            assert(x==y)
     for x,y in d,to_array(d)
         assert(x==y)
-    for x,y in d,to_array(each(d))
-        assert(x==y)
+    unsafe
+        for x,y in d,to_array(each(d))
+            assert(x==y)
     // dynamic array
-    for x,y in a,each(a)
-        assert(x==y)
-    for x,y in a,to_array(each(a))
-        assert(x==y)
+    unsafe
+        for x,y in a,each(a)
+            assert(x==y)
+    unsafe
+        for x,y in a,to_array(each(a))
+            assert(x==y)
     return true
 

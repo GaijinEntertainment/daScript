@@ -22,15 +22,16 @@ def test_ifs
     assert(s is s_value)
     assert(s as s_value == "3")
 
-[export,unsafe]
+[export]
 def test
 
     assert(typeinfo(sizeof type<U_F>)==8)
 
     var t : U_F
     assert(typeinfo(sizeof t)==8)
-    t.f_value = 1.0                                                 // unsafe operation
-    assert(t.i_value==0x3f800000)                                   // unsafe operation
+    unsafe
+        t.f_value = 1.0                                                 // unsafe operation
+        assert(t.i_value==0x3f800000)                                   // unsafe operation
     assert(variant_index(t)==0)
 
     assert(typeinfo(variant_index<i_value> t)==0)
@@ -43,18 +44,21 @@ def test
 
     assert(t is i_value)
     assert(t as i_value == 0x3f800000)
-    set_variant_index(t, typeinfo(variant_index<f_value> t))        // unsafe operation
+    unsafe
+        set_variant_index(t, typeinfo(variant_index<f_value> t))        // unsafe operation
     assert(t as f_value == 1.0)
 
     assert(t ?as f_value ?? 2.0 == 1.0)
     assert(t ?as i_value ?? 1u == 1u)
 
     t as f_value = 2.0
-    set_variant_index(t, typeinfo(variant_index<i_value> t))        // unsafe operation
+    unsafe
+        set_variant_index(t, typeinfo(variant_index<i_value> t))        // unsafe operation
     assert(t as i_value == 0x40000000)
 
     t as i_value = 0x3f800000
-    set_variant_index(t, typeinfo(variant_index<f_value> t))        // unsafe operation
+    unsafe
+        set_variant_index(t, typeinfo(variant_index<f_value> t))        // unsafe operation
     assert(t as f_value == 1.0)
 
     var paniced = false
@@ -64,7 +68,8 @@ def test
         paniced = true
     assert(paniced)
 
-    assert(t.f_value == 1.0)
+    unsafe
+        assert(t.f_value == 1.0)
     t = [[U_F i_value = 0x40000000]]
     assert(t as i_value == 0x40000000)
     t = [[U_F f_value = 1.0]]
@@ -76,16 +81,18 @@ def test
 
     var f : Foo
     var fp : Foo?
-    assert ( fp?.t?.i_value ?? 13u == 13u )                         // unsafe ?.i_value
-    fp = addr(f)
-    assert ( fp?.t?.i_value ?? 14u == 14u )                         // unsafe ?.i_value
-    f.t = addr(t)
-    assert ( fp?.t?.i_value ?? 15u == 0x3f800000 )                  // unsafe ?.i_value
-    assert ( fp?.t ?as i_value ?? 15u == 15u )
+    unsafe
+        assert ( fp?.t?.i_value ?? 13u == 13u )                         // unsafe ?.i_value
+        fp = addr(f)
+        assert ( fp?.t?.i_value ?? 14u == 14u )                         // unsafe ?.i_value
+        f.t = addr(t)
+        assert ( fp?.t?.i_value ?? 15u == 0x3f800000 )                  // unsafe ?.i_value
+        assert ( fp?.t ?as i_value ?? 15u == 15u )
 
     var x : IorA
-    set_variant_index(x, 1)
-    x.a <- [{for t in range(0,10); t}]
+    unsafe
+        set_variant_index(x, 1)
+        x.a <- [{for t in range(0,10); t}]
     var y := x
     assert(y is a)
     for t in range(0,10)

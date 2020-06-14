@@ -40,9 +40,10 @@ def test_reader
         }}
     %%
     print("{write_json(jsv)}\n")
-    delete jsv
+    unsafe
+        delete jsv
 
-[export,unsafe]
+[export]
 def test
     test_reader()
     for jidx in range(1,8)
@@ -66,9 +67,11 @@ def test
                     delete json
                     print("before collect  {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
                     heap_report()
-                    string_heap_collect()
+                    unsafe
+                        string_heap_collect()
                     print("after collect {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
     print("allocated {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
-    string_heap_collect()
+    unsafe
+        string_heap_collect()
     print("after collect {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
     return true

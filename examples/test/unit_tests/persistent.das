@@ -6,12 +6,13 @@ class Foo
     def update
         return count++
 
-[export,unsafe]
+[export]
 def test
     var pFoo = new Foo(13)
     let up1 = pFoo->update()
     let up2 = pFoo->update()
-    delete pFoo
+    unsafe
+        delete pFoo
     assert(up1==13)
     assert(up2==14)
     return true

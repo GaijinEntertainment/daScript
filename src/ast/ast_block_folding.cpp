@@ -5,6 +5,19 @@
 
 namespace das {
 
+    class UnsafeFolding : public PassVisitor {
+    protected:
+        virtual ExpressionPtr visit ( ExprUnsafe * expr ) {
+            return expr->body;
+        }
+    };
+
+    void Program::foldUnsafe() {
+        UnsafeFolding context;
+        visit(context);
+    }
+
+
     // this folds the following, by setting r2v flag on expressions
     //  r2v(var)            = @var
     //  r2v(expr.field)     = expr.@field

@@ -4,7 +4,7 @@ struct Storage
     i16 : int16
     ui16 : uint16
 
-[export,unsafe]
+[export]
 def test:bool
     var t, q : Storage
     assert(typeinfo(sizeof type<Storage>)==6)

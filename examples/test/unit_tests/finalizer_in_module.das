@@ -9,7 +9,7 @@ struct Foo
 def finalize(var f : Foo)
     all_good = true
 
-[export, unsafe]
+[export]
 def test
     var arr : array<Foo>
     push(arr,[[Foo a=1]])

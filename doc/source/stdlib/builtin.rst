@@ -946,9 +946,6 @@ arguments are
 
 find returns valT const?
 
-.. warning:: 
-  This is unsafe operation.
-
 arguments are
 
 +---+----------------------------------+

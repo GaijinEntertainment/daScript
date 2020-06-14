@@ -11,7 +11,7 @@ var
     gstackref = [[TestObjectFoo fooData=6]]
     gstackrefa = [[TestObjectFoo fooData=1; fooData=2]]
 
-[export, unsafe]
+[export]
 def test
     // stack-ref initialization
     assert(gstackref.fooData==6)
@@ -28,10 +28,12 @@ def test
     // ascend
     var ascend_t <- new [[TestObjectFoo() fooData=1]]
     assert(ascend_t.fooData==1)
-    delete ascend_t
+    unsafe
+        delete ascend_t
     // ascend with smart-ptr
     var ascend_smart_t <- new [[TestObjectSmart() fooData=1]]
     assert(ascend_smart_t.fooData==1)
-    delete ascend_smart_t
+    unsafe
+        delete ascend_smart_t
     return true
 

@@ -1,13 +1,10 @@
-require daslib/regex
-require daslib/regex_boost
 
 [export]
 def test()
-	var r1 <- %regex~f*%%
-	regex_debug(r1)
+	var tab <- {{ "one"=>1; "two"=> 2 }}
+	let i = tab?["three"] ?? 3
+	print("i = {i}\n")
+	return true
 
-	let res = regex_match(r1, "stats")
-	print("res = {res}\n")
 
-    return true
 

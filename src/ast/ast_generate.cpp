@@ -235,9 +235,14 @@ namespace das {
     }
 
     ExpressionPtr makeDelete ( const VariablePtr & var ) {
+        auto eUns = make_smart<ExprUnsafe>(var->at);
+        auto bod = make_smart<ExprBlock>();
+        bod->at = var->at;
+        eUns->body = bod;
         auto eVar = make_smart<ExprVar>(var->at, var->name);
         auto del = make_smart<ExprDelete>(var->at, eVar);
-        return del;
+        bod->list.push_back(del);
+        return eUns;
     }
 
     // return [[t()]]
@@ -297,12 +302,20 @@ namespace das {
         return fn;
     }
 
+    void wrapInUnsafe ( const FunctionPtr & func ) {
+        auto blk = make_smart<ExprBlock>();
+        blk->at = func->body->at;
+        auto usa = make_smart<ExprUnsafe>(func->body->at);
+        usa->body = func->body;
+        blk->list.push_back(usa);
+        func->body = blk;
+    }
+
     FunctionPtr generatePointerFinalizer ( const TypeDeclPtr & ptrType, const LineInfo & at ) {
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = at;
         pFunc->name = "finalize";
-        pFunc->unsafe = true;
         auto THIS0 = make_smart<ExprVar>(at, "__this");
         auto NULLP0 = make_smart<ExprConstPtr>(at);
         auto NEQ = make_smart<ExprOp2>(at, "!=", THIS0, NULLP0);
@@ -350,6 +363,7 @@ namespace das {
         cTHIS->type->ref = true;
         cTHIS->type->removeRef = false;
         pFunc->arguments.push_back(cTHIS);
+        wrapInUnsafe(pFunc);
         verifyGenerated(pFunc->body);
         return pFunc;
     }
@@ -359,7 +373,6 @@ namespace das {
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = ls->at;
         pFunc->name = "finalize";
-        pFunc->unsafe = true;
         auto fb = make_smart<ExprBlock>();
         fb->at = ls->at;
         // now finalize
@@ -385,18 +398,18 @@ namespace das {
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
+        wrapInUnsafe(pFunc);
         verifyGenerated(pFunc->body);
         return pFunc;
     }
 
     FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, bool isUnsafe ) {
+                                        const StructurePtr & ls ) {
         auto lfn = lambdaName + "`finazlier";
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
-        pFunc->unsafe = isUnsafe;
         auto fb = make_smart<ExprBlock>();
         fb->at = block->at;
         // fb->list.push_back(genComment("delete this lambda\n"));
@@ -432,17 +445,17 @@ namespace das {
         cTHIS->type = make_smart<TypeDecl>(Type::tPointer);
         cTHIS->type->firstType = make_smart<TypeDecl>(ls);
         pFunc->arguments.push_back(cTHIS);
+        wrapInUnsafe(pFunc);
         verifyGenerated(pFunc->body);
         return pFunc;
     }
 
-    FunctionPtr generateLocalFunction ( const string & lambdaName, ExprBlock * block, bool isUnsafe ) {
+    FunctionPtr generateLocalFunction ( const string & lambdaName, ExprBlock * block ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
-        pFunc->unsafe = isUnsafe;
         pFunc->body = block->clone();
         auto wb = static_pointer_cast<ExprBlock>(pFunc->body);
         wb->blockFlags = 0;
@@ -457,14 +470,13 @@ namespace das {
     }
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, bool needYield, bool isUnsafe ) {
+                                        const StructurePtr & ls, bool needYield ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->generated = true;
         pFunc->lambda = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
-        pFunc->unsafe = isUnsafe;
         auto fb = make_smart<ExprBlock>();
         fb->at = block->at;
         auto with = make_smart<ExprWith>(block->at);
@@ -1224,7 +1236,6 @@ namespace das {
         DAS_ASSERT(variantType->isVariant() && "can only finalize variant");
         auto fn = make_smart<Function>();
         fn->generated = true;
-        fn->unsafe = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;
         fn->result = make_smart<TypeDecl>(Type::tVoid);
@@ -1266,6 +1277,7 @@ namespace das {
         mz->arguments.push_back(lvar);
         block->list.push_back(mz);
         fn->body = block;
+        wrapInUnsafe(fn);
         verifyGenerated(fn->body);
         return fn;
     }
@@ -1274,7 +1286,6 @@ namespace das {
         DAS_ASSERT(left->isPointer() && left->smartPtr && right->isPointer() && "can only clone smart-ptr <- any-ptr");
         DAS_ASSERT(left->firstType && left->firstType->annotation && "can only clone smart handled types");
         auto fn = make_smart<Function>();
-        fn->unsafe = right->smartPtr;
         fn->generated = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;

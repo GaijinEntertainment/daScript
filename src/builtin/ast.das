@@ -18,29 +18,29 @@ typedef
     VariantMacroPtr = smart_ptr<VariantMacro>
     ReaderMacroPtr = smart_ptr<ReaderMacro>
 
-[generic,unsafe]
+[generic]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
     return describe_typedecl(decl,extra,contracts,modules)
 
-[generic,unsafe]
+[generic]
 def describe ( expr : smart_ptr<Expression> )
     return describe_expression(expr)
 
-[generic,unsafe]
+[generic]
 def describe ( expr : smart_ptr<Function> )
     return describe_function(expr)
 
-[unsafe]
 def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
     if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
-        return reinterpret<smart_ptr<Expression>>(expr)
+        unsafe
+            return reinterpret<smart_ptr<Expression>> expr
     else
         concept_assert(false, "not derived from ast::Expression")
         return [[ExpressionPtr]]
 
-[unsafe]
 def FunctionPtr ( fun : Function? ) : FunctionPtr
-    return reinterpret<FunctionPtr> fun
+    unsafe
+        return reinterpret<FunctionPtr> fun
 
 class AstFunctionAnnotation
     def abstract transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
@@ -441,12 +441,12 @@ def make_structure_annotation ( name : string; someClassPtr ) : StructureAnnotat
         concept_assert(false,"expecting pointer to class")
         return [[StructureAnnotationPtr]]
 
-[unsafe]
 def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
     static_if typeinfo(is_class someClass)
-        let classPtr = addr(someClass)
-        let classInfo = class_info(someClass)
-        return make_visitor(classPtr, classInfo)
+        unsafe
+            let classPtr = addr(someClass)
+            let classInfo = class_info(someClass)
+            return make_visitor(classPtr, classInfo)
     else
         concept_assert(false,"can't make visitor of non-class")
         return [[smart_ptr<VisitorAdpater>]]
@@ -475,29 +475,29 @@ def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
         concept_assert(false,"expecting pointer to class")
         return [[VariantMacroPtr]]
 
-[unsafe]
 def add_new_function_annotation ( name:string; someClassPtr )
     var ann <- make_function_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
-    delete ann
+    unsafe
+        delete ann
 
-[unsafe]
 def add_new_structure_annotation ( name:string; someClassPtr )
     var ann <- make_structure_annotation(name, someClassPtr)
     this_module() |> add_structure_annotation(ann)
-    delete ann
+    unsafe
+        delete ann
 
-[unsafe]
 def add_new_variant_macro ( name:string; someClassPtr )
     var ann <- make_variant_macro(name, someClassPtr)
     this_module() |> add_variant_macro(ann)
-    delete ann
+    unsafe
+        delete ann
 
-[unsafe]
 def add_new_reader_macro ( name:string; someClassPtr )
     var ann <- make_reader_macro(name, someClassPtr)
     this_module() |> add_reader_macro(ann)
-    delete ann
+    unsafe
+        delete ann
 
 def find_module(name:string) : Module?
     var rm : Module?
@@ -506,4 +506,3 @@ def find_module(name:string) : Module?
             rm = mod
     verify(rm!=null,"module not found")
     return rm
-

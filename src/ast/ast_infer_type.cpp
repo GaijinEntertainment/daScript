@@ -51,6 +51,7 @@ namespace das {
         bool                    needRestart = false;
         bool                    enableInferTimeFolding;
         Expression *            lastEnuValue = nullptr;
+        int32_t                 unsafeDepth = 0;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1451,8 +1452,14 @@ namespace das {
             return Visitor::visitGlobalLet(var);
         }
     // function
+        bool safeExpression ( Expression * expr ) const {
+            if ( unsafeDepth ) return true;
+            if ( expr->alwaysSafe ) return true;
+            return false;
+        }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
+            unsafeDepth = 0;
             func = f;
             func->hasReturn = false;
         }
@@ -1502,13 +1509,6 @@ namespace das {
                 error("unresolved generics are not supported",  "", "",
                     var->at, CompilationError::cant_infer_generic );
             }
-            if ( !var->type->ref && var->type->isPointer() && var->type->smartPtr ) {
-                if ( !fn->unsafe && program->policies.smart_pointer_by_value_unsafe ) {
-                    error("passing smart pointer by value requires [unsafe]",  "",
-                        "try " + var->name + " : " + var->type->describe(TypeDecl::DescribeExtra::no) + "& instead",
-                        var->at, CompilationError::unsafe);
-                }
-            }
             verifyType(var->type);
             return Visitor::visitArgument(fn, var, lastArg);
         }
@@ -1535,14 +1535,6 @@ namespace das {
             verifyType(func->result);
             if ( !func->result->isReturnType() ) {
                 error("not a valid function return type " + func->result->describe(), "", "",
-                      func->result->at,CompilationError::invalid_return_type);
-            }
-            if ( func->result->ref && !func->unsafe ) {
-                error("returning reference requires [unsafe]", "", "",
-                      func->result->at,CompilationError::invalid_return_type);
-            }
-            if ( func->result->isTemp() && !func->unsafe ) {
-                error("returning temporary value requires [unsafe]", "", "",
                       func->result->at,CompilationError::invalid_return_type);
             }
             if ( func->result->isRefType() ) {
@@ -1637,6 +1629,15 @@ namespace das {
                 c->type->constant = true;
             }
             return Visitor::visit(c);
+        }
+    // ExprUnsafe
+        virtual void preVisit ( ExprUnsafe * expr ) override {
+            Visitor::preVisit(expr);
+            unsafeDepth ++;
+        }
+        virtual ExpressionPtr visit ( ExprUnsafe * expr ) override {
+            unsafeDepth --;
+            return Visitor::visit(expr);
         }
     // ExprGoto
         Expression * findLabel ( int32_t label ) const {
@@ -1806,8 +1807,8 @@ namespace das {
                 error("can only make a pointer of of a reference",  "", "",
                     expr->at, CompilationError::cant_dereference);
             } else {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("address of reference requires [unsafe]",  "", "",
+                if ( !safeExpression(expr) ) {
+                    error("address of reference requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
@@ -2042,10 +2043,9 @@ namespace das {
                             string lname = generateNewLambdaName(block->at);
                             auto ls = generateLambdaStruct(lname, block.get(), cl.capt, true);
                             if ( program->addStructure(ls) ) {
-                                bool isUnsafe = func ? func->unsafe : false;
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, true, isUnsafe);
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, true);
                                 if ( program->addFunction(pFn) ) {
-                                    auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, isUnsafe);
+                                    auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                     if ( program->addFunction(pFnFin) ) {
                                         reportAstChanged();
                                         auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
@@ -2104,10 +2104,9 @@ namespace das {
                         string lname = generateNewLambdaName(block->at);
                         auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
                         if ( program->addStructure(ls) ) {
-                            bool isUnsafe = func ? func->unsafe : false;
-                            auto pFn = generateLambdaFunction(lname, block.get(), ls, false, isUnsafe);
+                            auto pFn = generateLambdaFunction(lname, block.get(), ls, false);
                             if ( program->addFunction(pFn) ) {
-                                auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, isUnsafe);
+                                auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                 if ( program->addFunction(pFnFin) ) {
                                     reportAstChanged();
                                     auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
@@ -2138,9 +2137,8 @@ namespace das {
                     error("can't infer local function block type",  "", "",
                         expr->at, CompilationError::invalid_block);
                 } else {
-                    bool isUnsafe = func ? func->unsafe : false;
                     string lname = generateNewLocalFunctionName(block->at);
-                    auto pFn = generateLocalFunction(lname, block.get(), isUnsafe);
+                    auto pFn = generateLocalFunction(lname, block.get());
                     if ( program->addFunction(pFn) ) {
                         reportAstChanged();
                         return make_smart<ExprAddr>(expr->at, lname + "`function");
@@ -2810,8 +2808,8 @@ namespace das {
                 error("can't delete constant expression " + expr->subexpr->type->describe(), "", "",
                       expr->at, CompilationError::bad_delete);
             } else if ( expr->subexpr->type->isPointer() ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("delete of pointer requires [unsafe]",  "", "",
+                if ( !safeExpression(expr) ) {
+                    error("delete of pointer requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
                 } else if ( expr->subexpr->type->firstType && expr->subexpr->type->firstType->isHandle() &&
                     expr->subexpr->type->firstType->annotation->isSmart() && !expr->subexpr->type->smartPtr ) {
@@ -3027,9 +3025,11 @@ namespace das {
             } else {
                 expr->type = castStruct(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             }
-            if ( (expr->upcast || expr->reinterpret) && func && !func->unsafe && !expr->alwaysSafe ) {
-                error("cast requires [unsafe]",  "", "",
-                    expr->at, CompilationError::unsafe);
+            if ( expr->upcast || expr->reinterpret ) {
+                if ( !safeExpression(expr) ) {
+                    error("cast requires unsafe",  "", "",
+                        expr->at, CompilationError::unsafe);
+                }
             }
             if ( expr->type ) {
                 verifyType(expr->type);
@@ -3204,8 +3204,8 @@ namespace das {
                 expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
                 expr->type->constant |= seT->constant;
             } else if ( seT->isPointer() ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("index of the pointer requires [unsafe]",  "", "",
+                if ( !safeExpression(expr) ) {
+                    error("index of the pointer requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
                 if ( !ixT->isIndex() ) {
@@ -3267,8 +3267,8 @@ namespace das {
                 }
                 auto seT = expr->subexpr->type->firstType;
                 if (seT->isGoodTableType()) {
-                    if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                        error("safe-index of table<> requires [unsafe]",  "", "",
+                    if ( !safeExpression(expr) ) {
+                        error("safe-index of table<> requires unsafe",  "", "",
                             expr->at, CompilationError::unsafe);
                     }
                     if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
@@ -3305,8 +3305,8 @@ namespace das {
                         expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
                         expr->type->firstType->constant = seT->constant;
                     } else if (seT->isGoodArrayType()) {
-                        if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                            error("safe-index of array<> requires [unsafe]",  "", "",
+                        if ( !safeExpression(expr) ) {
+                            error("safe-index of array<> requires unsafe",  "", "",
                                 expr->at, CompilationError::unsafe);
                         }
                         expr->type = make_smart<TypeDecl>(Type::tPointer);
@@ -3328,8 +3328,8 @@ namespace das {
                     }
                 }
             } else if ( expr->subexpr->type->isGoodArrayType() ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("safe-index of array<> requires [unsafe]",  "", "",
+                if ( !safeExpression(expr) ) {
+                    error("safe-index of array<> requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
                 auto seT = expr->subexpr->type;
@@ -3337,8 +3337,8 @@ namespace das {
                 expr->type->firstType = make_smart<TypeDecl>(*seT->firstType);
                 expr->type->firstType->constant |= seT->constant;
             } else if ( expr->subexpr->type->isGoodTableType() ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("safe-index of table<> requires [unsafe]",  "", "",
+                if ( !safeExpression(expr) ) {
+                    error("safe-index of table<> requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
                 const auto & seT = expr->subexpr->type;
@@ -3352,8 +3352,8 @@ namespace das {
                 expr->type->firstType = make_smart<TypeDecl>(*seT->secondType);
                 expr->type->constant |= seT->constant;
             } else if ( expr->subexpr->type->dim.size() ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("safe-index of [] requires [unsafe]",  "", "",
+                if ( !safeExpression(expr) ) {
+                    error("safe-index of [] requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
                 const auto & seT = expr->subexpr->type;
@@ -3494,14 +3494,6 @@ namespace das {
                     setBlockCopyMoveFlags(block);
                     reportAstChanged();
                 }
-                if ( block->returnType && block->returnType->ref && !func->unsafe ) {
-                    error("returning reference from block requires [unsafe]",  "", "",
-                          block->at,CompilationError::invalid_return_type);
-                }
-                if ( block->returnType && block->returnType->isTemp() && !func->unsafe ) {
-                    error("returning temporary value requires [unsafe]",  "", "",
-                          block->at,CompilationError::invalid_return_type);
-                }
                 if ( block->returnType ) {
                     setBlockCopyMoveFlags(block);
                     verifyType(block->returnType);
@@ -3602,8 +3594,8 @@ namespace das {
                 return substitute;
             }
             // regular infer
-            if ( !expr->value->type->isPointer() && func && !func->unsafe && !expr->alwaysSafe ) {
-                error("variant ?as on non-pointer requires [unsafe]", "", "",
+            if ( !expr->value->type->isPointer() && !safeExpression(expr) ) {
+                error("variant ?as on non-pointer requires unsafe", "", "",
                     expr->at,CompilationError::unsafe);
             }
             auto valT = expr->value->type->isPointer() ? expr->value->type->firstType : expr->value->type;
@@ -3711,8 +3703,8 @@ namespace das {
                     }
                     expr->fieldIndex = index;
                 } else if ( valT->firstType->isGoodVariantType() ) {
-                    if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                        error("variant.field requires [unsafe]", "", "",
+                    if ( !safeExpression(expr) ) {
+                        error("variant.field requires unsafe", "", "",
                             expr->at, CompilationError::unsafe);
                         return Visitor::visit(expr);
                     }
@@ -3733,8 +3725,8 @@ namespace das {
                 }
                 expr->fieldIndex = index;
             } else if ( valT->isGoodVariantType() ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("variant.field requires [unsafe]", "", "",
+                if ( !safeExpression(expr) ) {
+                    error("variant.field requires unsafe", "", "",
                         expr->at, CompilationError::unsafe);
                     return Visitor::visit(expr);
                 }
@@ -3817,8 +3809,8 @@ namespace das {
                 expr->fieldIndex = index;
                 expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->fieldIndex]);
             } else if ( valT->firstType->isGoodVariantType() ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("variant?.field requires [unsafe]", "", "",
+                if ( !safeExpression(expr) ) {
+                    error("variant?.field requires unsafe", "", "",
                         expr->at, CompilationError::unsafe);
                     return Visitor::visit(expr);
                 }
@@ -3993,8 +3985,8 @@ namespace das {
                 if ( !expr->func->arguments[0]->type->isRef() )
                     expr->subexpr = Expression::autoDereference(expr->subexpr);
                 // lets try to fold it
-                if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
-                    error("unsafe operator " + expr->name + " requires [unsafe]", "", "",
+                if ( expr->func && expr->func->unsafeOperation && safeExpression(expr) ) {
+                    error("unsafe operator " + expr->name + " requires unsafe", "", "",
                         expr->at, CompilationError::unsafe);
                 } else if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     if ( auto se = getConstExpr(expr->subexpr.get()) ) {
@@ -4135,8 +4127,8 @@ namespace das {
                 if ( !expr->func->arguments[1]->type->isRef() )
                     expr->right = Expression::autoDereference(expr->right);
                 // lets try to fold it
-                if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe ) {
-                    error("unsafe operator " + expr->name + " requires [unsafe]", "", "",
+                if ( expr->func && expr->func->unsafeOperation && !safeExpression(expr) ) {
+                    error("unsafe operator " + expr->name + " requires unsafe", "", "",
                         expr->at, CompilationError::unsafe);
                 } else if ( enableInferTimeFolding && isConstExprFunc(expr->func) ) {
                     auto lcc = getConstExpr(expr->left.get());
@@ -4214,8 +4206,8 @@ namespace das {
                 error("can't move temporary value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_pass_temporary);
             } else if ( expr->right->type->isPointer() && expr->right->type->smartPtr ) {
-                if ( func && !func->unsafe && !expr->alwaysSafe ) {
-                    error("moving from the smart pointer value requires [unsafe]",  "",
+                if ( !expr->right->type->ref && !safeExpression(expr) ) {
+                    error("moving from the smart pointer value requires unsafe",  "",
                         "try moving from reference instead",
                         expr->at, CompilationError::unsafe);
                     return Visitor::visit(expr);
@@ -4475,6 +4467,14 @@ namespace das {
                     error("this type can't be copied; " + block->type->describe(),"","use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
                 }
+                if ( block->returnType && block->returnType->ref && !safeExpression(expr) ) {
+                    error("returning reference requires unsafe", "", "",
+                        func->result->at,CompilationError::invalid_return_type);
+                }
+                if ( block->returnType && block->returnType->isTemp() && !safeExpression(expr) ) {
+                    error("returning temporary value requires unsafe", "", "",
+                        func->result->at,CompilationError::invalid_return_type);
+                }
             } else {
                 // infer
                 func->hasReturn = true;
@@ -4490,6 +4490,14 @@ namespace das {
                 if ( func->moveOnReturn && !expr->moveSemantics ) {
                     error("this type can't be copied; " + func->result->describe(),"","use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
+                }
+                if ( func->result->ref && !safeExpression(expr) ) {
+                    error("returning reference requires unsafe", "", "",
+                        func->result->at,CompilationError::invalid_return_type);
+                }
+                if ( func->result->isTemp() && !safeExpression(expr) ) {
+                    error("returning temporary value requires unsafe", "", "",
+                        func->result->at,CompilationError::invalid_return_type);
                 }
             }
             expr->type = make_smart<TypeDecl>();
@@ -5335,8 +5343,8 @@ namespace das {
                     expr->at, CompilationError::function_not_found);
             }
             */
-            if ( expr->func && expr->func->unsafeOperation && func && !func->unsafe && !expr->alwaysSafe ) {
-                error("unsafe call " + expr->name + " requires [unsafe]", "", "",
+            if ( expr->func && expr->func->unsafeOperation && !safeExpression(expr) ) {
+                error("unsafe call " + expr->name + " requires unsafe", "", "",
                     expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());
@@ -5954,8 +5962,6 @@ namespace das {
             return Visitor::visit(expr);
         }
     };
-
-    // program
 
     // try infer, if failed - no macros
     // run macros til any of them does work, then reinfer and restart (i.e. infer after each macro)

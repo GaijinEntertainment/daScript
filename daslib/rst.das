@@ -57,9 +57,9 @@ def function_label_name(value:FunctionPtr)
     mn = replace(mn,"`","_rq_")
     return "function-{mn}"
 
-[unsafe]
 def describe_type_short(td:TypeDecl?)
-    return describe_type_short(reinterpret<TypeDeclPtr> td)
+    unsafe
+        return describe_type_short(reinterpret<TypeDeclPtr> td)
 
 def describe_type_short(td:TypeDeclPtr)
     if !empty(td.alias) & !td.isAuto & !td.isAlias
@@ -67,9 +67,9 @@ def describe_type_short(td:TypeDeclPtr)
     let tp = describe(td,false,false,false)
     return replace(tp,"$::","")
 
-[unsafe]
 def describe_type(td:TypeDecl?)
-    return describe_type(reinterpret<TypeDeclPtr> td)
+    unsafe
+        return describe_type(reinterpret<TypeDeclPtr> td)
 
 def describe_type(td:TypeDeclPtr)
     return build_string() <| $ (var writer)
@@ -469,14 +469,15 @@ def document_structures(doc_file:file;mod:Module?)
             return
         document_structure(doc_file,mod,value)
 
-[unsafe]
 def document_structure_annotation(doc_file:file;mod:Module?;value)
     fwrite(doc_file,make_label(handle_label_name(value)))
     fwrite(doc_file,make_domain("das:attribute"))
     fwrite(doc_file,"{value.name}\n\n")
     var any_fields = false
     var any_props = false
-    var ann = reinterpret<BasicStructureAnnotation?> value
+    var ann : BasicStructureAnnotation?
+    unsafe
+        ann = reinterpret<BasicStructureAnnotation?> value
     for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
         if offset != -1u
             any_fields = true
@@ -504,7 +505,6 @@ def document_structure_annotation(doc_file:file;mod:Module?;value)
         fwrite(doc_file,make_table(tab))
     document_topic(doc_file,topic("structure_annotation",mod,string(value.name)))
 
-[unsafe]
 def document_structure_annotations(doc_file:file;mod:Module?)
     var any = false
     module_for_each_annotation(mod) <| $(value)
@@ -519,14 +519,12 @@ def document_structure_annotations(doc_file:file;mod:Module?)
             return
         document_structure_annotation(doc_file,mod,value)
 
-[unsafe]
 def document_annotation(doc_file:file;mod:Module?;value)
     fwrite(doc_file,make_label(handle_label_name(value)))
     fwrite(doc_file,make_domain("das:attribute"))
     fwrite(doc_file,"{value.name}\n\n")
     document_topic(doc_file,topic("any_annotation",mod,string(value.name)))
 
-[unsafe]
 def document_annotations(doc_file:file;mod:Module?)
     var any = false
     module_for_each_annotation(mod) <| $(value)
@@ -650,7 +648,6 @@ struct DocGroup
     func : array<Function?>
     hidden : bool
 
-[unsafe]
 def debug_group(var group:DocGroup)
     print("Group {group.name}\n")
     for func in group.func

@@ -17,12 +17,12 @@ def Foo3D_setXY(var that:Foo3D;x,y:int)
     that.y = y
     that.z = 0
 
-[unsafe]
 def Foo3D_setXY2(var that:Foo;x,y:int)
-    var that : Foo3D& = upcast<auto> that
-    that.x = x
-    that.y = y
-    that.z = 0
+    unsafe
+        var that : Foo3D& = upcast<auto> that
+        that.x = x
+        that.y = y
+        that.z = 0
 
 [export]
 def test

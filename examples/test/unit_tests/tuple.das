@@ -22,7 +22,7 @@ def testFinalizeAndClone
         assert(y._2[t]==t)
     return true
 
-[export,unsafe]
+[export]
 def test:bool
     let ttt = [[auto 1, 3.14]]
     assert(testI(ttt))
@@ -38,19 +38,21 @@ def test:bool
     assert(q._0==1)
     assert(q._1==2.0)
     assert(q._2=="3")
-    var pq = addr(q)
-    assert(pq._0==1)
-    assert(pq._1==2.0)
-    assert(pq._2=="3")
-    assert(pq?._0 ?? 0==1)
-    assert(pq?._1 ?? 0.0==2.0)
-    assert(pq?._2 ?? "nothing" =="3")
+    unsafe
+        var pq = addr(q)
+        assert(pq._0==1)
+        assert(pq._1==2.0)
+        assert(pq._2=="3")
+        assert(pq?._0 ?? 0==1)
+        assert(pq?._1 ?? 0.0==2.0)
+        assert(pq?._2 ?? "nothing" =="3")
     var qq = new tuple < int; float >
     qq._0 = 1
     qq._1 = 2.0
     assert(qq?._0 ?? 0==1)
     assert(qq?._1 ?? 0.0==2.0)
-    delete qq
+    unsafe
+        delete qq
     // make tuple
     let mkt = [[ tuple<int;float> 1, 2.0]]
     assert(mkt._0==1 & mkt._1==2.0)

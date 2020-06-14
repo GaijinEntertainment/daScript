@@ -6,17 +6,19 @@ require rtti
 
 class Server
     _server : smart_ptr<NetworkServer>
-    [unsafe] def Server
+    def Server
         let classInfo = class_info(self)
-        if !make_server(addr(self),classInfo)
-            panic("can't make server")
+        unsafe
+            if !make_server(addr(self),classInfo)
+                panic("can't make server")
     def init ( port : int ) : bool
         return server_init(_server,port)
-    [unsafe] def restore ( var shared_orphan : smart_ptr<NetworkServer>& )
+    def restore ( var shared_orphan : smart_ptr<NetworkServer>& )
         _server <- shared_orphan
         let classInfo = class_info(self)
-        server_restore(_server,addr(self),classInfo)
-    [unsafe] def save ( var shared_orphan : smart_ptr<NetworkServer>& )
+        unsafe
+            server_restore(_server,addr(self),classInfo)
+    def save ( var shared_orphan : smart_ptr<NetworkServer>& )
         shared_orphan <- _server
     def has_session : bool
         return _server != null

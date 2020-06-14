@@ -161,6 +161,7 @@ namespace das {
         virtual void preVisit ( ExprType * that ) { preVisitExpression(that); } \
         virtual ExpressionPtr visit ( ExprType * that ) { return visitExpression(that); }
         // all visitable expressions
+        VISIT_EXPR(ExprUnsafe)
         VISIT_EXPR(ExprReader)
         VISIT_EXPR(ExprLabel)
         VISIT_EXPR(ExprGoto)

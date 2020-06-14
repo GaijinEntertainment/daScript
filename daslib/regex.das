@@ -95,7 +95,7 @@ def maybe( value : ReNode? )
 def eos(expr:string; offset:int)
     return offset >= length(expr)
 
-[private,unsafe]
+[private]
 def at(expr:string; offset:int) : int
     static_if range_check_enabled
         let len = length(expr)
@@ -108,7 +108,8 @@ def at(expr:string; offset:int) : int
             panic("out of range {offset} of {len}")
             return 0
     else
-        return character_uat(expr, offset)
+        unsafe
+            return character_uat(expr, offset)
 
 [private]
 def next(re:MaybeReNode)
@@ -498,35 +499,37 @@ def re_assign_match_functions ( var re:Regex )
         else
             panic("unsupported {node.op}")
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match single char `{node.text}` {offset}\n")
-    if character_uat(node.text,0) != int(*str)
-        return null
-    var tail = str + 1
-    node.tail = tail
-    var node2 = node.next
-    if node2!=null
-        return invoke(node2.fun2,regex,node2,tail)
-    else
-        return tail
+    unsafe
+        if character_uat(node.text,0) != int(*str)
+            return null
+        var tail = str + 1
+        node.tail = tail
+        var node2 = node.next
+        if node2!=null
+            return invoke(node2.fun2,regex,node2,tail)
+        else
+            return tail
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match char `{node.text}` {offset}\n")
-    if memcmp(reinterpret<uint8?> node.text,str,node.textLen) != 0
-        return null
-    var tail = str + node.textLen
-    node.tail = tail
-    var node2 = node.next
-    if node2!=null
-        return invoke(node2.fun2,regex,node2,tail)
-    else
-        return tail
+    unsafe
+        if memcmp(reinterpret<uint8?> node.text,str,node.textLen) != 0
+            return null
+        var tail = str + node.textLen
+        node.tail = tail
+        var node2 = node.next
+        if node2!=null
+            return invoke(node2.fun2,regex,node2,tail)
+        else
+            return tail
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match union {offset}\n")
@@ -537,35 +540,37 @@ def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
             return osub
     return null
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 set {offset}\n")
     if !is_char_in_set(int(*str),node.cset)
         return null
-    var tail = str + 1
-    node.tail = tail
-    var node2 = node.next
-    if node2!=null
-        return invoke(node2.fun2,regex, node2, tail)
-    else
-        return tail
+    unsafe
+        var tail = str + 1
+        node.tail = tail
+        var node2 = node.next
+        if node2!=null
+            return invoke(node2.fun2,regex, node2, tail)
+        else
+            return tail
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 any {offset}\n")
     if int(*str)==0
         return null
-    var tail = str + 1
-    node.tail = tail
-    var node2 = node.next
-    if node2!=null
-        return invoke(node2.fun2,regex, node2, tail)
-    else
-        return tail
+    unsafe
+        var tail = str + 1
+        node.tail = tail
+        var node2 = node.next
+        if node2!=null
+            return invoke(node2.fun2,regex, node2, tail)
+        else
+            return tail
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 concat {offset}\n")
@@ -576,7 +581,7 @@ def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     node.tail = node.right.tail
     return oleft
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match eos {offset}\n")
@@ -589,7 +594,7 @@ def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     else
         return str
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match question {offset}\n")
@@ -604,7 +609,7 @@ def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
     else
         return tail
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {offset}\n")
@@ -629,7 +634,7 @@ def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = ofs
         return ofs
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {offset}\n")
@@ -637,29 +642,30 @@ def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
     var nsub = node.subexpr
     if !is_char_in_set(int(*str),node.cset)
         return null
-    var ofs = str + 1
-    var osym = ofs
-    var node2 = node.next
-    if node2!=null
-        while osym != null
-            node.tail = osym
-            var otail = invoke(node2.fun2,regex,node2,osym)
-            if otail != null
-                return otail
-            if !is_char_in_set(int(*osym),node.cset)
-                return null
-            osym++
-        return null
-    else
-        while osym != null
-            ofs = osym
-            if !is_char_in_set(int(*osym),node.cset)
-                break
-            osym++
-        node.tail = ofs
-        return ofs
+    unsafe
+        var ofs = str + 1
+        var osym = ofs
+        var node2 = node.next
+        if node2!=null
+            while osym != null
+                node.tail = osym
+                var otail = invoke(node2.fun2,regex,node2,osym)
+                if otail != null
+                    return otail
+                if !is_char_in_set(int(*osym),node.cset)
+                    return null
+                osym++
+            return null
+        else
+            while osym != null
+                ofs = osym
+                if !is_char_in_set(int(*osym),node.cset)
+                    break
+                osym++
+            node.tail = ofs
+            return ofs
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {offset}\n")
@@ -682,7 +688,7 @@ def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = ofs
         return ofs
 
-[private,unsafe,unsafe_deref]
+[private,unsafe_deref]
 def re_match2_group ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 group {offset}\n")
@@ -765,55 +771,57 @@ def regex_compile ( var re:Regex )
         re_assign_match_functions(re)
     return <- re
 
-[export,unsafe]
+[export]
 def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
     if empty(str)
         return -1
     if log_match_enabled
         print("matching with `{str}` at {offset}\n")
-    regex.match = reinterpret<uint8?> str
-    let mptr = invoke(regex.root.fun2,regex,regex.root,regex.match)
-    if mptr == null
-        return -1
-    return int(mptr-regex.match)
+    unsafe
+        regex.match = reinterpret<uint8?> str
+        let mptr = invoke(regex.root.fun2,regex,regex.root,regex.match)
+        if mptr == null
+            return -1
+        return int(mptr-regex.match)
 
 [export]
 def regex_group ( regex:Regex; index:int; match:string )
     let sub_range = regex.groups[index]._0
     return slice(match, sub_range.x, sub_range.y)
 
-[export,unsafe,unsafe_deref]
+[export,unsafe_deref]
 def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     if empty(str)
         return
-    var root = regex.root
-    var pstr = reinterpret<uint8?> str
-    var cstr = pstr
-    if regex.canEarlyOut
-        // lets try if it helps
-        while true
-            let Ch = int(*cstr)
-            if Ch==0
-                break
-            if is_char_in_set(Ch,regex.earlyOut)
+    unsafe
+        var root = regex.root
+        var pstr = reinterpret<uint8?> str
+        var cstr = pstr
+        if regex.canEarlyOut
+            // lets try if it helps
+            while true
+                let Ch = int(*cstr)
+                if Ch==0
+                    break
+                if is_char_in_set(Ch,regex.earlyOut)
+                    let om = invoke(root.fun2,regex,root,cstr)
+                    if om != null
+                        if !invoke(blk,range(int(cstr-pstr),int(om-pstr)))
+                            break
+                        cstr = om
+                    else
+                        cstr++
+                else
+                    cstr++
+        else
+            while int(*cstr) != 0
                 let om = invoke(root.fun2,regex,root,cstr)
                 if om != null
                     if !invoke(blk,range(int(cstr-pstr),int(om-pstr)))
                         break
                     cstr = om
                 else
-                    cstr++
-            else
-                cstr++
-    else
-        while int(*cstr) != 0
-            let om = invoke(root.fun2,regex,root,cstr)
-            if om != null
-                if !invoke(blk,range(int(cstr-pstr),int(om-pstr)))
-                    break
-                cstr = om
-            else
-                cstr ++
+                    cstr ++
 
 /*
     printer

@@ -13,7 +13,7 @@ struct Foo
 def passthroughFoo(a:Foo; blk:block<(b:Foo):void>)
     invoke(blk,a)
 
-[export,unsafe]
+[export]
 def test
     passthrough(1) <| $ ( a )
         assert(a==1)
@@ -32,12 +32,13 @@ def test
             passthroughref(C) <| $ ( c )
                 assert(a==1 & b==2 & c==3)
 
-    passthroughptr(addr(A)) <| $ ( a )
-        assert(*a==1)
-        passthroughptr(addr(B)) <| $ ( b )
-            assert(*a==1 & *b==2)
-            passthroughptr(addr(C)) <| $ ( c )
-                assert(*a==1 & *b==2 & *c==3)
+    unsafe
+        passthroughptr(addr(A)) <| $ ( a )
+            assert(*a==1)
+            passthroughptr(addr(B)) <| $ ( b )
+                assert(*a==1 & *b==2)
+                passthroughptr(addr(C)) <| $ ( c )
+                    assert(*a==1 & *b==2 & *c==3)
 
     passthroughFoo([[Foo v=1]]) <| $ ( a )
         assert(a.v==1)

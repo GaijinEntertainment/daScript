@@ -50,20 +50,22 @@ def JV ( var v : table<string;JsonValue?> )
 def JV ( var v : array<JsonValue?> )
     return new [[JsonValue value <- [[JsValue _array <- v]]]]
 
-[unsafe, private]
+[private]
 def lexer ( text : string )
     var stext = clone_string(text)
     return <- _lexer(stext)
 
-[unsafe, private]
+[private]
 def lexer ( text : array<uint8> )
     var stext = string(text)
     return <- _lexer(stext)
 
-[unsafe, private]
+[private]
 def _lexer ( var stext : string )
     return <- generator<Token>() <| $()
-        var tin <- each(stext)
+        var tin : iterator<int>
+        unsafe
+            tin <- each(stext)
         var ahead : int = ' '
         var str : array<uint8>
         while !empty(tin)
@@ -111,7 +113,8 @@ def _lexer ( var stext : string )
                 var num = string(str)
                 yield [[Token _number = double(num)]]
                 clear(str)
-                delete_string(num)
+                unsafe
+                    delete_string(num)
             elif is_alpha(ahead)
                 push(str,uint8(ahead))
                 while next(tin,ahead) & is_alpha(ahead)
@@ -126,7 +129,8 @@ def _lexer ( var stext : string )
                 else
                     yield [[Token _error = "invalid name {name}"]]
                     return false
-                delete_string(name)
+                unsafe
+                    delete_string(name)
                 clear(str)
             else
                 yield [[Token _error = "invalid character `{to_char(ahead)}` aka ASCII {ahead}"]]
@@ -237,14 +241,14 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
         error = "{ahead}"
         return null
 
-[export,unsafe]
+[export]
 def read_json ( text : string; var error : string& ) : JsonValue?
     var lex <- lexer(text)
     let res = parse_value(lex,error)
     delete lex
     return res
 
-[export,unsafe]
+[export]
 def read_json ( text : array<uint8>; var error : string& ) : JsonValue?
     var lex <- lexer(text)
     let res = parse_value(lex,error)

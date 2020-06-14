@@ -2,10 +2,11 @@ require fio
 
 options string_heap=4000000     // big gc hint
 
-[export,unsafe]
+[export]
 def test
     profile(1,"freq dictionary PG") <|
-        fopen("c:/users/boris/work/pg/pg.txt", "rb") <| $( f )
+        let fname = get_das_root() + "/../pg/pg.txt"
+        fopen(fname, "rb") <| $( f )
             if f != null
                 var dict : table<string; int>
                 fmap(f) <| $(data)
@@ -16,9 +17,10 @@ def test
                                 offset = index
                             length ++
                         elif length != 0
-                            var token = chop(data,offset,length) |> to_lower_in_place() // unsafe
-                            if dict[token]++ != 0
-                                delete token        // gc hint
+                            unsafe
+                                var token = chop(data,offset,length) |> to_lower_in_place() // unsafe
+                                if dict[token]++ != 0
+                                    delete_string(token)    // gc hint
                             length = 0
                 var arr : array<tuple<string;int>>
                 reserve(arr,length(dict))
@@ -27,12 +29,15 @@ def test
                 delete dict                         // gc hint
                 sort(arr) <| $(a,b)
                     return a._1 != b._1 ? a._1 > b._1 : a._0 < b._0
-                fopen("c:/users/boris/work/pg/das.freq", "wb") <| $( fw )
+                fopen(get_das_root() + "/../pg/das.freq", "wb") <| $( fw )
                     if fw != null
                         for t in arr
                             var ts = "{t._1} {t._0}\n"
                             fwrite(fw,ts)
-                            delete ts               // gc hint
-                delete arr                          // gc hint
+                            unsafe
+                                delete_string(ts)       // gc hint
+                delete arr                              // gc hint
+            else
+                print("cant open {fname}\n")
     return true
 

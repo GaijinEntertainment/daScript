@@ -11,12 +11,6 @@ Runtime type information library
 Type aliases
 ++++++++++++
 
-.. _alias-AnnotationPtr:
-
-.. das:attribute:: AnnotationPtr = smart_ptr<rtti::Annotation>
-
-|typedef-rtti-AnnotationPtr|
-
 .. _alias-FileAccessPtr:
 
 .. das:attribute:: FileAccessPtr = smart_ptr<rtti::FileAccess>
@@ -70,12 +64,6 @@ Type aliases
 
 
 |typedef-rtti-RttiValue|
-
-.. _alias-TypeAnnotationPtr:
-
-.. das:attribute:: TypeAnnotationPtr = smart_ptr<rtti::TypeAnnotation>
-
-|typedef-rtti-TypeAnnotationPtr|
 
 +++++++++
 Constants
@@ -897,7 +885,7 @@ Uncategorized
 
 .. das:function:: RttiValue_nothing()
 
-RttiValue_nothing returns  :ref:`RttiValue <alias-RttiValue>` 
+RttiValue_nothing returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
 
 |function-rtti-RttiValue_nothing|
 

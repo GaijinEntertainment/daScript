@@ -191,6 +191,7 @@
 %token  DAS_IMPLICIT        "implicit"
 %token  DAS_SHARED          "shared"
 %token  DAS_SMART_PTR       "smart_ptr"
+%token  DAS_UNSAFE          "unsafe"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -347,6 +348,7 @@
 %type <pExpression>     expression_block
 %type <pExpression>     expression_with
 %type <pExpression>     expression_while_loop
+%type <pExpression>     expression_unsafe
 %type <pExpression>     expression_for_loop
 %type <pExpression>     expression_break
 %type <pExpression>     expression_continue
@@ -706,6 +708,14 @@ expression_for_loop
     }
     ;
 
+expression_unsafe
+    :   DAS_UNSAFE[loc] expression_block[block] {
+        auto pUnsafe = new ExprUnsafe(tokAt(@loc));
+        pUnsafe->body = ExpressionPtr($block);
+        $$ = pUnsafe;
+    }
+    ;
+
 expression_while_loop
     :   DAS_WHILE[loc] expr[condition] expression_block[block] {
         auto pWhile = new ExprWhile(tokAt(@loc));
@@ -979,6 +989,7 @@ expression_any
     |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
+    |   expression_unsafe[subexpr]          { $$ = $subexpr; }
     |   expression_with[subexpr]            { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }

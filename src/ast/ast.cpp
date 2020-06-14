@@ -1678,6 +1678,25 @@ namespace das {
         return cexpr;
     }
 
+    // ExprUnsafe
+
+    ExpressionPtr ExprUnsafe::visit(Visitor & vis) {
+        vis.preVisit(this);
+        body = body->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprUnsafe::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprUnsafe>(expr);
+        Expression::clone(cexpr);
+        cexpr->body = body->clone();
+        return cexpr;
+    }
+
+    uint32_t ExprUnsafe::getEvalFlags() const {
+        return body->getEvalFlags();
+    }
+
     // ExprWhile
 
     ExpressionPtr ExprWhile::visit(Visitor & vis) {

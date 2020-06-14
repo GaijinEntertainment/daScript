@@ -1,10 +1,10 @@
-[unsafe]
 def safe_addr(var a)
-    return addr(a)
+    unsafe
+        return addr(a)
 
-[unsafe]
 def safe_addr_val(var a : auto&)
-    return addr(a)
+    unsafe
+        return addr(a)
 
 [export]
 def test()

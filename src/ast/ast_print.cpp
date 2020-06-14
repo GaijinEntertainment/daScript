@@ -248,7 +248,6 @@ namespace das {
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->privateFunction ) { ss << "[private]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
-            if ( fn->unsafe ) { ss << "[unsafe]\n"; }
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
             logAnnotations(fn->annotations);
@@ -478,6 +477,11 @@ namespace das {
         virtual void preVisitWhileBody ( ExprWhile * wh, Expression * body ) override {
             Visitor::preVisitWhileBody(wh,body);
             ss << "\n";
+        }
+    // while
+        virtual void preVisit ( ExprUnsafe * wh ) override {
+            Visitor::preVisit(wh);
+            ss << "unsafe\n";
         }
     // call
         virtual void preVisit ( ExprCall * call ) override {

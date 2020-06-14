@@ -6,7 +6,6 @@ require UnitTest
 struct SomethingSmall
     a, b, c : int
 
-[unsafe]
 def test_delete_array
     var a : array<int> [5]
     let w0 = heap_bytes_allocated()
@@ -19,7 +18,6 @@ def test_delete_array
     for t in range(0,5)
         assert(length(a[t])==0 & capacity(a[t])==0)
 
-[unsafe]
 def test_delete_table
     var a : table<int;int>
     let w0 = heap_bytes_allocated()
@@ -31,7 +29,6 @@ def test_delete_table
     assert(w1>w0 & w0==w2)
     assert(length(a)==0 & capacity(a)==0)
 
-[unsafe]
 def test_delete_struct
     var a : SomethingSmall?
     let w0 = heap_bytes_allocated()
@@ -42,7 +39,6 @@ def test_delete_struct
     assert(w1>w0 & w0==w2)
     assert(a==null)
 
-[unsafe]
 def test_delete_struct_array
     let w0 = heap_bytes_allocated()
     var a = new SomethingSmall[10]
@@ -53,21 +49,21 @@ def test_delete_struct_array
     for pA in a
         assert(pA==null)
 
-[unsafe]
 def test_delete_handle
     var a : TestObjectFoo?
     a = new TestObjectFoo
-    delete a
+    unsafe
+        delete a
     assert(a==null)
 
-[unsafe]
 def test_delete_handle_array
     var a  = new TestObjectFoo[10]
-    delete a
+    unsafe
+        delete a
     for pA in a
         assert(pA==null)
 
-[sideeffects,unsafe]
+[sideeffects]
 def da_inscope(x)
     var in scope b = new SomethingSmall
     var in scope a = new SomethingSmall[10]
@@ -81,22 +77,24 @@ def test_delete_struct_array_in_scope
     let w1 = heap_bytes_allocated()
     assert(w0==w1)
 
-[sideeffects,unsafe]
+[sideeffects]
 def test_delete_string()
     let w0 = heap_bytes_allocated()
     var a = "{deref(getPtr())}"
     // assert(a=="0")
-    delete_string(a)
+    unsafe
+        delete_string(a)
     let w1 = heap_bytes_allocated()
     assert(w0==w1)
     assert(a=="")
 
-[sideeffects,unsafe]
+[sideeffects]
 def test_delete_string_array()
     let w0 = heap_bytes_allocated()
     var a = [[string[3] "{deref(getPtr())}_1"; "{deref(getPtr())}_2"; "{deref(getPtr())}_3"]]
     for AA in a
-        delete_string(AA)
+        unsafe
+            delete_string(AA)
     let w1 = heap_bytes_allocated()
     assert(w0==w1)
 

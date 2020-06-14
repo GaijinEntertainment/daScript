@@ -2116,6 +2116,10 @@ namespace das
         return node;
     }
 
+    SimNode * ExprUnsafe::simulate (Context & context) const {
+        return body->simulate(context);
+    }
+
     SimNode * ExprFor::simulate (Context & context) const {
         // determine iteration types
         bool nativeIterators = false;

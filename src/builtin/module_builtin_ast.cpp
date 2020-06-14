@@ -994,9 +994,9 @@ namespace das {
         ft->argNames = { "builtIn", "policyBased", "callBased", "interopFn",
             "hasReturn", "copyOnReturn", "moveOnReturn", "exports", "init",
             "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime",
-            "unsafe", "unsafeOperation", "unsafeDeref", "hasMakeBlock", "aotNeedPrologue",
+            "unsafeOperation", "unsafeDeref", "hasMakeBlock", "aotNeedPrologue",
             "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction",
-            "_generator", "_lambda", "firstArgReturnType", "isClassMethod"
+            "_generator", "_lambda", "firstArgReturnType", "isClassMethod", "safe"
         };
         return ft;
     }
