@@ -338,6 +338,7 @@
 %type <pEnum>           enum_list
 
 %type <pExpression>     expr
+%type <pExpression>     expr_field
 %type <pExpression>     expr_assign
 %type <pExpression>     expr_assign_pipe
 %type <pExpression>     expr_list
@@ -1412,6 +1413,18 @@ func_addr_expr
     }
     ;
 
+expr_field
+    :   expr[subexpr] '.'[loc] NAME[name]     {
+        $$ = new ExprField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name);
+        delete $name;
+    }
+    |   expr[subexpr] '.'[loc] { das_supress_errors=true; } error { das_supress_errors=false; } {
+        printf("here\n");
+        $$ = new ExprField(tokAt(@loc), tokAt(@loc), ExpressionPtr($subexpr), "");
+        yyerrok;
+    }
+    ;
+
 expr
     :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(@loc),nullptr); }
     |   name_in_namespace[name]               { $$ = new ExprVar(tokAt(@name),*$name); delete $name; }
@@ -1421,6 +1434,7 @@ expr
     |   make_decl[md]                         { $$ = $md; }
     |   DAS_TRUE[loc]                         { $$ = new ExprConstBool(tokAt(@loc),true); }
     |   DAS_FALSE[loc]                        { $$ = new ExprConstBool(tokAt(@loc),false); }
+    |   expr_field[subexpr]                   { $$ = $subexpr; }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"!",ExpressionPtr($subexpr)); }
     |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(@loc),"~",ExpressionPtr($subexpr)); }
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(@loc),"+",ExpressionPtr($subexpr)); }
@@ -1450,7 +1464,6 @@ expr
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
-    |   expr[subexpr] '.'[loc] NAME[name]        { $$ = new ExprField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name); delete $name; }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name); delete $name; }
     |   func_addr_expr[subexpr]                  { $$ = $subexpr; }
     |   name_in_namespace[name] '(' ')' {

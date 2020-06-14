@@ -3666,6 +3666,11 @@ namespace das {
     // ExprField
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( !expr->value->type ) return Visitor::visit(expr);
+            if ( expr->name.empty() ) {
+                error("syntax error, expecting field after .", "", "",
+                        expr->at, CompilationError::cant_get_field);
+                return Visitor::visit(expr);
+            }
             // infer
             auto valT = expr->value->type;
             if ( valT->isVectorType() ) {
