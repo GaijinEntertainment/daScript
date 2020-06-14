@@ -5,6 +5,8 @@
 Functional programming library
 ==============================
 
+|module-functional|
+
 +++++++++++++
 Uncategorized
 +++++++++++++

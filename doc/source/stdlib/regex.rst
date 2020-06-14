@@ -5,9 +5,11 @@
 Regular expression library
 ==========================
 
-+++++++++++
-TypeAliases
-+++++++++++
+|module-regex|
+
+++++++++++++
+Type aliases
+++++++++++++
 
 .. _alias-CharSet:
 
@@ -27,6 +29,40 @@ TypeAliases
 
 
 |typedef-regex-MaybeReNode|
+
++++++++++
+Constants
++++++++++
+
+.. _global-regex-log_match_enabled:
+
+.. das:attribute:: log_match_enabled = false
+
+|variable-regex-log_match_enabled|
+
+.. _global-regex-log_parse_enabled:
+
+.. das:attribute:: log_parse_enabled = false
+
+|variable-regex-log_parse_enabled|
+
+.. _global-regex-meta:
+
+.. das:attribute:: meta = "\\+-*.()[]|^"
+
+|variable-regex-meta|
+
+.. _global-regex-meta_set:
+
+.. das:attribute:: meta_set = "wW"
+
+|variable-regex-meta_set|
+
+.. _global-regex-range_check_enabled:
+
+.. das:attribute:: range_check_enabled = false
+
+|variable-regex-range_check_enabled|
 
 ++++++++++++
 Enumerations

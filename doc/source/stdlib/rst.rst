@@ -5,6 +5,24 @@
 Documentation generator
 =======================
 
+|module-rst|
+
++++++++++
+Constants
++++++++++
+
+.. _global-rst-log_documentation:
+
+.. das:attribute:: log_documentation = true
+
+|variable-rst-log_documentation|
+
+.. _global-rst-show_hidden_groups:
+
+.. das:attribute:: show_hidden_groups = true
+
+|variable-rst-show_hidden_groups|
+
 .. _struct-rst-DocGroup:
 
 .. das:attribute:: DocGroup
@@ -37,6 +55,8 @@ Document writers
   *  :ref:`document_function_arguments (doc_file:fio::FILE const? const;argNames:array\<string\> const;argTypes:array\<ast::TypeDecl?\> const) : void <function-_at_rst_c__c_document_function_arguments__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_array_hh_string_hh_const__hh_array_hh__hh_ptr_hh__hh_handle_hh_TypeDecl_hh_const>` 
   *  :ref:`document_function_declaration (doc_file:fio::FILE const? const;domain:string const;func_name:string const;argNames:array\<string\> const;argTypes:array\<ast::TypeDecl?\> const;resType:smart_ptr\<ast::TypeDecl\> const) : void <function-_at_rst_c__c_document_function_declaration__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_string_hh_const_string_hh_const__hh_array_hh_string_hh_const__hh_array_hh__hh_ptr_hh__hh_handle_hh_TypeDecl_hh_const__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const>` 
   *  :ref:`document_functions (doc_file:fio::FILE const? const;mod:rtti::Module? const;groups:array\<rst::DocGroup\> const) : void <function-_at_rst_c__c_document_functions__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_array_hh_DocGroup_hh_const>` 
+  *  :ref:`document_global_constant (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:smart_ptr\<ast::Variable\> const) : void <function-_at_rst_c__c_document_global_constant__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_smart_ptr_hh__hh_handle_hh_Variable_hh_const>` 
+  *  :ref:`document_global_constants (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_global_constants__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const>` 
   *  :ref:`document_structure (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:smart_ptr\<ast::Structure\> const) : void <function-_at_rst_c__c_document_structure__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const>` 
   *  :ref:`document_structure_annotations (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_structure_annotations__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const>` 
   *  :ref:`document_structures (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_structures__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const>` 
@@ -204,6 +224,38 @@ arguments are
 
 
 |function-rst-document_functions|
+
+.. _function-_at_rst_c__c_document_global_constant__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_smart_ptr_hh__hh_handle_hh_Variable_hh_const:
+
+.. das:function:: document_global_constant(doc_file: file; mod: rtti::Module? const; value: VariablePtr)
+
+arguments are
+
++--------+-------------------------------------------------+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++value   + :ref:`VariablePtr <alias-VariablePtr>`          +
++--------+-------------------------------------------------+
+
+
+|function-rst-document_global_constant|
+
+.. _function-_at_rst_c__c_document_global_constants__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const:
+
+.. das:function:: document_global_constants(doc_file: file; mod: rtti::Module? const)
+
+arguments are
+
++--------+-------------------------------------------------+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
+
+
+|function-rst-document_global_constants|
 
 .. _function-_at_rst_c__c_document_structure__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const:
 
@@ -488,6 +540,8 @@ Label makers
   *  :ref:`enum_label_name (value:ast::Enumeration? const) : string <function-_at_rst_c__c_enum_label_name__hh_ptr_hh__hh_handle_hh_Enumeration_hh_const>` 
   *  :ref:`enum_label_name (value:smart_ptr\<ast::Enumeration\> const) : string <function-_at_rst_c__c_enum_label_name__hh_smart_ptr_hh__hh_handle_hh_Enumeration_hh_const>` 
   *  :ref:`function_label_name (value:smart_ptr\<ast::Function\> const) : string <function-_at_rst_c__c_function_label_name__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const>` 
+  *  :ref:`global_label_name (value:ast::Variable? const) : string <function-_at_rst_c__c_global_label_name__hh_ptr_hh__hh_handle_hh_Variable_hh_const>` 
+  *  :ref:`global_label_name (value:smart_ptr\<ast::Variable\> const) : string <function-_at_rst_c__c_global_label_name__hh_smart_ptr_hh__hh_handle_hh_Variable_hh_const>` 
   *  :ref:`struct_label_name (value:ast::Structure? const) : string <function-_at_rst_c__c_struct_label_name__hh_ptr_hh__hh_handle_hh_Structure_hh_const>` 
   *  :ref:`struct_label_name (value:smart_ptr\<ast::Structure\> const) : string <function-_at_rst_c__c_struct_label_name__hh_smart_ptr_hh__hh_handle_hh_Structure_hh_const>` 
   *  :ref:`handle_label_name (value:auto const) : auto <function-_at_rst_c__c_handle_label_name__hh_auto_hh_const>` 
@@ -551,6 +605,36 @@ arguments are
 
 
 |function-rst-function_label_name|
+
+.. _function-_at_rst_c__c_global_label_name__hh_ptr_hh__hh_handle_hh_Variable_hh_const:
+
+.. das:function:: global_label_name(value: ast::Variable? const)
+
+global_label_name returns string
+
+arguments are
+
++-----+---------------------------------------------------+
++value+ :ref:`ast::Variable <handle-ast-Variable>` ? const+
++-----+---------------------------------------------------+
+
+
+|function-rst-global_label_name|
+
+.. _function-_at_rst_c__c_global_label_name__hh_smart_ptr_hh__hh_handle_hh_Variable_hh_const:
+
+.. das:function:: global_label_name(value: VariablePtr)
+
+global_label_name returns string
+
+arguments are
+
++-----+----------------------------------------+
++value+ :ref:`VariablePtr <alias-VariablePtr>` +
++-----+----------------------------------------+
+
+
+|function-rst-global_label_name|
 
 .. _function-_at_rst_c__c_struct_label_name__hh_ptr_hh__hh_handle_hh_Structure_hh_const:
 
@@ -820,8 +904,24 @@ arguments are
 Naming helpers
 ++++++++++++++
 
+  *  :ref:`topic (mod:rtti::Module? const) : string <function-_at_rst_c__c_topic__hh_ptr_hh__hh_handle_hh_Module_hh_const>` 
   *  :ref:`topic (category:string const;mod:rtti::Module? const;name:string const) : string <function-_at_rst_c__c_topic_string_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const>` 
   *  :ref:`module_name (mod:auto const) : auto <function-_at_rst_c__c_module_name__hh_auto_hh_const>` 
+
+.. _function-_at_rst_c__c_topic__hh_ptr_hh__hh_handle_hh_Module_hh_const:
+
+.. das:function:: topic(mod: rtti::Module? const)
+
+topic returns string
+
+arguments are
+
++---+-------------------------------------------------+
++mod+ :ref:`rtti::Module <handle-rtti-Module>` ? const+
++---+-------------------------------------------------+
+
+
+|function-rst-topic|
 
 .. _function-_at_rst_c__c_topic_string_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const:
 

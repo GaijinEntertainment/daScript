@@ -5,6 +5,8 @@
 String manipulation library
 ===========================
 
+|module-strings|
+
 +++++++++++++
 Uncategorized
 +++++++++++++

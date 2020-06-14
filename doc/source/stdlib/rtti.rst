@@ -5,9 +5,11 @@
 Runtime type information library
 ================================
 
-+++++++++++
-TypeAliases
-+++++++++++
+|module-rtti|
+
+++++++++++++
+Type aliases
+++++++++++++
 
 .. _alias-AnnotationPtr:
 
@@ -74,6 +76,22 @@ TypeAliases
 .. das:attribute:: TypeAnnotationPtr = smart_ptr<rtti::TypeAnnotation>
 
 |typedef-rtti-TypeAnnotationPtr|
+
++++++++++
+Constants
++++++++++
+
+.. _global-rtti-FUNCINFO_BUILTIN:
+
+.. das:attribute:: FUNCINFO_BUILTIN = 0x2
+
+|variable-rtti-FUNCINFO_BUILTIN|
+
+.. _global-rtti-FUNCINFO_INIT:
+
+.. das:attribute:: FUNCINFO_INIT = 0x1
+
+|variable-rtti-FUNCINFO_INIT|
 
 ++++++++++++
 Enumerations

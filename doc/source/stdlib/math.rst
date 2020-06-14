@@ -7,6 +7,29 @@ Math library
 
 .. include:: C:\Users\Boris\Work\yzg/doc/source/stdlib/detail/math.rst
 
+Floating point math in general is not bit-precise. Compiler can optimize permutations, replace divisions with multiplications, and some of functions are not bit-exact.
+If you need precise math use double precision type.
+All functions and symbols are in "math" module, use require to get access to it. ::
+
+    require math
+
+
++++++++++
+Constants
++++++++++
+
+.. _global-math-FLT_EPSILON:
+
+.. das:attribute:: FLT_EPSILON = 1.19209e-07f
+
+|variable-math-FLT_EPSILON|
+
+.. _global-math-PI:
+
+.. das:attribute:: PI = 3.14159f
+
+|variable-math-PI|
+
 ++++++++++++++++++++++++++++++++++++++++++
 all numerics (uint*, int*, float*, double)
 ++++++++++++++++++++++++++++++++++++++++++

@@ -98,3 +98,7 @@
 
 .. |function-math-uint_noise_3D| replace:: returns noise value of position in the seeded sequence
 
+.. |variable-math-FLT_EPSILON| replace:: the difference between 1 and the smallest floating point number of type float that is greater than 1.
+
+.. |variable-math-PI| replace:: The ratio of a circle's circumference to its diameter. π
+

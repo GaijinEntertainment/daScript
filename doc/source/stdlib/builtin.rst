@@ -5,6 +5,72 @@
 Built-in runtime
 ================
 
+|module-builtin|
+
++++++++++
+Constants
++++++++++
+
+.. _global-builtin-DBL_MAX:
+
+.. das:attribute:: DBL_MAX = 1.79769e+308lf
+
+|variable-builtin-DBL_MAX|
+
+.. _global-builtin-DBL_MIN:
+
+.. das:attribute:: DBL_MIN = 2.22507e-308lf
+
+|variable-builtin-DBL_MIN|
+
+.. _global-builtin-FLT_MAX:
+
+.. das:attribute:: FLT_MAX = 3.40282e+38f
+
+|variable-builtin-FLT_MAX|
+
+.. _global-builtin-FLT_MIN:
+
+.. das:attribute:: FLT_MIN = 1.17549e-38f
+
+|variable-builtin-FLT_MIN|
+
+.. _global-builtin-INT_MAX:
+
+.. das:attribute:: INT_MAX = 2147483647
+
+|variable-builtin-INT_MAX|
+
+.. _global-builtin-INT_MIN:
+
+.. das:attribute:: INT_MIN = -2147483648
+
+|variable-builtin-INT_MIN|
+
+.. _global-builtin-LONG_MAX:
+
+.. das:attribute:: LONG_MAX = 2147483647
+
+|variable-builtin-LONG_MAX|
+
+.. _global-builtin-LONG_MIN:
+
+.. das:attribute:: LONG_MIN = -2147483648
+
+|variable-builtin-LONG_MIN|
+
+.. _global-builtin-UINT_MAX:
+
+.. das:attribute:: UINT_MAX = 0xffffffff
+
+|variable-builtin-UINT_MAX|
+
+.. _global-builtin-ULONG_MAX:
+
+.. das:attribute:: ULONG_MAX = 0xffffffff
+
+|variable-builtin-ULONG_MAX|
+
 ++++++++++++++++++
 Handled structures
 ++++++++++++++++++

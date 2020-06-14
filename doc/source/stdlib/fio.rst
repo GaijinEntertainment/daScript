@@ -5,15 +5,27 @@
 File input output library
 =========================
 
-+++++++++++
-TypeAliases
-+++++++++++
+|module-fio|
+
+++++++++++++
+Type aliases
+++++++++++++
 
 .. _alias-file:
 
 .. das:attribute:: file = fio::FILE const?
 
 |typedef-fio-file|
+
++++++++++
+Constants
++++++++++
+
+.. _global-fio-df_magic:
+
+.. das:attribute:: df_magic = 0x12345678
+
+|variable-fio-df_magic|
 
 .. _struct-fio-df_header:
 

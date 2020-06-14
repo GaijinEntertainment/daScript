@@ -933,6 +933,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isVoid)>("isVoid","isVoid");
             addProperty<DAS_BIND_MANAGED_PROP(isAuto)>("isAuto","isAuto");
             addProperty<DAS_BIND_MANAGED_PROP(isAlias)>("isAlias","isAlias");
+            addProperty<DAS_BIND_MANAGED_PROP(isWorkhorseType)>("isWorkhorseType","isWorkhorseType");
             addProperty<DAS_BIND_MANAGED_PROP(isCtorType)>("isCtorType","isCtorType");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf","getSizeOf");
@@ -2224,6 +2225,13 @@ namespace das {
         }
     }
 
+    void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context ) {
+        for ( auto & td : mod->globals ) {
+            das_invoke<void>::invoke<VariablePtr>(context,block,td.second);
+        }
+    }
+
+
     bool isSameAstType ( TypeDeclPtr THIS,
                      TypeDeclPtr decl,
                      RefMatters refMatters,
@@ -2520,6 +2528,8 @@ namespace das {
                 SideEffects::modifyExternal, "for_each_structure");
             addExtern<DAS_BIND_FUN(for_each_generic)>(*this, lib,  "for_each_generic",
                 SideEffects::modifyExternal, "for_each_generic");
+            addExtern<DAS_BIND_FUN(for_each_global)>(*this, lib,  "for_each_global",
+                SideEffects::modifyExternal, "for_each_global");
             addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
                 SideEffects::modifyExternal, "builtin_structure_for_each_field");
             // errors

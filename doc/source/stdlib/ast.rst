@@ -5,9 +5,11 @@
 AST manipulation library
 ========================
 
-+++++++++++
-TypeAliases
-+++++++++++
+|module-ast|
+
+++++++++++++
+Type aliases
+++++++++++++
 
 .. _alias-EnumerationPtr:
 
@@ -3506,29 +3508,31 @@ TypeDecl fields are
 
 TypeDecl properties are
 
-+----------+----+
-+isCtorType+bool+
-+----------+----+
-+alignOf   +int +
-+----------+----+
-+isVoid    +bool+
-+----------+----+
-+isAuto    +bool+
-+----------+----+
-+canMove   +bool+
-+----------+----+
-+isExprType+bool+
-+----------+----+
-+sizeOf    +int +
-+----------+----+
-+isAlias   +bool+
-+----------+----+
-+baseSizeOf+int +
-+----------+----+
-+canCopy   +bool+
-+----------+----+
-+countOf   +int +
-+----------+----+
++---------------+----+
++isCtorType     +bool+
++---------------+----+
++alignOf        +int +
++---------------+----+
++isVoid         +bool+
++---------------+----+
++isAuto         +bool+
++---------------+----+
++canMove        +bool+
++---------------+----+
++isExprType     +bool+
++---------------+----+
++sizeOf         +int +
++---------------+----+
++isAlias        +bool+
++---------------+----+
++baseSizeOf     +int +
++---------------+----+
++canCopy        +bool+
++---------------+----+
++countOf        +int +
++---------------+----+
++isWorkhorseType+bool+
++---------------+----+
 
 
 |structure_annotation-ast-TypeDecl|
@@ -8288,6 +8292,21 @@ arguments are
 
 
 |function-ast-for_each_generic|
+
+.. _function-_at_ast_c__c_for_each_global__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Variable_hh__c_void_hh_const_hh_implicit__hh_const:
+
+.. das:function:: for_each_global(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Variable>):void> const implicit)
+
+arguments are
+
++----+------------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++----+------------------------------------------------------------------------------------+
++arg1+block<(smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >):void> const implicit+
++----+------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_global|
 
 .. _function-_at_ast_c__c_for_each_structure__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Structure_hh__c_void_hh_const_hh_implicit__hh_const:
 

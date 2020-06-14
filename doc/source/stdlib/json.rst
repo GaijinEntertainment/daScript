@@ -5,9 +5,11 @@
 JSON manipulation library
 =========================
 
-+++++++++++
-TypeAliases
-+++++++++++
+|module-json|
+
+++++++++++++
+Type aliases
+++++++++++++
 
 .. _alias-JsValue:
 
@@ -50,6 +52,22 @@ TypeAliases
 
 
 |typedef-json-Token|
+
++++++++++
+Constants
++++++++++
+
+.. _global-json-Token_string:
+
+.. das:attribute:: Token_string = 0
+
+|variable-json-Token_string|
+
+.. _global-json-Token_symbol:
+
+.. das:attribute:: Token_symbol = 4
+
+|variable-json-Token_symbol|
 
 .. _struct-json-JsonValue:
 

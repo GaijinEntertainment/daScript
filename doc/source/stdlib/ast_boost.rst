@@ -5,6 +5,8 @@
 Boost package for the AST
 =========================
 
+|module-ast_boost|
+
 +++++++
 Classes
 +++++++

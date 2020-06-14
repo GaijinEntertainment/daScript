@@ -5,6 +5,8 @@
 Network socket library
 ======================
 
+|module-network|
+
 ++++++++++++++++++
 Handled structures
 ++++++++++++++++++

@@ -5,6 +5,8 @@
 URI manipulation library based on UriParser
 ===========================================
 
+|module-uriparser|
+
 +++++++++++++
 Uncategorized
 +++++++++++++

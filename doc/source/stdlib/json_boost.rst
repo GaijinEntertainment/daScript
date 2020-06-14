@@ -5,6 +5,8 @@
 Boost package for JSON
 ======================
 
+|module-json_boost|
+
 +++++++
 Classes
 +++++++

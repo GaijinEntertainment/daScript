@@ -23,6 +23,12 @@ def module_name(mod)
 def alias_label_name(td:TypeDeclPtr)
     return "alias-{td.alias}"
 
+def global_label_name(value:Variable?)
+    return "global-{module_name(value._module)}-{value.name}"
+
+def global_label_name(value:VariablePtr)
+    return global_label_name(get_ptr(value))
+
 def enum_label_name(value:Enumeration?)
     return "enum-{module_name(value._module)}-{value.name}"
 
@@ -244,6 +250,9 @@ def make_table(tab:array<array<string>>)
 def topic(category:string;mod:Module?;name:string)
     return "|{category}-{module_name(mod)}-{name}|"
 
+def topic(mod:Module?)
+    return "|module-{module_name(mod)}|"
+
 def document_topic(doc_file:file;topic:string)
     let topic_file_name = "{topic_root}/{slice(topic,1,-1)}.rst"
     var st : FStat
@@ -299,9 +308,38 @@ def document_typedefs(doc_file:file;mod:Module?)
         any = true
     if !any
         return
-    fwrite(doc_file,make_group("TypeAliases"))
+    fwrite(doc_file,make_group("Type aliases"))
     for_each_typedef(mod) <| $(name, value)
         document_typedef(doc_file,mod,name,value)
+
+def document_global_constant(doc_file:file;mod:Module?;value:VariablePtr)
+    fwrite(doc_file,make_label(global_label_name(value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,string(value.name))
+    fwrite(doc_file," = {describe(value.init)}\n\n")
+    document_topic(doc_file,topic("variable",mod,string(value.name)))
+
+[private]
+def is_global_constant(value:VariablePtr)
+    if !value._type.flags.constant
+        return false
+    if !value._type.isWorkhorseType
+        return false
+    if value.init==null
+        return false
+    return true
+
+def document_global_constants(doc_file:file;mod:Module?)
+    var any = false
+    for_each_global(mod) <| $(value)
+        if is_global_constant(value)
+            any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Constants"))
+    for_each_global(mod) <| $(value)
+        if is_global_constant(value)
+            document_global_constant(doc_file,mod,value)
 
 def document_enumeration(doc_file:file;mod:Module?;value)
     fwrite(doc_file,make_label(enum_label_name(value)))
@@ -692,7 +730,9 @@ def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGrou
     if length(substname)!=0
         fwrite(doc_file,".. include:: {substname}\n\n")
         generate_substitute_stub(mod,substname)
+    document_topic(doc_file,topic(mod))
     document_typedefs(doc_file,mod)
+    document_global_constants(doc_file,mod)
     document_enumerations(doc_file,mod)
     document_structures(doc_file,mod)
     document_structure_annotations(doc_file,mod)

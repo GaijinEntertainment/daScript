@@ -5,6 +5,8 @@
 Random generator library
 ========================
 
+|module-random|
+
 +++++++++++++
 Uncategorized
 +++++++++++++

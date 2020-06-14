@@ -5,6 +5,8 @@
 Boost package for REGEX
 =======================
 
+|module-regex_boost|
+
 +++++++
 Classes
 +++++++
