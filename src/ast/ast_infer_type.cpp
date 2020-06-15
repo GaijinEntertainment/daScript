@@ -4032,7 +4032,7 @@ namespace das {
             }
             lt->smartPtr = false;
             rt->smartPtr = false;
-            bool res = lt->isSameType(*rt,RefMatters::no, ConstMatters::no, TemporaryMatters::no);
+            bool res =  canCopyOrMoveType(lt,rt,TemporaryMatters::no);
             lt->smartPtr = lt_smart;
             rt->smartPtr = rt_smart;
             return res;

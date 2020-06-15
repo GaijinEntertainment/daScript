@@ -2898,9 +2898,18 @@ arguments are
 Profiler
 ++++++++
 
+  *  :ref:`collect_profile_info (arg0: const) : string <function-_at__builtin__c__c_collect_profile_info__hh_const>` 
   *  :ref:`dump_profile_info (arg0: const) : void <function-_at__builtin__c__c_dump_profile_info__hh_const>` 
   *  :ref:`profile (arg0:int const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : float <function-_at__builtin__c__c_profile_int_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
   *  :ref:`reset_profiler (arg0: const) : void <function-_at__builtin__c__c_reset_profiler__hh_const>` 
+
+.. _function-_at__builtin__c__c_collect_profile_info__hh_const:
+
+.. das:function:: collect_profile_info()
+
+collect_profile_info returns string
+
+|function-builtin-collect_profile_info|
 
 .. _function-_at__builtin__c__c_dump_profile_info__hh_const:
 

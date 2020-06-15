@@ -161,7 +161,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros_in_module"]]
         var ifmn <- new [[ExprConstString() at=at, value:=compiling_module().name]]
         push(ifm.arguments,ifmn)
-        var ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true:=ExpressionPtr(iblk)]]
+        var ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true:=iblk]]
         push(blk.list,ife)
         fn.body <- blk
         compiling_module() |> add_function(fn)
