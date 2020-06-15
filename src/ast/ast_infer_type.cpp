@@ -5188,7 +5188,58 @@ namespace das {
             }
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
-            if ( functions.size()>1 || generics.size()>1 ) {
+            if ( functions.size()==1 ) {
+                auto funcC = functions.back();
+                if ( funcC->fromGeneric ) { // we ignore generics, if there is solid non-generic match which did not come from a generic
+                    // if its from wrong generic, or if it could be from multiple ones - its a failure
+                    if ( (generics.size()>1) || (generics.size()==1 && funcC->fromGeneric!=generics.back().get()) ) {
+                        reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
+                        return nullptr;
+                    }
+                }
+                if ( funcC->firstArgReturnType ) {
+                    expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
+                    expr->type->ref = false;
+                } else {
+                    expr->type = make_smart<TypeDecl>(*funcC->result);
+                }
+                // infer FORWARD types
+                for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
+                    auto & arg = expr->arguments[iF];
+                    if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) ) {
+                        DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
+                        auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
+                        auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
+                        auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
+                        DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
+                        TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
+                        block->returnType = make_smart<TypeDecl>(*retT->firstType);
+                        for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
+                            block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                        }
+                        setBlockCopyMoveFlags(block.get());
+                        reportAstChanged();
+                    }
+                }
+                // append default arguments
+                for ( size_t iT = expr->arguments.size(); iT != funcC->arguments.size(); ++iT ) {
+                    auto newArg = funcC->arguments[iT]->init->clone();
+                    if ( !newArg->type ) {
+                        // recursive resolve???
+                        newArg = newArg->visit(*this);
+                    }
+                    if ( newArg->type && newArg->type->baseType==Type::fakeLineInfo ) {
+                        newArg->at = expr->at;
+                    }
+                    expr->arguments.push_back(newArg);
+                }
+                // dereference what needs dereferences
+                for ( size_t iA = 0; iA != expr->arguments.size(); ++iA )
+                    if ( !funcC->arguments[iA]->type->isRef() )
+                        expr->arguments[iA] = Expression::autoDereference(expr->arguments[iA]);
+                // and all good
+                return funcC;
+            } else if ( functions.size()>1 || generics.size()>1 ) {
                 reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
@@ -5304,58 +5355,6 @@ namespace das {
                         reportMissing(expr, types, "no matching functions or generics ", true);
                     }
                 }
-            } else {
-                DAS_ASSERT(functions.size()==1);
-                auto funcC = functions.back();
-                if ( generics.size()==1 ) {
-                    auto gen = generics.back();
-                    if ( funcC->fromGeneric != gen.get() ) {
-                        reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
-                        return nullptr;
-                    }
-                }
-                if ( funcC->firstArgReturnType ) {
-                    expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
-                    expr->type->ref = false;
-                } else {
-                    expr->type = make_smart<TypeDecl>(*funcC->result);
-                }
-                // infer FORWARD types
-                for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
-                    auto & arg = expr->arguments[iF];
-                    if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) ) {
-                        DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
-                        auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
-                        auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                        auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
-                        DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
-                        TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
-                        block->returnType = make_smart<TypeDecl>(*retT->firstType);
-                        for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
-                            block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
-                        }
-                        setBlockCopyMoveFlags(block.get());
-                        reportAstChanged();
-                    }
-                }
-                // append default arguments
-                for ( size_t iT = expr->arguments.size(); iT != funcC->arguments.size(); ++iT ) {
-                    auto newArg = funcC->arguments[iT]->init->clone();
-                    if ( !newArg->type ) {
-                        // recursive resolve???
-                        newArg = newArg->visit(*this);
-                    }
-                    if ( newArg->type && newArg->type->baseType==Type::fakeLineInfo ) {
-                        newArg->at = expr->at;
-                    }
-                    expr->arguments.push_back(newArg);
-                }
-                // dereference what needs dereferences
-                for ( size_t iA = 0; iA != expr->arguments.size(); ++iA )
-                    if ( !funcC->arguments[iA]->type->isRef() )
-                        expr->arguments[iA] = Expression::autoDereference(expr->arguments[iA]);
-                // and all good
-                return funcC;
             }
             return nullptr;
         }
