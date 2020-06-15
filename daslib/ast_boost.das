@@ -82,10 +82,9 @@ class MacroMacro : AstFunctionAnnotation
         func.flags |= FunctionFlags init
         var blk <- new [[ExprBlock() at=func.at]]
         var ifm <- new [[ExprCall() at=func.at, name:="is_compiling_macros"]]
-        var ife <- new [[ExprIfThenElse() at=func.at, cond<-ExpressionPtr(ifm), if_true<-func.body]]
-        push(blk.list,ExpressionPtr(ife))
-        unsafe
-            func.body <- ExpressionPtr(blk)
+        var ife <- new [[ExprIfThenElse() at=func.at, cond<-ifm, if_true<-func.body]]
+        push(blk.list,ife)
+        func.body <- blk
         return true
 
 class TagFunctionAnnotation : AstFunctionAnnotation
@@ -161,11 +160,10 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         var iblk <- new [[ExprBlock() at=at]]
         var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros_in_module"]]
         var ifmn <- new [[ExprConstString() at=at, value:=compiling_module().name]]
-        push(ifm.arguments,ExpressionPtr(ifmn))
-        var ife <- new [[ExprIfThenElse() at=at, cond<-ExpressionPtr(ifm), if_true:=ExpressionPtr(iblk)]]
-        push(blk.list,ExpressionPtr(ife))
-        unsafe
-            fn.body <- ExpressionPtr(blk)
+        push(ifm.arguments,ifmn)
+        var ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true:=ExpressionPtr(iblk)]]
+        push(blk.list,ife)
+        fn.body <- blk
         compiling_module() |> add_function(fn)
         return get_ptr(iblk)
     else
@@ -184,7 +182,7 @@ class SetupAnyAnnotation : AstStructureAnnotation
     annotation_function_call : string = ""
     name : string
     def setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
-        push(cll.arguments,ExpressionPtr(new [[ExprConstString() at=st.at, value:=name]]))
+        push(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
         if argName is nothing
@@ -199,8 +197,8 @@ class SetupAnyAnnotation : AstStructureAnnotation
         var nee <- new [[ExprNew() at=st.at, initializer=true]]
         unsafe
             nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st)]]
-        push(cll.arguments,ExpressionPtr(nee))
-        push(blk.list,ExpressionPtr(cll))
+        push(cll.arguments,nee)
+        push(blk.list,cll)
         return true
 
 class SetupFunctionAnnotatoin : SetupAnyAnnotation
@@ -216,8 +214,8 @@ class TagFunctionMacro : SetupAnyAnnotation
     override annotation_function_call : string = "setup_tag_annotation"
     tag : string
     def override setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
-        push(cll.arguments,ExpressionPtr(new [[ExprConstString() at=st.at, value:=name]]))
-        push(cll.arguments,ExpressionPtr(new [[ExprConstString() at=st.at, value:=tag]]))
+        push(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
+        push(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let argTag = find_arg("tag", args)
         if argTag is nothing
@@ -234,8 +232,8 @@ class BetterRttiVisitor : AstVariantMacro
         if isExpression(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
             var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
-            var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-ExpressionPtr(vdr), right<-ExpressionPtr(cna)]]
-            return ExpressionPtr(veq)
+            var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-vdr, right<-cna]]
+            return veq
         return [[ExpressionPtr]]
 
 [private]
@@ -249,11 +247,11 @@ def walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
             push(mkArr.values, elem)
         push(mkArr.makeType.dim,total)
         var mkToArrayMove <- new [[ExprCall() at=at, name:="to_array_move"]]
-        push(mkToArrayMove.arguments,ExpressionPtr(mkArr))
-        return ExpressionPtr(mkToArrayMove)
+        push(mkToArrayMove.arguments,mkArr)
+        return mkToArrayMove
     else
         var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
-        return ExpressionPtr(mkArr)
+        return mkArr
 
 [private]
 def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -268,7 +266,7 @@ def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expr
             push(mkArr.values, elem)
     unsafe
 	    delete einfo
-	return ExpressionPtr(mkArr)
+	return mkArr
 
 [private]
 def walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -276,7 +274,7 @@ def walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
     	let pdata = *(reinterpret<uint8??> data)
         var elem <- walk_and_convert(pdata, info.firstType, at)
         var mkAsc <- new [[ExprAscend() at=at, subexpr <- elem]]
-        return ExpressionPtr(mkAsc)
+        return mkAsc
 
 [private]
 def walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -286,7 +284,7 @@ def walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
         unsafe
             var elem <- walk_and_convert(data + offset, info.argTypes[idx], at)
             push(mkArr.values, elem)
-    return ExpressionPtr(mkArr)
+    return mkArr
 
 [private]
 def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -303,7 +301,7 @@ def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) 
                     mkF.flags = FieldDeclarationFlags moveSemantics
                 push(*mkS, mkF)
     push(mkStruct.structs, mkS)
-	return ExpressionPtr(mkStruct)
+	return mkStruct
 
 [private]
 def walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -316,7 +314,7 @@ def walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
         if !info.argTypes[vindex].canCopy
             mkS.flags = FieldDeclarationFlags moveSemantics
         push(mkVariant.variants, mkS)
-        return ExpressionPtr(mkVariant)
+        return mkVariant
 
 [private]
 def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -335,34 +333,34 @@ def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
             var mkTup <- new [[ExprMakeTuple() at=at, recordType<-clone_type(tupT), isKeyValue=true]]
             push(mkTup.values,key)
             push(mkTup.values,value)
-            push(mkArr.values,ExpressionPtr(mkTup))
+            push(mkArr.values,mkTup)
         push(mkArr.makeType.dim,total)
         var mkToTableMove <- new [[ExprCall() at=at, name:="to_table_move"]]
-        push(mkToTableMove.arguments,ExpressionPtr(mkArr))
-        return ExpressionPtr(mkToTableMove)
+        push(mkToTableMove.arguments,mkArr)
+        return mkToTableMove
     else
         var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
-        return ExpressionPtr(mkArr)
+        return mkArr
 
 [private]
 def walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     unsafe
         if info.baseType == Type tInt
-            return ExpressionPtr(new [[ExprConstInt() at=at, value=*reinterpret<int?> data]])
+            return new [[ExprConstInt() at=at, value=*reinterpret<int?> data]]
         elif info.baseType == Type tUInt
-            return ExpressionPtr(new [[ExprConstUInt() at=at, value=*reinterpret<uint?> data]])
+            return new [[ExprConstUInt() at=at, value=*reinterpret<uint?> data]]
         elif info.baseType == Type tFloat
-            return ExpressionPtr(new [[ExprConstFloat() at=at, value=*reinterpret<float?> data]])
+            return new [[ExprConstFloat() at=at, value=*reinterpret<float?> data]]
         elif info.baseType == Type tDouble
-            return ExpressionPtr(new [[ExprConstDouble() at=at, value=*reinterpret<double?> data]])
+            return new [[ExprConstDouble() at=at, value=*reinterpret<double?> data]]
         elif info.baseType == Type tBool
-            return ExpressionPtr(new [[ExprConstBool() at=at, value=*reinterpret<bool?> data]])
+            return new [[ExprConstBool() at=at, value=*reinterpret<bool?> data]]
         elif info.baseType == Type tRange
-            return ExpressionPtr(new [[ExprConstRange() at=at, value=*reinterpret<range?> data]])
+            return new [[ExprConstRange() at=at, value=*reinterpret<range?> data]]
         elif info.baseType == Type tURange
-            return ExpressionPtr(new [[ExprConstURange() at=at, value=*reinterpret<urange?> data]])
+            return new [[ExprConstURange() at=at, value=*reinterpret<urange?> data]]
         elif info.baseType == Type tString
-            return ExpressionPtr(new [[ExprConstString() at=at, value:=*reinterpret<string?> data]])
+            return new [[ExprConstString() at=at, value:=*reinterpret<string?> data]]
         else
             panic("unsupported {info.baseType}")
             return [[ExpressionPtr]]
@@ -380,7 +378,7 @@ def walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:LineInfo 
             eval = int(* reinterpret<uint16?> data)
     else
         panic("unsupported enumeration")
-    return ExpressionPtr(new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]])
+    return new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]]
 
 [private]
 def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
@@ -392,9 +390,9 @@ def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expressi
 	elif info.baseType == Type tPointer
         unsafe
             if *reinterpret<uint8??>data == null
-                return ExpressionPtr(new [[ExprConstPtr() at=at]])
+                return new [[ExprConstPtr() at=at]]
             elif info.firstType==null | info.firstType.isVoid
-                return ExpressionPtr(new [[ExprConstPtr() at=at]])
+                return new [[ExprConstPtr() at=at]]
             else
                 return walk_and_convert_pointer(data,info,at)
 	elif info.baseType == Type tStructure

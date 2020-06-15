@@ -4424,7 +4424,7 @@ namespace das {
                     error("expecting a return value", "", "",
                         expr->at, CompilationError::expecting_return_value);
                 } else {
-                    if ( !resType->isSameType(*expr->subexpr->type,RefMatters::no, ConstMatters::no, TemporaryMatters::yes) ) {
+                    if ( !canCopyOrMoveType(resType,expr->subexpr->type,TemporaryMatters::yes) ) {
                         error("incompatible return type, expecting "
                               + resType->describe() + ", passing " + expr->subexpr->type->describe(), "", "",
                               expr->at, CompilationError::invalid_return_type);
@@ -5431,7 +5431,7 @@ namespace das {
             auto fieldVariant = expr->makeType->findArgumentIndex(decl->name);
             if (fieldVariant != -1) {
                 auto fieldType = expr->makeType->argTypes[fieldVariant];
-                if (!fieldType->isSameType(*decl->value->type, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
+                if ( !canCopyOrMoveType(fieldType,decl->value->type,TemporaryMatters::no) ) {
                     error("can't initialize field " + decl->name + "; expecting "
                         + fieldType->describe() + ", passing " + decl->value->type->describe(),"", "",
                         decl->value->at, CompilationError::invalid_type);
@@ -5517,7 +5517,7 @@ namespace das {
             }
             if ( expr->makeType->baseType == Type::tStructure ) {
                 if ( auto field = expr->makeType->structType->findField(decl->name) ) {
-                    if ( !field->type->isSameType(*decl->value->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                    if ( !canCopyOrMoveType(field->type,decl->value->type,TemporaryMatters::no) ) {
                         error("can't initialize field " + decl->name + "; expecting "
                               +field->type->describe()+", passing "+decl->value->type->describe(), "", "",
                                 decl->value->at, CompilationError::invalid_type );
@@ -5539,7 +5539,7 @@ namespace das {
                         error("field is a property, not a value; " + decl->name, "", "",
                             decl->at, CompilationError::cant_get_field);
                     }
-                    if ( !fldt->isSameType(*decl->value->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+                    if ( !canCopyOrMoveType(fldt,decl->value->type,TemporaryMatters::no) ) {
                         error("can't initialize field " + decl->name + "; expecting "
                               + fldt->describe()+", passing "+decl->value->type->describe(), "", "",
                                 decl->value->at, CompilationError::invalid_type );
@@ -5904,7 +5904,7 @@ namespace das {
             if ( !init->type|| !expr->recordType ) {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
-            if ( !expr->recordType->isSameType(*init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+            if ( !canCopyOrMoveType(expr->recordType,init->type,TemporaryMatters::no) ) {
                 error("can't initialize array element " + to_string(index) + "; expecting "
                       +expr->recordType->describe()+", passing "+init->type->describe(), "", "",
                         init->at, CompilationError::invalid_type );

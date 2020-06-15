@@ -40,12 +40,14 @@ MAKE_TYPE_FACTORY(ExprNamedCall,ExprNamedCall)
 MAKE_TYPE_FACTORY(MakeFieldDecl,MakeFieldDecl)
 MAKE_TYPE_FACTORY(MakeStruct,MakeStruct)
 MAKE_TYPE_FACTORY(ExprCall,ExprCall)
+MAKE_TYPE_FACTORY(ExprCallFunc,ExprCallFunc)
 MAKE_TYPE_FACTORY(ExprLooksLikeCall,ExprLooksLikeCall)
 MAKE_TYPE_FACTORY(ExprNullCoalescing,ExprNullCoalescing)
 MAKE_TYPE_FACTORY(ExprAt,ExprAt)
 MAKE_TYPE_FACTORY(ExprSafeAt,ExprSafeAt)
 MAKE_TYPE_FACTORY(ExprPtr2Ref,ExprPtr2Ref)
 MAKE_TYPE_FACTORY(ExprIs,ExprIs)
+MAKE_TYPE_FACTORY(ExprOp,ExprOp)
 MAKE_TYPE_FACTORY(ExprOp2,ExprOp2)
 MAKE_TYPE_FACTORY(ExprOp3,ExprOp3)
 MAKE_TYPE_FACTORY(ExprCopy,ExprCopy)
@@ -168,11 +170,13 @@ namespace das {
             this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
             this->addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
         }
-        virtual bool canSubstitute ( TypeAnnotation * ann ) {
+        virtual bool canSubstitute ( TypeAnnotation * ann ) const override {
             if ( ann == this ) return true;
             if ( module != ann->module ) return false;
-            for ( auto p : parents ) {
-                if ( p == ann ) return true;
+            if ( memcmp(ann->name.c_str(),"Expr",4)!=0 ) return false;
+            auto * AEA = static_cast<AstExprAnnotation *>(ann);
+            for ( auto p : AEA->parents ) {
+                if ( p == this ) return true;
             }
             return false;
         }
@@ -2366,42 +2370,44 @@ namespace das {
             initRecAnnotation(vaa, lib);
             // reader macro
             addAnnotation(make_smart<AstReaderMacroAnnotation>(lib));
-            // expressions
+            // expressions (in order of inheritance)
             addExpressionAnnotation(make_smart<AstExprBlockAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprLetAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprStringBuilderAnnotation>(lib))->from("Expression");
-            addExpressionAnnotation(make_smart<AstExprNewAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstMakeFieldDeclAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstMakeStructAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprNamedCallAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprLooksLikeCallAnnotation<ExprLooksLikeCall>>("ExprLooksLikeCall",lib));
-            addExpressionAnnotation(make_smart<AstExprCallAnnotation>(lib));
+            addExpressionAnnotation(make_smart<AstExprNamedCallAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprLooksLikeCallAnnotation<ExprLooksLikeCall>>("ExprLooksLikeCall",lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprCallFuncAnnotation<ExprCallFunc>>("ExprCallFunc",lib))->from("ExprLooksLikeCall");
+            addExpressionAnnotation(make_smart<AstExprNewAnnotation>(lib))->from("ExprCallFunc");
+            addExpressionAnnotation(make_smart<AstExprCallAnnotation>(lib))->from("ExprCallFunc");
             addExpressionAnnotation(make_smart<AstExprPtr2RefAnnotation<ExprPtr2Ref>>("ExprPtr2Ref",lib));
             addExpressionAnnotation(make_smart<AstExprNullCoalescingAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprAtAnnotation<ExprAt>>("ExprAt",lib));
             addExpressionAnnotation(make_smart<AstExprAtAnnotation<ExprSafeAt>>("ExprSafeAt",lib));
             addExpressionAnnotation(make_smart<AstExprIsAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprOp2>>("ExprOp2",lib));
-            addExpressionAnnotation(make_smart<AstExprOp3Annotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprCopyAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprMove>>("ExprMove",lib));
-            addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprClone>>("ExprClone",lib));
-            addExpressionAnnotation(make_smart<AstExprWithAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprWhileAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprTryCatchAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprIfThenElseAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprForAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprMakeLocalAnnotation<ExprMakeLocal>>("ExprMakeLocal",lib));
-            addExpressionAnnotation(make_smart<AstExprMakeStructAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprMakeVariantAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprMakeArrayAnnotation<ExprMakeArray>>("ExprMakeArray",lib));
-            addExpressionAnnotation(make_smart<AstExprMakeTupleAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprArrayComprehensionAnnotation>(lib));
+            addExpressionAnnotation(make_smart<AstExprAnnotation<ExprOp>>("ExprOp",lib))->from("ExprCallFunc");
+            addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprOp2>>("ExprOp2",lib))->from("ExprOp");
+            addExpressionAnnotation(make_smart<AstExprOp3Annotation>(lib))->from("ExprOp");
+            addExpressionAnnotation(make_smart<AstExprCopyAnnotation>(lib))->from("ExprOp2");
+            addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprMove>>("ExprMove",lib))->from("ExprOp2");
+            addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprClone>>("ExprClone",lib))->from("ExprOp2");
+            addExpressionAnnotation(make_smart<AstExprWithAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprWhileAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprTryCatchAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprIfThenElseAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprForAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprMakeLocalAnnotation<ExprMakeLocal>>("ExprMakeLocal",lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprMakeStructAnnotation>(lib))->from("ExprMakeLocal");
+            addExpressionAnnotation(make_smart<AstExprMakeVariantAnnotation>(lib))->from("ExprMakeLocal");
+            addExpressionAnnotation(make_smart<AstExprMakeArrayAnnotation<ExprMakeArray>>("ExprMakeArray",lib))->from("ExprMakeLocal");
+            addExpressionAnnotation(make_smart<AstExprMakeTupleAnnotation>(lib))->from("ExprMakeArray");
+            addExpressionAnnotation(make_smart<AstExprArrayComprehensionAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstTypeInfoMacroAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib));
+            addExpressionAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib))->from("Expression");
             // expressions with no extra syntax
-            addExpressionAnnotation(make_smart<AstExprLabelAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprGotoAnnotation>(lib));
+            addExpressionAnnotation(make_smart<AstExprLabelAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprGotoAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprRef2ValueAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprRef2PtrAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprAddrAnnotation>(lib));
@@ -2412,55 +2418,55 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprEraseAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprFindAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprKeyExistsAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprAscendAnnotation>(lib));
+            addExpressionAnnotation(make_smart<AstExprAscendAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprCastAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprDeleteAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprVarAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprSwizzleAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprFieldAnnotation<ExprField>>("ExprField",lib));
+            addExpressionAnnotation(make_smart<AstExprFieldAnnotation<ExprField>>("ExprField",lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprSafeFieldAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprFieldAnnotation<ExprIsVariant>>("ExprIsVariant",lib));
             addExpressionAnnotation(make_smart<AstExprFieldAnnotation<ExprAsVariant>>("ExprAsVariant",lib));
             addExpressionAnnotation(make_smart<AstExprSafeAsVariantAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprOp1Annotation>(lib));
+            addExpressionAnnotation(make_smart<AstExprOp1Annotation>(lib))->from("ExprOp");
             addExpressionAnnotation(make_smart<AstExprReturnAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprYieldAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExpressionAnnotation<ExprBreak>>("ExprBreak",lib));
             addExpressionAnnotation(make_smart<AstExpressionAnnotation<ExprContinue>>("ExprContinue",lib));
-            addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprConst>>("ExprConst",lib));
-            addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprFakeContext>>("ExprFakeContext",lib));
-            addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprFakeLineInfo>>("ExprFakeLineInfo",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstPtr,void *>>("ExprConstPtr",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt8 ,int8_t>> ("ExprConstInt8",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt16,int16_t>>("ExprConstInt16",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt64,int64_t>>("ExprConstInt64",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt  ,int32_t>>("ExprConstInt",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt2 ,int2>>   ("ExprConstInt2",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt3 ,int3>>   ("ExprConstInt3",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt4 ,int4>>   ("ExprConstInt4",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt8 ,uint8_t>> ("ExprConstUInt8",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt16,uint16_t>>("ExprConstUInt16",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt64,uint64_t>>("ExprConstUInt64",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt  ,uint32_t>>("ExprConstUInt",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt2 ,uint2>>   ("ExprConstUInt2",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt3 ,uint3>>   ("ExprConstUInt3",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt4 ,uint4>>   ("ExprConstUInt4",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstRange ,range>> ("ExprConstRange",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstURange,urange>>("ExprConstURange",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat  ,float>> ("ExprConstFloat",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat2 ,float2>>("ExprConstFloat2",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat3 ,float3>>("ExprConstFloat3",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat4 ,float4>>("ExprConstFloat4",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstDouble,double>> ("ExprConstDouble",lib));
-            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstBool,bool>> ("ExprConstBool",lib));
+            addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprConst>>("ExprConst",lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprFakeContext>>("ExprFakeContext",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprFakeLineInfo>>("ExprFakeLineInfo",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstPtr,void *>>("ExprConstPtr",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt8 ,int8_t>> ("ExprConstInt8",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt16,int16_t>>("ExprConstInt16",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt64,int64_t>>("ExprConstInt64",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt  ,int32_t>>("ExprConstInt",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt2 ,int2>>   ("ExprConstInt2",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt3 ,int3>>   ("ExprConstInt3",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt4 ,int4>>   ("ExprConstInt4",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt8 ,uint8_t>> ("ExprConstUInt8",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt16,uint16_t>>("ExprConstUInt16",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt64,uint64_t>>("ExprConstUInt64",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt  ,uint32_t>>("ExprConstUInt",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt2 ,uint2>>   ("ExprConstUInt2",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt3 ,uint3>>   ("ExprConstUInt3",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt4 ,uint4>>   ("ExprConstUInt4",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstRange ,range>> ("ExprConstRange",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstURange,urange>>("ExprConstURange",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat  ,float>> ("ExprConstFloat",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat2 ,float2>>("ExprConstFloat2",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat3 ,float3>>("ExprConstFloat3",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat4 ,float4>>("ExprConstFloat4",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstDouble,double>> ("ExprConstDouble",lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstBool,bool>> ("ExprConstBool",lib))->from("ExprConst");
             addExpressionAnnotation(make_smart<AstExprMakeBlockAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprMakeGeneratorAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprLikeCallAnnotation<ExprMemZero>>("ExprMemZero",lib));
-            addExpressionAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprConstStringAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprReaderAnnotation>(lib));
-            addExpressionAnnotation(make_smart<AstExprUnsafeAnnotation>(lib));
+            addExpressionAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprConstStringAnnotation>(lib))->from("ExprConst");
+            addExpressionAnnotation(make_smart<AstExprReaderAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprUnsafeAnnotation>(lib))->from("Expression");
             // vector functions for custom containers
             addExtern<DAS_BIND_FUN(mks_vector_push)>(*this, lib, "push",
                 SideEffects::modifyArgument, "mks_vector_push")->generated = true;
