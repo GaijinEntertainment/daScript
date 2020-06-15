@@ -509,7 +509,9 @@ namespace das
             return it->second.get();
         }
         auto ni = getNewFileInfo(fileName);
-        ni->reserveProfileData();
+        if ( ni ) {
+            ni->reserveProfileData();
+        }
         return ni;
     }
 
