@@ -1111,8 +1111,7 @@ namespace das
 #endif
     }
 
-    void Context::dumpProfileInfo() {
-        TextPrinter tout;
+    void Context::collectProfileInfo( TextWriter & tout ) {
 #if DAS_ENABLE_PROFILER
         uint64_t totalGoo = 0;
         auto allFiles = getAllFiles();
@@ -1165,7 +1164,7 @@ namespace das
         }
 
 #else
-        tout << "\nPROFILIER IS DISABLED\n";
+        tout << "\nPROFILER IS DISABLED\n";
 #endif
     }
 

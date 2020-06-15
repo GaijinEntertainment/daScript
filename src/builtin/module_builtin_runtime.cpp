@@ -552,7 +552,14 @@ namespace das
     }
 
     void dumpProfileInfo( Context * context ) {
-        context->dumpProfileInfo();
+        TextPrinter tout;
+        context->collectProfileInfo(tout);
+    }
+
+    char * collectProfileInfo( Context * context ) {
+        TextWriter tout;
+        context->collectProfileInfo(tout);
+        return context->stringHeap.allocateString(tout.str());
     }
 
     void builtin_array_free ( Array & dim, int szt, Context * __context__ ) {
@@ -797,6 +804,7 @@ namespace das
         // profiler
         addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "reset_profiler", SideEffects::modifyExternal, "resetProfiler");
         addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info", SideEffects::modifyExternal, "dumpProfileInfo");
+        addExtern<DAS_BIND_FUN(collectProfileInfo)>(*this, lib, "collect_profile_info", SideEffects::modifyExternal, "collectProfileInfo");
         // variant
         addExtern<DAS_BIND_FUN(variant_index)>(*this, lib, "variant_index", SideEffects::none, "variant_index");
         auto svi = addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index",

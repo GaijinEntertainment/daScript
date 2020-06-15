@@ -51,7 +51,7 @@ strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%);
         group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr|get_ptr$)%%);
         group_by_regex("Macro infrastructure", mod, %regex~is_compiling%%);
-        group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info)$%%);
+        group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%);
         group_by_regex("System infastructure", mod, %regex~(panic|print|terminate|breakpoint|stackwalk|get_das_root|get_clock)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash)$%%);
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%)

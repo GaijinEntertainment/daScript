@@ -31,7 +31,7 @@ namespace das
     #define MAX_FOR_ITERATORS   32
 
     #if DAS_ENABLE_PROFILER
-        #define DAS_PROFILE_NODE    profileNode(context, this);
+        #define DAS_PROFILE_NODE    profileNode(this);
     #else
         #define DAS_PROFILE_NODE
     #endif
@@ -514,7 +514,7 @@ namespace das
         uint64_t getUniqueMemorySize() const;
 
         void resetProfiler();
-        void dumpProfileInfo();
+        void collectProfileInfo( TextWriter & tout );
 
         vector<FileInfo *> getAllFiles() const;
 
@@ -621,17 +621,13 @@ namespace das
 
 #if DAS_ENABLE_PROFILER
 
-__forceinline void profileNode ( Context & context, SimNode * node ) {
+__forceinline void profileNode ( SimNode * node ) {
     if ( auto fi = node->debugInfo.fileInfo ) {
         auto li = node->debugInfo.line;
         auto & pdata = fi->profileData;
         if ( pdata.size() <= li ) pdata.resize ( li + 1 );
         pdata[li] ++;
     }
-}
-
-__forceinline void profileNode ( Context * context, SimNode * node ) {
-    profileNode(*context, node);
 }
 
 #endif
