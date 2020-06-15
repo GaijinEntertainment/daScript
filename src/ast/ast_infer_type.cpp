@@ -5242,6 +5242,7 @@ namespace das {
                                 if (resT->isRefType()) {   // we don't pass boxed type by reference ever
                                     resT->ref = false;
                                 }
+                                resT->isExplicit = true; // this is generic for this type, and this type only
                                 argT = resT;
                             }
                         }

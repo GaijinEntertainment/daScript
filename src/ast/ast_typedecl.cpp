@@ -841,6 +841,11 @@ namespace das
             return false;
         }
         if ( baseType==Type::tHandle && annotation!=decl.annotation ) {
+            if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
+                if ( annotation->canSubstitute(decl.annotation) ) {
+                    return true;
+                }
+            }
             return false;
         }
         if ( baseType==Type::tStructure && structType!=decl.structType ) {
@@ -858,7 +863,7 @@ namespace das
             if ( (firstType && !firstType->isVoid())
                 && (decl.firstType && !decl.firstType->isVoid())
                 && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
-                    TemporaryMatters::yes,allowSubstitute,false) ) {
+                    TemporaryMatters::yes,isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
                 return false;
             }
         }
