@@ -1289,7 +1289,7 @@ namespace das {
             }
             if ( decl.init ) {
                 if ( decl.init->type ) {
-                    if ( !decl.type->isSameType(*decl.init->type,RefMatters::no, ConstMatters::yes, TemporaryMatters::yes) ) {
+                    if ( !canCopyOrMoveType(decl.type,decl.init->type,TemporaryMatters::yes) ) {
                         error("structure field initialization type mismatch, "
                               + decl.type->describe() + " = " + decl.init->type->describe(),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
@@ -1386,7 +1386,7 @@ namespace das {
                     var->type = varT;
                     reportAstChanged();
                 }
-            } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+            } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no) ) {
                 error("global variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(),  "", "",
                     var->at, CompilationError::invalid_initialization_type);
@@ -4186,14 +4186,21 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMove
+        bool canCopyOrMoveType ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter ) const {
+            if ( leftType->baseType==Type::tPointer ) {
+                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::yes);
+            } else {
+                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::no);
+            }
+        }
         string moveErrorInfo(ExprMove * expr) const {
             return ", " + expr->left->type->describe() + " <- " + expr->right->type->describe();
         }
         virtual ExpressionPtr visit ( ExprMove * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
-            if ( !expr->left->type->isSameType(*expr->right->type, RefMatters::no, ConstMatters::no, TemporaryMatters::yes) ) {
-                error("can only move the same type"+moveErrorInfo(expr), "", "",
+            if ( !canCopyOrMoveType(expr->left->type,expr->right->type,TemporaryMatters::no) ) {
+                error("can only move compatible type"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
                 error("can only move to a reference"+moveErrorInfo(expr), "", "",
@@ -4228,8 +4235,8 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
-            if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("can only copy the same type"+copyErrorInfo(expr), "", "",
+            if ( !canCopyOrMoveType(expr->left->type,expr->right->type,TemporaryMatters::no) ) {
+                error("can only copy compatible type"+copyErrorInfo(expr), "", "",
                     expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
                 error("can only copy to a reference"+copyErrorInfo(expr), "", "",
@@ -4922,7 +4929,7 @@ namespace das {
                     var->type = varT;
                     reportAstChanged();
                 }
-            } else if ( !var->type->isSameType(*var->init->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
+            } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no) ) {
                 error("local variable " + var->name + " initialization type mismatch, "
                       + var->type->describe() + " = " + var->init->type->describe(), "", "",
                     var->at, CompilationError::invalid_initialization_type);
