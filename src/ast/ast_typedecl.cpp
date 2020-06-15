@@ -825,6 +825,13 @@ namespace das
         */
     }
 
+    void TypeDecl::sanitize ( ) {
+        isExplicit = false;
+        if ( firstType ) firstType->sanitize();
+        if ( secondType ) secondType->sanitize();
+        for ( auto & argT : argTypes ) argT->sanitize();
+    }
+
     bool TypeDecl::isSameType ( const TypeDecl & decl,
              RefMatters refMatters,
              ConstMatters constMatters,

@@ -2246,6 +2246,10 @@ type_declaration
         $typeDecl->removeDim = true;
         $$ = $typeDecl;
     }
+    |   type_declaration[typeDecl] DAS_EXPLICIT {
+        $typeDecl->isExplicit = true;
+        $$ = $typeDecl;
+    }
     |   type_declaration[typeDecl] DAS_CONST {
         $typeDecl->constant = true;
         $typeDecl->removeConstant = false;

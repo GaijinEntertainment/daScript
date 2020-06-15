@@ -535,6 +535,7 @@ namespace das {
         btd->argNames.insert(btd->argNames.begin(), "__this");
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
+        pStruct->fields.back().type->sanitize();
         auto finFunc = make_smart<TypeDecl>(Type::tFunction);
         auto finArg = make_smart<TypeDecl>(Type::tPointer);
         finArg->firstType = make_smart<TypeDecl>(pStruct);
@@ -545,10 +546,12 @@ namespace das {
         finFunc->firstType = make_smart<TypeDecl>(Type::tVoid);
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
+        pStruct->fields.back().type->sanitize();
         if ( needYield ) {
             auto yt = make_smart<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
             pStruct->fields.back().generated = true;
+            pStruct->fields.back().type->sanitize();
         }
         for ( auto var : capt ) {
             auto td = make_smart<TypeDecl>(*var->type);
@@ -556,6 +559,7 @@ namespace das {
             td->constant = false;
             pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
             pStruct->fields.back().capturedConstant = var->type->constant;
+            pStruct->fields.back().type->sanitize();
         }
         return pStruct;
     }

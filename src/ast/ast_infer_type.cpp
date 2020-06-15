@@ -92,8 +92,11 @@ namespace das {
             needRestart = true;
         }
     protected:
-
-        void verifyType ( const TypeDeclPtr & decl ) const {
+        void verifyType ( const TypeDeclPtr & decl, bool allowExplicit = false ) const {
+            if ( decl->isExplicit && !allowExplicit ) {
+                error("expression can't be explicit here " + decl->describe(), "", "",
+                      decl->at,CompilationError::invalid_type);
+            }
             if ( decl->dim.size() && decl->ref ) {
                 error("can't declare an array of references, " + decl->describe(), "", "",
                       decl->at,CompilationError::invalid_type);
@@ -215,7 +218,7 @@ namespace das {
                         error("can't pass a boxed type by a reference, " + argType->describe(), "", "",
                               argType->at,CompilationError::invalid_argument_type);
                     }
-                    verifyType(argType);
+                    verifyType(argType,true);
                 }
             } else if ( decl->baseType==Type::tTuple ) {
                 for ( auto & argType : decl->argTypes ) {
@@ -1249,6 +1252,7 @@ namespace das {
                 if ( !pf->type->isAutoOrAlias() ) {
                     decl.type = make_smart<TypeDecl>(*pf->type);
                     decl.parentType = false;
+                    decl.type->sanitize();
                     reportAstChanged();
                 } else {
                     error("not fully resolved yet",  "", "", decl.at);
@@ -1258,6 +1262,7 @@ namespace das {
             if ( decl.type->isAlias() ) {
                 if ( auto aT = inferAlias(decl.type) ) {
                     decl.type = aT;
+                    decl.type->sanitize();
                     reportAstChanged();
                 } else {
                     error("undefined type " + decl.type->describe(),  "", "",
@@ -1274,6 +1279,7 @@ namespace das {
                     TypeDecl::applyAutoContracts(varT, decl.type);
                     decl.type = varT;
                     decl.type->ref = false;
+                    decl.type->sanitize();
                     reportAstChanged();
                 }
             }
@@ -1509,7 +1515,7 @@ namespace das {
                 error("unresolved generics are not supported",  "", "",
                     var->at, CompilationError::cant_infer_generic );
             }
-            verifyType(var->type);
+            verifyType(var->type,true);
             return Visitor::visitArgument(fn, var, lastArg);
         }
         virtual FunctionPtr visit ( Function * that ) override {
@@ -1526,6 +1532,7 @@ namespace das {
             if  ( func->result->isAlias() ) {
                 if ( auto aT = inferAlias(func->result) ) {
                     func->result = aT;
+                    func->result->sanitize();
                     reportAstChanged();
                 } else {
                     error("undefined type " + func->result->describe(),  "", "",
@@ -2435,7 +2442,7 @@ namespace das {
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
-            verifyType(expr->typeexpr);
+            verifyType(expr->typeexpr,true);
             if ( nErrors==program->errors.size() ) {
                 if ( expr->trait=="sizeof" ) {
                     reportAstChanged();
@@ -3001,6 +3008,7 @@ namespace das {
                 auto aT = inferAlias(expr->castType);
                 if ( aT ) {
                     expr->castType = aT;
+                    expr->castType->sanitize();
                     reportAstChanged();
                 } else {
                     error("udefined type " + expr->castType->describe(),  "", "",
@@ -3099,8 +3107,9 @@ namespace das {
             if ( expr->typeexpr->isAlias() ) {
                 if ( auto aT = findAlias(expr->typeexpr->alias) ) {
                     expr->typeexpr = make_smart<TypeDecl>(*aT);
-                    expr->typeexpr->ref = false;      // drop a ref
-                    expr->typeexpr->constant = false; // drop a const
+                    expr->typeexpr->ref = false;        // drop a ref
+                    expr->typeexpr->constant = false;   // drop a const
+                    expr->typeexpr->sanitize();
                     reportAstChanged();
                 } else {
                     error("undefined type " + expr->typeexpr->describe(), "", "",
@@ -3115,7 +3124,7 @@ namespace das {
                     expr->at, CompilationError::invalid_new_type);
             } else if ( expr->typeexpr->baseType==Type::tStructure ) {
                 if ( !expr->initializer && expr->typeexpr->structType->isClass ) {
-                    error("new of class rquires () syntax; " + expr->typeexpr->describe(), "", "",
+                    error("new of class requires () syntax; " + expr->typeexpr->describe(), "", "",
                         expr->at, CompilationError::invalid_new_type);
                 }
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
@@ -3441,7 +3450,7 @@ namespace das {
             if ( var->type->ref && var->type->isRefType() ) { // silently fix a : Foo& into a : Foo
                 var->type->ref = false;
             }
-            verifyType(var->type);
+            verifyType(var->type,true);
         }
         virtual ExpressionPtr visitBlockArgumentInit (ExprBlock * block, const VariablePtr & arg, Expression * that ) override {
             if ( arg->type->isAuto() ) {
@@ -3899,6 +3908,7 @@ namespace das {
                         expr->type = make_smart<TypeDecl>(*arg->type);
                         if (!expr->type->isRefType())
                             expr->type->ref = true;
+                        expr->type->sanitize();
                         expr->pBlock = static_cast<ExprBlock*>(block);
                         return Visitor::visit(expr);
                     }
@@ -3916,6 +3926,7 @@ namespace das {
                         expr->type = make_smart<TypeDecl>(*arg->type);
                         if (!expr->type->isRefType())
                             expr->type->ref = true;
+                        expr->type->sanitize();
                         return Visitor::visit(expr);
                     }
                     argumentIndex ++;
@@ -4850,6 +4861,7 @@ namespace das {
                 auto aT = inferAlias(var->type);
                 if ( aT ) {
                     var->type = aT;
+                    var->type->sanitize();
                     reportAstChanged();
                 } else {
                     error("udefined type " + var->type->describe(), "", "",
@@ -4927,6 +4939,7 @@ namespace das {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
                     var->type = varT;
+                    var->type->sanitize();
                     reportAstChanged();
                 }
             } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no) ) {
