@@ -941,6 +941,39 @@ ExprCall fields are
 
 |structure_annotation-ast-ExprCall|
 
+.. _handle-ast-ExprCallFunc:
+
+.. das:attribute:: ExprCallFunc
+
+ExprCallFunc fields are
+
++----------------------+----------------------------------------------------------------------------------------+
++func                  + :ref:`ast::Function <handle-ast-Function>` ?                                           +
++----------------------+----------------------------------------------------------------------------------------+
++arguments             + :ref:`ast::dasvector`smart_ptr`Expression <handle-ast-dasvector`smart_ptr`Expression>` +
++----------------------+----------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                           +
++----------------------+----------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                           +
++----------------------+----------------------------------------------------------------------------------------+
++stackTop              +uint                                                                                    +
++----------------------+----------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                 +
++----------------------+----------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                    +
++----------------------+----------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                               +
++----------------------+----------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                 +
++----------------------+----------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                     +
++----------------------+----------------------------------------------------------------------------------------+
++__rtti                +string const                                                                            +
++----------------------+----------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprCallFunc|
+
 .. _handle-ast-ExprCast:
 
 .. das:attribute:: ExprCast
@@ -2671,6 +2704,12 @@ ExprNullCoalescing fields are
 
 |structure_annotation-ast-ExprNullCoalescing|
 
+.. _handle-ast-ExprOp:
+
+.. das:attribute:: ExprOp
+
+|structure_annotation-ast-ExprOp|
+
 .. _handle-ast-ExprOp1:
 
 .. das:attribute:: ExprOp1
@@ -3150,6 +3189,31 @@ ExprTypeInfo fields are
 
 
 |structure_annotation-ast-ExprTypeInfo|
+
+.. _handle-ast-ExprUnsafe:
+
+.. das:attribute:: ExprUnsafe
+
+ExprUnsafe fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++body      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprUnsafe|
 
 .. _handle-ast-ExprVar:
 
@@ -7881,6 +7945,34 @@ arguments are
 
 
 |method-ast-AstVisitor.visitExprReader|
+
+.. das:function:: AstVisitor.preVisitExprUnsafe(self: AstVisitor; expr: smart_ptr<ast::ExprUnsafe> const)
+
+arguments are
+
++----+-----------------------------------------------------------------+
++self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++----+-----------------------------------------------------------------+
++expr+smart_ptr< :ref:`ast::ExprUnsafe <handle-ast-ExprUnsafe>` > const+
++----+-----------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.preVisitExprUnsafe|
+
+.. das:function:: AstVisitor.visitExprUnsafe(self: AstVisitor; expr: smart_ptr<ast::ExprUnsafe> const)
+
+visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+arguments are
+
++----+-----------------------------------------------------------------+
++self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++----+-----------------------------------------------------------------+
++expr+smart_ptr< :ref:`ast::ExprUnsafe <handle-ast-ExprUnsafe>` > const+
++----+-----------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.visitExprUnsafe|
 
 +++++++++++++
 Uncategorized

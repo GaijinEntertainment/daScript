@@ -8,10 +8,9 @@ def prepend_cond(var fn:FunctionPtr; cond:string)
     var iblk <- fn.body
     var blk <- new [[ExprBlock() at=fn.at]]
     var ifm <- new [[ExprCall() at=fn.at, name:=cond]]
-    var ife <- new [[ExprIfThenElse() at=fn.at, cond<-ExpressionPtr(ifm), if_true:=ExpressionPtr(iblk)]]
-    push(blk.list,ExpressionPtr(ife))
-    unsafe
-        fn.body <- ExpressionPtr(blk)
+    var ife <- new [[ExprIfThenElse() at=fn.at, cond<-ifm, if_true:=ExpressionPtr(iblk)]]
+    push(blk.list,ife)
+    fn.body <- blk
 
 [function_macro(name="add_cond")]
 class AppendCondAnnotation : AstFunctionAnnotation

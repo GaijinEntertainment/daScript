@@ -2833,6 +2833,10 @@ namespace das {
                 }
             }
         }
+        bool needSubstitute ( const TypeDeclPtr & argType, const TypeDeclPtr & passType ) const {
+            if (argType->baseType == Type::anyArgument) return false;
+            return !argType->isSameType(*passType,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no);
+        }
         void CallFunc_preVisitCallArg ( ExprCallFunc * call, Expression * arg, bool ) {
             auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
                 return a.get() == arg;
@@ -2842,6 +2846,9 @@ namespace das {
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( funArgType->aotAlias ) {
                 ss << "das_alias<" << funArgType->alias << ">::to(";
+            }
+            if ( needSubstitute(funArgType,arg->type) ) {
+                ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::pass(";
             }
             if ( call->func->interopFn ) {
                 ss << "cast<" << describeCppType(argType);
@@ -2875,6 +2882,7 @@ namespace das {
                 }
             }
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
+            if ( needSubstitute(funArgType,arg->type) ) ss << ")";
             if ( funArgType->aotAlias ) ss << ")";
             if ( !last ) ss << ",";
         }

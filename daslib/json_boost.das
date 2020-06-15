@@ -29,14 +29,14 @@ class BetterJsonMacro : AstVariantMacro
     def override visitExprIsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
         if is_json_ptr_value(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
-            var isv <- new [[ExprIsVariant() at=expr.at, name:=expr.name, value <- ExpressionPtr(vdr) ]]
-            return ExpressionPtr(isv)
+            var isv <- new [[ExprIsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
+            return isv
         return [[ExpressionPtr]]
     def override visitExprAsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
         if is_json_ptr_value(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
-            var isv <- new [[ExprAsVariant() at=expr.at, name:=expr.name, value <- ExpressionPtr(vdr) ]]
-            return ExpressionPtr(isv)
+            var isv <- new [[ExprAsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
+            return isv
         return [[ExpressionPtr]]
 
 [reader_macro(name="json")]
@@ -58,5 +58,5 @@ class JsonReader : AstReaderMacro
             return [[ExpressionPtr]]
         else
             var jsv <- convert_to_expression(json,expr.at)
-            return ExpressionPtr(jsv)
+            return jsv
 

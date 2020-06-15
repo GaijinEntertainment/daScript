@@ -141,6 +141,31 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct das_reinterpret {
+        template <typename QQ>
+        static __forceinline TT & pass ( QQ && a ) {
+            return *((TT *)&a);
+        }
+        template <typename QQ>
+        static __forceinline TT & pass ( QQ & a ) {
+            return *((TT *)&a);
+        }
+        template <typename QQ>
+        static __forceinline const TT & pass ( const QQ & a ) {
+            return *((const TT *)&a);
+        }
+    };
+
+    template <typename TT>
+    struct das_reinterpret<const TT> : das_reinterpret<TT> {};
+
+    template <>
+    struct das_reinterpret<vec4f>;
+
+    template <>
+    struct das_reinterpret<const vec4f>;
+
     template <typename ResT,typename VecT, int index>
     struct das_swizzle_ref {
         static __forceinline ResT & swizzle ( VecT & val ) {

@@ -401,7 +401,7 @@ namespace das
         if ( implicit ) {
             stream << " implicit";
         }
-        if ( isExplicit ) {
+        if ( contracts==DescribeContracts::yes && isExplicit ) {
             stream << " explicit";
         }
         if ( explicitConst ) {

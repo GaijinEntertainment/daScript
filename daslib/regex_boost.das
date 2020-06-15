@@ -30,4 +30,4 @@ class RegexReader : AstReaderMacro
         delete regex
         var creg <- new [[ExprCall() at=expr.at, name:="regex::regex_compile"]]
         push(creg.arguments,re_data)
-        return ExpressionPtr(creg)
+        return creg
