@@ -274,11 +274,13 @@ namespace das {
         auto varA = make_smart<Variable>();
         varA->name = "a";
         varA->type = make_smart<TypeDecl>(str);
+        varA->type->isExplicit = true;
         varA->at = str->at;
         auto varB = make_smart<Variable>();
         varB->name = "b";
         varB->type = make_smart<TypeDecl>(str);
         varB->type->constant = true;
+        varA->type->isExplicit = true;
         varB->at = str->at;
         auto fn = make_smart<Function>();
         fn->name = "clone";
@@ -362,6 +364,7 @@ namespace das {
         cTHIS->type->removeConstant = true;
         cTHIS->type->ref = true;
         cTHIS->type->removeRef = false;
+        cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         wrapInUnsafe(pFunc);
         verifyGenerated(pFunc->body);
@@ -397,6 +400,7 @@ namespace das {
         cTHIS->at = ls->at;
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(ls);
+        cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         wrapInUnsafe(pFunc);
         verifyGenerated(pFunc->body);
@@ -444,6 +448,7 @@ namespace das {
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(Type::tPointer);
         cTHIS->type->firstType = make_smart<TypeDecl>(ls);
+        cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         wrapInUnsafe(pFunc);
         verifyGenerated(pFunc->body);
@@ -1151,6 +1156,7 @@ namespace das {
         arg0->type = make_smart<TypeDecl>(*tupleType);
         arg0->type->constant = false;
         arg0->type->ref = false;
+        arg0->type->isExplicit = true;
         fn->arguments.push_back(arg0);
         auto block = make_smart<ExprBlock>();
         block->at = at;
@@ -1245,6 +1251,7 @@ namespace das {
         arg0->type = make_smart<TypeDecl>(*variantType);
         arg0->type->constant = false;
         arg0->type->ref = false;
+        arg0->type->isExplicit = true;
         fn->arguments.push_back(arg0);
         auto block = make_smart<ExprBlock>();
         block->at = at;
@@ -1364,10 +1371,11 @@ namespace das {
         return enc.enclosure;
     }
 
-    void modifyToClassMember ( Function * func, Structure * baseClass ) {
+    void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit ) {
         // first argument is this
         auto argT = make_smart<TypeDecl>(baseClass);
         argT->constant = false;
+        argT->isExplicit = isExplicit;
         auto argV = make_smart<Variable>();
         argV->name = "self";
         argV->type = argT;

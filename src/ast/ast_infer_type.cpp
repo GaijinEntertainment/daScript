@@ -665,7 +665,7 @@ namespace das {
             }
             // compare types which don't need inference
             auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
-            if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, tempMatters) ) {
+            if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, tempMatters, AllowSubstitute::yes) ) {
                 return false;
             }
             // can't pass non-ref to ref
@@ -1024,12 +1024,12 @@ namespace das {
             }
             if ( customCount && genCount ) {
                 string candidates = program->describeCandidates(fnList);
-                error("both generated and custom " + fnList[0]->name + " functions exist for " + fnList[0]->describe(), "", "",
+                error("both generated and custom " + fnList[0]->name + " functions exist for " + fnList[0]->describe(), candidates, "",
                     at, CompilationError::function_not_found);
                 return false;
             } else if ( customCount>1 ) {
                 string candidates = program->describeCandidates(fnList);
-                error("too many custom  " + fnList[0]->name + " functions exist for " + fnList[0]->describe(), "", "",
+                error("too many custom  " + fnList[0]->name + " functions exist for " + fnList[0]->describe(), candidates, "",
                     at,CompilationError::function_not_found);
                 return false;
             } else {

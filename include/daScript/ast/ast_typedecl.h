@@ -49,7 +49,8 @@ namespace das {
         string getMangledName() const;
         bool canAot() const;
         bool canAot( das_set<Structure *> & recAot ) const;
-        bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel = true ) const;
+        bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters,
+            TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute = AllowSubstitute::no, bool topLevel = true ) const;
         bool isExprType() const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
@@ -159,6 +160,7 @@ namespace das {
                 bool    explicitConst : 1;
                 bool    aotAlias : 1;
                 bool    smartPtr : 1;
+                bool    isExplicit : 1;
             };
             uint32_t flags = 0;
         };

@@ -26,11 +26,11 @@ class Foo3D : Foo
     def Foo3D                           // overriding default initializer
         assert(x==0 & y==0)             // Foo initializer is NOT called by default
         assert(z==13)
-        Foo`Foo(cast<Foo> self)         // call parents initializer explicitly
+        Foo`Foo(self)                   // call parents initializer explicitly
         assert(x==1 & y==1)
         z = 3
     def override set(X,Y:int)           // overriding method variable
-        Foo`set(cast<Foo> self,X,Y)     // calling generated method function directly
+        Foo`set(self,X,Y)               // calling generated method function directly
         z = 0
     def override ups()                  // for testing 'polymorphism'
         x = -2

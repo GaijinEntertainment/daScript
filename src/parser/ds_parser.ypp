@@ -189,6 +189,7 @@
 %token  DAS_LABEL           "label"
 %token  DAS_GOTO            "goto"
 %token  DAS_IMPLICIT        "implicit"
+%token  DAS_EXPLICIT        "explicit"
 %token  DAS_SHARED          "shared"
 %token  DAS_SMART_PTR       "smart_ptr"
 %token  DAS_UNSAFE          "unsafe"
@@ -1691,7 +1692,7 @@ struct_variable_declaration_list
                 );
                 decl->override = $ovr;
                 $list->push_back(decl);
-                modifyToClassMember($func, g_thisStructure);
+                modifyToClassMember($func, g_thisStructure, false);
             } else {
                 if ( $ovr ) {
                     das_yyerror("can't override constructor " + $func->getMangledName(),
@@ -1704,8 +1705,10 @@ struct_variable_declaration_list
                             ctr->at, CompilationError::function_already_declared);
                     }
                     $func->name = g_thisStructure->name + "`" + g_thisStructure->name;
+                    modifyToClassMember($func, g_thisStructure, false);
+                } else {
+                    modifyToClassMember($func, g_thisStructure, true);
                 }
-                modifyToClassMember($func, g_thisStructure);
             }
             runFunctionAnnotations($func, $annL, tokAt(@annL));
             if ( !g_Program->addFunction($func) ) {

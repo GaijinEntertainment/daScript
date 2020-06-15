@@ -326,6 +326,7 @@ void YYNEWLINE() {
 <normal>"iterator"                                      return DAS_ITERATOR;
 <normal>"in"                                            return DAS_IN;
 <normal>"implicit"                                      return DAS_IMPLICIT;
+<normal>"explicit"                                      return DAS_EXPLICIT;
 <normal>"shared"                                        return DAS_SHARED;
 <normal>"smart_ptr"                                     return DAS_SMART_PTR;
 <normal>"unsafe"                                        das_need_oxford_comma = false; return DAS_UNSAFE;

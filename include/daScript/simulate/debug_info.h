@@ -70,6 +70,11 @@ namespace das
     ,   yes
     };
 
+    enum class AllowSubstitute   {
+        no,
+        yes
+    };
+
     struct StructInfo;
     struct TypeAnnotation;
     struct EnumInfo;
