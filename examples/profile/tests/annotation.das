@@ -80,4 +80,5 @@ def test
             queryTwo()
     profile(20,"query-3") <|
         queryThree()
+    testProfile::releaseEsComponents()
     return true

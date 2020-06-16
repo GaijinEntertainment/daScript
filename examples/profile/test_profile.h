@@ -76,14 +76,13 @@ struct EsPassAttributeTable  : EsAttributeTable {
 
 struct EsComponent {
     das::string      name;
-    void *      data = nullptr;
     uint32_t    size = 0;
     uint32_t    stride = 0;
     bool        boxed = false;
 
     EsComponent() = default;
-    EsComponent(const das::string & n, void * d, size_t sz, size_t st, bool bx) :
-    name(n), data(d), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
+    EsComponent(const das::string & n, size_t sz, size_t st, bool bx) :
+    name(n), size(uint32_t(sz)), stride(uint32_t(st)), boxed(bx) {}
 };
 
 constexpr int g_total = 100000;
@@ -93,6 +92,8 @@ extern das::vector<das::float3 *> g_velBoxed;
 extern das::vector<EsComponent> g_components;
 
 void initEsComponents();
+void initEsComponentsTable ();
+void releaseEsComponents();
 void verifyEsComponents(das::Context * ctx);
 void testEsUpdate(char * pass, das::Context * ctx);
 uint32_t queryEs(const das::Block & block, das::Context * context);

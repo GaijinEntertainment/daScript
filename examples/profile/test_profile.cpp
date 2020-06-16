@@ -281,6 +281,13 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
 }
 #endif
 
+void * getComponentData ( const string & name ) {
+    if (name == "pos") return g_pos.data();
+    else if (name == "vel") return g_vel.data();
+    else if (name == "velBoxed") return g_velBoxed.data();
+    else return nullptr;
+}
+
 uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto * closure = (SimNode_ClosureBlock *) block.body;
     EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
@@ -301,7 +308,7 @@ uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsCom
                 return esc.name == table->attributes[a].name;
             });
             if ( it != components.end() ) {
-                data[a]   = (char *) it->data;
+                data[a] = (char *) getComponentData(it->name);
                 stride[a] = it->stride;
                 boxed[a]  = it->boxed;
             } else {
@@ -433,23 +440,41 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
     }
 };
 
-vector<float3>          g_pos ( g_total );
-vector<float3>          g_vel ( g_total );
-vector<float3 *>        g_velBoxed ( g_total );
+vector<float3>          g_pos;
+vector<float3>          g_vel;
+vector<float3 *>        g_velBoxed;
 vector<EsComponent>     g_components;
+
+template <typename TT>
+void releaseVec(vector<TT>& vec) {
+    vector<TT> temp;
+    vec.swap(temp);
+}
+
+void releaseEsComponents() {
+    releaseVec(g_pos);
+    releaseVec(g_vel);
+    releaseVec(g_velBoxed);
+}
 
 void initEsComponents() {
     // build components
+    g_pos.resize(g_total);
+    g_vel.resize(g_total);
+    g_velBoxed.resize(g_total);
     float f = 1.0f;
-    for ( int i=0; i != g_total; ++i, ++f ) {
-        g_pos[i] = { f, f+1, f+2 };
+    for (int i = 0; i != g_total; ++i, ++f) {
+        g_pos[i] = { f, f + 1, f + 2 };
         g_vel[i] = { 1.0f, 2.0f, 3.0f };
         g_velBoxed[i] = &g_vel[i];
     }
+}
+
+void initEsComponentsTable() {
     g_components.clear();
-    g_components.emplace_back("pos",      g_pos.data(),      sizeof(float3), sizeof(float3),   false);
-    g_components.emplace_back("vel",      g_vel.data(),      sizeof(float3), sizeof(float3),   false);
-    g_components.emplace_back("velBoxed", g_velBoxed.data(), sizeof(float3), sizeof(float3 *), true );
+    g_components.emplace_back("pos",      sizeof(float3), sizeof(float3),   false);
+    g_components.emplace_back("vel",      sizeof(float3), sizeof(float3),   false);
+    g_components.emplace_back("velBoxed", sizeof(float3), sizeof(float3 *), true );
 }
 
 void verifyEsComponents(Context * context) {
@@ -918,7 +943,7 @@ public:
         addExtern<DAS_BIND_FUN(update10000ks)>(*this,lib,"update10000ks",SideEffects::modifyExternal,"update10000ks");
         addExtern<DAS_BIND_FUN(testManagedInt)>(*this,lib,"testManagedInt",SideEffects::modifyExternal,"testManagedInt");
         // es
-        initEsComponents();
+        initEsComponentsTable();
         auto qes_annotation = make_smart<QueryEsFunctionAnnotation>();
         addAnnotation(qes_annotation);
         auto queryEsFn = addExtern<DAS_BIND_FUN(queryEs)>(*this, lib, "queryEs",SideEffects::modifyExternal,"queryEs");
@@ -929,6 +954,7 @@ public:
 #endif
         addExtern<DAS_BIND_FUN(testEsUpdate)>(*this, lib, "testEsUpdate",SideEffects::modifyExternal,"testEsUpdate");
         addExtern<DAS_BIND_FUN(initEsComponents)>(*this, lib, "initEsComponents",SideEffects::modifyExternal,"initEsComponents");
+        addExtern<DAS_BIND_FUN(releaseEsComponents)>(*this, lib, "releaseEsComponents", SideEffects::modifyExternal, "releaseEsComponents");
         addExtern<DAS_BIND_FUN(verifyEsComponents)>(*this, lib, "verifyEsComponents",SideEffects::modifyExternal,"verifyEsComponents");
         // C++ copy of all tests
         addExtern<DAS_BIND_FUN(testPrimes)>(*this, lib, "testPrimes",SideEffects::modifyExternal,"testPrimes");
