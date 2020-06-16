@@ -867,11 +867,23 @@ namespace das
             if ( smartPtr != decl.smartPtr ) {
                 return false;
             }
-            if ( (firstType && !firstType->isVoid())
-                && (decl.firstType && !decl.firstType->isVoid())
-                && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
-                    TemporaryMatters::yes,isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
-                return false;
+            bool iAmVoid = !firstType || firstType->isVoid();
+            bool heIsVoid = !decl.firstType || decl.firstType->isVoid();
+            if ( topLevel ) {
+                if ( !iAmVoid && !heIsVoid &&
+                        !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
+                            TemporaryMatters::yes,isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
+                    return false;
+                }
+            } else {
+                if ( !iAmVoid && !heIsVoid ) {
+                    if ( !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
+                                TemporaryMatters::yes,isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
+                        return false;
+                    }
+                } else {
+                    return iAmVoid == heIsVoid;
+                }
             }
         }
         if ( isEnumT() ) {
