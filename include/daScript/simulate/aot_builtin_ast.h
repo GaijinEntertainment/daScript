@@ -393,6 +393,9 @@ namespace das {
     char * ast_das_to_string ( Type bt, Context * context );
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context );
 
+    Module * compileModule ( Context * context );
+    smart_ptr_raw<Program> compileProgram ( Context * context );
+
     Module * thisModule ( Context * context, LineInfoArg * lineinfo );
     smart_ptr_raw<Program> thisProgram ( Context * context );
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter );
@@ -401,6 +404,29 @@ namespace das {
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * context );
     VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * context );
+    void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr ann, Context * context );
+    FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
+    StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
+    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr ann, Context * context );
+    void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
+    void addModuleFunction ( Module * module, FunctionPtr func, Context * context );
+    void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message );
+    void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context );
+    ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
+
+    template <>
+    struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
+        __forceinline das_iterator(AnnotationArgumentList & r)
+            : das_iterator<vector<AnnotationArgument>>(r) {
+        }
+    };
+
+    template <>
+    struct das_iterator <const AnnotationArgumentList> : das_iterator<const vector<AnnotationArgument>> {
+        __forceinline das_iterator(const AnnotationArgumentList & r)
+            : das_iterator<const vector<AnnotationArgument>>(r) {
+        }
+    };
 }

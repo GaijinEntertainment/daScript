@@ -211,11 +211,11 @@ namespace das {
                 }
             } else {
                 if ( type->firstType ) {
-                    stream  << "smart_ptr_raw<"
+                    stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<")
                             <<  describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no)
                             << ">";
                 } else {
-                    stream << "smart_ptr_raw<void>";
+                    stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<") << "void>";
                 }
             }
         } else if ( type->isEnumT() ) {
@@ -1888,7 +1888,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
-            ss << "((char *) \"" << escapeString(c->text) << "\")";
+            ss << "((char *) \"" << escapeString(c->text,false) << "\")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt2 * c ) override {

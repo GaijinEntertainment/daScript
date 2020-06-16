@@ -8209,7 +8209,7 @@ arguments are
 
 |function-ast-clone_type|
 
-.. _function-_at_ast_c__c_compiling_module:
+.. _function-_at_ast_c__c_compiling_module__hh_const:
 
 .. das:function:: compiling_module()
 
@@ -8217,7 +8217,7 @@ compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 |function-ast-compiling_module|
 
-.. _function-_at_ast_c__c_compiling_program:
+.. _function-_at_ast_c__c_compiling_program__hh_const:
 
 .. das:function:: compiling_program()
 

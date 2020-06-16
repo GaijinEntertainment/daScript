@@ -843,7 +843,7 @@ namespace das
         addCall<ExprDebug>          ("debug");
         addCall<ExprMemZero>        ("memzero");
         // hash
-        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none, "hash");
+        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash", SideEffects::none, "_builtin_hash");
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_table_clear");
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length", SideEffects::none, "builtin_table_size");

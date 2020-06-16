@@ -264,6 +264,10 @@ namespace das {
         static __forceinline TT * cast ( const smart_ptr_raw<QQ> & expr ) {
             return reinterpret_cast<TT *>(expr.get());
         }
+        template <typename QQ>
+        static __forceinline TT * cast ( const smart_ptr<QQ> & expr ) {
+            return reinterpret_cast<TT *>(expr.get());
+        }
         static __forceinline TT * cast ( void * expr ) {
             return reinterpret_cast<TT *>(expr);
         }
@@ -1147,6 +1151,13 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_delete_handle<smart_ptr<TT>> {
+        static __forceinline void clear ( Context *, smart_ptr<TT> & p ) {
+            p.reset();
+        }
+    };
+
+    template <typename TT>
     struct das_delete_persistent;
 
     template <typename TT>
@@ -1246,6 +1257,18 @@ namespace das {
     __forceinline TT & das_deref ( Context * __context__, const TT * ptr ) {
         if ( !ptr ) __context__->throw_error("dereferencing null pointer");
         return *((TT *)ptr);
+    }
+
+    template <typename TT>
+    __forceinline TT & das_deref ( Context * __context__, const smart_ptr<TT> & ptr ) {
+        if ( !ptr ) __context__->throw_error("dereferencing null pointer");
+        return *ptr.get();
+    }
+
+    template <typename TT>
+    __forceinline TT & das_deref ( Context * __context__, const smart_ptr_raw<TT> & ptr ) {
+        if ( !ptr ) __context__->throw_error("dereferencing null pointer");
+        return *ptr.get();
     }
 
     template <typename TT>
@@ -2041,13 +2064,13 @@ namespace das {
         return thh.erase(tab, key, hfn) != -1;
     }
 
-    template <typename TT>
-    __forceinline void das_vector_push ( vector<TT> & vec, const TT & value ) {
+    template <typename TT, typename QQ>
+    __forceinline void das_vector_push ( vector<TT> & vec, const QQ & value ) {
         vec.push_back(value);
     }
 
-    template <typename TT>
-    __forceinline void das_vector_push_value ( vector<TT> & vec, TT value ) {
+    template <typename TT, typename QQ>
+    __forceinline void das_vector_push_value ( vector<TT> & vec, QQ value ) {
         vec.push_back(value);
     }
 

@@ -1,4 +1,4 @@
-module apply_macro
+module _apply_macro
 
 require ast
 require daslib/ast_boost

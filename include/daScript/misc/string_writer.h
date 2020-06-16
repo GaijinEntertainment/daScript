@@ -56,7 +56,11 @@ namespace das {
             return *this;
         }
         StringWriter & write(const char * stst) {
-            return writeStr(stst, strlen(stst));
+            if ( stst ) {
+                return writeStr(stst, strlen(stst));
+            } else {
+                return *this;
+            }
         }
         StringWriter & operator << (const StringWriterTag & v ) {
             if (&v == &HEX) hex = true;

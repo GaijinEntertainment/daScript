@@ -2153,11 +2153,13 @@ namespace das {
 
     extern ProgramPtr g_Program;
 
-    Module * compileModule ( ) {
+    Module * compileModule ( Context * context ) {
+        if ( !g_Program ) context->throw_error("compileModule only available during compilation");
         return g_Program->thisModule.get();
     }
 
-    smart_ptr_raw<Program> compileProgram ( ) {
+    smart_ptr_raw<Program> compileProgram ( Context * context ) {
+        if ( !g_Program ) context->throw_error("compileProgram only available during compilation");
         return g_Program;
     }
 
@@ -2583,8 +2585,9 @@ namespace das {
             // verifyAotReady();
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/ast/ast.h\"\n";
             tw << "#include \"daScript/simulate/aot_builtin_ast.h\"\n";
-            return ModuleAotType::hybrid;
+            return ModuleAotType::cpp;
         }
     };
 }

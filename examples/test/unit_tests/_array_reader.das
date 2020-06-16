@@ -1,4 +1,4 @@
-module array_reader
+module _array_reader
 
 require rtti
 require ast

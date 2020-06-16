@@ -161,6 +161,7 @@ namespace das {
                 bool    explicitConst : 1;
                 bool    aotAlias : 1;
                 bool    smartPtr : 1;
+                bool    smartPtrNative : 1;
                 bool    isExplicit : 1;
             };
             uint32_t flags = 0;
@@ -248,6 +249,7 @@ namespace das {
             auto t = make_smart<TypeDecl>(Type::tPointer);
             t->firstType = typeFactory<TT>::make(lib);
             t->smartPtr = true;
+            t->smartPtrNative = true;
             return t;
         }
     };

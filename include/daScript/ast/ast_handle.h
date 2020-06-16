@@ -391,7 +391,7 @@ namespace das
     template <typename TT>
     struct registerVectorFunctions<TT,false> {
         static void init ( Module * mod, const ModuleLibrary & lib ) {
-            addExtern<DAS_BIND_FUN(das_vector_push<TT>)>(*mod, lib, "push",
+            addExtern<DAS_BIND_FUN((das_vector_push<TT,TT>))>(*mod, lib, "push",
                 SideEffects::modifyArgument, "das_vector_push")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")->generated = true;
@@ -405,7 +405,7 @@ namespace das
     template <typename TT>
     struct registerVectorFunctions<TT,true> {
         static void init ( Module * mod, const ModuleLibrary & lib ) {
-            addExtern<DAS_BIND_FUN(das_vector_push_value<TT>)>(*mod, lib, "push",
+            addExtern<DAS_BIND_FUN((das_vector_push_value<TT,TT>))>(*mod, lib, "push",
                 SideEffects::modifyArgument, "das_vector_push_value")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")->generated = true;
