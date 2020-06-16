@@ -85,7 +85,10 @@ namespace das {
 #endif
             return ptr;
         } else {
-            for ( auto & book : shelf ) {
+            auto ss = shelf.size();
+            while ( ss ) {
+                ss--;
+                auto& book = shelf[ss];
                 if ( char * ptr = book.allocate(size) ) {
                     return ptr;
                 }
@@ -99,7 +102,10 @@ namespace das {
     bool MemoryModel::free ( char * ptr, uint32_t size ) {
         if ( !size ) return true;
         size = (size + alignMask) & ~alignMask;
-        for ( auto & book : shelf ) {
+        auto ss = shelf.size();
+        while (ss) {
+            ss--;
+            auto& book = shelf[ss];
             if ( book.isOwnPtr(ptr) ) {
                 book.free(ptr, size);
                 totalAllocated -= size;
@@ -141,7 +147,10 @@ namespace das {
         size = (size + alignMask) & ~alignMask;
         nsize = (nsize + alignMask) & ~alignMask;
         if ( size<pageSize && nsize<pageSize ) {
-            for ( auto & book : shelf ) {
+            auto ss = shelf.size();
+            while (ss) {
+                ss--;
+                auto& book = shelf[ss];
                 if ( book.isOwnPtr(ptr) ) {
                     if ( auto nptr = book.reallocate(ptr, size, nsize) ) {
                         totalAllocated = totalAllocated - size + nsize;

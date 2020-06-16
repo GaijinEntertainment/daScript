@@ -1,6 +1,6 @@
 require fio
 
-options string_heap=4000000     // big gc hint
+// options string_heap=4000000     // big gc hint
 
 [export]
 def test
