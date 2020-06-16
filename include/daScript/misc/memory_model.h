@@ -126,7 +126,7 @@ namespace das {
             return bigStuff.find(ptr) != bigStuff.end();
         }
         __forceinline bool isOwnPtrQnD(char* ptr) const {
-            return !shelf.empty() ? shelf.front().isOwnPtr(ptr) : false;
+            return !shelf.empty() ? shelf.back().isOwnPtr(ptr) : false;
         }
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }
