@@ -533,7 +533,25 @@ namespace das
         str.resize(newLength);
     }
 
+    Array  g_CommandLineArguments;
+
+    void setCommandLineArguments ( int argc, char * argv[] ) {
+        g_CommandLineArguments.data = (char *) argv;
+        g_CommandLineArguments.capacity = argc;
+        g_CommandLineArguments.size = argc;
+        g_CommandLineArguments.lock = 1;
+        g_CommandLineArguments.flags = 0;
+    }
+
+    Array getCommandLineArguments() {
+        return g_CommandLineArguments;
+    }
+
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
+        // command line
+        using fnType = TArray<char *> ( * ) ();
+        addExtern<fnType,reinterpret_cast<fnType>(&getCommandLineArguments),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_command_line_arguments",
+                SideEffects::accessExternal,"getCommandLineArguments");
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
         addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",

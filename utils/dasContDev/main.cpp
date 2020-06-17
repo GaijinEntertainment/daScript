@@ -80,7 +80,8 @@ bool compile_and_run ( const string & fn ) {
 
 void require_project_specific_modules();//link time resolved dependencies
 
-int main(int argc, const char * argv[]) {
+int main(int argc, char * argv[]) {
+    setCommandLineArguments(argc,argv);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
     string main_das;

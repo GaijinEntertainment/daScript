@@ -368,6 +368,7 @@ int main( int argc, char * argv[] ) {
     }  else if ( argc==2 ) {
         setDasRoot(argv[1]);
     }
+    setCommandLineArguments(argc,argv);
     // das_track_string_breakpoint(189);
     // das_track_breakpoint(8);
     // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
@@ -390,19 +391,15 @@ int main( int argc, char * argv[] ) {
     getchar();
     return 0;
 #endif
-#if 1 // Debug this one test
-
+#if 0 // Debug this one test
     // #define TEST_NAME   "/doc/reflections/das2rst.das"
-
-    // #define TEST_NAME   "/examples/test/array_reader_example.das"
-    // #define TEST_NAME   "/examples/test/hello_world.das"
-    // #define TEST_NAME   "/examples/test/apply_macro_example.das"
-    // #define TEST_NAME   "/examples/test/regex_lite.das"
     // #define TEST_NAME   "/examples/test/dict_pg.das"
-    #define TEST_NAME   "/examples/test/hint_macros.das"
+    // #define TEST_NAME   "/examples/test/hello_world.das"
+    // #define TEST_NAME   "/examples/test/regex_lite.das"
+    #define TEST_NAME   "/examples/test/hello_world.das"
     // #define TEST_NAME   "/examples/test/json_example.das"
     // #define TEST_NAME   "/examples/test/ast_print.das"
-    // #define TEST_NAME   "/examples/test/unit_tests/oop.das"
+    // #define TEST_NAME   "/examples/test/unit_tests/hint_macros_example.das"
     // debug_unit_test(TEST_PATH TEST_NAME,16,23,false);
     unit_test(getDasRoot() +  TEST_NAME,false);
     // unit_test(getDasRoot() +  TEST_NAME,true);

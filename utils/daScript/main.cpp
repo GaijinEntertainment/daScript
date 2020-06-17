@@ -34,11 +34,12 @@ void print_help() {
 
 void require_project_specific_modules();//link time resolved dependencies
 
-int main(int argc, const char * argv[]) {
+int main(int argc, char * argv[]) {
     if ( argc<=1 ) {
         print_help();
         return -1;
     }
+    setCommandLineArguments(argc,argv);
     vector<string> files;
     string mainName = "main";
     bool outputProgramCode = false;

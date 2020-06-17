@@ -141,14 +141,15 @@ int main( int argc, char * argv[] ) {
     }  else if ( argc==2 ) {
         setDasRoot(argv[1]);
     }
-  _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
+    setCommandLineArguments(argc,argv);
+    _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_TestProfile);
     NEED_MODULE(Module_Random);
 #if 0
-    const char * TEST_NAME = getDasRoot() +  "/examples/profile/tests/aos.das";
+    auto TEST_NAME = getDasRoot() +  "/examples/profile/tests/annotation.das";
     tout << "\nINTERPRETED:\n";
     unit_test(TEST_NAME,false);
     tout << "\nAOT:\n";
