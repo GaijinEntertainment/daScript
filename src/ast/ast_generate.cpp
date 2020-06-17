@@ -478,7 +478,6 @@ namespace das {
                                         const StructurePtr & ls, bool needYield ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
-        pFunc->generated = true;
         pFunc->lambda = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
