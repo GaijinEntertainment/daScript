@@ -2526,6 +2526,9 @@ namespace das {
                 } else if ( expr->trait=="is_bitfield" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isBitfield());
+                } else if (expr->trait == "is_string") {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isString());
                 } else if ( expr->trait=="is_handle" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isHandle());
