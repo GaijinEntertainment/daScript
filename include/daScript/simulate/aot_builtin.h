@@ -5,6 +5,7 @@ namespace das {
     bool is_compiling_macros ( Context * ctx );
     void builtin_throw ( char * text, Context * context );
     void builtin_print ( char * text, Context * context );
+    vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
     void builtin_stackwalk ( Context * context, LineInfoArg * lineInfo );
     void builtin_terminate ( Context * context );

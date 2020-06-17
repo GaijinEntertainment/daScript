@@ -1,6 +1,15 @@
 options indenting=4
 options remove_unused_symbols=false
 
+let
+    print_flags_debugger = (
+            print_flags escapeString
+        |   print_flags namesAndDimensions
+        |   print_flags humanReadable
+        |   print_flags typeQualifiers
+        |   print_flags refAddresses
+    )
+
 [generic]
 def intptr ( p : void? ) : uint64
 	static_if typeinfo(sizeof p)==4

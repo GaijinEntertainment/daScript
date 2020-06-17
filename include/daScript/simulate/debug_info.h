@@ -298,11 +298,13 @@ namespace das
     ,   namesAndDimensions =    (1<<1)
     ,   typeQualifiers =        (1<<2)
     ,   refAddresses =          (1<<3)
+    ,   humanReadable =         (1<<4)
 
     ,   string_builder  =   PrintFlags::none
     ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
-        | PrintFlags::typeQualifiers | PrintFlags::refAddresses
-    ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions | PrintFlags::typeQualifiers
+            | PrintFlags::humanReadable | PrintFlags::typeQualifiers | PrintFlags::refAddresses
+    ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
+            | PrintFlags::typeQualifiers | PrintFlags::humanReadable
     };
 
     string debug_type ( TypeInfo * info );

@@ -54,6 +54,11 @@ namespace das {
         DebugDataWalker() = delete;
         DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
     // data structures
+        __forceinline void br() {
+            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                ss << "\n";
+            }
+        }
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
             auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                 return t.first==ps && t.second==info->hash;
@@ -85,9 +90,11 @@ namespace das {
             if ( int(flags) & int(PrintFlags::refAddresses) ) {
                 ss << " at 0x" << HEX << intptr_t(ps) << DEC;
             }
+            br();
         }
         virtual void afterStructure ( char *, StructInfo * ) override {
             ss << "]]";
+            br();
             visited.pop_back();
         }
         virtual void afterStructureCancel ( char *, StructInfo * ) override {
@@ -100,8 +107,10 @@ namespace das {
             }
         }
         virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool last ) override {
-            if ( !last )
+            if ( !last ) {
                 ss << ";";
+            }
+            br();
         }
 
         virtual void beforeTuple ( char * ps, TypeInfo * ) override {
@@ -112,16 +121,20 @@ namespace das {
             if ( int(flags) & int(PrintFlags::refAddresses) ) {
                 ss << " at 0x" << HEX << intptr_t(ps) << DEC;
             }
+            br();
         }
         virtual void afterTuple ( char *, TypeInfo * ) override {
             ss << "]]";
+            br();
         }
         virtual void beforeTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool ) override {
             ss << " ";
         }
         virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool last ) override {
-            if ( !last )
+            if ( !last ) {
                 ss << ";";
+            }
+            br();
         }
 
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
@@ -139,20 +152,23 @@ namespace das {
                     ss << "unknown=";
                 }
             }
-
+            br();
         }
         virtual void afterVariant ( char *, TypeInfo * ) override {
             if (int(flags) & int(PrintFlags::namesAndDimensions)) {
                 ss << "]]";
             }
+            br();
         }
 
         virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
             ss << " ";
         }
         virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool last ) override {
-            if ( !last )
+            if ( !last ) {
                 ss << ";";
+            }
+            br();
         }
         virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             ss << " ";
@@ -161,17 +177,21 @@ namespace das {
             ss << " : ";
         }
         virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool last ) override {
-            if ( !last )
+            if ( !last ) {
                 ss << ";";
+            }
+            br();
         }
         virtual void beforeDim ( char *, TypeInfo * ti ) override {
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << debug_type(ti);
             }
+            br();
         }
         virtual void afterDim ( char *, TypeInfo * ) override {
             ss << "]]";
+            br();
         }
         virtual void beforeArray ( Array * arr, TypeInfo * ti ) override {
             ss << "[[";
@@ -182,9 +202,11 @@ namespace das {
             if ( int(flags) & int(PrintFlags::refAddresses) ) {
                 ss << " data at 0x" << HEX << intptr_t(arr->data) << DEC;
             }
+            br();
         }
         virtual void afterArray ( Array *, TypeInfo * ) override {
             ss << "]]";
+            br();
         }
         virtual void beforeTable ( Table * tab, TypeInfo * ti ) override {
             ss << "[[";
@@ -195,9 +217,11 @@ namespace das {
             if ( int(flags) & int(PrintFlags::refAddresses) ) {
                 ss << " data at 0x" << HEX << intptr_t(tab->data) << DEC;
             }
+            br();
         }
         virtual void afterTable ( Table *, TypeInfo * ) override {
             ss << "]]";
+            br();
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
@@ -225,11 +249,13 @@ namespace das {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << "[[" << debug_type(ti) << " ";
             }
+            br();
         }
         virtual void afterHandle ( char *, TypeInfo * ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << "]]";
             }
+            br();
             visited_handles.pop_back();
         }
         virtual void beforeLambda ( Lambda *, TypeInfo * ti ) override {

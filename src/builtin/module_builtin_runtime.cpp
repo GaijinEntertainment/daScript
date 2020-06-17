@@ -738,7 +738,33 @@ namespace das
         }
     };
 
+    TypeDeclPtr makePrintFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "print_flags";
+        ft->argNames = { "escapeString", "namesAndDimensions", "typeQualifiers", "refAddresses", "humanReadable" };
+        return ft;
+    }
+
+    template <>
+    struct typeFactory<PrintFlags> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            return makePrintFlags();
+        }
+    };
+
+    vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        TextWriter ssw;
+        auto typeInfo = call->types[0];
+        auto res = args[0];
+        auto flags = cast<uint32_t>::to(args[1]);
+        ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags(flags));
+        auto sres = context.stringHeap.allocateString(ssw.str());
+        return cast<char *>::from(sres);
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
+        // printer flags
+        addAlias(makePrintFlags());
         // unesacpe macro
         addReaderMacro(make_smart<UnescapedStringMacro>());
         // function annotations
@@ -796,11 +822,12 @@ namespace das
         addInterop<builtin_make_enum_iterator,void,vec4f>(*this, lib, "_builtin_make_enum_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_enum_iterator");
         // functions
-        addExtern<DAS_BIND_FUN(builtin_throw)>         (*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
-        addExtern<DAS_BIND_FUN(builtin_print)>         (*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
-        addExtern<DAS_BIND_FUN(builtin_terminate)> (*this, lib, "terminate", SideEffects::modifyExternal, "terminate");
-        addExtern<DAS_BIND_FUN(builtin_stackwalk)> (*this, lib, "stackwalk", SideEffects::modifyExternal, "builtin_stackwalk");
-        addInterop<builtin_breakpoint,void>     (*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
+        addExtern<DAS_BIND_FUN(builtin_throw)>(*this, lib, "panic", SideEffects::modifyExternal, "builtin_throw");
+        addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
+        addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint", SideEffects::modifyExternal, "builtin_sprint");
+        addExtern<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate", SideEffects::modifyExternal, "terminate");
+        addExtern<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk", SideEffects::modifyExternal, "builtin_stackwalk");
+        addInterop<builtin_breakpoint,void>(*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
         // profiler
         addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "reset_profiler", SideEffects::modifyExternal, "resetProfiler");
         addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info", SideEffects::modifyExternal, "dumpProfileInfo");

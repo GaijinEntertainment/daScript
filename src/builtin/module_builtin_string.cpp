@@ -626,6 +626,7 @@ namespace das
         addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format", SideEffects::none, "format<double>");
         // queries
         addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha", SideEffects::none, "is_alpha");
+        addExtern<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line", SideEffects::none, "is_new_line");
         addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space", SideEffects::none, "is_white_space");
         addExtern<DAS_BIND_FUN(is_number)> (*this, lib, "is_number", SideEffects::none, "is_number");
         // bitset helpers
