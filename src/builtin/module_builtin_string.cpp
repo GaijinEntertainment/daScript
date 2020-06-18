@@ -507,14 +507,13 @@ namespace das
         g_CommandLineArguments.flags = 0;
     }
 
-    Array getCommandLineArguments() {
-        return g_CommandLineArguments;
+    void getCommandLineArguments( Array & arr ) {
+        arr = g_CommandLineArguments;
     }
 
     void Module_BuiltIn::addString(ModuleLibrary & lib) {
         // command line
-        using fnType = TArray<char *> ( * ) ();
-        addExtern<fnType,reinterpret_cast<fnType>(&getCommandLineArguments),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_command_line_arguments",
+        addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
                 SideEffects::accessExternal,"getCommandLineArguments");
         // string builder writer
         addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
