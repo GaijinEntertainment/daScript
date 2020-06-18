@@ -94,11 +94,7 @@ namespace das {
                     return (char *) *it;
                 }
             }
-            if ( auto str = (char *)allocate(length + 1 + sizeof(StringHeader)) ) {
-                auto sh = (StringHeader *) str;
-                sh->length = length;
-                sh->hash = 0;
-                str += sizeof(StringHeader);
+            if ( auto str = (char *)allocate(length + 1) ) {
 #if DAS_TRACK_ALLOCATIONS
                 if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
                 header->tracking_id = g_tracker_string ++;
@@ -113,9 +109,8 @@ namespace das {
     }
 
     void StringAllocator::freeString ( char * text, uint32_t length ) {
-        DAS_ASSERT( (((StringHeader *)text)-1)->length == length );
         if ( needIntern ) internMap.erase(text);
-        free ( text - sizeof(StringHeader), length + 1 + sizeof(StringHeader) );
+        free ( text, length + 1 );
     }
 
     char * presentStr ( char * buf, char * ch, int size ) {

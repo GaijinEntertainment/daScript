@@ -625,7 +625,7 @@ namespace das
             arguments[0]->name = argName;
             return this;
         }
-        FunctionPtr args ( initializer_list<const char *> argList ) {
+        FunctionPtr args ( std::initializer_list<const char *> argList ) {
             DAS_ASSERT(argList.size()==arguments.size());
             int argIndex = 0;
             for ( const char * arg : argList ) {

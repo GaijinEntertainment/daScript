@@ -116,17 +116,6 @@ namespace das {
         uint32_t    stackSize = 0;
     };
 
-    struct StringHeader {
-        uint32_t    hash;
-        uint32_t    length;
-#if DAS_TRACK_ALLOCATIONS
-        uint64_t    tracking_id;
-#endif
-    };
-#if !DAS_TRACK_ALLOCATIONS
-    static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
-#endif
-
     class HeapAllocator : public MemoryModel {
         enum { default_page_size = 4096 };
     public:

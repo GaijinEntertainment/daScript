@@ -528,12 +528,7 @@ struct dictKeyEqual {
 
 struct dictKeyHash {
     __forceinline uint32_t operator () ( const char * str ) const {
-        StringHeader * header = ((StringHeader *)str)-1;
-        auto hh = header->hash;
-        if ( !hh ) {
-            header->hash = hh = hash_block32((uint8_t *)str, header->length);
-        }
-        return hh;
+        return str ? hash_blockz32((uint8_t *)str) : 16777619;
     }
 };
 

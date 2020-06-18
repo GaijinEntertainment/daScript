@@ -23,7 +23,7 @@ namespace das
                 }
             }
             */
-            auto it = context->stringHeap.bigStuff.find(st - sizeof(StringHeader));
+            auto it = context->stringHeap.bigStuff.find(st);
             if ( it != context->stringHeap.bigStuff.end() ) {
                 it->second |= DAS_PAGE_GC_MASK;
                 return;
