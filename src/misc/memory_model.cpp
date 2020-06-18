@@ -157,17 +157,17 @@ namespace das {
     }
 
     void MemoryModel::sweep() {
-        /*
         totalAllocated = 0;
-        for ( auto & book : shelf ) {
-            for ( uint32_t i=0; i!=book.totalPages; ++i ) {
-                auto & page = book.pages[i];
-                if ( page.total & DAS_PAGE_GC_MASK ) {
-                    page.total &= ~DAS_PAGE_GC_MASK;
-                    totalAllocated += page.total;
-                } else {
-                    page.offset = 0;
-                    page.total = 0;
+        for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {   // we re-track all small allocations
+            for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
+                uint32_t utotal = ch->total / 32;
+                for ( uint32_t i=0; i!=utotal; ++i ) {
+                    uint32_t b = ch->bits[i];
+                    for ( uint32_t j=0; j!=32; ++j ) {          // TODO: this is COUNTBITS * size
+                        if ( b & (1<<j) ) {
+                            totalAllocated += ch->size;
+                        }
+                    }
                 }
             }
         }
@@ -181,7 +181,6 @@ namespace das {
                 it = bigStuff.erase(it);
             }
         }
-        */
     }
 
     void LinearChunkAllocator::free ( char * ptr, uint32_t s ) {

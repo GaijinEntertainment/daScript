@@ -117,13 +117,13 @@ namespace das {
             if ( chunks[si] ) {
                 return chunks[si]->total * 2;
             } else {
-                return 65536 / (si<<4); // fit in 64 kb on a first chunk?
+                return 65536 / ((si+1)<<4); // fit in 64 kb on a first chunk?
             }
         }
         char * allocate ( uint32_t size ) {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            uint32_t si = size >> 4;
+            uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
                 if ( char * res = ch->allocate() ) {
                     return res;
@@ -136,7 +136,7 @@ namespace das {
         void free ( char * ptr, uint32_t size ) {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            uint32_t si = size >> 4;
+            uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
                 if ( ch->isOwnPtr(ptr) ) {
                     ch->free(ptr);
@@ -145,21 +145,26 @@ namespace das {
             }
             DAS_ASSERT(0 && "not a chunk pointer");
         }
-        void mark ( char * ptr, uint32_t size ) {
+        bool mark ( char * ptr, uint32_t size ) {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            uint32_t si = size >> 4;
+            uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
                 if ( ch->isOwnPtr(ptr) ) {
                     ch->mark(ptr);
-                    return;
+                    return true;
                 }
             }
-            DAS_ASSERT(0 && "not a chunk pointer");
+            return false;
+        }
+        void beforeGC() {
+            for ( int i=0; i!=DAS_MAX_SHOE_CUNKS; ++i ) {
+                if ( chunks[i] ) chunks[i]->reset();
+            }
         }
         bool isOwnPtr ( char * ptr, uint32_t size ) const {
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            uint32_t si = size >> 4;
+            uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
                 if ( ch->isOwnPtr(ptr) ) {
                     return true;

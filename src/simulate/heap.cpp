@@ -52,7 +52,7 @@ namespace das {
 
     void StringAllocator::recognize ( char * str ) {
         if ( !str ) return;
-        if ( needIntern && str && isOwnPtr(str, strlen(str)+1) ) {
+        if ( needIntern && str && isOwnPtr(str, uint32_t(strlen(str)+1)) ) {
             internMap.insert(str);
         }
     }
@@ -124,34 +124,24 @@ namespace das {
     }
 
     void StringAllocator::forEachString ( function<void (const char *)> && fn ) {
-        /*
-        for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
-            auto & book = shelf[bi];
-            for ( uint32_t i=0; i!=book.totalPages; ++i ) {
-                const auto & page = book.pages[i];
-                if ( page.total ) {
-                    uint32_t dofs = 0;
-                    while ( dofs != page.offset ) {
-                        char * ch = book.data + i*book.pageSize + dofs;
-                        auto header = (StringHeader *) ch;
-                        ch += sizeof(StringHeader);
-                        fn ( ch );
-                        uint32_t bytes = sizeof(StringHeader) + header->length + 1;
-                        bytes = (bytes + alignMask) & ~alignMask;
-                        dofs += bytes;
-                        DAS_ASSERT(dofs <= page.offset);
+        for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
+            for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
+                uint32_t utotal = ch->total / 32;
+                for ( uint32_t i=0; i!=utotal; ++i ) {
+                    uint32_t b = ch->bits[i];
+                    for ( uint32_t j=0; j!=32; ++j ) {    // todo: simpler bit loop
+                        if ( b & (1<<j) ) {
+                            fn ( ch->data + (i*32 + j)*ch->size );
+                        }
                     }
                 }
             }
         }
         if ( !bigStuff.empty() ) {
             for ( auto it : bigStuff ) {
-                char * ch = (char *)it.first;
-                ch += sizeof(StringHeader);
-                fn ( ch );
+                fn ( (char*) it.first );
             }
         }
-        */
     }
 
     void StringAllocator::sweep() {
@@ -166,18 +156,11 @@ namespace das {
     }
 
     void HeapAllocator::reportAllocations() {
-/*
         TextPrinter tout;
-        for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
-            auto & book = shelf[bi];
-            tout << "book " << int(bi) << ": " << book.totalPages << " pages, " << book.pageSize << " bytes each\n";
-            for ( uint32_t i=0; i!=book.totalPages; ++i ) {
-                const auto & page = book.pages[i];
-                if ( page.total ) {
-                    tout << "\tpage " << i << ": " << page.total << " of " << page.offset << " bytes\n";
-                } else {
-                    tout << "\tpage " << i << ": empty\n";
-                }
+        for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
+            if ( shoe.chunks[si] ) tout << "decks of size " << int((si+1)<<4) << "\n";
+            for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
+                tout << "\t" << ch->allocated << " of " << ch->total << ", " << (ch->allocated*ch->size) << " of " << ch->totalBytes << " bytes\n";
             }
         }
         if ( !bigStuff.empty() ) {
@@ -185,7 +168,7 @@ namespace das {
 #if DAS_TRACK_ALLOCATIONS
             tout << "size\tpointer\t\tid\n";
 #else
-            tout << "size\tpointern";
+            tout << "size\tpointer\n";
 #endif
             for ( const auto & it : bigStuff ) {
 #if DAS_TRACK_ALLOCATIONS
@@ -230,39 +213,24 @@ namespace das {
             }
 #endif
         }
-*/
     }
 
     void StringAllocator::reportAllocations() {
-/*
         TextPrinter tout;
         char buf[33];
-        for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
-            auto & book = shelf[bi];
-            tout << "book " << int(bi) << ": " << book.totalPages << " pages, " << book.pageSize << " bytes each\n";
-            for ( uint32_t i=0; i!=book.totalPages; ++i ) {
-                const auto & page = book.pages[i];
-                if ( page.total ) {
-                    tout << "\tpage " << i << ": " << page.total << " of " << page.offset << " bytes\n";
-                    uint32_t dofs = 0;
-                    while ( dofs != page.offset ) {
-                        char * ch = book.data + i*book.pageSize + dofs;
-                        auto header = (StringHeader *) ch;
-                        ch += sizeof(StringHeader);
-#if DAS_TRACK_ALLOCATIONS
-                        tout << "\t\t" << header->length << "\t" << HEX << header->hash << DEC
-                            << "\t" << header->tracking_id << "\t" << presentStr(buf,ch,32) << "\n";
-#else
-                        tout << "\t\t" << header->length << "\t" << HEX << header->hash << DEC
-                            << "\t" << presentStr(buf,ch,32) << "\n";
-#endif
-                        uint32_t bytes = sizeof(StringHeader) + header->length + 1;
-                        bytes = (bytes + alignMask) & ~alignMask;
-                        dofs += bytes;
-                        DAS_ASSERT(dofs <= page.offset);
+        for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
+            if ( shoe.chunks[si] ) tout << "string decks of size " << int((si+1)<<4) << "\n";
+            for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
+                tout << "\t" << ch->allocated << " of " << ch->total << ", " << (ch->allocated*ch->size) << " of " << ch->totalBytes << " bytes\n";
+                uint32_t utotal = ch->total / 32;
+                for ( uint32_t i=0; i!=utotal; ++i ) {
+                    uint32_t b = ch->bits[i];
+                    for ( uint32_t j=0; j!=32; ++j ) {
+                        if ( b & (1<<j) ) {
+                            char * str = ( ch->data + (i*32 + j)*ch->size );
+                            tout << "\t\t" << presentStr(buf,str,32) << "\n";
+                        }
                     }
-                } else {
-                    tout << "\tpage " << i << ": empty\n";
                 }
             }
         }
@@ -270,14 +238,10 @@ namespace das {
             tout << "big stuff:\n";
             for ( auto it : bigStuff ) {
                 char * ch = (char *)it.first;
-                auto header = (StringHeader *) ch;
-                ch += sizeof(StringHeader);
                 strncpy(buf,ch,32);
                 buf[32] = 0;
-                tout << "\t" << header->length << "\t" << HEX << header->hash << DEC
-                    << "\t" << presentStr(buf,ch,32) << "\n";
+                tout << "\t" << presentStr(buf,ch,32) << "\n";
             }
         }
-*/
     }
 }

@@ -15,26 +15,27 @@ namespace das
             if ( context->constStringHeap->isOwnPtr(st) ) {     // not a const string
                 return;
             }
-            /*
-            for ( auto & book : context->stringHeap.shelf ) {   // not a short string
-                if ( book.isOwnPtr(st) ) {
-                    book.mark(st);
-                    return;
-                }
-            }
-            */
-            auto it = context->stringHeap.bigStuff.find(st);
+            auto it = context->stringHeap.bigStuff.find(st);    // not a big allocation
             if ( it != context->stringHeap.bigStuff.end() ) {
                 it->second |= DAS_PAGE_GC_MASK;
                 return;
             }
-            // TODO: add debug code to verify uncategorized pointer
-            //  see if its in the big stuff, or heap, or something - and report accordingly
-            //  this is going to be part of DAS-ASAN
+            auto len = strlen(st) + 1;
+            len = (len + 15) & ~15;
+            if ( len < DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
+                if ( context->stringHeap.shoe.mark(st, len) ) {
+                    return;
+                }
+            }
+            // not part of regular heap
+            // DAS_ASSERT(0 && "collecting string which is not in const or regular string heap");
         }
     };
 
     void Context::collectStringHeap ( LineInfo * at ) {
+        // clean up, so that all small allocations are marked as 'free'
+        stringHeap.shoe.beforeGC();
+        // now
         GcMarkStringHeap walker;
         walker.context = this;
         // mark globals
