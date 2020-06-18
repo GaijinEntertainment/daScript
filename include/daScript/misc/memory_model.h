@@ -2,17 +2,6 @@
 
 namespace das {
 
-    struct StringHeader {
-        uint32_t    hash;
-        uint32_t    length;
-#if DAS_TRACK_ALLOCATIONS
-        uint64_t    tracking_id;
-#endif
-    };
-#if !DAS_TRACK_ALLOCATIONS
-    static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
-#endif
-
 #if DAS_TRACK_ALLOCATIONS
     extern uint64_t    g_tracker;
     extern uint64_t    g_breakpoint;
@@ -203,12 +192,8 @@ namespace das {
         LinearChunkAllocator() { alignMask = 3; }
         char * allocate ( uint32_t s );
         void free ( char * ptr, uint32_t s );
-        void reset ();
+        virtual void reset ();
         char * allocateName ( const string & name );
-        char * allocateString ( const char * text, uint32_t length );
-        __forceinline char * allocateString ( const string & str ) {
-            return allocateString ( str.c_str(), uint32_t(str.length()) );
-        }
         __forceinline bool isOwnPtrQnD ( const char * ptr ) const {
            return chunk!=nullptr && chunk->isOwnPtr(ptr);
         }

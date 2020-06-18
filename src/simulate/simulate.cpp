@@ -560,7 +560,7 @@ namespace das
 
     Context::Context(uint32_t stackSize) : stack(stackSize) {
         code = make_smart<NodeAllocator>();
-        constStringHeap = make_smart<StringAllocator>();
+        constStringHeap = make_smart<ConstStringAllocator>();
         debugInfo = make_smart<DebugInfoAllocator>();
         ownStack = (stackSize != 0);
     }

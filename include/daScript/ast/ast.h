@@ -909,7 +909,6 @@ namespace das
         uint32_t    string_heap = 0;                    // initial string heap size
         uint32_t    string_heap_page = 4096;            // default string page size
 #endif
-        bool        intern_const_strings = false;       // use string interning lookup for const strings
         bool        intern_strings = false;             // use string interning lookup for regular string heap
     // rtti
         bool rtti = false;                              // create extended RTTI

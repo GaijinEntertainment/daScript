@@ -333,7 +333,6 @@ namespace das {
         "string_heap",                  Type::tInt,
         "string_heap_page",             Type::tInt,
         "stack",                        Type::tInt,
-        "intern_const_strings",         Type::tBool,
         "intern_strings",               Type::tBool,
     // aot
         "no_aot",                       Type::tBool,

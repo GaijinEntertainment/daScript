@@ -299,21 +299,6 @@ namespace das {
         return nullptr;
     }
 
-    char * LinearChunkAllocator::allocateString ( const char * text, uint32_t length ) {
-        if ( length ) {
-            if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {
-                StringHeader * header = (StringHeader *) str;
-                header->length = length;
-                header->hash = 0;
-                str += sizeof(StringHeader);
-                if ( text ) memcpy(str, text, length);
-                str[length] = 0;
-                return str;
-            }
-        }
-        return nullptr;
-    }
-
     void LinearChunkAllocator::getStats ( uint32_t & depth, uint64_t & bytes, uint64_t & total )  const {
         depth = 0;
         bytes = 0;

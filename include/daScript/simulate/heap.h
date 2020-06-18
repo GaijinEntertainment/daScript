@@ -116,6 +116,17 @@ namespace das {
         uint32_t    stackSize = 0;
     };
 
+    struct StringHeader {
+        uint32_t    hash;
+        uint32_t    length;
+#if DAS_TRACK_ALLOCATIONS
+        uint64_t    tracking_id;
+#endif
+    };
+#if !DAS_TRACK_ALLOCATIONS
+    static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
+#endif
+
     class HeapAllocator : public MemoryModel {
         enum { default_page_size = 4096 };
     public:
@@ -150,6 +161,18 @@ namespace das {
     };
 
     typedef das_hash_set<const char *,StrHashPred,StrEqPred> das_string_set;
+
+    class ConstStringAllocator : public LinearChunkAllocator {
+    public:
+        char * allocateString ( const char * text, uint32_t length );
+        __forceinline char * allocateString ( const string & str ) {
+            return allocateString ( str.c_str(), uint32_t(str.length()) );
+        }
+        virtual void reset () override;
+        char * intern ( const char * str ) const;
+    protected:
+        das_string_set internMap;
+    };
 
     class StringAllocator : public HeapAllocator {
     public:

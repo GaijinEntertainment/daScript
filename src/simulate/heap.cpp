@@ -56,6 +56,39 @@ namespace das {
         }
     }
 
+    char * ConstStringAllocator::intern(const char * str) const {
+        auto it = internMap.find(str);
+        return it != internMap.end() ? ((char *)*it) : nullptr;
+    }
+
+    void ConstStringAllocator::reset () {
+        LinearChunkAllocator::reset();
+        das_string_set dummy;
+        swap(internMap, dummy);
+    }
+
+    char * ConstStringAllocator::allocateString ( const char * text, uint32_t length ) {
+        if ( length ) {
+            if ( text ) {
+                auto it = internMap.find(text);
+                if ( it != internMap.end() ) {
+                    return (char *) *it;
+                }
+            }
+            if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {
+                StringHeader * header = (StringHeader *) str;
+                header->length = length;
+                header->hash = 0;
+                str += sizeof(StringHeader);
+                if ( text ) memcpy(str, text, length);
+                str[length] = 0;
+                internMap.insert(str);
+                return str;
+            }
+        }
+        return nullptr;
+    }
+
     char * StringAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
             if ( needIntern && text ) {

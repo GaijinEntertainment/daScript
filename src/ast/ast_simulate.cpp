@@ -2439,13 +2439,10 @@ namespace das
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         isSimulating = true;
         context.thisProgram = this;
-        context.constStringHeap = make_smart<StringAllocator>();
+        context.constStringHeap = make_smart<ConstStringAllocator>();
         if ( globalStringHeapSize ) {
-            context.constStringHeap->pageSize = globalStringHeapSize;           // const string heap in 1 page
             context.constStringHeap->setInitialSize(globalStringHeapSize);
-            context.constStringHeap->setIntern(true);
         }
-        context.heap.pageSize = options.getIntOption("heap_page",policies.heap_page);
         if ( auto optHeap = options.getIntOption("heap",policies.heap) ) {
             context.heap.setInitialSize( uint32_t(optHeap) );
         }
@@ -2569,8 +2566,7 @@ namespace das
         }
         // verify code and string heaps
         DAS_ASSERTF(context.code->depth()<=1, "code must come in one page");
-        DAS_ASSERTF(context.constStringHeap->pagesAllocated()<=1, "strings must come in one page");
-        context.constStringHeap->setIntern(options.getBoolOption("intern_const_strings", policies.intern_const_strings));
+        DAS_ASSERTF(context.constStringHeap->depth()<=1, "strings must come in one page");
         context.stringHeap.setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
         // log all functions
         if ( options.getBoolOption("log_nodes",false) ) {
@@ -2614,7 +2610,7 @@ namespace das
             logs << "stack         " << context.stack.size() << "\n";
             logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->depth()
                 << " pages (" << context.code->totalAlignedMemoryAllocated() << ")\n";
-            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->pagesAllocated()
+            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->depth()
                 << " pages (" << context.constStringHeap->totalAlignedMemoryAllocated() << ")\n";
             logs << "debug         " << context.debugInfo->bytesAllocated() << " (" <<
                 context.debugInfo->totalAlignedMemoryAllocated() << ")\n";
