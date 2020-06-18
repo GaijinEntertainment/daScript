@@ -4,7 +4,7 @@ Terminals unused in grammar
     "end of failed eader macro"
 
 
-State 43 conflicts: 1 shift/reduce
+State 44 conflicts: 1 shift/reduce
 State 183 conflicts: 1 shift/reduce
 State 189 conflicts: 1 shift/reduce
 State 199 conflicts: 1 shift/reduce
@@ -216,8 +216,8 @@ Grammar
   151          | "@ <|" expr_block
 
   152 name_in_namespace: "name"
-  153                  | "name" COLCOL "name"
-  154                  | COLCOL "name"
+  153                  | "name" "::" "name"
+  154                  | "::" "name"
 
   155 expression_delete: "delete" expr
 
@@ -880,30 +880,30 @@ Terminals, with rules where they appear
     "<<<=" (380) 121 228
     ">>>=" (381) 122 229
     "=>" (382) 201 202 496
-    "[[" (383) 313 488 489 490 491 501 508
-    "[{" (384) 492 493 502 509
-    "{{" (385) 505
-    "integer constant" <i> (386) 38 39 40 41 57 65 208
-    "long integer constant" <i64> (387) 210
-    "unsigned integer constant" <ui> (388) 209
-    "unsigned long integer constant" <ui64> (389) 211
-    "floating point constant" <fd> (390) 58 66 212
-    "double constant" <d> (391) 213
-    "name" <s> (392) 14 28 29 30 32 56 63 64 65 66 67 68 69 70 86 152 153 154 187 188 194 197 233 234 242 284 300 301 302 311 327 330 359 360 361 365 366 369 374 375 409 410 411 473 475 480 481 482 483
-    "start of the string" (393) 17 21
-    STRING_CHARACTER <ch> (394) 15 16 22 23
-    "end of the string" (395) 17 21
-    "{" (396) 20
-    "}" (397) 20
-    "end of failed eader macro" (398)
-    UNARY_MINUS (399)
-    UNARY_PLUS (400)
-    PRE_INC (401)
-    PRE_DEC (402)
-    POST_INC (403)
-    POST_DEC (404)
-    DEREF (405)
-    COLCOL (406) 153 154
+    "::" (383) 153 154
+    "[[" (384) 313 488 489 490 491 501 508
+    "[{" (385) 492 493 502 509
+    "{{" (386) 505
+    "integer constant" <i> (387) 38 39 40 41 57 65 208
+    "long integer constant" <i64> (388) 210
+    "unsigned integer constant" <ui> (389) 209
+    "unsigned long integer constant" <ui64> (390) 211
+    "floating point constant" <fd> (391) 58 66 212
+    "double constant" <d> (392) 213
+    "name" <s> (393) 14 28 29 30 32 56 63 64 65 66 67 68 69 70 86 152 153 154 187 188 194 197 233 234 242 284 300 301 302 311 327 330 359 360 361 365 366 369 374 375 409 410 411 473 475 480 481 482 483
+    "start of the string" (394) 17 21
+    STRING_CHARACTER <ch> (395) 15 16 22 23
+    "end of the string" (396) 17 21
+    "{" (397) 20
+    "}" (398) 20
+    "end of failed eader macro" (399)
+    UNARY_MINUS (400)
+    UNARY_PLUS (401)
+    PRE_INC (402)
+    PRE_DEC (403)
+    POST_INC (404)
+    POST_DEC (405)
+    DEREF (406)
 
 
 Nonterminals, with rules where they appear
@@ -1580,8 +1580,8 @@ State 13
    80 optional_annotation_list: '[' . annotation_list ']'
 
     "require"  shift, and go to state 42
-    "name"     shift, and go to state 43
-    COLCOL     shift, and go to state 44
+    "::"       shift, and go to state 43
+    "name"     shift, and go to state 44
 
     annotation_declaration_name  go to state 45
     annotation_declaration       go to state 46
@@ -1837,20 +1837,20 @@ State 42
 
 State 43
 
-  152 name_in_namespace: "name" .
-  153                  | "name" . COLCOL "name"
+  154 name_in_namespace: "::" . "name"
 
-    COLCOL  shift, and go to state 71
-
-    COLCOL    [reduce using rule 152 (name_in_namespace)]
-    $default  reduce using rule 152 (name_in_namespace)
+    "name"  shift, and go to state 71
 
 
 State 44
 
-  154 name_in_namespace: COLCOL . "name"
+  152 name_in_namespace: "name" .
+  153                  | "name" . "::" "name"
 
-    "name"  shift, and go to state 72
+    "::"  shift, and go to state 72
+
+    "::"      [reduce using rule 152 (name_in_namespace)]
+    $default  reduce using rule 152 (name_in_namespace)
 
 
 State 45
@@ -2087,16 +2087,16 @@ State 70
 
 State 71
 
-  153 name_in_namespace: "name" COLCOL . "name"
+  154 name_in_namespace: "::" "name" .
 
-    "name"  shift, and go to state 114
+    $default  reduce using rule 154 (name_in_namespace)
 
 
 State 72
 
-  154 name_in_namespace: COLCOL "name" .
+  153 name_in_namespace: "name" "::" . "name"
 
-    $default  reduce using rule 154 (name_in_namespace)
+    "name"  shift, and go to state 114
 
 
 State 73
@@ -2114,8 +2114,8 @@ State 74
    78 annotation_list: annotation_list ',' . annotation_declaration
 
     "require"  shift, and go to state 42
-    "name"     shift, and go to state 43
-    COLCOL     shift, and go to state 44
+    "::"       shift, and go to state 43
+    "name"     shift, and go to state 44
 
     annotation_declaration_name  go to state 45
     annotation_declaration       go to state 116
@@ -2497,8 +2497,8 @@ State 109
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -2543,7 +2543,7 @@ State 113
 
 State 114
 
-  153 name_in_namespace: "name" COLCOL "name" .
+  153 name_in_namespace: "name" "::" "name" .
 
     $default  reduce using rule 153 (name_in_namespace)
 
@@ -2863,8 +2863,8 @@ State 157
 
   368 optional_structure_parent: ':' . name_in_namespace
 
-    "name"  shift, and go to state 43
-    COLCOL  shift, and go to state 44
+    "::"    shift, and go to state 43
+    "name"  shift, and go to state 44
 
     name_in_namespace  go to state 231
 
@@ -3470,8 +3470,8 @@ State 228
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -3552,6 +3552,7 @@ State 230
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -3561,7 +3562,7 @@ State 230
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -3572,7 +3573,6 @@ State 230
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     ';'                               shift, and go to state 327
     '{'                               shift, and go to state 155
     '}'                               shift, and go to state 328
@@ -3770,6 +3770,7 @@ State 243
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -3779,7 +3780,7 @@ State 243
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -3790,7 +3791,6 @@ State 243
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -4040,6 +4040,7 @@ State 264
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -4049,7 +4050,7 @@ State 264
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -4061,7 +4062,6 @@ State 264
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -4149,8 +4149,8 @@ State 268
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -4318,6 +4318,7 @@ State 278
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -4327,7 +4328,7 @@ State 278
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -4338,7 +4339,6 @@ State 278
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -4443,11 +4443,11 @@ State 284
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
+    "::"         shift, and go to state 43
     "[["         shift, and go to state 308
     "[{"         shift, and go to state 309
     "{{"         shift, and go to state 310
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -4522,6 +4522,7 @@ State 286
     "--"                              shift, and go to state 306
     "<-"                              shift, and go to state 417
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -4531,7 +4532,7 @@ State 286
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -4542,7 +4543,6 @@ State 286
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     ';'                               shift, and go to state 418
     '{'                               shift, and go to state 155
 
@@ -4636,6 +4636,7 @@ State 290
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -4645,7 +4646,7 @@ State 290
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -4656,7 +4657,6 @@ State 290
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -4731,6 +4731,7 @@ State 292
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -4740,7 +4741,7 @@ State 292
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -4751,7 +4752,6 @@ State 292
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -4870,6 +4870,7 @@ State 300
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -4879,7 +4880,7 @@ State 300
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -4890,7 +4891,6 @@ State 300
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -4987,6 +4987,7 @@ State 304
     "--"                              shift, and go to state 306
     "<-"                              shift, and go to state 436
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -4996,7 +4997,7 @@ State 304
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5007,7 +5008,6 @@ State 304
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5077,6 +5077,7 @@ State 305
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5086,7 +5087,7 @@ State 305
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5097,7 +5098,6 @@ State 305
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5165,6 +5165,7 @@ State 306
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5174,7 +5175,7 @@ State 306
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5185,7 +5186,6 @@ State 306
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5269,8 +5269,8 @@ State 308
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -5323,8 +5323,8 @@ State 309
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -5376,6 +5376,7 @@ State 310
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5385,7 +5386,7 @@ State 310
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5396,7 +5397,6 @@ State 310
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5517,6 +5517,7 @@ State 318
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5526,7 +5527,7 @@ State 318
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5537,7 +5538,6 @@ State 318
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5605,6 +5605,7 @@ State 319
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5614,7 +5615,7 @@ State 319
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5625,7 +5626,6 @@ State 319
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5693,6 +5693,7 @@ State 320
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5702,7 +5703,7 @@ State 320
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5713,7 +5714,6 @@ State 320
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5743,8 +5743,8 @@ State 321
 
    25 expr_reader: '%' . name_in_namespace $@1 reader_character_sequence
 
-    "name"  shift, and go to state 43
-    COLCOL  shift, and go to state 44
+    "::"    shift, and go to state 43
+    "name"  shift, and go to state 44
 
     name_in_namespace  go to state 454
 
@@ -5791,6 +5791,7 @@ State 322
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5800,7 +5801,7 @@ State 322
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5811,7 +5812,6 @@ State 322
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5879,6 +5879,7 @@ State 323
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5888,7 +5889,7 @@ State 323
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5899,7 +5900,6 @@ State 323
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -5967,6 +5967,7 @@ State 324
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -5976,7 +5977,7 @@ State 324
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -5987,7 +5988,6 @@ State 324
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -6120,6 +6120,7 @@ State 333
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -6129,7 +6130,7 @@ State 333
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -6140,7 +6141,6 @@ State 333
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -6604,8 +6604,8 @@ State 372
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -6760,8 +6760,8 @@ State 378
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -6810,8 +6810,8 @@ State 379
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -6860,8 +6860,8 @@ State 380
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -6910,8 +6910,8 @@ State 381
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -6976,8 +6976,8 @@ State 384
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -7037,8 +7037,8 @@ State 386
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -7098,8 +7098,8 @@ State 388
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -7159,8 +7159,8 @@ State 390
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
+    "::"         shift, and go to state 43
     "name"       shift, and go to state 543
-    COLCOL       shift, and go to state 44
 
     name_in_namespace           go to state 211
     tuple_type                  go to state 544
@@ -7425,8 +7425,8 @@ State 408
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -7487,6 +7487,7 @@ State 410
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -7496,7 +7497,7 @@ State 410
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -7507,7 +7508,6 @@ State 410
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -7684,8 +7684,8 @@ State 416
   194               | "typeinfo" '(' . name_in_namespace '<' "name" '>' "type" '<' $@10 type_declaration '>' $@11 ')'
   197               | "typeinfo" '(' . name_in_namespace '<' "name" ';' "name" '>' "type" '<' $@12 type_declaration '>' $@13 ')'
 
-    "name"  shift, and go to state 43
-    COLCOL  shift, and go to state 44
+    "::"    shift, and go to state 43
+    "name"  shift, and go to state 44
 
     name_in_namespace  go to state 557
 
@@ -7734,6 +7734,7 @@ State 417
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -7743,7 +7744,7 @@ State 417
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -7754,7 +7755,6 @@ State 417
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -8032,6 +8032,7 @@ State 424
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -8041,7 +8042,7 @@ State 424
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -8052,7 +8053,6 @@ State 424
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -8213,6 +8213,7 @@ State 428
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -8222,7 +8223,7 @@ State 428
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -8233,7 +8234,6 @@ State 428
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -8410,8 +8410,8 @@ State 435
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -8465,6 +8465,7 @@ State 436
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -8474,7 +8475,7 @@ State 436
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -8485,7 +8486,6 @@ State 436
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -8825,6 +8825,7 @@ State 444
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "??"                              shift, and go to state 259
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -8849,7 +8850,6 @@ State 444
     '('                               shift, and go to state 581
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
     '#'                               shift, and go to state 266
 
@@ -8956,6 +8956,7 @@ State 446
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "??"                              shift, and go to state 259
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -8980,7 +8981,6 @@ State 446
     '('                               shift, and go to state 591
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
     '#'                               shift, and go to state 266
 
@@ -9466,9 +9466,9 @@ State 458
   238               | '@' '@' . '<' $@14 type_declaration '>' $@15 name_in_namespace
   241               | '@' '@' . '<' $@16 optional_function_argument_list optional_function_type '>' $@17 name_in_namespace
 
-    "name"  shift, and go to state 43
+    "::"    shift, and go to state 43
+    "name"  shift, and go to state 44
     '<'     shift, and go to state 602
-    COLCOL  shift, and go to state 44
 
     $default  reduce using rule 205 (block_or_lambda)
 
@@ -9622,6 +9622,7 @@ State 464
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -9631,7 +9632,7 @@ State 464
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -9644,7 +9645,6 @@ State 464
     ')'                               shift, and go to state 607
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -9798,6 +9798,7 @@ State 475
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -9807,7 +9808,7 @@ State 475
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -9818,7 +9819,6 @@ State 475
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -9886,6 +9886,7 @@ State 476
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -9895,7 +9896,7 @@ State 476
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -9906,7 +9907,6 @@ State 476
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -9974,6 +9974,7 @@ State 477
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -9983,7 +9984,7 @@ State 477
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -9994,7 +9995,6 @@ State 477
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10062,6 +10062,7 @@ State 478
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10071,7 +10072,7 @@ State 478
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10082,7 +10083,6 @@ State 478
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10150,6 +10150,7 @@ State 479
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10159,7 +10160,7 @@ State 479
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10170,7 +10171,6 @@ State 479
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10238,6 +10238,7 @@ State 480
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10247,7 +10248,7 @@ State 480
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10258,7 +10259,6 @@ State 480
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10326,6 +10326,7 @@ State 481
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10335,7 +10336,7 @@ State 481
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10346,7 +10347,6 @@ State 481
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10414,6 +10414,7 @@ State 482
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10423,7 +10424,7 @@ State 482
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10434,7 +10435,6 @@ State 482
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10502,6 +10502,7 @@ State 483
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10511,7 +10512,7 @@ State 483
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10522,7 +10523,6 @@ State 483
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10590,6 +10590,7 @@ State 484
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10599,7 +10600,7 @@ State 484
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10610,7 +10611,6 @@ State 484
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10692,6 +10692,7 @@ State 487
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10701,7 +10702,7 @@ State 487
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10712,7 +10713,6 @@ State 487
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10780,6 +10780,7 @@ State 488
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10789,7 +10790,7 @@ State 488
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10800,7 +10801,6 @@ State 488
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10868,6 +10868,7 @@ State 489
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10877,7 +10878,7 @@ State 489
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10888,7 +10889,6 @@ State 489
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -10956,6 +10956,7 @@ State 490
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -10965,7 +10966,7 @@ State 490
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -10976,7 +10977,6 @@ State 490
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11044,6 +11044,7 @@ State 491
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11053,7 +11054,7 @@ State 491
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11064,7 +11065,6 @@ State 491
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11132,6 +11132,7 @@ State 492
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11141,7 +11142,7 @@ State 492
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11152,7 +11153,6 @@ State 492
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11230,6 +11230,7 @@ State 494
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 634
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11239,7 +11240,7 @@ State 494
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11250,7 +11251,6 @@ State 494
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11318,6 +11318,7 @@ State 495
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11327,7 +11328,7 @@ State 495
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11338,7 +11339,6 @@ State 495
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11413,6 +11413,7 @@ State 497
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11422,7 +11423,7 @@ State 497
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11433,7 +11434,6 @@ State 497
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11501,6 +11501,7 @@ State 498
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11510,7 +11511,7 @@ State 498
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11521,7 +11522,6 @@ State 498
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11589,6 +11589,7 @@ State 499
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11598,7 +11599,7 @@ State 499
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11609,7 +11610,6 @@ State 499
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11677,6 +11677,7 @@ State 500
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11686,7 +11687,7 @@ State 500
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11697,7 +11698,6 @@ State 500
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11765,6 +11765,7 @@ State 501
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11774,7 +11775,7 @@ State 501
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11785,7 +11786,6 @@ State 501
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11853,6 +11853,7 @@ State 502
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11862,7 +11863,7 @@ State 502
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11873,7 +11874,6 @@ State 502
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -11941,6 +11941,7 @@ State 503
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -11950,7 +11951,7 @@ State 503
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -11961,7 +11962,6 @@ State 503
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12029,6 +12029,7 @@ State 504
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12038,7 +12039,7 @@ State 504
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12049,7 +12050,6 @@ State 504
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12119,6 +12119,7 @@ State 505
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 646
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12128,7 +12129,7 @@ State 505
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12139,7 +12140,6 @@ State 505
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12209,6 +12209,7 @@ State 506
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12218,7 +12219,7 @@ State 506
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12229,7 +12230,6 @@ State 506
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12297,6 +12297,7 @@ State 507
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12306,7 +12307,7 @@ State 507
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12317,7 +12318,6 @@ State 507
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12385,6 +12385,7 @@ State 508
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12394,7 +12395,7 @@ State 508
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12405,7 +12406,6 @@ State 508
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12473,6 +12473,7 @@ State 509
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12482,7 +12483,7 @@ State 509
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12493,7 +12494,6 @@ State 509
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12561,6 +12561,7 @@ State 510
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12570,7 +12571,7 @@ State 510
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12581,7 +12582,6 @@ State 510
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12649,6 +12649,7 @@ State 511
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12658,7 +12659,7 @@ State 511
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12669,7 +12670,6 @@ State 511
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12737,6 +12737,7 @@ State 512
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12746,7 +12747,7 @@ State 512
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12757,7 +12758,6 @@ State 512
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12825,6 +12825,7 @@ State 513
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12834,7 +12835,7 @@ State 513
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12845,7 +12846,6 @@ State 513
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -12913,6 +12913,7 @@ State 514
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -12922,7 +12923,7 @@ State 514
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -12933,7 +12934,6 @@ State 514
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -13001,6 +13001,7 @@ State 515
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -13010,7 +13011,7 @@ State 515
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -13021,7 +13022,6 @@ State 515
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -13089,6 +13089,7 @@ State 516
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -13098,7 +13099,7 @@ State 516
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -13109,7 +13110,6 @@ State 516
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -13189,6 +13189,7 @@ State 518
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -13198,7 +13199,7 @@ State 518
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -13209,7 +13210,6 @@ State 518
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -13278,6 +13278,7 @@ State 519
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -13287,7 +13288,7 @@ State 519
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -13299,7 +13300,6 @@ State 519
     ')'                               shift, and go to state 663
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -13468,6 +13468,7 @@ State 529
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -13477,7 +13478,7 @@ State 529
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -13488,7 +13489,6 @@ State 529
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -13792,11 +13792,11 @@ State 542
 State 543
 
   152 name_in_namespace: "name" .
-  153                  | "name" . COLCOL "name"
+  153                  | "name" . "::" "name"
   327 tuple_type: "name" . ':' type_declaration
 
-    ':'     shift, and go to state 686
-    COLCOL  shift, and go to state 71
+    "::"  shift, and go to state 72
+    ':'   shift, and go to state 686
 
     $default  reduce using rule 152 (name_in_namespace)
 
@@ -14077,6 +14077,7 @@ State 555
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -14086,7 +14087,7 @@ State 555
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -14097,7 +14098,6 @@ State 555
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -14167,6 +14167,7 @@ State 556
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -14176,7 +14177,7 @@ State 556
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -14188,7 +14189,6 @@ State 556
     ')'                               shift, and go to state 694
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -14263,6 +14263,7 @@ State 557
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -14272,7 +14273,7 @@ State 557
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '<'                               shift, and go to state 697
     '-'                               shift, and go to state 318
@@ -14284,7 +14285,6 @@ State 557
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -14465,6 +14465,7 @@ State 560
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -14474,7 +14475,7 @@ State 560
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -14485,7 +14486,6 @@ State 560
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -14553,6 +14553,7 @@ State 561
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -14562,7 +14563,7 @@ State 561
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -14573,7 +14574,6 @@ State 561
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -14734,8 +14734,8 @@ State 566
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -14784,8 +14784,8 @@ State 567
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -14907,8 +14907,8 @@ State 569
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -15116,14 +15116,14 @@ State 578
 State 579
 
   152 name_in_namespace: "name" .
-  153                  | "name" . COLCOL "name"
+  153                  | "name" . "::" "name"
   480 make_struct_fields: "name" . copy_or_move expr
   481                   | "name" . ":=" expr
 
-    "<-"    shift, and go to state 406
-    ":="    shift, and go to state 710
-    '='     shift, and go to state 407
-    COLCOL  shift, and go to state 71
+    "<-"  shift, and go to state 406
+    ":="  shift, and go to state 710
+    "::"  shift, and go to state 72
+    '='   shift, and go to state 407
 
     $default  reduce using rule 152 (name_in_namespace)
 
@@ -15177,6 +15177,7 @@ State 580
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -15186,7 +15187,7 @@ State 580
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '&'                               shift, and go to state 394
     '-'                               shift, and go to state 318
@@ -15199,7 +15200,6 @@ State 580
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
     '#'                               shift, and go to state 396
 
@@ -15270,6 +15270,7 @@ State 581
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -15279,7 +15280,7 @@ State 581
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -15291,7 +15292,6 @@ State 581
     ')'                               shift, and go to state 712
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -15509,6 +15509,7 @@ State 591
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -15518,7 +15519,7 @@ State 591
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -15530,7 +15531,6 @@ State 591
     ')'                               shift, and go to state 721
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -15620,6 +15620,7 @@ State 594
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -15629,7 +15630,7 @@ State 594
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -15640,7 +15641,6 @@ State 594
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -15708,6 +15708,7 @@ State 595
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -15717,7 +15718,7 @@ State 595
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -15728,7 +15729,6 @@ State 595
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -15811,6 +15811,7 @@ State 598
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -15820,7 +15821,7 @@ State 598
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -15831,7 +15832,6 @@ State 598
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -17254,6 +17254,7 @@ State 634
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -17263,7 +17264,7 @@ State 634
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -17274,7 +17275,6 @@ State 634
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -17989,6 +17989,7 @@ State 646
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -17998,7 +17999,7 @@ State 646
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -18009,7 +18010,6 @@ State 646
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -19012,6 +19012,7 @@ State 671
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -19021,7 +19022,7 @@ State 671
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -19032,7 +19033,6 @@ State 671
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -19221,8 +19221,8 @@ State 675
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -19353,8 +19353,8 @@ State 686
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -19412,8 +19412,8 @@ State 688
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
+    "::"         shift, and go to state 43
     "name"       shift, and go to state 543
-    COLCOL       shift, and go to state 44
 
     name_in_namespace           go to state 211
     tuple_type                  go to state 772
@@ -19494,6 +19494,7 @@ State 692
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -19503,7 +19504,7 @@ State 692
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -19514,7 +19515,6 @@ State 692
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -19833,6 +19833,7 @@ State 708
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -19842,7 +19843,7 @@ State 708
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -19853,7 +19854,6 @@ State 708
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -19929,6 +19929,7 @@ State 710
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -19938,7 +19939,7 @@ State 710
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -19949,7 +19950,6 @@ State 710
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -20017,6 +20017,7 @@ State 711
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -20026,7 +20027,7 @@ State 711
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -20037,7 +20038,6 @@ State 711
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -20151,6 +20151,7 @@ State 717
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -20160,7 +20161,7 @@ State 717
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -20171,7 +20172,6 @@ State 717
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -20246,6 +20246,7 @@ State 719
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -20255,7 +20256,7 @@ State 719
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -20266,7 +20267,6 @@ State 719
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -20337,6 +20337,7 @@ State 720
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -20346,7 +20347,7 @@ State 720
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -20357,7 +20358,6 @@ State 720
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -20625,8 +20625,8 @@ State 730
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -20710,6 +20710,7 @@ State 732
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "@ <|"                            shift, and go to state 307
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -20719,7 +20720,7 @@ State 732
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -20730,7 +20731,6 @@ State 732
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     ';'                               shift, and go to state 327
     '{'                               shift, and go to state 155
     '}'                               shift, and go to state 804
@@ -20843,6 +20843,7 @@ State 736
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -20852,7 +20853,7 @@ State 736
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -20863,7 +20864,6 @@ State 736
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -20960,6 +20960,7 @@ State 740
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -20969,7 +20970,7 @@ State 740
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -20980,7 +20981,6 @@ State 740
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -21076,6 +21076,7 @@ State 744
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -21085,7 +21086,7 @@ State 744
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -21097,7 +21098,6 @@ State 744
     ')'                               shift, and go to state 813
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -21316,6 +21316,7 @@ State 749
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -21325,7 +21326,7 @@ State 749
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -21336,7 +21337,6 @@ State 749
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -21882,6 +21882,7 @@ State 783
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -21891,7 +21892,7 @@ State 783
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -21903,7 +21904,6 @@ State 783
     ')'                               shift, and go to state 831
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -22537,6 +22537,7 @@ State 809
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
     "<-"                              shift, and go to state 846
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -22546,7 +22547,7 @@ State 809
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -22557,7 +22558,6 @@ State 809
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -22636,8 +22636,8 @@ State 812
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -22847,8 +22847,8 @@ State 825
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -22902,6 +22902,7 @@ State 826
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -22911,7 +22912,7 @@ State 826
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -22922,7 +22923,6 @@ State 826
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -22998,6 +22998,7 @@ State 828
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23007,7 +23008,7 @@ State 828
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23018,7 +23019,6 @@ State 828
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -23086,6 +23086,7 @@ State 829
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23095,7 +23096,7 @@ State 829
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23106,7 +23107,6 @@ State 829
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -23174,6 +23174,7 @@ State 830
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23183,7 +23184,7 @@ State 830
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23194,7 +23195,6 @@ State 830
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -23342,6 +23342,7 @@ State 833
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23351,7 +23352,7 @@ State 833
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23362,7 +23363,6 @@ State 833
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -23444,6 +23444,7 @@ State 836
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23453,7 +23454,7 @@ State 836
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23464,7 +23465,6 @@ State 836
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -23532,6 +23532,7 @@ State 837
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23541,7 +23542,7 @@ State 837
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23552,7 +23553,6 @@ State 837
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -23627,6 +23627,7 @@ State 839
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23636,7 +23637,7 @@ State 839
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23647,7 +23648,6 @@ State 839
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -23766,6 +23766,7 @@ State 846
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -23775,7 +23776,7 @@ State 846
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -23786,7 +23787,6 @@ State 846
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -24583,8 +24583,8 @@ State 867
 
   238 func_addr_expr: '@' '@' '<' $@14 type_declaration '>' $@15 . name_in_namespace
 
-    "name"  shift, and go to state 43
-    COLCOL  shift, and go to state 44
+    "::"    shift, and go to state 43
+    "name"  shift, and go to state 44
 
     name_in_namespace  go to state 882
 
@@ -24764,6 +24764,7 @@ State 876
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -24773,7 +24774,7 @@ State 876
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -24784,7 +24785,6 @@ State 876
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -24856,8 +24856,8 @@ State 883
 
   241 func_addr_expr: '@' '@' '<' $@16 optional_function_argument_list optional_function_type '>' $@17 . name_in_namespace
 
-    "name"  shift, and go to state 43
-    COLCOL  shift, and go to state 44
+    "::"    shift, and go to state 43
+    "name"  shift, and go to state 44
 
     name_in_namespace  go to state 892
 
@@ -24915,8 +24915,8 @@ State 886
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212
@@ -25048,6 +25048,7 @@ State 889
     "generator"                       shift, and go to state 303
     "++"                              shift, and go to state 305
     "--"                              shift, and go to state 306
+    "::"                              shift, and go to state 43
     "[["                              shift, and go to state 308
     "[{"                              shift, and go to state 309
     "{{"                              shift, and go to state 310
@@ -25057,7 +25058,7 @@ State 889
     "unsigned long integer constant"  shift, and go to state 314
     "floating point constant"         shift, and go to state 315
     "double constant"                 shift, and go to state 316
-    "name"                            shift, and go to state 43
+    "name"                            shift, and go to state 44
     "start of the string"             shift, and go to state 317
     '-'                               shift, and go to state 318
     '+'                               shift, and go to state 319
@@ -25068,7 +25069,6 @@ State 889
     '('                               shift, and go to state 324
     '$'                               shift, and go to state 325
     '@'                               shift, and go to state 326
-    COLCOL                            shift, and go to state 44
     '{'                               shift, and go to state 155
 
     string_builder          go to state 329
@@ -25305,8 +25305,8 @@ State 901
     "uint16"     shift, and go to state 208
     "tuple"      shift, and go to state 209
     "variant"    shift, and go to state 210
-    "name"       shift, and go to state 43
-    COLCOL       shift, and go to state 44
+    "::"         shift, and go to state 43
+    "name"       shift, and go to state 44
 
     name_in_namespace           go to state 211
     basic_type_declaration      go to state 212

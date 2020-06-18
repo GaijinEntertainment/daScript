@@ -324,7 +324,7 @@ namespace das
     }
 
     int32_t heap_depth ( Context * context ) {
-        return (int32_t) context->heap.shelf.size();
+        return (int32_t) context->heap.shoe.depth();
     }
 
     uint32_t string_heap_bytes_allocated ( Context * context ) {
@@ -336,7 +336,7 @@ namespace das
     }
 
     int32_t string_heap_depth ( Context * context ) {
-        return (int32_t) context->stringHeap.shelf.size();
+        return (int32_t) context->stringHeap.shoe.depth();
     }
 
     void string_heap_collect ( Context * context, LineInfoArg * info ) {

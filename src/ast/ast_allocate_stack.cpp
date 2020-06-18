@@ -507,7 +507,7 @@ namespace das {
             if ( !message.empty() ) {
                 if ( uniStr.find(message)==uniStr.end() ) {
                     uniStr.insert(message);
-                    uint32_t allocSize = uint32_t(sizeof(StringHeader)) + uint32_t(message.length()) + 1;
+                    uint32_t allocSize = uint32_t(message.length()) + 1;
                     allocSize = (allocSize + 3) & ~3;
                     bytesTotal += allocSize;
                 }

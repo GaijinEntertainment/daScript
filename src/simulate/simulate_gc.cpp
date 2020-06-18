@@ -15,12 +15,14 @@ namespace das
             if ( context->constStringHeap->isOwnPtr(st) ) {     // not a const string
                 return;
             }
+            /*
             for ( auto & book : context->stringHeap.shelf ) {   // not a short string
                 if ( book.isOwnPtr(st) ) {
                     book.mark(st);
                     return;
                 }
             }
+            */
             auto it = context->stringHeap.bigStuff.find(st - sizeof(StringHeader));
             if ( it != context->stringHeap.bigStuff.end() ) {
                 it->second |= DAS_PAGE_GC_MASK;

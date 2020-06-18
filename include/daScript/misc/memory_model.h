@@ -12,96 +12,198 @@ namespace das {
 
     struct LineInfo;
 
-    struct Page {
-        __forceinline uint32_t allocate ( uint32_t size, uint32_t pageSize ) {
-            if ( offset + size > pageSize ) return -1u;
-            offset += size;
-            total += size;
-            // DAS_ASSERT(total <= pageSize );
-            return offset - size;
+    struct Deck {
+        Deck( uint32_t ne, uint32_t es, Deck * n ) {
+            total = (ne+31) & ~31;
+            size = es;
+            totalBytes = total * size;
+            data = (char*) das_aligned_alloc16(totalBytes);
+            bits = (uint32_t*) das_aligned_alloc16(total / 32 * 4);
+            next = n;
+            reset();
         }
-        __forceinline void free ( uint32_t loc, uint32_t size ) {
-            if ( loc + size == offset ) offset -= size;
-            // DAS_ASSERT(total >= size);
-            total -= size;
-            if ( total==0 ) offset = 0;
+        ~Deck ( ) {
+            das_aligned_free16(data);
+            das_aligned_free16(bits);
+            if ( next ) delete next;
         }
-        __forceinline bool reallocate ( uint32_t loc, uint32_t size, uint32_t nsize, uint32_t pageSize ) {
-            if ( loc + size != offset ) return false;
-            if ( loc + nsize > pageSize ) return false;
-            offset = offset - size + nsize;
-            total = total - size + nsize;
-            // DAS_ASSERT(total <= pageSize );
-            if ( total==0 ) offset = 0;
-            return true;
+        void reset() {
+            memset ( bits, 0, total / 32 * 4);
+            look = 0;
+            allocated = 0;
+            if ( next ) next->reset();
         }
-        uint32_t    offset = 0;
-        uint32_t    total  = 0;
-    };
-
-    struct Book {
-        Book () = delete;
-        Book (const Book &) = delete;
-        Book (Book && b) { moveBook(b); }
-        Book & operator = (const Book &) = delete;
-        Book & operator = (Book && b) { moveBook(b); return * this; };
-        void moveBook ( Book & b );
-        Book ( uint32_t ps, uint32_t tp ) : pageSize(ps), totalPages(tp) {
-            totalSize = totalFree = pageSize * totalPages;
-            freePageIndex = 0;
-            data = (char *) das_aligned_alloc16(totalSize);
-            pages = new Page[totalPages];
-        }
-        ~Book();
-        void reset();
         __forceinline bool isOwnPtr ( char * ptr ) const {
-            return (ptr>=data) && (ptr<(data + totalSize));
+            return (ptr>=data) && (ptr<data+totalBytes);
         }
-        __forceinline char * allocate ( uint32_t size ) {
-            if ( size > pageSize ) return nullptr;
-            if ( size > totalFree ) return nullptr;
-            for ( uint32_t i=0; i!=totalPages; ++i ) {
-                uint32_t ofs = pages[freePageIndex].allocate(size,pageSize);
-                if ( ofs!=-1u ) {
-                    totalFree -= size;
-                    return data + freePageIndex*pageSize + ofs;
+        __forceinline char * allocate ( ) {
+            if ( allocated == total ) return nullptr;
+            allocated ++;
+            for ( uint32_t t=0; t!=total; ++t ) {
+                uint32_t b = bits[look];
+                if ( b != 0xffffffff ) {
+                    uint32_t j = __builtin_ctz(~b);
+                    bits[look] = b | (1<<j);
+                    allocated ++;
+                    return data + (look*32 + j) * size;
                 }
-                freePageIndex ++;
-                if ( freePageIndex >= totalPages ) freePageIndex = 0;
+                look = look + 1;
+                if ( look == total ) look = 0;
             }
+            DAS_ASSERT(0 && "allocated reports room, but no bits are available");
             return nullptr;
         }
-        __forceinline void free ( char * ptr, uint32_t size ) {
-            uint32_t gofs = uint32_t(ptr - data);
-            uint32_t idx = gofs / pageSize;
-            uint32_t ofs = gofs % pageSize;
-            pages[idx].free(ofs, size);
-            totalFree += size;
-        }
-        __forceinline char * reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
-            if ( !ptr ) return allocate(size);
-            if ( size==nsize ) return ptr;
-            uint32_t gofs = uint32_t(ptr - data);
-            uint32_t idx = gofs / pageSize;
-            uint32_t ofs = gofs % pageSize;
-            if ( pages[idx].reallocate(ofs,size,nsize,pageSize) ) {
-                totalFree = totalFree + size - nsize;
-                return ptr;
-            }
-            return nullptr;
+        __forceinline void free ( char * ptr ) {
+            auto idx = (ptr - data) / size;
+            DAS_ASSERT ( idx>=0 && idx<total );
+            uint32_t uidx = uint32_t(idx);
+            uint32_t i = uidx >> 5;
+            uint32_t j = uidx & 31;
+            uint32_t b = bits[i];
+            DAS_ASSERT((b & (1<<j))!=0 && "calling free on the pointer, which is already free");
+            bits[i] = b ^ (1<<j);
+            look = i;
+            allocated --;
         }
         __forceinline void mark ( char * ptr ) {
-            uint32_t gofs = uint32_t(ptr - data);
-            uint32_t idx = gofs / pageSize;
-            pages[idx].total |= DAS_PAGE_GC_MASK;
+            auto idx = (ptr - data) / size;
+            DAS_ASSERT ( idx>=0 && idx<total );
+            uint32_t uidx = uint32_t(idx);
+            uint32_t i = uidx >> 5;
+            uint32_t j = uidx & 31;
+            uint32_t b = bits[i];
+            if ( !(b & (1<<j)) ) {
+                bits[i] = b | (1<<j);
+                allocated ++;
+            }
         }
-        uint32_t    pageSize;
-        uint32_t    totalPages;
-        uint32_t    totalSize;
-        uint32_t    totalFree;
-        uint32_t    freePageIndex;
-        char *      data;
-        Page *      pages;
+        char *      data = nullptr;
+        uint32_t *  bits = nullptr;
+        uint32_t    total = 0;
+        uint32_t    size = 0;
+        uint32_t    totalBytes = 0;
+        uint32_t    look = 0;
+        uint32_t    allocated = 0;
+        Deck *      next = nullptr;
+    };
+
+#define DAS_MAX_SHOE_ALLOCATION     256
+#define DAS_MAX_SHOE_CUNKS          (DAS_MAX_SHOE_ALLOCATION>>4)
+
+    struct Shoe {
+        Shoe () {
+            for ( int i=0; i!= DAS_MAX_SHOE_CUNKS; ++i ) {
+                chunks[i] = nullptr;
+            }
+        }
+        ~Shoe() {
+            for ( int i=0; i!= DAS_MAX_SHOE_CUNKS; ++i ) {
+                if ( chunks[i] ) delete chunks[i];
+            }
+        }
+        void clear() {
+            for ( int i=0; i!= DAS_MAX_SHOE_CUNKS; ++i ) {
+                if ( chunks[i] ) delete chunks[i];
+                chunks[i] = nullptr;
+            }
+        }
+        void reset() {
+            // TODO: modify watermarks
+            for ( int i=0; i!= DAS_MAX_SHOE_CUNKS; ++i ) {
+                if ( chunks[i] ) chunks[i]->reset();
+            }
+        }
+        uint32_t grow ( uint32_t si ) {
+            if ( chunks[si] ) {
+                return chunks[si]->total * 2;
+            } else {
+                return 65536 / (si<<4); // fit in 64 kb on a first chunk?
+            }
+        }
+        char * allocate ( uint32_t size ) {
+            size = (size + 15) & ~15;
+            DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            uint32_t si = size >> 4;
+            for ( auto ch = chunks[si]; ch; ch=ch->next ) {
+                if ( char * res = ch->allocate() ) {
+                    return res;
+                }
+            }
+            uint32_t total = grow(si);
+            chunks[si] = new Deck(total, size, chunks[si]);
+            return chunks[si]->allocate();
+        }
+        void free ( char * ptr, uint32_t size ) {
+            size = (size + 15) & ~15;
+            DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            uint32_t si = size >> 4;
+            for ( auto ch = chunks[si]; ch; ch=ch->next ) {
+                if ( ch->isOwnPtr(ptr) ) {
+                    ch->free(ptr);
+                    return;
+                }
+            }
+            DAS_ASSERT(0 && "not a chunk pointer");
+        }
+        void mark ( char * ptr, uint32_t size ) {
+            size = (size + 15) & ~15;
+            DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            uint32_t si = size >> 4;
+            for ( auto ch = chunks[si]; ch; ch=ch->next ) {
+                if ( ch->isOwnPtr(ptr) ) {
+                    ch->mark(ptr);
+                    return;
+                }
+            }
+            DAS_ASSERT(0 && "not a chunk pointer");
+        }
+        bool isOwnPtr ( char * ptr, uint32_t size ) const {
+            DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            uint32_t si = size >> 4;
+            for ( auto ch = chunks[si]; ch; ch=ch->next ) {
+                if ( ch->isOwnPtr(ptr) ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        void getStats ( uint32_t & depth, uint32_t & pages, uint64_t & bytes, uint64_t & totalBytes ) const {
+            depth = 0;
+            bytes = 0;
+            totalBytes = 0;
+            pages = 0;
+            for ( uint32_t si=0; si!= DAS_MAX_SHOE_CUNKS; ++si ) {
+                uint32_t d = 0;
+                for ( auto ch = chunks[si]; ch; ch=ch->next ) {
+                    d ++;
+                    pages ++;
+                    bytes += ch->allocated * ch->size;
+                    totalBytes += ch->total * ch->size + (ch->total/32*4);
+                }
+                depth = max(depth, d);
+            }
+        }
+        uint32_t depth ( ) const {
+            uint32_t d, p; uint64_t b, t;
+            getStats(d, p, b, t);
+            return d;
+        }
+        uint32_t totalChunks ( ) const {
+            uint32_t d, p; uint64_t b, t;
+            getStats(d, p, b, t);
+            return p;
+        }
+        uint64_t bytesAllocated ( ) const {
+            uint32_t d, p; uint64_t b, t;
+            getStats(d, p, b, t);
+            return b;
+        }
+        uint64_t totalBytesAllocated ( ) const {
+            uint32_t d, p; uint64_t b, t;
+            getStats(d, p, b, t);
+            return d;
+        }
+        Deck *  chunks[DAS_MAX_SHOE_CUNKS];
     };
 
     struct MemoryModel : ptr_ref_count {
@@ -117,16 +219,8 @@ namespace das {
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
-        __forceinline bool isOwnPtr( char * ptr ) const {
-            for ( auto & book : shelf ) {
-                if ( book.isOwnPtr(ptr) ) {
-                    return true;
-                }
-            }
-            return bigStuff.find(ptr) != bigStuff.end();
-        }
-        __forceinline bool isOwnPtrQnD(char* ptr) const {
-            return !shelf.empty() ? shelf.back().isOwnPtr(ptr) : false;
+        __forceinline bool isOwnPtr( char * ptr, uint32_t size ) const {
+            return shoe.isOwnPtr(ptr,size) || (bigStuff.find(ptr)!=bigStuff.end());
         }
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }
@@ -139,7 +233,7 @@ namespace das {
         uint32_t                maxAllocated;
         uint32_t                initial_page_count = 16;
         uint32_t                initialSize = 0;
-        vector<Book>            shelf;
+        Shoe                    shoe;
         das_hash_map<void *,uint32_t> bigStuff;  // note: can't use char *, some stl implementations try hashing it as string
 #if DAS_SANITIZER
         das_hash_map<void *,uint32_t> deletedBigStuff;
@@ -218,7 +312,7 @@ namespace das {
         function<int(int)>  customGrow;
     protected:
         uint32_t    initialSize = 65536;
-        uint32_t    alignMask = 3;
+        uint32_t    alignMask = 15;
         HeapChunk * chunk = nullptr;
     };
 

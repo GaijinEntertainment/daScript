@@ -263,6 +263,7 @@
 %token  ROTLEQU             "<<<="
 %token  ROTREQU             ">>>="
 %token  MAPTO               "=>"
+%token  COLCOL              "::"
 
 %token  BRABRAB             "[["    /* [[ */
 %token  BRACBRB             "[{"    /* [{ */

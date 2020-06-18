@@ -8,14 +8,8 @@ namespace das {
         return hash_block32((uint8_t *)x, uint32_t(size));
     }
 
-    __forceinline uint32_t stringLength ( Context & ctx, const char * str ) { // str!=nullptr
-        char * hptr = (char *) ( str - sizeof(StringHeader) );
-        if ( ctx.stringHeap.isOwnPtrQnD(hptr) || ctx.constStringHeap->isOwnPtrQnD(hptr) ) {
-            auto header = (StringHeader *) hptr;
-            return header->length;
-        } else {
-            return uint32_t(strlen(str));
-        }
+    __forceinline uint32_t stringLength ( Context &, const char * str ) { // str!=nullptr
+        return uint32_t(strlen(str));
     }
 
     __forceinline uint32_t stringLengthSafe ( Context & ctx, const char * str ) {//accepts nullptr
@@ -28,19 +22,8 @@ namespace das {
     }
 
     template <>
-    __forceinline uint32_t hash_function ( Context & ctx, char * str ) {
-        if ( !str ) return 16777619;
-        char * hptr = (char *) ( str - sizeof(StringHeader) );
-        if ( ctx.stringHeap.isOwnPtrQnD(hptr) || ctx.constStringHeap->isOwnPtrQnD(hptr) ) {
-            auto header = (StringHeader *) hptr;
-            auto hh = header->hash;
-            if ( !hh ) {
-                header->hash = hh = hash_block32((uint8_t *)str, header->length);
-            }
-            return hh;
-        } else {
-            return hash_blockz32((uint8_t *)str);
-        }
+    __forceinline uint32_t hash_function ( Context &, char * str ) {
+        return str ? hash_blockz32((uint8_t *)str) : 16777619;
     }
 
     uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );

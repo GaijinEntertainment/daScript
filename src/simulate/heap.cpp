@@ -51,7 +51,8 @@ namespace das {
     }
 
     void StringAllocator::recognize ( char * str ) {
-        if ( needIntern && str && isOwnPtr(str) ) {
+        if ( !str ) return;
+        if ( needIntern && str && isOwnPtr(str, strlen(str)+1) ) {
             internMap.insert(str);
         }
     }
@@ -75,11 +76,7 @@ namespace das {
                     return (char *) *it;
                 }
             }
-            if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {
-                StringHeader * header = (StringHeader *) str;
-                header->length = length;
-                header->hash = 0;
-                str += sizeof(StringHeader);
+            if ( auto str = (char *)allocate(length + 1) ) {
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
                 internMap.insert(str);
@@ -97,15 +94,15 @@ namespace das {
                     return (char *) *it;
                 }
             }
-            if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {
-                StringHeader * header = (StringHeader *) str;
-                header->length = length;
-                header->hash = 0;
+            if ( auto str = (char *)allocate(length + 1 + sizeof(StringHeader)) ) {
+                auto sh = (StringHeader *) str;
+                sh->length = length;
+                sh->hash = 0;
+                str += sizeof(StringHeader);
 #if DAS_TRACK_ALLOCATIONS
                 if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
                 header->tracking_id = g_tracker_string ++;
 #endif
-                str += sizeof(StringHeader);
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
                 if ( needIntern && text ) internMap.insert(str);
@@ -132,6 +129,7 @@ namespace das {
     }
 
     void StringAllocator::forEachString ( function<void (const char *)> && fn ) {
+        /*
         for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
             auto & book = shelf[bi];
             for ( uint32_t i=0; i!=book.totalPages; ++i ) {
@@ -158,6 +156,7 @@ namespace das {
                 fn ( ch );
             }
         }
+        */
     }
 
     void StringAllocator::sweep() {
@@ -172,6 +171,7 @@ namespace das {
     }
 
     void HeapAllocator::reportAllocations() {
+/*
         TextPrinter tout;
         for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
             auto & book = shelf[bi];
@@ -235,9 +235,11 @@ namespace das {
             }
 #endif
         }
+*/
     }
 
     void StringAllocator::reportAllocations() {
+/*
         TextPrinter tout;
         char buf[33];
         for ( size_t bi=0; bi!=shelf.size(); ++bi ) {
@@ -281,5 +283,6 @@ namespace das {
                     << "\t" << presentStr(buf,ch,32) << "\n";
             }
         }
+*/
     }
 }
