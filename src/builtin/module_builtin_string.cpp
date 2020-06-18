@@ -427,47 +427,6 @@ namespace das
         return arr.size ? context->stringHeap.allocateString(arr.data, arr.size) : nullptr;
     }
 
-    char* builtin_append_char(char* str, int32_t Ch, Context* context) {
-        if ( !str ) {
-            StringHeader* header = (StringHeader *) context->stringHeap.allocate(sizeof(StringHeader) + 2);
-            header->length = 1;
-            header->hash = 0;
-#if DAS_TRACK_ALLOCATIONS
-            if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
-            header->tracking_id = g_tracker_string ++;
-#endif
-            str = (char*)(header + 1);
-            str[0] = (char) Ch;
-            str[1] = 0;
-            return str;
-        } else if ( context->stringHeap.isOwnPtr(str) ) {
-            char* hstr = str - sizeof(StringHeader);
-            StringHeader* header = (StringHeader*)hstr;
-            uint32_t length = header->length;
-            uint32_t size = sizeof(StringHeader) + length + 1;
-            char* nstr = context->stringHeap.reallocate(hstr, size, size + 1);
-            if (nstr != hstr) {
-                header = (StringHeader*)nstr;
-#if DAS_TRACK_ALLOCATIONS
-                if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
-                header->tracking_id = g_tracker_string ++;
-#endif
-            }
-            header->length = length + 1;
-            nstr += sizeof(StringHeader);
-            nstr[length] = (char) Ch;
-            nstr[length + 1] = 0;
-            return nstr;
-        } else {
-            uint32_t length = uint32_t(strlen(str));
-            char* nstr = context->stringHeap.allocateString(nullptr, length + 1);
-            memcpy(nstr, str, length);
-            nstr[length] = (char) Ch;
-            nstr[length + 1] = 0;
-            return nstr;
-        }
-    }
-
     char * builtin_string_escape ( const char *str, Context * context ) {
         if ( !str ) return nullptr;
         return context->stringHeap.allocateString(escapeString(str,false));
@@ -608,8 +567,6 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_char_of");
         addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
         addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
-        addExtern<DAS_BIND_FUN(builtin_append_char)>(*this, lib, "append",
-            SideEffects::modifyArgumentAndExternal, "builtin_append_char")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
             SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string");
         addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
