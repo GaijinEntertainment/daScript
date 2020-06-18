@@ -200,6 +200,7 @@ namespace das {
         }
         for ( ;; ) {
             if ( char * res = chunk->allocate(s) ) {
+                // DAS_ASSERTF((intptr_t(res) & alignMask) == 0, "allocated unaligned data");
                 return res;
             }
             chunk = new HeapChunk ( max(growPages(chunk->size), s), chunk);

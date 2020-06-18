@@ -257,6 +257,7 @@ namespace das {
 
     struct HeapChunk {
         __forceinline HeapChunk ( uint32_t s, HeapChunk * n ) {
+            s = (s + 15) & ~15;
             data = (char *) das_aligned_alloc16(s);
             size = s;
             offset = 0;
@@ -288,7 +289,7 @@ namespace das {
 
     class LinearChunkAllocator : public ptr_ref_count {
     public:
-        LinearChunkAllocator() { alignMask = 3; }
+        LinearChunkAllocator() { }
         char * allocate ( uint32_t s );
         void free ( char * ptr, uint32_t s );
         virtual void reset ();

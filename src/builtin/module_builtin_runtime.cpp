@@ -720,7 +720,7 @@ namespace das
 
     struct UnescapedStringMacro : public ReaderMacro {
         UnescapedStringMacro ( ) : ReaderMacro("_esc") {}
-        virtual ExpressionPtr visit ( Program *, Module *, ExprReader * expr ) {
+        virtual ExpressionPtr visit ( Program *, Module *, ExprReader * expr ) override {
             return make_smart<ExprConstString>(expr->at,expr->sequence);
         }
         virtual bool accept ( Program *, Module *, ExprReader * re, int Ch, const LineInfo & ) override {

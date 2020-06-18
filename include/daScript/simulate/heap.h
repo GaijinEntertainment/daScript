@@ -153,6 +153,7 @@ namespace das {
 
     class ConstStringAllocator : public LinearChunkAllocator {
     public:
+        ConstStringAllocator() { alignMask = 3; }
         char * allocateString ( const char * text, uint32_t length );
         __forceinline char * allocateString ( const string & str ) {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
