@@ -361,10 +361,10 @@ namespace das
         if ( delimLen ) {
             while ( *ch ) {
                 const char * tok = ch;
-                while ( *ch && memcmp(delim,ch,delimLen)!=0 ) ch++;
+                while ( *ch && strncmp(delim,ch,delimLen)!=0 ) ch++;
                 words.push_back(string(tok,ch-tok));
                 if ( !*ch ) break;
-                while ( *ch && memcmp(delim,ch,delimLen)==0 ) ch+=delimLen;
+                while ( *ch && strncmp(delim,ch,delimLen)==0 ) ch+=delimLen;
                 if ( !*ch ) words.push_back("");
             }
         } else {
