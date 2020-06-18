@@ -2,7 +2,7 @@
 
 namespace das {
     void setCommandLineArguments ( int argc, char * argv[] );
-    Array getCommandLineArguments();
+    void getCommandLineArguments( Array & arr );
     bool is_compiling ( Context * ctx );
     bool is_compiling_macros ( Context * ctx );
     void builtin_throw ( char * text, Context * context );
