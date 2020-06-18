@@ -87,9 +87,14 @@ namespace das {
 
     template <typename TT>
     char * builtin_build_string_T ( TT && block, Context * context ) {
-        StringBuilderWriter writer(context->stringHeap);
+        StringBuilderWriter writer;
         block(writer);
-        return writer.c_str();
+        auto length = writer.tellp();
+        if ( length ) {
+            return context->stringHeap.allocateString(writer.c_str(), length);
+        } else {
+            return nullptr;
+        }
     }
 
     __forceinline int32_t get_character_uat ( const char * str, int32_t index ) { return ((uint8_t *)str)[index]; }

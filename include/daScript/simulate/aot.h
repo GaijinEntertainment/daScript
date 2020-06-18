@@ -1484,26 +1484,28 @@ namespace das {
 
     template <typename TT>
     __forceinline char * das_lexical_cast ( TT x, Context * __context__ ) {
-        StringBuilderWriter writer(__context__->stringHeap);
+        StringBuilderWriter writer;
         writer << x;
-        auto pStr = writer.c_str();
-        if ( !pStr && writer.tellp()!=0 ) {
-            __context__->throw_error("can't allocate string builder result, out of heap");
+        auto length = writer.tellp();
+        if ( length ) {
+            return __context__->stringHeap.allocateString(writer.c_str(), length);
+        } else {
+            return nullptr;
         }
-        return pStr;
     }
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
-        StringBuilderWriter writer(__context__->stringHeap);
+        StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
         for ( int i = 0; i!=node.nArguments; ++i ) {
             walker.walk(node.argumentValues[i], node.types[i]);
         }
-        auto pStr = writer.c_str();
-        if ( !pStr && writer.tellp()!=0 ) {
-            __context__->throw_error("can't allocate string builder result, out of heap");
+        auto length = writer.tellp();
+        if ( length ) {
+            return __context__->stringHeap.allocateString(writer.c_str(), length);
+        } else {
+            return nullptr;
         }
-        return pStr;
     }
 
     struct das_stack_prologue {

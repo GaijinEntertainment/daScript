@@ -255,11 +255,16 @@ namespace das
     }
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context ) {
-        StringBuilderWriter writer(context->stringHeap);
+        StringBuilderWriter writer;
         vec4f args[1];
         args[0] = cast<StringBuilderWriter *>::from(&writer);
         context->invoke(block, args, nullptr);
-        return writer.c_str();
+        auto length = writer.tellp();
+        if ( length ) {
+            return context->stringHeap.allocateString(writer.c_str(), length);
+        } else {
+            return nullptr;
+        }
     }
 
     vec4f builtin_write_string ( Context &, SimNode_CallBase * call, vec4f * args ) {

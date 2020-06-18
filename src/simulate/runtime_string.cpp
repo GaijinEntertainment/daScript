@@ -273,16 +273,21 @@ namespace das
         DAS_PROFILE_NODE
         vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
         evalArgs(context, argValues);
-        StringBuilderWriter writer(context.stringHeap);
+        StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
         for ( int i = 0; i!=nArguments; ++i ) {
             walker.walk(argValues[i], types[i]);
         }
-        auto pStr = writer.c_str();
-        if ( !pStr && writer.tellp()!=0 ) {
-            context.throw_error("can't allocate string builder result, out of heap");
+        int length = writer.tellp();
+        if ( length ) {
+            auto pStr = context.stringHeap.allocateString(writer.c_str(), length);
+            if ( !pStr  ) {
+                context.throw_error("can't allocate string builder result, out of heap");
+            }
+            return cast<char *>::from(pStr);
+        } else {
+            return v_zero();
         }
-        return cast<char *>::from(pStr);
     }
 
     // string iteration

@@ -7,41 +7,12 @@
 
 namespace das {
 
-    class HeapWriterPolicy {
+    class StringBuilderWriter : public StringWriter<VectorAllocationPolicy> {
     public:
-        char * c_str();
-        int tellp() const;
-    protected:
-        __forceinline void reserve(int newSize) {
-            if (newSize > dataCapacity) _reserve(newSize);
+        StringBuilderWriter() { }
+        __forceinline char * c_str() const {
+            return (char *) data.data();
         }
-        __forceinline void append(const char * s, int l) {
-            int newSize = dataSize + l;
-            reserve(newSize);
-            if (data) {
-                memcpy(data + dataSize, s, l);
-                dataSize += l;
-            }
-        }
-        __forceinline char * allocate (int l) {
-            reserve(dataSize + l);
-            if (!data) return nullptr;
-            dataSize += l;
-            return data + dataSize - l;
-        }
-        __forceinline void output() {}
-        void _reserve(int newSize);
-        void _resize(int newCapacity);
-    protected:
-        StringAllocator * heap = nullptr;
-        char *  data = nullptr;
-        int     dataSize = 0;
-        int     dataCapacity = 0;
-    };
-
-    class StringBuilderWriter : public StringWriter<HeapWriterPolicy> {
-    public:
-        StringBuilderWriter(StringAllocator & h) { heap = &h; }
     };
 
     template <typename Writer>
