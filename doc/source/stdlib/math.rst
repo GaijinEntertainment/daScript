@@ -5,7 +5,7 @@
 Math library
 ============
 
-.. include:: C:\Users\Boris\Work\yzg/doc/source/stdlib/detail/math.rst
+.. include:: detail/math.rst
 
 Floating point math in general is not bit-precise. Compiler can optimize permutations, replace divisions with multiplications, and some of functions are not bit-exact.
 If you need precise math use double precision type.
