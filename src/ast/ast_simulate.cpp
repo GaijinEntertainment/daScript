@@ -2568,7 +2568,7 @@ namespace das
             }
         }
         // verify code and string heaps
-        DAS_ASSERTF(context.code->pagesAllocated()<=1, "code must come in one page");
+        DAS_ASSERTF(context.code->depth()<=1, "code must come in one page");
         DAS_ASSERTF(context.constStringHeap->pagesAllocated()<=1, "strings must come in one page");
         context.constStringHeap->setIntern(options.getBoolOption("intern_const_strings", policies.intern_const_strings));
         context.stringHeap.setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
@@ -2612,7 +2612,7 @@ namespace das
             logs << "globals       " << context.getGlobalSize() << "\n";
             logs << "shared        " << context.getSharedSize() << "\n";
             logs << "stack         " << context.stack.size() << "\n";
-            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->pagesAllocated()
+            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->depth()
                 << " pages (" << context.code->totalAlignedMemoryAllocated() << ")\n";
             logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->pagesAllocated()
                 << " pages (" << context.constStringHeap->totalAlignedMemoryAllocated() << ")\n";

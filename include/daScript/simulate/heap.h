@@ -129,17 +129,6 @@ namespace das {
         function<int(int)>  customGrow;
     };
 
-    struct StringHeader {
-        uint32_t    hash;
-        uint32_t    length;
-#if DAS_TRACK_ALLOCATIONS
-        uint64_t    tracking_id;
-#endif
-    };
-#if !DAS_TRACK_ALLOCATIONS
-    static_assert(sizeof(StringHeader)==8, "has to be 8 bytes, or else");
-#endif
-
 #if DAS_TRACK_ALLOCATIONS
     extern uint64_t    g_tracker_string;
     extern uint64_t    g_breakpoint_string;
@@ -193,12 +182,12 @@ namespace das {
     };
     static_assert(sizeof(NodePrefix)==sizeof(vec4f), "node prefix must be one alignment line");
 
-    class NodeAllocator : public HeapAllocator {
+    class NodeAllocator : public LinearChunkAllocator {
     public:
         bool prefixWithHeader = true;
         uint32_t totalNodesAllocated = 0;
     public:
-        NodeAllocator() = default;
+        NodeAllocator() {}
 
         template<typename TT, typename... Params>
         __forceinline TT * makeNode(Params... args) {
@@ -364,8 +353,7 @@ namespace das {
     public:
         DebugInfoAllocator() {
             prefixWithHeader = false;
-            initial_page_count = 1;
-            pageSize = 1024;
+            initialSize = 1024;
         }
         virtual uint32_t growPages(uint32_t pages) const override { return pages; }
         das_hash_map<uint32_t,TypeInfo *>    lookup;

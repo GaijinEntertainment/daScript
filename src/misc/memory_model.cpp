@@ -256,5 +256,91 @@ namespace das {
             }
         }
     }
+
+    void LinearChunkAllocator::free ( char * ptr, uint32_t s ) {
+        for ( auto ch=chunk; ch; ch=ch->next ) {
+            if ( ch->isOwnPtr(ptr) ) {
+                ch->free(ptr,s);
+                break;
+            }
+        }
+    }
+
+    char * LinearChunkAllocator::allocate ( uint32_t s ) {
+        if ( !s ) return nullptr;
+        s = (s + alignMask) & ~alignMask;
+        if ( !chunk ) {
+            chunk = new HeapChunk ( max(initialSize, s), nullptr );
+        }
+        for ( ;; ) {
+            if ( char * res = chunk->allocate(s) ) {
+                return res;
+            }
+            chunk = new HeapChunk ( max(growPages(chunk->size), s), chunk);
+        }
+    }
+
+    void LinearChunkAllocator::reset() {
+        if ( chunk ) {
+            delete chunk;
+            chunk = nullptr;
+        }
+    }
+
+    char * LinearChunkAllocator::allocateName ( const string & name ) {
+        if (!name.empty()) {
+            auto length = uint32_t(name.length());
+            if (auto str = (char *)allocate(length + 1)) {
+                memcpy(str, name.c_str(), length);
+                str[length] = 0;
+                return str;
+            }
+        }
+        return nullptr;
+    }
+
+    char * LinearChunkAllocator::allocateString ( const char * text, uint32_t length ) {
+        if ( length ) {
+            if (auto str = (char *)allocate(length + 1 + sizeof(StringHeader))) {
+                StringHeader * header = (StringHeader *) str;
+                header->length = length;
+                header->hash = 0;
+                str += sizeof(StringHeader);
+                if ( text ) memcpy(str, text, length);
+                str[length] = 0;
+                return str;
+            }
+        }
+        return nullptr;
+    }
+
+    void LinearChunkAllocator::getStats ( uint32_t & depth, uint64_t & bytes, uint64_t & total )  const {
+        depth = 0;
+        bytes = 0;
+        total = 0;
+        for ( auto ch=chunk; ch; ch=ch->next ) {
+            depth ++;
+            bytes += ch->offset;
+            total += ch->size;
+        }
+    }
+
+    uint32_t LinearChunkAllocator::depth() const {
+        uint32_t d; uint64_t b, t;
+        getStats(d, b, t);
+        return d;
+    }
+
+    uint64_t LinearChunkAllocator::bytesAllocated() const {
+        uint32_t d; uint64_t b, t;
+        getStats(d, b, t);
+        return b;
+    }
+
+    uint64_t LinearChunkAllocator::totalAlignedMemoryAllocated() const {
+        uint32_t d; uint64_t b, t;
+        getStats(d, b, t);
+        return t;
+    }
 }
 
