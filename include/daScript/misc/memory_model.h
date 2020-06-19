@@ -225,13 +225,12 @@ namespace das {
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
+        __forceinline int depth() const { return shoe.depth(); }
         __forceinline bool isOwnPtr( char * ptr, uint32_t size ) const {
             return shoe.isOwnPtr(ptr,size) || (bigStuff.find(ptr)!=bigStuff.end());
         }
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }
-        uint32_t pagesAllocated() const;
-        uint32_t pagesTotal() const;
         uint64_t totalAlignedMemoryAllocated() const;
         uint32_t                alignMask;
         uint32_t                totalAllocated;

@@ -573,8 +573,8 @@ namespace das
         thisHelper = ctx.thisHelper;
         ownStack = (ctx.stack.size() != 0);
         // heap
-        heap.setInitialSize(ctx.heap.initialSize);
-        stringHeap.setInitialSize(ctx.stringHeap.initialSize);
+        heap.setInitialSize(ctx.heap.getInitialSize());
+        stringHeap.setInitialSize(ctx.stringHeap.getInitialSize());
         stringHeap.setIntern(ctx.stringHeap.isIntern());
         // globals
         annotationData = ctx.annotationData;

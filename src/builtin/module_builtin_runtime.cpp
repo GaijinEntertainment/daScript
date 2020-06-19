@@ -315,28 +315,28 @@ namespace das
         return cast<uint32_t>::from(uhash);
     }
 
-    uint32_t heap_bytes_allocated ( Context * context ) {
+    uint64_t heap_bytes_allocated ( Context * context ) {
         return context->heap.bytesAllocated();
     }
 
-    uint32_t heap_high_watermark ( Context * context ) {
-        return (int32_t) context->heap.maxBytesAllocated();
+    uint64_t heap_high_watermark ( Context * context ) {
+        return 0; //(int32_t) context->heap.maxBytesAllocated();
     }
 
     int32_t heap_depth ( Context * context ) {
-        return (int32_t) context->heap.shoe.depth();
+        return (int32_t) context->heap.depth();
     }
 
-    uint32_t string_heap_bytes_allocated ( Context * context ) {
+    uint64_t string_heap_bytes_allocated ( Context * context ) {
         return context->stringHeap.bytesAllocated();
     }
 
-    uint32_t string_heap_high_watermark ( Context * context ) {
-        return (int32_t) context->stringHeap.maxBytesAllocated();
+    uint64_t string_heap_high_watermark ( Context * context ) {
+        return 0; // (int32_t) context->stringHeap.maxBytesAllocated();
     }
 
     int32_t string_heap_depth ( Context * context ) {
-        return (int32_t) context->stringHeap.shoe.depth();
+        return (int32_t) context->stringHeap.depth();
     }
 
     void string_heap_collect ( Context * context, LineInfoArg * info ) {
@@ -344,11 +344,11 @@ namespace das
     }
 
     void string_heap_report ( Context * context ) {
-        context->stringHeap.reportAllocations();
+        context->stringHeap.report();
     }
 
     void heap_report ( Context * context ) {
-        context->heap.reportAllocations();
+        context->heap.report();
     }
 
     void builtin_table_lock ( const Table & arr, Context * context ) {

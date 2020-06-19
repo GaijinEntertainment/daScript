@@ -522,8 +522,8 @@ namespace das
 
     public:
         uint64_t *                      annotationData = nullptr;
-        StringAllocator                 stringHeap;
-        HeapAllocator                   heap;
+        PersistentStringAllocator       stringHeap;
+        PersistentHeapAllocator         heap;
         char *                          globals = nullptr;
         char *                          shared = nullptr;
         smart_ptr<ConstStringAllocator> constStringHeap;

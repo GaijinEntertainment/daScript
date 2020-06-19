@@ -132,14 +132,6 @@ namespace das {
         shoe.reset();
     }
 
-    uint32_t MemoryModel::pagesTotal() const {
-        return shoe.totalChunks();
-    }
-
-    uint32_t MemoryModel::pagesAllocated() const {
-        return shoe.totalChunks();
-    }
-
     uint64_t MemoryModel::totalAlignedMemoryAllocated() const {
         uint64_t mem = shoe.totalBytesAllocated();
         for (const auto & it : bigStuff) {

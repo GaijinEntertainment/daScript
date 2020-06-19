@@ -15,26 +15,15 @@ namespace das
             if ( context->constStringHeap->isOwnPtr(st) ) {     // not a const string
                 return;
             }
-            auto it = context->stringHeap.bigStuff.find(st);    // not a big allocation
-            if ( it != context->stringHeap.bigStuff.end() ) {
-                it->second |= DAS_PAGE_GC_MASK;
-                return;
-            }
             auto len = strlen(st) + 1;
             len = (len + 15) & ~15;
-            if ( len < DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
-                if ( context->stringHeap.shoe.mark(st, uint32_t(len)) ) {
-                    return;
-                }
-            }
-            // not part of regular heap
-            // DAS_ASSERT(0 && "collecting string which is not in const or regular string heap");
+            context->stringHeap.mark(st, len);
         }
     };
 
     void Context::collectStringHeap ( LineInfo * at ) {
         // clean up, so that all small allocations are marked as 'free'
-        stringHeap.shoe.beforeGC();
+        if ( !stringHeap.mark() ) return;
         // now
         GcMarkStringHeap walker;
         walker.context = this;

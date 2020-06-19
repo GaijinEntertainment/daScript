@@ -2608,9 +2608,9 @@ namespace das
                 << " pages (" << context.constStringHeap->totalAlignedMemoryAllocated() << ")\n";
             logs << "debug         " << context.debugInfo->bytesAllocated() << " (" <<
                 context.debugInfo->totalAlignedMemoryAllocated() << ")\n";
-            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.pagesAllocated()
+            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.depth()
                 << " pages (" << context.heap.totalAlignedMemoryAllocated() << ")\n";
-            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.pagesAllocated()
+            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.depth()
                 << " pages(" << context.stringHeap.totalAlignedMemoryAllocated() << ")\n";
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
