@@ -576,13 +576,15 @@ namespace das
         ownStack = (ctx.stack.size() != 0);
         if ( persistent ) {
             heap = make_smart<PersistentHeapAllocator>();
+            stringHeap = make_smart<PersistentStringAllocator>();
         } else {
             heap = make_smart<LinearHeapAllocator>();
+            stringHeap = make_smart<LinearStringAllocator>();
         }
         // heap
         heap->setInitialSize(ctx.heap->getInitialSize());
-        stringHeap.setInitialSize(ctx.stringHeap.getInitialSize());
-        stringHeap.setIntern(ctx.stringHeap.isIntern());
+        stringHeap->setInitialSize(ctx.stringHeap->getInitialSize());
+        stringHeap->setIntern(ctx.stringHeap->isIntern());
         // globals
         annotationData = ctx.annotationData;
         globalsSize = ctx.globalsSize;
@@ -635,7 +637,7 @@ namespace das
         mem += globalsSize;
         mem += stack.size();
         mem += heap->totalAlignedMemoryAllocated();
-        mem += stringHeap.totalAlignedMemoryAllocated();
+        mem += stringHeap->totalAlignedMemoryAllocated();
         return mem;
     }
 
@@ -705,8 +707,8 @@ namespace das
     char * Context::intern(const char * str) {
         if ( !str ) return nullptr;
         char * ist = constStringHeap->intern(str);
-        if ( !ist ) ist = stringHeap.intern(str);
-        return ist ? ist : stringHeap.allocateString(str,uint32_t(strlen(str)));
+        if ( !ist ) ist = stringHeap->intern(str);
+        return ist ? ist : stringHeap->allocateString(str,uint32_t(strlen(str)));
     }
 
     class SharedDataWalker : public DataWalker {

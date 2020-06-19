@@ -324,11 +324,11 @@ namespace das
     }
 
     uint64_t string_heap_bytes_allocated ( Context * context ) {
-        return context->stringHeap.bytesAllocated();
+        return context->stringHeap->bytesAllocated();
     }
 
     int32_t string_heap_depth ( Context * context ) {
-        return (int32_t) context->stringHeap.depth();
+        return (int32_t) context->stringHeap->depth();
     }
 
     void string_heap_collect ( Context * context, LineInfoArg * info ) {
@@ -336,7 +336,7 @@ namespace das
     }
 
     void string_heap_report ( Context * context ) {
-        context->stringHeap.report();
+        context->stringHeap->report();
     }
 
     void heap_report ( Context * context ) {
@@ -551,7 +551,7 @@ namespace das
     char * collectProfileInfo( Context * context ) {
         TextWriter tout;
         context->collectProfileInfo(tout);
-        return context->stringHeap.allocateString(tout.str());
+        return context->stringHeap->allocateString(tout.str());
     }
 
     void builtin_array_free ( Array & dim, int szt, Context * __context__ ) {
@@ -750,7 +750,7 @@ namespace das
         auto res = args[0];
         auto flags = cast<uint32_t>::to(args[1]);
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags(flags));
-        auto sres = context.stringHeap.allocateString(ssw.str());
+        auto sres = context.stringHeap->allocateString(ssw.str());
         return cast<char *>::from(sres);
     }
 

@@ -198,7 +198,7 @@ namespace das {
         struct stat st;
         int fd = fileno((FILE*)f);
         fstat(fd, &st);
-        char * res = context->stringHeap.allocateString(nullptr, st.st_size);
+        char * res = context->stringHeap->allocateString(nullptr, st.st_size);
         fseek((FILE*)f, 0, SEEK_SET);
         fread(res, 1, st.st_size, (FILE *)f);
         return res;
@@ -208,7 +208,7 @@ namespace das {
         if ( !f ) context->throw_error("can't fgets NULL");
         char buffer[1024];
         if (char* buf = fgets(buffer, sizeof(buffer), (FILE *)f)) {
-            return context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+            return context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
         } else {
             return nullptr;
         }
@@ -291,11 +291,11 @@ namespace das {
                     full_path[--len] = 0;
                 }
             }
-            return context->stringHeap.allocateString(full_path, len);
+            return context->stringHeap->allocateString(full_path, len);
 #else
             char * tempName = strdup(name);
             char * dirName = dirname(tempName);
-            char * result = context->stringHeap.allocateString(dirName, strlen(dirName));
+            char * result = context->stringHeap->allocateString(dirName, strlen(dirName));
             free(tempName);
             return result;
 #endif
@@ -313,11 +313,11 @@ namespace das {
             char ext[ _MAX_EXT ];
             _splitpath(name, drive, dir, full_path, ext);
             strcat(full_path, ext);
-            return context->stringHeap.allocateString(full_path, uint32_t(strlen(full_path)));
+            return context->stringHeap->allocateString(full_path, uint32_t(strlen(full_path)));
 #else
             char * tempName = strdup(name);
             char * dirName = basename(tempName);
-            char * result = context->stringHeap.allocateString(dirName, strlen(dirName));
+            char * result = context->stringHeap->allocateString(dirName, strlen(dirName));
             free(tempName);
             return result;
 #endif
@@ -345,7 +345,7 @@ namespace das {
         string findPath = string(path) + "/*";
         if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                char * fname = context->stringHeap.allocateString(c_file.name, uint32_t(strlen(c_file.name)));
+                char * fname = context->stringHeap->allocateString(c_file.name, uint32_t(strlen(c_file.name)));
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
@@ -358,7 +358,7 @@ namespace das {
         struct dirent *ent;
         if ((dir = opendir (path)) != NULL) {
             while ((ent = readdir (dir)) != NULL) {
-                char * fname = context->stringHeap.allocateString(ent->d_name,uint32_t(strlen(ent->d_name)));
+                char * fname = context->stringHeap->allocateString(ent->d_name,uint32_t(strlen(ent->d_name)));
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };

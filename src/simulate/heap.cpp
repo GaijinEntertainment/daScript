@@ -273,4 +273,34 @@ namespace das {
             }
         }
     }
+
+    void LinearStringAllocator::report() {
+        TextPrinter tout;
+        char buf[33];
+        for ( auto ch=model.chunk; ch; ch=ch->next ) {
+            tout << HEX << intptr_t(ch->data) << DEC << "\t"
+                << ch->offset << " of " << ch->size << "\n";
+            char * tail = ch->data + ch->offset;
+            for ( char * txt = ch->data; txt!=tail; ) {
+                strncpy(buf,txt,32);
+                buf[32] = 0;
+                tout << "\t" << presentStr(buf,txt,32) << "\n";
+                auto sz = uint32_t(strlen(txt)) + 1;
+                sz = ( sz + model.alignMask ) & ~model.alignMask;
+                txt += sz;
+            }
+        }
+    }
+
+    void LinearStringAllocator::forEachString ( function<void (const char *)> && fn ) {
+        for ( auto ch=model.chunk; ch; ch=ch->next ) {
+            char * tail = ch->data + ch->offset;
+            for ( char * txt = ch->data; txt!=tail; ) {
+                fn(txt);
+                auto sz = uint32_t(strlen(txt)) + 1;
+                sz = ( sz + model.alignMask ) & ~model.alignMask;
+                txt += sz;
+            }
+        }
+    }
 }

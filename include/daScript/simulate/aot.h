@@ -1488,7 +1488,7 @@ namespace das {
         writer << x;
         auto length = writer.tellp();
         if ( length ) {
-            return __context__->stringHeap.allocateString(writer.c_str(), length);
+            return __context__->stringHeap->allocateString(writer.c_str(), length);
         } else {
             return nullptr;
         }
@@ -1502,7 +1502,7 @@ namespace das {
         }
         auto length = writer.tellp();
         if ( length ) {
-            return __context__->stringHeap.allocateString(writer.c_str(), length);
+            return __context__->stringHeap->allocateString(writer.c_str(), length);
         } else {
             return nullptr;
         }

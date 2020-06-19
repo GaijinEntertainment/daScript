@@ -260,6 +260,28 @@ namespace das {
         MemoryModel model;
     };
 
+    class LinearStringAllocator : public StringHeapAllocator {
+    public:
+        LinearStringAllocator() { model.alignMask = 3; }
+        virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
+        virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
+        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override { return model.reallocate(ptr,oldSize,newSize); }
+        virtual int depth() const override { return model.depth(); }
+        virtual uint64_t bytesAllocated() const override { return model.bytesAllocated(); }
+        virtual uint64_t totalAlignedMemoryAllocated() const override { return model.totalAlignedMemoryAllocated(); }
+        virtual void reset() override { model.reset(); }
+        virtual void forEachString ( function<void (const char *)> && fn ) override;
+        virtual void report() override;
+        virtual bool mark() override { return false; }
+        virtual void mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); }
+        virtual void sweep() override { DAS_ASSERT(0 && "not supported"); }
+        virtual bool isOwnPtr ( char * ptr, uint32_t ) override { return model.isOwnPtr(ptr); }
+        virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
+        virtual int32_t getInitialSize() const override { return model.initialSize; }
+    protected:
+        LinearChunkAllocator model;
+    };
+
     struct NodePrefix {
         uint32_t    magic = 0xdeadc0de;
         uint32_t    size = 0;

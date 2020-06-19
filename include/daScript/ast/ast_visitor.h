@@ -276,6 +276,8 @@ namespace das {
             : ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {
             ctx.thisProgram = prog.get();
             ctx.thisHelper = &helper;
+            ctx.heap = make_smart<LinearHeapAllocator>();
+            ctx.stringHeap = make_smart<LinearStringAllocator>();
             helper.rtti = true;
         }
     protected:

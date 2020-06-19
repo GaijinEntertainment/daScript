@@ -17,7 +17,7 @@ char * uri_to_unix_file_name ( char * uristr, Context * context ) {
     auto buf = new char[len + 1];
     char * result = nullptr;
     if ( uriUriStringToUnixFilenameA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -29,7 +29,7 @@ char * uri_to_windows_file_name ( char * uristr, Context * context ) {
     auto buf = new char[len + 1];
     char * result = nullptr;
     if ( uriUriStringToWindowsFilenameA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -41,7 +41,7 @@ char * unix_file_name_to_uri ( char * uristr, Context * context ) {
     auto buf = new char[len + 16];
     char * result = nullptr;
     if ( uriUnixFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -53,7 +53,7 @@ char * windows_file_name_to_uri ( char * uristr, Context * context ) {
     auto buf = new char[len + 16];
     char * result = nullptr;
     if ( uriWindowsFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -65,7 +65,7 @@ char * escape_uri ( char * uristr, bool spaceToPlus, bool normalizeBreaks, Conte
     auto buf = new char[len*6];
     char * result = nullptr;
     if ( uriEscapeA(uristr, buf, spaceToPlus, normalizeBreaks) ) {
-        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -79,7 +79,7 @@ char * unescape_uri ( char * uristr,Context * context ) {
     buf[len] = 0;
     char * result = nullptr;
     if ( uriUnescapeInPlaceA(buf) ) {
-        result = context->stringHeap.allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;

@@ -2442,10 +2442,13 @@ namespace das
         context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         if ( context.persistent ) {
             context.heap = make_smart<PersistentHeapAllocator>();
+            context.stringHeap = make_smart<PersistentStringAllocator>();
         } else {
             context.heap = make_smart<LinearHeapAllocator>();
+            context.stringHeap = make_smart<LinearStringAllocator>();
         }
         context.heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
+        context.stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
         context.constStringHeap = make_smart<ConstStringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
@@ -2567,7 +2570,7 @@ namespace das
         // verify code and string heaps
         DAS_ASSERTF(context.code->depth()<=1, "code must come in one page");
         DAS_ASSERTF(context.constStringHeap->depth()<=1, "strings must come in one page");
-        context.stringHeap.setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
+        context.stringHeap->setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
         // log all functions
         if ( options.getBoolOption("log_nodes",false) ) {
             for ( int i=0; i!=context.totalVariables; ++i ) {
@@ -2616,8 +2619,8 @@ namespace das
                 context.debugInfo->totalAlignedMemoryAllocated() << ")\n";
             logs << "heap          " << context.heap->bytesAllocated() << " in "<< context.heap->depth()
                 << " pages (" << context.heap->totalAlignedMemoryAllocated() << ")\n";
-            logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.depth()
-                << " pages(" << context.stringHeap.totalAlignedMemoryAllocated() << ")\n";
+            logs << "string        " << context.stringHeap->bytesAllocated() << " in "<< context.stringHeap->depth()
+                << " pages(" << context.stringHeap->totalAlignedMemoryAllocated() << ")\n";
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }

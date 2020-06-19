@@ -2168,7 +2168,7 @@ namespace das {
     }
 
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
-        return context->stringHeap.allocateString(t->describe(
+        return context->stringHeap->allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
             d_contracts ? TypeDecl::DescribeContracts::yes : TypeDecl::DescribeContracts::no,
             d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no));
@@ -2177,21 +2177,21 @@ namespace das {
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context ) {
         TextWriter ss;
         ss << *t;
-        return context->stringHeap.allocateString(ss.str());
+        return context->stringHeap->allocateString(ss.str());
     }
 
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context ) {
         TextWriter ss;
         ss << *t;
-        return context->stringHeap.allocateString(ss.str());
+        return context->stringHeap->allocateString(ss.str());
     }
 
     char * ast_das_to_string ( Type bt, Context * context ) {
-        return context->stringHeap.allocateString(das_to_string(bt));
+        return context->stringHeap->allocateString(das_to_string(bt));
     }
 
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context ) {
-        return context->stringHeap.allocateString(bft->findBitfieldName(value));
+        return context->stringHeap->allocateString(bft->findBitfieldName(value));
     }
 
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message ) {
@@ -2284,7 +2284,7 @@ namespace das {
     }
 
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context ) {
-        return context->stringHeap.allocateString(func->getMangledName());
+        return context->stringHeap->allocateString(func->getMangledName());
     }
 
     class Module_Ast : public Module {

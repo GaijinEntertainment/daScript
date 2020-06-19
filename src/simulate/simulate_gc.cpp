@@ -17,13 +17,13 @@ namespace das
             }
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
-            context->stringHeap.mark(st, len);
+            context->stringHeap->mark(st, len);
         }
     };
 
     void Context::collectStringHeap ( LineInfo * at ) {
         // clean up, so that all small allocations are marked as 'free'
-        if ( !stringHeap.mark() ) return;
+        if ( !stringHeap->mark() ) return;
         // now
         GcMarkStringHeap walker;
         walker.context = this;
@@ -77,7 +77,7 @@ namespace das
             sp += info ? info->stackSize : pp->stackSize;
         }
         // sweep
-        stringHeap.sweep();
+        stringHeap->sweep();
     }
 }
 

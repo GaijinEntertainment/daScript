@@ -600,7 +600,7 @@ namespace das {
             break;
         case Type::tString:
             nada._variant = 7;
-            nada.sValue = context->stringHeap.allocateString(info.sValue);
+            nada.sValue = context->stringHeap->allocateString(info.sValue);
             break;
         default:;
         }
@@ -730,7 +730,7 @@ namespace das {
 
     char * rtti_get_das_type_name(Type tt, Context * context) {
         string str = das_to_string(tt);
-        return context->stringHeap.allocateString(str);
+        return context->stringHeap->allocateString(str);
     }
 
 #if !DAS_NO_FILEIO

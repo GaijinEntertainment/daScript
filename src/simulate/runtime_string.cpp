@@ -20,7 +20,7 @@ namespace das
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return v_zero();
-        } else if ( char * sAB = (char * ) context.stringHeap.allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             return cast<char *>::from(sAB);
@@ -40,11 +40,11 @@ namespace das
         if ( !commonLength ) {
             // *pA = nullptr; is unnecessary, because its already nullptr
             return;
-        } else if ( char * sAB = (char * ) context.stringHeap.allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             *pA = sAB;
-            context.stringHeap.recognize(sAB);
+            context.stringHeap->recognize(sAB);
         } else {
             context.throw_error("can't add two strings, out of heap");
         }
@@ -280,7 +280,7 @@ namespace das
         }
         int length = writer.tellp();
         if ( length ) {
-            auto pStr = context.stringHeap.allocateString(writer.c_str(), length);
+            auto pStr = context.stringHeap->allocateString(writer.c_str(), length);
             if ( !pStr  ) {
                 context.throw_error("can't allocate string builder result, out of heap");
             }

@@ -224,7 +224,7 @@ namespace das
         __forceinline void restartHeaps() {
             DAS_ASSERTF(insideContext==0,"can't reset heaps in locked context");
             heap->reset();
-            stringHeap.reset();
+            stringHeap->reset();
         }
 
         __forceinline uint32_t tryRestartAndLock() {
@@ -522,7 +522,7 @@ namespace das
 
     public:
         uint64_t *                      annotationData = nullptr;
-        PersistentStringAllocator       stringHeap;
+        smart_ptr<StringHeapAllocator>  stringHeap;
         smart_ptr<AnyHeapAllocator>     heap;
         bool                            persistent = false;
         char *                          globals = nullptr;
