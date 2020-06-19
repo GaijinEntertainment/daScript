@@ -6,6 +6,8 @@
 // options log = true
 // options log_nodes = true
 
+options persistent_heap = true
+
 require random
 require testProfile
 
@@ -18,7 +20,7 @@ var
 
 [unsafe_deref]
 def merge(var lower, greater: Node?): Node?
-    if lower == null 
+    if lower == null
     	return greater
     if greater == null
     	return lower
@@ -94,7 +96,7 @@ struct Pair
 def splitBinary(var orig: Node?; value: int): Pair
     if orig == null
     	return [[ Pair first=null, second=null ]]
-    
+
     if orig.x < value
         let splitPair = splitBinary(orig.right, value)
         orig.right = splitPair.first
