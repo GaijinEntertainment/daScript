@@ -268,7 +268,7 @@ namespace das
             }
         }
         virtual void close ( Context & context, char * ) override {
-            context.heap.free((char *)this, sizeof(RangeIterator));
+            context.heap->free((char *)this, sizeof(RangeIterator));
         }
         EnumInfo *  info = nullptr;
         int32_t     count = 0;
@@ -316,23 +316,15 @@ namespace das
     }
 
     uint64_t heap_bytes_allocated ( Context * context ) {
-        return context->heap.bytesAllocated();
-    }
-
-    uint64_t heap_high_watermark ( Context * context ) {
-        return 0; //(int32_t) context->heap.maxBytesAllocated();
+        return context->heap->bytesAllocated();
     }
 
     int32_t heap_depth ( Context * context ) {
-        return (int32_t) context->heap.depth();
+        return (int32_t) context->heap->depth();
     }
 
     uint64_t string_heap_bytes_allocated ( Context * context ) {
         return context->stringHeap.bytesAllocated();
-    }
-
-    uint64_t string_heap_high_watermark ( Context * context ) {
-        return 0; // (int32_t) context->stringHeap.maxBytesAllocated();
     }
 
     int32_t string_heap_depth ( Context * context ) {
@@ -348,7 +340,7 @@ namespace das
     }
 
     void heap_report ( Context * context ) {
-        context->heap.report();
+        context->heap->report();
     }
 
     void builtin_table_lock ( const Table & arr, Context * context ) {
@@ -412,22 +404,22 @@ namespace das
     }
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(GoodArrayIterator));
-        context->heap.mark_comment(iter, "array<> iterator");
+        char * iter = context->heap->allocate(sizeof(GoodArrayIterator));
+        context->heap->mark_comment(iter, "array<> iterator");
         new (iter) GoodArrayIterator((Array *)&arr, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(FixedArrayIterator));
-        context->heap.mark_comment(iter, "fixed array iterator");
+        char * iter = context->heap->allocate(sizeof(FixedArrayIterator));
+        context->heap->mark_comment(iter, "fixed array iterator");
         new (iter) FixedArrayIterator((char *)data, size, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(RangeIterator));
-        context->heap.mark_comment(iter, "range iterator");
+        char * iter = context->heap->allocate(sizeof(RangeIterator));
+        context->heap->mark_comment(iter, "range iterator");
         new (iter) RangeIterator(rng);
         result = { (Iterator *) iter };
     }
@@ -447,18 +439,18 @@ namespace das
         char * iter = nullptr;
         switch ( tinfo->type ) {
         case Type::tEnumeration:
-            iter = context.heap.allocate(sizeof(EnumIterator<int32_t>));
-            context.heap.mark_comment(iter, "enum iterator");
+            iter = context.heap->allocate(sizeof(EnumIterator<int32_t>));
+            context.heap->mark_comment(iter, "enum iterator");
             new (iter) EnumIterator<int32_t>(einfo);
             break;
         case Type::tEnumeration8:
-            iter = context.heap.allocate(sizeof(EnumIterator<int8_t>));
-            context.heap.mark_comment(iter, "enum8 iterator");
+            iter = context.heap->allocate(sizeof(EnumIterator<int8_t>));
+            context.heap->mark_comment(iter, "enum8 iterator");
             new (iter) EnumIterator<int8_t>(einfo);
             break;
         case Type::tEnumeration16:
-            iter = context.heap.allocate(sizeof(EnumIterator<int16_t>));
-            context.heap.mark_comment(iter, "enum16 iterator");
+            iter = context.heap->allocate(sizeof(EnumIterator<int16_t>));
+            context.heap->mark_comment(iter, "enum16 iterator");
             new (iter) EnumIterator<int16_t>(einfo);
             break;
         default:
@@ -470,8 +462,8 @@ namespace das
     }
 
     void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(StringIterator));
-        context->heap.mark_comment(iter, "string iterator");
+        char * iter = context->heap->allocate(sizeof(StringIterator));
+        context->heap->mark_comment(iter, "string iterator");
         new (iter) StringIterator(str);
         result = { (Iterator *) iter };
     }
@@ -480,13 +472,13 @@ namespace das
         virtual bool first ( Context &, char * ) override { return false; }
         virtual bool next  ( Context &, char * ) override { return false; }
         virtual void close ( Context & context, char * ) override {
-            context.heap.free((char *)this, sizeof(NilIterator));
+            context.heap->free((char *)this, sizeof(NilIterator));
         }
     };
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(NilIterator));
-        context->heap.mark_comment(iter, "nil iterator");
+        char * iter = context->heap->allocate(sizeof(NilIterator));
+        context->heap->mark_comment(iter, "nil iterator");
         new (iter) NilIterator();
         result = { (Iterator *) iter };
     }
@@ -527,7 +519,7 @@ namespace das
             };
             auto flags = context.stopFlags; // need to save stop flags, we can be in the middle of some return or something
             context.call(finFunc, argValues, 0);
-            context.heap.free((char *)this, sizeof(LambdaIterator));
+            context.heap->free((char *)this, sizeof(LambdaIterator));
             context.stopFlags = flags;
         }
         virtual void walk ( DataWalker & walker ) override {
@@ -541,8 +533,8 @@ namespace das
     };
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, Context * context ) {
-        char * iter = context->heap.allocate(sizeof(LambdaIterator));
-        context->heap.mark_comment(iter, "lambda iterator");
+        char * iter = context->heap->allocate(sizeof(LambdaIterator));
+        context->heap->mark_comment(iter, "lambda iterator");
         new (iter) LambdaIterator(*context, lambda);
         result = { (Iterator *) iter };
     }
@@ -566,7 +558,7 @@ namespace das
         if ( dim.data ) {
             if ( !dim.lock || dim.hopeless ) {
                 uint32_t oldSize = dim.capacity*szt;
-                __context__->heap.free(dim.data, oldSize);
+                __context__->heap->free(dim.data, oldSize);
             } else {
                 __context__->throw_error("can't delete locked array");
             }
@@ -583,7 +575,7 @@ namespace das
         if ( tab.data ) {
             if ( !tab.lock || tab.hopeless ) {
                 uint32_t oldSize = tab.capacity*(szk+szv+sizeof(uint32_t));
-                __context__->heap.free(tab.data, oldSize);
+                __context__->heap->free(tab.data, oldSize);
             } else {
                 __context__->throw_error("can't delete locked table");
             }
@@ -840,14 +832,10 @@ namespace das
         // heap
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
                 SideEffects::modifyExternal, "heap_bytes_allocated");
-        addExtern<DAS_BIND_FUN(heap_high_watermark)>(*this, lib, "heap_high_watermark",
-                SideEffects::modifyExternal, "heap_high_watermark");
         addExtern<DAS_BIND_FUN(heap_depth)>(*this, lib, "heap_depth",
                 SideEffects::modifyExternal, "heap_depth");
         addExtern<DAS_BIND_FUN(string_heap_bytes_allocated)>(*this, lib, "string_heap_bytes_allocated",
                 SideEffects::modifyExternal, "string_heap_bytes_allocated");
-        addExtern<DAS_BIND_FUN(string_heap_high_watermark)>(*this, lib, "string_heap_high_watermark",
-                SideEffects::modifyExternal, "string_heap_high_watermark");
         addExtern<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
                 SideEffects::modifyExternal, "string_heap_depth");
         auto shc = addExtern<DAS_BIND_FUN(string_heap_collect)>(*this, lib, "string_heap_collect",

@@ -40,8 +40,8 @@ namespace das {
         __forceinline void write ( void * data, uint32_t size ) {
             if ( bytesWritten + size > bytesAllocated ) {
                 uint32_t newSize = das::max ( bytesAllocated + bytesGrow, bytesWritten + size );
-                bytesAt = context->heap.reallocate(bytesAt, bytesAllocated, newSize);
-                context->heap.mark_comment(bytesAt, "binary serializer write");
+                bytesAt = context->heap->reallocate(bytesAt, bytesAllocated, newSize);
+                context->heap->mark_comment(bytesAt, "binary serializer write");
                 bytesAllocated = newSize;
             }
             DEBUG_BIN_DATA("writing %i bytes at %i\n", size, bytesWritten );
@@ -80,7 +80,7 @@ namespace das {
         void close () {
             if ( !reading && bytesAt ) {
                 DEBUG_BIN_DATA("close at %i bytes\n\n", bytesWritten);
-                bytesAt = context->heap.reallocate(bytesAt, bytesAllocated, bytesWritten);
+                bytesAt = context->heap->reallocate(bytesAt, bytesAllocated, bytesWritten);
             }
         }
     // data structures
@@ -228,8 +228,8 @@ namespace das {
                 info = context->debugInfo->lookup[hash];    // TODO: verify if there is capture, all that
                 DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");
                 uint32_t size = getTypeSize(info) + 16;
-                char * ptr = context->heap.allocate(size);
-                context->heap.mark_comment(ptr, "lambda (via bin serializer)");
+                char * ptr = context->heap->allocate(size);
+                context->heap->mark_comment(ptr, "lambda (via bin serializer)");
                 memset ( ptr, 0, size );
                 *((TypeInfo **)ptr) = info;
                 ptr += 16;

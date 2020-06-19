@@ -290,6 +290,7 @@ namespace das {
         LinearChunkAllocator() { }
         char * allocate ( uint32_t s );
         void free ( char * ptr, uint32_t s );
+        char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
         virtual void reset ();
         char * allocateName ( const string & name );
         __forceinline bool isOwnPtrQnD ( const char * ptr ) const {
@@ -314,7 +315,6 @@ namespace das {
         void getStats ( uint32_t & depth, uint64_t & bytes, uint64_t & total ) const;
     public:
         function<int(int)>  customGrow;
-    protected:
         uint32_t    initialSize = 65536;
         uint32_t    alignMask = 15;
         HeapChunk * chunk = nullptr;

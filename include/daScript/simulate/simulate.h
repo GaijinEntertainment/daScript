@@ -183,7 +183,7 @@ namespace das
         friend struct SimNode_TryCatch;
         friend class Program;
     public:
-        Context(uint32_t stackSize = 16*1024);
+        Context(uint32_t stackSize = 16*1024, bool ph = false);
         Context(const Context &);
         Context & operator = (const Context &) = delete;
         virtual ~Context();
@@ -223,7 +223,7 @@ namespace das
 
         __forceinline void restartHeaps() {
             DAS_ASSERTF(insideContext==0,"can't reset heaps in locked context");
-            heap.reset();
+            heap->reset();
             stringHeap.reset();
         }
 
@@ -523,7 +523,8 @@ namespace das
     public:
         uint64_t *                      annotationData = nullptr;
         PersistentStringAllocator       stringHeap;
-        PersistentHeapAllocator         heap;
+        smart_ptr<AnyHeapAllocator>     heap;
+        bool                            persistent = false;
         char *                          globals = nullptr;
         char *                          shared = nullptr;
         smart_ptr<ConstStringAllocator> constStringHeap;

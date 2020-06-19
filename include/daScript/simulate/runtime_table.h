@@ -153,8 +153,8 @@ namespace das
         repeatIt:;
             Table newTab;
             uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));
-            newTab.data = (char *) context->heap.allocate(memSize);
-            context->heap.mark_comment(newTab.data, "table");
+            newTab.data = (char *) context->heap->allocate(memSize);
+            context->heap->mark_comment(newTab.data, "table");
             if ( !newTab.data ) {
                 context->throw_error("can't grow table, out of heap");
                 return false;
@@ -193,7 +193,7 @@ namespace das
             }
             if (tab.capacity) {
                 uint32_t oldSize = tab.capacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));
-                context->heap.free(tab.data, oldSize);
+                context->heap->free(tab.data, oldSize);
             }
             swap ( newTab, tab );
             return true;

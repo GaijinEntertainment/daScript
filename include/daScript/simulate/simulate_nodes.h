@@ -1639,9 +1639,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap.allocate(bytes);
-                context.heap.mark_comment(ptr, "new");
-                context.heap.mark_location(ptr, &debugInfo);
+                ptr = context.heap->allocate(bytes);
+                context.heap->mark_comment(ptr, "new");
+                context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes);
             }
@@ -1667,9 +1667,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap.allocate(bytes + (typeInfo ? 16 : 0));
-                context.heap.mark_comment(ptr, "new [[ ]]");
-                context.heap.mark_location(ptr, &debugInfo);
+                ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
+                context.heap->mark_comment(ptr, "new [[ ]]");
+                context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
             }
@@ -1704,9 +1704,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap.allocate(bytes + (typeInfo ? 16 : 0));
-                context.heap.mark_comment(ptr, "new [[ ]]");
-                context.heap.mark_location(ptr, &debugInfo);
+                ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
+                context.heap->mark_comment(ptr, "new [[ ]]");
+                context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
             }
@@ -1766,9 +1766,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap.allocate(bytes);
-                context.heap.mark_comment(ptr, "new with initializer");
-                context.heap.mark_location(ptr, &debugInfo);
+                ptr = context.heap->allocate(bytes);
+                context.heap->mark_comment(ptr, "new with initializer");
+                context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes);
             }
@@ -2397,9 +2397,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
-            char * iter = context.heap.allocate(sizeof(IterT));
-            context.heap.mark_comment(iter,"any iterator");
-            context.heap.mark_location(iter,&debugInfo);
+            char * iter = context.heap->allocate(sizeof(IterT));
+            context.heap->mark_comment(iter,"any iterator");
+            context.heap->mark_location(iter,&debugInfo);
             new (iter) IterT(array);
             return cast<char *>::from(iter);
         }

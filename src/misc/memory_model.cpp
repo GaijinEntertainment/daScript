@@ -167,7 +167,19 @@ namespace das {
         }
     }
 
+    char * LinearChunkAllocator::reallocate ( char * ptr, uint32_t size, uint32_t nsize ) {
+        if ( !ptr ) return allocate(nsize);
+        size = (size + alignMask) & ~alignMask;
+        nsize = (nsize + alignMask) & ~alignMask;
+        // TODO: we can 'expand' in certain cases
+        char * nptr = allocate(nsize);
+        memcpy ( nptr, ptr, das::min(size,nsize) );
+        free(ptr, size);
+        return nptr;
+    }
+
     void LinearChunkAllocator::free ( char * ptr, uint32_t s ) {
+        s = (s + alignMask) & ~alignMask;
         for ( auto ch=chunk; ch; ch=ch->next ) {
             if ( ch->isOwnPtr(ptr) ) {
                 ch->free(ptr,s);

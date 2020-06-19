@@ -272,7 +272,7 @@ namespace das
                     char ** value = (char **) _value;
                     *value = nullptr;
                 }
-                context.heap.free((char *)this, sizeof(VectorIterator));
+                context.heap->free((char *)this, sizeof(VectorIterator));
             }
             VectorType * array;
             char * array_end = nullptr;

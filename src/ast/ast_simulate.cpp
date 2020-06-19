@@ -2439,11 +2439,17 @@ namespace das
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         isSimulating = true;
         context.thisProgram = this;
+        context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
+        if ( context.persistent ) {
+            context.heap = make_smart<PersistentHeapAllocator>();
+        } else {
+            context.heap = make_smart<LinearHeapAllocator>();
+        }
+        context.heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
         context.constStringHeap = make_smart<ConstStringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
         }
-
         DebugInfoHelper helper(context.debugInfo);
         helper.rtti = options.getBoolOption("rtti",policies.rtti);
         context.thisHelper = &helper;
@@ -2608,8 +2614,8 @@ namespace das
                 << " pages (" << context.constStringHeap->totalAlignedMemoryAllocated() << ")\n";
             logs << "debug         " << context.debugInfo->bytesAllocated() << " (" <<
                 context.debugInfo->totalAlignedMemoryAllocated() << ")\n";
-            logs << "heap          " << context.heap.bytesAllocated() << " in "<< context.heap.depth()
-                << " pages (" << context.heap.totalAlignedMemoryAllocated() << ")\n";
+            logs << "heap          " << context.heap->bytesAllocated() << " in "<< context.heap->depth()
+                << " pages (" << context.heap->totalAlignedMemoryAllocated() << ")\n";
             logs << "string        " << context.stringHeap.bytesAllocated() << " in "<< context.stringHeap.depth()
                 << " pages(" << context.stringHeap.totalAlignedMemoryAllocated() << ")\n";
             logs << "shared        " << context.getSharedMemorySize() << "\n";

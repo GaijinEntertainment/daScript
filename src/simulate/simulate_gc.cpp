@@ -15,7 +15,7 @@ namespace das
             if ( context->constStringHeap->isOwnPtr(st) ) {     // not a const string
                 return;
             }
-            auto len = strlen(st) + 1;
+            uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
             context->stringHeap.mark(st, len);
         }

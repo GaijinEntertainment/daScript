@@ -310,16 +310,16 @@ namespace das
             int32_t * value = (int32_t *) _value;
             *value = 0;
         }
-        context.heap.free((char *)this, sizeof(StringIterator));
+        context.heap->free((char *)this, sizeof(StringIterator));
     }
 
     vec4f SimNode_StringIterator::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         char * str = cast<char *>::to(ll);
-        char * iter = context.heap.allocate(sizeof(StringIterator));
-        context.heap.mark_comment(iter,"string iterator");
-        context.heap.mark_location(iter,&debugInfo);
+        char * iter = context.heap->allocate(sizeof(StringIterator));
+        context.heap->mark_comment(iter,"string iterator");
+        context.heap->mark_location(iter,&debugInfo);
         new (iter) StringIterator(str);
         return cast<char *>::from(iter);
     }

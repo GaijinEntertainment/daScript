@@ -112,13 +112,13 @@ namespace das {
         }
     }
 
-    /*
-
     void LinearHeapAllocator::report() {
-        DAS_ASSERT(0 && "TODO: implement");
+        TextPrinter tout;
+        for ( auto ch=model.chunk; ch; ch=ch->next ) {
+            tout << HEX << intptr_t(ch->data) << DEC << "\t"
+                << ch->offset << " of " << ch->size << "\n";
+        }
     }
-
-    */
 
     void StringHeapAllocator::setIntern(bool on) {
         needIntern = on;

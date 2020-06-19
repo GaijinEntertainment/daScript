@@ -19,16 +19,16 @@ namespace das
     }
 
     void RangeIterator::close ( Context & context, char * ) {
-        context.heap.free((char *)this, sizeof(RangeIterator));
+        context.heap->free((char *)this, sizeof(RangeIterator));
     }
 
     vec4f SimNode_RangeIterator::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = subexpr->eval(context);
         range r = cast<range>::to(ll);
-        char * iter = context.heap.allocate(sizeof(RangeIterator));
-        context.heap.mark_comment(iter,"range iterator");
-        context.heap.mark_location(iter,&debugInfo);
+        char * iter = context.heap->allocate(sizeof(RangeIterator));
+        context.heap->mark_comment(iter,"range iterator");
+        context.heap->mark_location(iter,&debugInfo);
         new (iter) RangeIterator(r);
         return cast<char *>::from(iter);
     }

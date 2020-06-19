@@ -1016,14 +1016,14 @@ namespace das {
     template <typename TT>
     struct das_new {
         static __forceinline TT * make ( Context * __context__ ) {
-            char * data = __context__->heap.allocate( sizeof(TT) );
+            char * data = __context__->heap->allocate( sizeof(TT) );
             if ( !data ) __context__->throw_error("out of heap");
             memset ( data, 0, sizeof(TT) );
             return (TT *) data;
         }
         template <typename QQ>
         static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
-            TT * data = (TT *) __context__->heap.allocate( sizeof(TT) );
+            TT * data = (TT *) __context__->heap->allocate( sizeof(TT) );
             if ( !data ) __context__->throw_error("out of heap");
             *data = init();
             return data;
@@ -1115,7 +1115,7 @@ namespace das {
     template <typename TT>
     struct das_delete_lambda_struct<TT *> {
         static __forceinline void clear ( Context * __context__, TT * ptr ) {
-            __context__->heap.free(((char *)ptr)-16, sizeof(TT)+16);
+            __context__->heap->free(((char *)ptr)-16, sizeof(TT)+16);
         }
     };
 
@@ -1125,7 +1125,7 @@ namespace das {
     template <typename TT>
     struct das_delete_ptr<TT *> {
         static __forceinline void clear ( Context * __context__, TT * ptr ) {
-            __context__->heap.free((char *)ptr, sizeof(TT));
+            __context__->heap->free((char *)ptr, sizeof(TT));
         }
     };
 
@@ -1196,7 +1196,7 @@ namespace das {
             if ( dim.data ) {
                 if ( !dim.lock ) {
                     uint32_t oldSize = dim.capacity*sizeof(TT);
-                    __context__->heap.free(dim.data, oldSize);
+                    __context__->heap->free(dim.data, oldSize);
                 } else {
                     __context__->throw_error("can't delete locked array");
                 }
@@ -1211,7 +1211,7 @@ namespace das {
             if ( tab.data ) {
                 if ( !tab.lock ) {
                     uint32_t oldSize = tab.capacity*(sizeof(TKey)+sizeof(TVal)+sizeof(uint32_t));
-                    __context__->heap.free(tab.data, oldSize);
+                    __context__->heap->free(tab.data, oldSize);
                 } else {
                     __context__->throw_error("can't delete locked table");
                 }
@@ -1279,7 +1279,7 @@ namespace das {
     template <typename TT, typename AT, bool moveIt = false>
     struct das_ascend {
         static __forceinline TT * make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
+            if ( char * ptr = (char *)__context__->heap->allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1331,7 +1331,7 @@ namespace das {
     template <typename AT>
     struct das_ascend<Lambda,AT,false> {
         static __forceinline Lambda make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap.allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
+            if ( char * ptr = (char *)__context__->heap->allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;

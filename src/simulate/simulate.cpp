@@ -39,7 +39,7 @@ namespace das
             char ** value = (char **) _value;
             *value = nullptr;
         }
-        context.heap.free((char *)this, size);
+        context.heap->free((char *)this, size);
     }
 
     // this is here to occasionally investigate untyped evaluation paths
@@ -105,9 +105,9 @@ namespace das
                 if ( persistent ) {
                     das_aligned_free16(*pStruct);
                 } else if ( isLambda ) {
-                    context.heap.free(*pStruct - 16, structSize + 16);
+                    context.heap->free(*pStruct - 16, structSize + 16);
                 } else {
-                    context.heap.free(*pStruct, structSize);
+                    context.heap->free(*pStruct, structSize);
                 }
                 *pStruct = nullptr;
             }
@@ -558,22 +558,29 @@ namespace das
 
     // Context
 
-    Context::Context(uint32_t stackSize) : stack(stackSize) {
+    Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_smart<NodeAllocator>();
         constStringHeap = make_smart<ConstStringAllocator>();
         debugInfo = make_smart<DebugInfoAllocator>();
         ownStack = (stackSize != 0);
+        persistent = ph;
     }
 
-    Context::Context(const Context & ctx) : stack(ctx.stack.size()) {
+    Context::Context(const Context & ctx): stack(ctx.stack.size()) {
+        persistent = ctx.persistent;
         code = ctx.code;
         constStringHeap = ctx.constStringHeap;
         debugInfo = ctx.debugInfo;
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
         ownStack = (ctx.stack.size() != 0);
+        if ( persistent ) {
+            heap = make_smart<PersistentHeapAllocator>();
+        } else {
+            heap = make_smart<LinearHeapAllocator>();
+        }
         // heap
-        heap.setInitialSize(ctx.heap.getInitialSize());
+        heap->setInitialSize(ctx.heap->getInitialSize());
         stringHeap.setInitialSize(ctx.stringHeap.getInitialSize());
         stringHeap.setIntern(ctx.stringHeap.isIntern());
         // globals
@@ -627,7 +634,7 @@ namespace das
         uint64_t mem = 0;
         mem += globalsSize;
         mem += stack.size();
-        mem += heap.totalAlignedMemoryAllocated();
+        mem += heap->totalAlignedMemoryAllocated();
         mem += stringHeap.totalAlignedMemoryAllocated();
         return mem;
     }

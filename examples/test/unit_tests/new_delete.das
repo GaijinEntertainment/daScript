@@ -1,6 +1,8 @@
 // options log=true
 // options log_infer_passes=true // log_nodes=false
 
+options persistent_heap = true
+
 require UnitTest
 
 struct SomethingSmall

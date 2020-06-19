@@ -24,9 +24,9 @@ namespace das
     void array_reserve(Context & context, Array & arr, uint32_t newCapacity, uint32_t stride) {
         if ( arr.isLocked() ) context.throw_error("can't change capacity of a locked array");
         if ( arr.capacity >= newCapacity ) return;
-        auto newData = (char *)context.heap.reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
+        auto newData = (char *)context.heap->reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
         if ( !newData ) context.throw_error("out of linear allocator memory");
-        context.heap.mark_comment(newData, "array");
+        context.heap->mark_comment(newData, "array");
         if ( newData != arr.data ) {
             // memcpy(newData, arr.data, arr.capacity);
             arr.data = newData;
@@ -71,16 +71,16 @@ namespace das
             *value = nullptr;
         }
         array_unlock(context, *array);
-        context.heap.free((char *)this, sizeof(GoodArrayIterator));
+        context.heap->free((char *)this, sizeof(GoodArrayIterator));
     }
 
     vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         Array * arr = cast<Array *>::to(ll);
-        char * iter = context.heap.allocate(sizeof(GoodArrayIterator));
-        context.heap.mark_comment(iter,"array<> iterator");
-        context.heap.mark_location(iter,&debugInfo);
+        char * iter = context.heap->allocate(sizeof(GoodArrayIterator));
+        context.heap->mark_comment(iter,"array<> iterator");
+        context.heap->mark_location(iter,&debugInfo);
         new (iter) GoodArrayIterator(arr, stride);
         return cast<char *>::from(iter);
     }
@@ -106,16 +106,16 @@ namespace das
             char ** value = (char **) _value;
             *value = nullptr;
         }
-        context.heap.free((char *)this, sizeof(FixedArrayIterator));
+        context.heap->free((char *)this, sizeof(FixedArrayIterator));
     }
 
     vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         char * data = cast<char *>::to(ll);
-        char * iter = context.heap.allocate(sizeof(FixedArrayIterator));
-        context.heap.mark_comment(iter,"fixed array iterator");
-        context.heap.mark_location(iter,&debugInfo);
+        char * iter = context.heap->allocate(sizeof(FixedArrayIterator));
+        context.heap->mark_comment(iter,"fixed array iterator");
+        context.heap->mark_location(iter,&debugInfo);
         new (iter) FixedArrayIterator(data, size, stride);
         return cast<char *>::from(iter);
     }
@@ -130,7 +130,7 @@ namespace das
             if ( pArray->data ) {
                 if ( !pArray->isLocked() ) {
                     uint32_t oldSize = pArray->capacity*stride;
-                    context.heap.free(pArray->data, oldSize);
+                    context.heap->free(pArray->data, oldSize);
                 } else {
                     context.throw_error("deleting locked array");
                     return v_zero();
