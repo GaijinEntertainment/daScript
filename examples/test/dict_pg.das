@@ -1,5 +1,7 @@
 require fio
 
+// options string_heap=4000000     // big gc hint
+
 [export]
 def test
     profile(1,"freq dictionary PG") <|
@@ -17,12 +19,14 @@ def test
                         elif length != 0
                             unsafe
                                 var token = chop(data,offset,length) |> to_lower_in_place() // unsafe
-                                dict[token]++
+                                if dict[token]++ != 0
+                                    delete_string(token)    // gc hint
                             length = 0
                 var arr : array<tuple<string;int>>
                 reserve(arr,length(dict))
                 for k,v in keys(dict),values(dict)
                     push(arr,[[auto k,v]])
+                delete dict                         // gc hint
                 sort(arr) <| $(a,b)
                     return a._1 != b._1 ? a._1 > b._1 : a._0 < b._0
                 fopen(get_das_root() + "/../pg/das.freq", "wb") <| $( fw )
@@ -30,6 +34,9 @@ def test
                         for t in arr
                             var ts = "{t._1} {t._0}\n"
                             fwrite(fw,ts)
+                            unsafe
+                                delete_string(ts)       // gc hint
+                delete arr                              // gc hint
             else
                 print("cant open {fname}\n")
     return true
