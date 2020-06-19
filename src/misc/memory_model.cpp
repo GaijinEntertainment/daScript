@@ -38,6 +38,23 @@ namespace das {
         initialSize = size;
     }
 
+    uint32_t MemoryModel::grow ( uint32_t si ) {
+        if ( shoe.chunks[si] ) {
+            uint32_t size = shoe.chunks[si]->total;
+            if ( customGrow ) {
+                size = customGrow(size);
+            } else {
+                size = size * 2;
+            }
+            return size;
+        } else {
+            if ( !initialSize ) {
+                initialSize = default_initial_size;
+            }
+            return initialSize / ((si+1)<<4); // fit in initial size
+        }
+    }
+
     char * MemoryModel::allocate ( uint32_t size ) {
         if ( !size ) return nullptr;
         size = (size + alignMask) & ~alignMask;
@@ -52,7 +69,15 @@ namespace das {
 #endif
             return ptr;
         } else {
-            return shoe.allocate(size);
+            if ( char * res = shoe.allocate(size) ) {
+                return res;
+            }
+            size = (size + 15) & ~15;
+            DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            uint32_t si = (size >> 4) - 1;
+            uint32_t total = grow(si);
+            shoe.chunks[si] = new Deck(total, size, shoe.chunks[si]);
+            return shoe.chunks[si]->allocate();
         }
     }
 
@@ -188,25 +213,35 @@ namespace das {
         }
     }
 
+    uint32_t LinearChunkAllocator::grow ( uint32_t size ) {
+        return customGrow ? customGrow(size) : size * 2;
+    }
+
     char * LinearChunkAllocator::allocate ( uint32_t s ) {
         if ( !s ) return nullptr;
         s = (s + alignMask) & ~alignMask;
         if ( !chunk ) {
+            if ( !initialSize ) {
+                initialSize = default_initial_size;
+            }
             chunk = new HeapChunk ( max(initialSize, s), nullptr );
         }
         for ( ;; ) {
             if ( char * res = chunk->allocate(s) ) {
-                // DAS_ASSERTF((intptr_t(res) & alignMask) == 0, "allocated unaligned data");
                 return res;
             }
-            chunk = new HeapChunk ( max(growPages(chunk->size), s), chunk);
+            chunk = new HeapChunk ( max(grow(chunk->size), s), chunk);
         }
     }
 
     void LinearChunkAllocator::reset() {
-        if ( chunk ) {
+        if ( chunk && chunk->next ) {
+            auto maxAllocated = (uint32_t(bytesAllocated())+1023) & ~1023;
+            initialSize = max ( initialSize, maxAllocated);
             delete chunk;
             chunk = nullptr;
+        } else if ( chunk ) {
+            chunk->offset = 0;
         }
     }
 

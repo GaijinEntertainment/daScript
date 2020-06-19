@@ -132,6 +132,7 @@ namespace das {
         virtual bool isOwnPtr (  char * ptr, uint32_t size ) = 0;
         virtual void setInitialSize ( uint32_t size ) = 0;
         virtual int32_t getInitialSize() const = 0;
+        virtual void setGrowFunction ( CustomGrowFunction && fun ) = 0;
     public:
 #if DAS_TRACK_ALLOCATIONS
         virtual void mark_location ( void *, LineInfo * ) = 0;
@@ -194,6 +195,7 @@ namespace das {
         virtual bool isOwnPtr ( char * ptr, uint32_t size ) override { return model.isOwnPtr(ptr,size); }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
+        virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
     protected:
         MemoryModel model;
     };
@@ -215,6 +217,7 @@ namespace das {
         virtual bool isOwnPtr ( char * ptr, uint32_t ) override { return model.isOwnPtr(ptr); }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
+        virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
     protected:
         LinearChunkAllocator model;
     };
@@ -256,6 +259,7 @@ namespace das {
         virtual bool isOwnPtr ( char * ptr, uint32_t size ) override { return model.isOwnPtr(ptr,size); }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
+        virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
     protected:
         MemoryModel model;
     };
@@ -278,6 +282,7 @@ namespace das {
         virtual bool isOwnPtr ( char * ptr, uint32_t ) override { return model.isOwnPtr(ptr); }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
+        virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
     protected:
         LinearChunkAllocator model;
     };
@@ -463,7 +468,9 @@ namespace das {
             prefixWithHeader = false;
             initialSize = 1024;
         }
-        virtual uint32_t growPages(uint32_t pages) const override { return pages; }
+        virtual uint32_t grow ( uint32_t size ) override {
+            return size;
+        }
         das_hash_map<uint32_t,TypeInfo *>    lookup;
     };
 }

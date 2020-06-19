@@ -115,13 +115,6 @@ namespace das {
                 if ( chunks[i] ) chunks[i]->reset();
             }
         }
-        uint32_t grow ( uint32_t si ) {
-            if ( chunks[si] ) {
-                return chunks[si]->total * 2;
-            } else {
-                return 65536 / ((si+1)<<4); // fit in 64 kb on a first chunk?
-            }
-        }
         char * allocate ( uint32_t size ) {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
@@ -131,9 +124,7 @@ namespace das {
                     return res;
                 }
             }
-            uint32_t total = grow(si);
-            chunks[si] = new Deck(total, size, chunks[si]);
-            return chunks[si]->allocate();
+            return nullptr;
         }
         void free ( char * ptr, uint32_t size ) {
             size = (size + 15) & ~15;
@@ -213,14 +204,17 @@ namespace das {
         Deck *  chunks[DAS_MAX_SHOE_CUNKS];
     };
 
+    typedef function<int(int)> CustomGrowFunction;
+
     struct MemoryModel : ptr_ref_count {
+        enum { default_initial_size = 65536 };
         MemoryModel(const MemoryModel &) = delete;
         MemoryModel & operator = (const MemoryModel &) = delete;
         MemoryModel ();
         virtual ~MemoryModel ();
         virtual void reset();
         void setInitialSize ( uint32_t size );
-        virtual uint32_t growPages(uint32_t pages) const { return pages * 2; }
+        uint32_t grow ( uint32_t si );
         virtual void sweep();
         char * allocate ( uint32_t size );
         bool free ( char * ptr, uint32_t size );
@@ -232,6 +226,7 @@ namespace das {
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }
         uint64_t totalAlignedMemoryAllocated() const;
+        CustomGrowFunction      customGrow;
         uint32_t                alignMask;
         uint32_t                totalAllocated;
         uint32_t                maxAllocated;
@@ -286,8 +281,10 @@ namespace das {
     };
 
     class LinearChunkAllocator : public ptr_ref_count {
+        enum { default_initial_size = 65536 };
     public:
         LinearChunkAllocator() { }
+        virtual ~LinearChunkAllocator () { if ( chunk ) delete chunk; }
         char * allocate ( uint32_t s );
         void free ( char * ptr, uint32_t s );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
@@ -308,14 +305,12 @@ namespace das {
         __forceinline void setInitialSize ( uint32_t size ) {
             initialSize = size;
         }
+        virtual uint32_t grow ( uint32_t si );
     protected:
-        virtual uint32_t growPages(uint32_t pages) const {
-            return customGrow ? customGrow(pages) : pages * 2;
-        }
         void getStats ( uint32_t & depth, uint64_t & bytes, uint64_t & total ) const;
     public:
-        function<int(int)>  customGrow;
-        uint32_t    initialSize = 65536;
+        CustomGrowFunction  customGrow;
+        uint32_t    initialSize = 0;
         uint32_t    alignMask = 15;
         HeapChunk * chunk = nullptr;
     };
