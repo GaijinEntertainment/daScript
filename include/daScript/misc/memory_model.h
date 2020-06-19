@@ -212,10 +212,9 @@ namespace das {
     };
 
     struct MemoryModel : ptr_ref_count {
-        MemoryModel() = delete;
         MemoryModel(const MemoryModel &) = delete;
         MemoryModel & operator = (const MemoryModel &) = delete;
-        MemoryModel ( uint32_t ps );
+        MemoryModel ();
         virtual ~MemoryModel ();
         virtual void reset();
         void setInitialSize ( uint32_t size );
@@ -233,10 +232,8 @@ namespace das {
         uint32_t pagesTotal() const;
         uint64_t totalAlignedMemoryAllocated() const;
         uint32_t                alignMask;
-        uint32_t                pageSize;
         uint32_t                totalAllocated;
         uint32_t                maxAllocated;
-        uint32_t                initial_page_count = 16;
         uint32_t                initialSize = 0;
         Shoe                    shoe;
         das_hash_map<void *,uint32_t> bigStuff;  // note: can't use char *, some stl implementations try hashing it as string

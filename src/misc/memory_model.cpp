@@ -14,9 +14,7 @@ namespace das {
     }
 #endif
 
-    MemoryModel::MemoryModel ( uint32_t ps ) {
-        DAS_ASSERTF(!(ps & 15), "page size must be 16 bytes aligned");
-        pageSize = ps;
+    MemoryModel::MemoryModel () {
         alignMask = 15;
         totalAllocated = 0;
         maxAllocated = 0;
@@ -37,13 +35,7 @@ namespace das {
     }
 
     void MemoryModel::setInitialSize ( uint32_t size ) {
-        /*
-        if ( size && shelf.empty() ) {
-            uint32_t tp = (size+pageSize-1) / pageSize;
-            shelf.emplace_back(pageSize, das::max(tp,1u));
-            initialSize = size;
-        }
-        */
+        initialSize = size;
     }
 
     char * MemoryModel::allocate ( uint32_t size ) {

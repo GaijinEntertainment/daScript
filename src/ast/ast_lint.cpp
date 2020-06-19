@@ -328,10 +328,6 @@ namespace das {
         "no_global_variables",          Type::tBool,
         "no_unused_function_arguments", Type::tBool,
     // memory
-        "heap",                         Type::tInt,
-        "heap_page",                    Type::tInt,
-        "string_heap",                  Type::tInt,
-        "string_heap_page",             Type::tInt,
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
     // aot

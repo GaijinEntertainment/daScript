@@ -898,17 +898,6 @@ namespace das
     struct CodeOfPolicies {
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
-#if DAS_TRACK_ALLOCATIONS
-        uint32_t    heap = 0;                           // initial heap size
-        uint32_t    heap_page = 0;                      // default heap page size
-        uint32_t    string_heap = 0;                    // initial string heap size
-        uint32_t    string_heap_page = 0;               // default string page size
-#else
-        uint32_t    heap = 0;                           // initial heap size
-        uint32_t    heap_page = 4096;                   // default heap page size
-        uint32_t    string_heap = 0;                    // initial string heap size
-        uint32_t    string_heap_page = 4096;            // default string page size
-#endif
         bool        intern_strings = false;             // use string interning lookup for regular string heap
     // rtti
         bool rtti = false;                              // create extended RTTI

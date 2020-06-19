@@ -2443,13 +2443,7 @@ namespace das
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
         }
-        if ( auto optHeap = options.getIntOption("heap",policies.heap) ) {
-            context.heap.setInitialSize( uint32_t(optHeap) );
-        }
-        context.stringHeap.pageSize = options.getIntOption("string_heap_page",policies.string_heap_page);
-        if ( auto optStringHeap = options.getIntOption("string_heap",policies.string_heap) ) {
-            context.stringHeap.setInitialSize( uint32_t(optStringHeap) );
-        }
+
         DebugInfoHelper helper(context.debugInfo);
         helper.rtti = options.getBoolOption("rtti",policies.rtti);
         context.thisHelper = &helper;

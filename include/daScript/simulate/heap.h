@@ -117,9 +117,8 @@ namespace das {
     };
 
     class HeapAllocator : public MemoryModel {
-        enum { default_page_size = 4096 };
     public:
-        HeapAllocator() : MemoryModel(default_page_size) {}
+        HeapAllocator() {}
         char * allocateName ( const string & name );
         virtual uint32_t growPages(uint32_t pages) const override {
             return customGrow ? customGrow(pages) : pages * 2;

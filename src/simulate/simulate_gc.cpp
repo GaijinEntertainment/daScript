@@ -23,7 +23,7 @@ namespace das
             auto len = strlen(st) + 1;
             len = (len + 15) & ~15;
             if ( len < DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
-                if ( context->stringHeap.shoe.mark(st, len) ) {
+                if ( context->stringHeap.shoe.mark(st, uint32_t(len)) ) {
                     return;
                 }
             }
