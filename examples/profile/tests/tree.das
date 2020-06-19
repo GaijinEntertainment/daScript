@@ -1,12 +1,10 @@
 // this is port from https://github.com/frol/completely-unscientific-benchmarks
 // naive is almost direct kotlin implementation
 // regular is almost direct C++-raw implementation
-// options heap = 200000//not required hint to increase initial heap footprint. <1% of performance. 200kb is enough
 
 // options log_infer_passes = true
 // options log = true
-
-options log_nodes = true
+// options log_nodes = true
 
 require random
 require testProfile
@@ -158,7 +156,4 @@ def test
         mainNaive()
     profile(10, "tree C++")  <|
         testProfile::testTree()
-	// print("total = {int(heap_bytes_allocated())}\n")
-    // print("depth = {heap_depth()}\n")
-    verify(heap_depth()==1)
     return true

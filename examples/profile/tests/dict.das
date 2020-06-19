@@ -31,8 +31,5 @@ def test
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
-	// print("string heap watermark is {int(string_heap_high_watermark())}\n")
-	// print("string heap depth is {string_heap_depth()}\n")
-	verify(string_heap_depth()==1)
     return true
 

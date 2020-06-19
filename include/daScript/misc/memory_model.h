@@ -38,16 +38,19 @@ namespace das {
         }
         __forceinline char * allocate ( ) {
             if ( allocated == total ) return nullptr;
-            for ( uint32_t t=0; t!=total; ++t ) {
+            uint32_t maxt = total / 32;
+            for ( uint32_t t=0; t!=maxt; ++t ) {
                 uint32_t b = bits[look];
                 if ( b != 0xffffffff ) {
                     uint32_t j = __builtin_ctz(~b);
                     bits[look] = b | (1<<j);
                     allocated ++;
-                    return data + (look*32 + j) * size;
+                    uint32_t ofs = (look * 32 + j);
+                    DAS_ASSERT(ofs < total);
+                    return data + ofs * size;
                 }
                 look = look + 1;
-                if ( look == total ) look = 0;
+                if ( look == maxt ) look = 0;
             }
             DAS_ASSERT(0 && "allocated reports room, but no bits are available");
             return nullptr;
