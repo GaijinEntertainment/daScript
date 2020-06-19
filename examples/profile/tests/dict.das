@@ -5,10 +5,6 @@ require math
 // enable for test purposes only. this is slower
 // options intern_strings = true
 
-// 8Mb heap in single page
-options string_heap=7999940
-options string_heap_page=7999940
-
 require testProfile
 
 def makeRandomSequence(var src:array<string>)

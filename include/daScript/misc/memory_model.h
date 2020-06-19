@@ -19,8 +19,8 @@ namespace das {
             totalBytes = total * size;
             data = (char*) das_aligned_alloc16(totalBytes);
             bits = (uint32_t*) das_aligned_alloc16(total / 32 * 4);
+            reset();    // this reset before next
             next = n;
-            reset();
         }
         ~Deck ( ) {
             das_aligned_free16(data);
@@ -38,7 +38,6 @@ namespace das {
         }
         __forceinline char * allocate ( ) {
             if ( allocated == total ) return nullptr;
-            allocated ++;
             for ( uint32_t t=0; t!=total; ++t ) {
                 uint32_t b = bits[look];
                 if ( b != 0xffffffff ) {
