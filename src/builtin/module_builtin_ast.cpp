@@ -961,6 +961,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(canCopy)>("canCopy","canCopy");
             addProperty<DAS_BIND_MANAGED_PROP(canMove)>("canMove","canMove");
             addProperty<DAS_BIND_MANAGED_PROP(isVoid)>("isVoid","isVoid");
+            addProperty<DAS_BIND_MANAGED_PROP(isString)>("isString","isString");
             addProperty<DAS_BIND_MANAGED_PROP(isAuto)>("isAuto","isAuto");
             addProperty<DAS_BIND_MANAGED_PROP(isAlias)>("isAlias","isAlias");
             addProperty<DAS_BIND_MANAGED_PROP(isWorkhorseType)>("isWorkhorseType","isWorkhorseType");
@@ -2110,15 +2111,33 @@ namespace das {
         }
     }
 
+    void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
+        vec4f args[1];
+        if ( builtin_empty(name) ) {
+            const auto & fnbn = module->generics;
+            context->invokeEx(block, args, nullptr, [&](SimNode * code){
+                for ( auto & nv : fnbn ) {
+                    args[0] = cast<FunctionPtr>::from(nv.second);
+                    code->eval(*context);
+                }
+            },lineInfo);
+        } else {
+            const auto & fnbn = module->genericsByName[name];
+            context->invokeEx(block, args, nullptr, [&](SimNode * code){
+                for ( auto & nv : fnbn ) {
+                    args[0] = cast<FunctionPtr>::from(nv);
+                    code->eval(*context);
+                }
+            },lineInfo);
+        }
+    }
+
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<FunctionAnnotationAdapter>(name,(char *)pClass,info,context);
     }
 
-    void addModuleFunction ( Module * module, FunctionPtr func, Context * context ) {
-        if ( !module->addFunction(func, true) ) {
-            context->throw_error_ex("can't add function s to module %s",
-                func->name.c_str(), module->name.c_str());
-        }
+    bool addModuleFunction ( Module * module, FunctionPtr func, Context * context ) {
+        return module->addFunction(func, true);
     }
 
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr ann, Context * context ) {
@@ -2492,6 +2511,8 @@ namespace das {
                 SideEffects::accessExternal, "compileModule");
             addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "for_each_function",
                 SideEffects::accessExternal, "forEachFunction");
+            addExtern<DAS_BIND_FUN(forEachGenericFunction)>(*this, lib,  "for_each_generic",
+                SideEffects::accessExternal, "forEachGenericFunction");
             addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisit");
             // function annotation

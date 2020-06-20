@@ -113,6 +113,12 @@ def for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:Functio
                 for t in ann.arguments
                     if "{t.name}" == tag
                         invoke(blk, func)
+    for_each_generic(mod, "") <| $ ( func )
+        for ann in func.annotations
+            if "{ann.annotation.name}" == "tag_function"
+                for t in ann.arguments
+                    if "{t.name}" == tag
+                        invoke(blk, func)
 
 [export]
 def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
@@ -164,7 +170,8 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         var ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true:=iblk]]
         push(blk.list,ife)
         fn.body <- blk
-        compiling_module() |> add_function(fn)
+        if !(compiling_module() |> add_function(fn))
+            panic("can't setup")
         return get_ptr(iblk)
     else
         if fn.body.__rtti != "ExprBlock"

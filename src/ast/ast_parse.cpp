@@ -224,10 +224,10 @@ namespace das {
         }
         err = das_yyparse();        // TODO: add mutex or make thread safe?
         das_yylex_destroy();
-        g_Program.reset();
         g_Access.reset();
         g_FileAccessStack.clear();
         if ( err || program->failed() ) {
+            g_Program.reset();
             sort(program->errors.begin(),program->errors.end());
             program->isCompiling = false;
             return program;
@@ -258,6 +258,7 @@ namespace das {
                     logs << "\n" << program->dotGraph() << "\n";
                 }
             }
+            g_Program.reset();
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( program->needMacroModule ) {

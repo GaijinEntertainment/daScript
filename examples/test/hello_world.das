@@ -1,5 +1,14 @@
+require daslib/apply
+
+struct Foo
+	i : int
+	s : string
+
+def visit(name: string; value)
+	print("{name} = {value}\n")
+
 [export]
 def test
-	let args <- get_command_line_arguments()
-	debug(args,"\nCommand line arguments = \n")
+	var foo : Foo
+	apply(foo,"visit")
 	return true

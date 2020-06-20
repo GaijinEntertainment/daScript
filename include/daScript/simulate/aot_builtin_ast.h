@@ -409,7 +409,8 @@ namespace das {
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr ann, Context * context );
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
-    void addModuleFunction ( Module * module, FunctionPtr func, Context * context );
+    void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
+    bool addModuleFunction ( Module * module, FunctionPtr func, Context * context );
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message );
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
