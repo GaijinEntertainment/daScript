@@ -93,9 +93,12 @@ namespace das {
         }
     protected:
         void verifyType ( const TypeDeclPtr & decl, bool allowExplicit = false ) const {
+            // TODO: enable and cleanup
             if ( decl->isExplicit && !allowExplicit ) {
+                /*
                 error("expression can't be explicit here " + decl->describe(), "", "",
                       decl->at,CompilationError::invalid_type);
+                */
             }
             if ( decl->dim.size() && decl->ref ) {
                 error("can't declare an array of references, " + decl->describe(), "", "",
@@ -5172,6 +5175,47 @@ namespace das {
         string callCloneName ( const string & name ) {
             return "__::" + name;
         }
+
+        int computeSubstituteDistance ( const TypeDeclPtr & argType, const TypeDeclPtr & funType ) const {
+            if ( argType->isPointer() ) {
+                bool avoid = argType->firstType != nullptr;
+                bool fvoid = funType->firstType != nullptr;
+                if ( avoid && fvoid ) return 0;         // both null, no difference
+                else if ( avoid ) return 1;             // passign void to non void function - 1
+                else if ( fvoid ) return 1;             // passing non void to void function - 1
+                else return computeSubstituteDistance(argType->firstType,funType->firstType);
+            } else if ( argType->isStructure() ) {
+                DAS_ASSERT ( argType->structType != funType->structType );
+                int distance = 0;
+                for ( auto st = argType->structType; st != nullptr; st = st->parent ) {
+                    if ( st == funType->structType ) {
+                        break;
+                    }
+                    distance ++;
+                }
+                return distance;
+            } else if ( argType->isHandle() ) {
+                DAS_ASSERT ( argType->annotation != funType->annotation );
+                return 1;
+            } else {
+                DAS_ASSERT ( 0 && "we should not be here" );
+                return 0;
+            }
+        }
+
+        int computeSubstituteDistance ( ExprLooksLikeCall * expr, const FunctionPtr & fn ) const {
+            int distance = 0;
+            for ( size_t i=0; i!=expr->arguments.size(); ++i ) {
+                const auto & argType = expr->arguments[i]->type;
+                const auto & funType = fn->arguments[i]->type;
+                if ( !argType->isSameType ( *funType, RefMatters::no, ConstMatters::no,
+                    TemporaryMatters::no, AllowSubstitute::no) ) {
+                    distance += computeSubstituteDistance(argType,funType);
+                }
+            }
+            return distance;
+        }
+
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
             vector<TypeDeclPtr> types;
@@ -5191,6 +5235,34 @@ namespace das {
             }
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
+            if ( functions.size()>1 ) {
+                vector<pair<int,FunctionPtr>> fnm;
+                for ( auto & fn : functions ) {
+                    auto dist = computeSubstituteDistance(expr, fn);
+                    fnm.push_back(make_pair(dist,fn));
+                }
+                sort ( fnm.begin(), fnm.end(), [&] ( auto a, auto b ) {
+                    return a.first < b.first;
+                });
+                int count = 1;
+                int depth = fnm[0].first;
+                while ( count < fnm.size() ) {
+                    if ( fnm[count].first != depth ) break;
+                    count ++;
+                }
+                /*
+                TextPrinter tp;
+                for ( auto t : fnm ) {
+                    tp << t.first << " " << t.second->getMangledName() << "\n";
+                }
+                tp << "\n";
+                */
+                if ( count == 1 ) {
+                    functions.resize(1);
+                    functions[0] = fnm[0].second;
+                }
+            }
+
             if ( functions.size()==1 ) {
                 auto funcC = functions.back();
                 if ( funcC->fromGeneric ) { // we ignore generics, if there is solid non-generic match which did not come from a generic
