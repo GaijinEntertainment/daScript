@@ -5262,7 +5262,7 @@ namespace das {
                 });
                 int count = 1;
                 int depth = fnm[0].first;
-                while ( count < fnm.size() ) {
+                while ( count < int(fnm.size()) ) {
                     if ( fnm[count].first != depth ) break;
                     count ++;
                 }

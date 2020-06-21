@@ -256,7 +256,7 @@ namespace das {
             offset = 0;
             next = n;
         }
-        __forceinline ~HeapChunk() {
+        ~HeapChunk() {
             das_aligned_free16(data);
             if ( next ) delete next;
         }
