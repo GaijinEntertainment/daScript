@@ -4235,7 +4235,7 @@ namespace das {
                 error("can't move temporary value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_pass_temporary);
             } else if ( expr->right->type->isPointer() && expr->right->type->smartPtr ) {
-                if ( !expr->right->type->ref && !safeExpression(expr) ) {
+                if ( !expr->right->type->ref && !safeExpression(expr) && !expr->right->rtti_isAscend() ) {
                     error("moving from the smart pointer value requires unsafe",  "",
                         "try moving from reference instead",
                         expr->at, CompilationError::unsafe);

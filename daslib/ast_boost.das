@@ -156,12 +156,10 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
     compiling_program().flags |= ProgramFlags needMacroModule
     var fn <- compiling_module() |> find_unique_function(name)
     if fn == null
-        unsafe
-            fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
+        fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
         fn.flags |= FunctionFlags init
-        unsafe
-            fn.result <- new [[TypeDecl() baseType=Type tVoid]]
+        fn.result <- new [[TypeDecl() baseType=Type tVoid]]
         var blk <- new [[ExprBlock() at=at]]
         var iblk <- new [[ExprBlock() at=at]]
         var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros_in_module"]]
@@ -202,8 +200,7 @@ class SetupAnyAnnotation : AstStructureAnnotation
         var cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
         self->setup_call(st,cll)
         var nee <- new [[ExprNew() at=st.at, initializer=true]]
-        unsafe
-            nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st)]]
+        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st)]]
         push(cll.arguments,nee)
         push(blk.list,cll)
         return true

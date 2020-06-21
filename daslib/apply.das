@@ -4,13 +4,13 @@ require ast
 require daslib/ast_boost
 
 [tag_function(apply_tag)]
-def apply(anything;visitor:string)
+def apply(anything;visitor_block)
     pass
 
 /*
-    def apply`Foo(self:Foo)
-        visitor("field1",self.field1)
-        visitor("field2",self.field2)
+    def apply`Foo(self:Foo;arg_field1:block<(value:field1-type):void>;arg_field2:...)
+        invoke(arg_field1,self.field1)
+        invoke(arg_field2,self.field2)
         ...
 */
 def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname,visitor:string; at:LineInfo )
@@ -18,8 +18,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname,visitor:string; at:Line
     assert(stype.dim.length==0)
     var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
     fn.flags |= FunctionFlags generated
-    unsafe
-        fn.result <- new [[TypeDecl() baseType=Type tVoid]]
+    fn.result <- new [[TypeDecl() baseType=Type tVoid]]
     push(fn.arguments, new [[Variable() name:="self",at=at, _type := clone_type(stype)]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
     for fld in stype.structType.fields

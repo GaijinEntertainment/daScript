@@ -1006,6 +1006,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isAscend() const override { return true; }
         ExpressionPtr   subexpr;
         TypeDeclPtr     ascType;
         uint32_t        stackTop = 0;
