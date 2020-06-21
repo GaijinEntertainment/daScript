@@ -47,7 +47,9 @@
 			"xstddef": "cpp",
 			"*.rh": "cpp",
 			"initializer_list": "cpp",
-			"xlocbuf": "cpp"
+			"xlocbuf": "cpp",
+			"algorithm": "cpp",
+			"cmath": "cpp"
 		}
 	}
 }

@@ -29,6 +29,7 @@ MAKE_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
 MAKE_TYPE_FACTORY(PassMacro,PassMacro)
 MAKE_TYPE_FACTORY(VariantMacro,VariantMacro)
 MAKE_TYPE_FACTORY(ReaderMacro,ReaderMacro)
+MAKE_TYPE_FACTORY(CallMacro,CallMacro)
 MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
 
@@ -126,6 +127,7 @@ MAKE_TYPE_FACTORY(ExprMakeBlock,ExprMakeBlock);
 MAKE_TYPE_FACTORY(ExprMakeGenerator,ExprMakeGenerator);
 MAKE_TYPE_FACTORY(ExprMemZero,ExprMemZero);
 MAKE_TYPE_FACTORY(ExprReader,ExprReader);
+MAKE_TYPE_FACTORY(ExprCallMacro,ExprCallMacro);
 MAKE_TYPE_FACTORY(ExprUnsafe,ExprUnsafe);
 
 DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
@@ -874,6 +876,13 @@ namespace das {
         }
     };
 
+    struct AstExprCallMacroAnnotation : AstExprLooksLikeCallAnnotation<ExprCallMacro> {
+        AstExprCallMacroAnnotation(ModuleLibrary & ml)
+            :  AstExprLooksLikeCallAnnotation<ExprCallMacro> ("ExprCallMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(macro)>("macro");
+        }
+    };
+
     struct AstExprUnsafeAnnotation : AstExpressionAnnotation<ExprUnsafe> {
         AstExprUnsafeAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprUnsafe> ("ExprUnsafe", ml) {
@@ -1503,6 +1512,7 @@ namespace das {
         IMPL_ADAPT(ExprMemZero);
         IMPL_ADAPT(ExprReader);
         IMPL_ADAPT(ExprUnsafe);
+        IMPL_ADAPT(ExprCallMacro);
     }
 // whole program
     void VisitorAdapter::preVisitProgram ( Program * expr )
@@ -1812,6 +1822,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprMakeGenerator);
     IMPL_BIND_EXPR(ExprMemZero);
     IMPL_BIND_EXPR(ExprReader);
+    IMPL_BIND_EXPR(ExprCallMacro);
     IMPL_BIND_EXPR(ExprUnsafe);
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
@@ -2035,6 +2046,34 @@ namespace das {
         }
     };
 
+    struct CallMacroAdapter : CallMacro {
+        CallMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : CallMacro(n), classPtr(pClass), context(ctx) {
+            fnVisit = adapt("visit",pClass,info);
+        }
+        virtual ExpressionPtr visit (  Program * prog, Module * mod, ExprCallMacro * expr ) override {
+            if ( fnVisit ) {
+                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprCallMacro>>
+                        (context,fnVisit,classPtr,prog,mod,expr);
+            } else {
+                return nullptr;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    protected:
+        Func    fnVisit;
+    };
+
+    struct AstCallMacroAnnotation : ManagedStructureAnnotation<CallMacro,false,true> {
+        AstCallMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("CallMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
+        }
+    };
+
     #include "ast.das.inc"
 
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
@@ -2044,6 +2083,20 @@ namespace das {
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context ) {
         if ( !module->addReaderMacro(newM, true) ) {
             context->throw_error_ex("can't add reader macro %s to module %s", newM->name.c_str(), module->name.c_str());
+        }
+    }
+
+    CallMacroPtr makeCallMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<CallMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleCallMacro ( Module * module, CallMacroPtr newM, Context * context ) {
+        if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
+            auto ecm = new ExprCallMacro(at, newM->name);
+            ecm->macro = newM.get();
+            return ecm;
+        }) ) {
+            context->throw_error_ex("can't add call macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
     }
 
@@ -2136,7 +2189,7 @@ namespace das {
         return make_smart<FunctionAnnotationAdapter>(name,(char *)pClass,info,context);
     }
 
-    bool addModuleFunction ( Module * module, FunctionPtr func, Context * context ) {
+    bool addModuleFunction ( Module * module, FunctionPtr func, Context * ) {
         return module->addFunction(func, true);
     }
 
@@ -2391,6 +2444,8 @@ namespace das {
             initRecAnnotation(vaa, lib);
             // reader macro
             addAnnotation(make_smart<AstReaderMacroAnnotation>(lib));
+            // call macro
+            addAnnotation(make_smart<AstCallMacroAnnotation>(lib));
             // expressions (in order of inheritance)
             addExpressionAnnotation(make_smart<AstExprBlockAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprLetAnnotation>(lib))->from("Expression");
@@ -2488,6 +2543,7 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprConstStringAnnotation>(lib))->from("ExprConst");
             addExpressionAnnotation(make_smart<AstExprReaderAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprUnsafeAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprCallMacroAnnotation>(lib))->from("ExprLooksLikeCall");
             // vector functions for custom containers
             addExtern<DAS_BIND_FUN(mks_vector_push)>(*this, lib, "push",
                 SideEffects::modifyArgument, "mks_vector_push")->generated = true;
@@ -2544,6 +2600,11 @@ namespace das {
                 SideEffects::modifyExternal, "makeReaderMacro");
             addExtern<DAS_BIND_FUN(addModuleReaderMacro)>(*this, lib,  "add_reader_macro",
                 SideEffects::modifyExternal, "addModuleReaderMacro");
+            // call macro
+            addExtern<DAS_BIND_FUN(makeCallMacro)>(*this, lib,  "make_call_macro",
+                SideEffects::modifyExternal, "makeCallMacro");
+            addExtern<DAS_BIND_FUN(addModuleCallMacro)>(*this, lib,  "add_call_macro",
+                SideEffects::modifyExternal, "addModulemakeCallMacro");
             // variant macro
             addAnnotation(make_smart<AstVariantMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVariantMacro)>(*this, lib,  "make_variant_macro",

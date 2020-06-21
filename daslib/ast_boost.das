@@ -214,6 +214,9 @@ class SetupReaderMacro : SetupAnyAnnotation
 class SetupVariantMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_variant_macro"
 
+class SetupCallMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_call_macro"
+
 class TagFunctionMacro : SetupAnyAnnotation
     override annotation_function_call : string = "setup_tag_annotation"
     tag : string
@@ -426,6 +429,7 @@ def setup
         add_new_function_annotation("tag_function",new TagFunctionAnnotation())
         add_new_structure_annotation("function_macro",new SetupFunctionAnnotatoin())
         add_new_structure_annotation("reader_macro",new SetupReaderMacro())
+        add_new_structure_annotation("call_macro",new SetupCallMacro())
         add_new_structure_annotation("variant_macro",new SetupVariantMacro())
         add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
         add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())

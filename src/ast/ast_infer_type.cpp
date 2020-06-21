@@ -5039,6 +5039,22 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // ExprCallMacro
+        virtual ExpressionPtr visit ( ExprCallMacro * expr ) override {
+            // implement call macro
+            auto errc = ctx.thisProgram->errors.size();
+            auto thisModule = ctx.thisProgram->thisModule.get();
+            auto substitute = expr->macro->visit(ctx.thisProgram, thisModule, expr);
+            if ( substitute ) {
+                reportAstChanged();
+                return substitute;
+            }
+            if ( errc==ctx.thisProgram->errors.size() ) {
+                error("unsupported call macro " + expr->macro->name,  "", "",
+                    expr->at, CompilationError::unsupported_call_macro);
+            }
+            return Visitor::visit(expr);
+        }
     // ExprLooksLikeCall
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);

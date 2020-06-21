@@ -166,6 +166,7 @@ namespace das {
         DECL_VISIT(ExprMemZero);
         DECL_VISIT(ExprReader);
         DECL_VISIT(ExprUnsafe);
+        DECL_VISIT(ExprCallMacro);
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override;
@@ -380,6 +381,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprMemZero);
         IMPL_BIND_EXPR(ExprReader);
         IMPL_BIND_EXPR(ExprUnsafe);
+        IMPL_BIND_EXPR(ExprCallMacro);
     };
 
 #undef FN_PREVISIT
@@ -414,6 +416,8 @@ namespace das {
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message );
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
+    void addModuleCallMacro ( Module * module, CallMacroPtr newM, Context * context );
+    CallMacroPtr makeCallMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
 

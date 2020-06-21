@@ -37,6 +37,9 @@ namespace das
     struct ReaderMacro;
     typedef smart_ptr<ReaderMacro> ReaderMacroPtr;
 
+    struct CallMacro;
+    typedef smart_ptr<CallMacro> CallMacroPtr;
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -720,6 +723,7 @@ namespace das
         bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );
         bool addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail = false );
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
+        bool addCallMacro ( const CallMacroPtr & ptr, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
@@ -756,6 +760,13 @@ namespace das
             callThis[fnName] = [fnName,args...](const LineInfo & at) {
                 return new TT(at, fnName, args...);
             };
+        }
+        __forceinline bool addCallMacro ( const string & fnName, ExprCallFactory && factory ) {
+            if ( callThis.find(fnName)!=callThis.end() ) {
+                return false;
+            }
+            callThis[fnName] = move(factory);
+            return true;
         }
     public:
         unique_ptr<Context>                         macroContext;
@@ -856,6 +867,15 @@ namespace das
         ReaderMacro ( const string na = "" ) : name(na) {}
         virtual bool accept ( Program *, Module *, ExprReader *, int, const LineInfo & ) { return false; }
         virtual ExpressionPtr visit (  Program *, Module *, ExprReader * ) { return nullptr; }
+        virtual void seal( Module * m ) { module = m; }
+        string name;
+        Module * module = nullptr;
+    };
+
+    struct ExprCallMacro;
+    struct CallMacro : ptr_ref_count {
+        CallMacro ( const string na = "" ) : name(na) {}
+        virtual ExpressionPtr visit (  Program *, Module *, ExprCallMacro * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
         string name;
         Module * module = nullptr;

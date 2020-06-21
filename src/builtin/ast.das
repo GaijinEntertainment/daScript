@@ -17,6 +17,7 @@ typedef
     PassMacroPtr = smart_ptr<PassMacro>
     VariantMacroPtr = smart_ptr<VariantMacro>
     ReaderMacroPtr = smart_ptr<ReaderMacro>
+    CallMacroPtr = smart_ptr<CallMacro>
 
 [generic]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -62,6 +63,9 @@ class AstVariantMacro
 class AstReaderMacro
     def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
+
+class AstCallMacro
+    def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
 
 class AstVisitor
 // program
@@ -427,6 +431,9 @@ class AstVisitor
 // unsafe
     def abstract preVisitExprUnsafe(expr:smart_ptr<ExprUnsafe>) : void
     def abstract visitExprUnsafe(expr:smart_ptr<ExprUnsafe>) : ExpressionPtr
+// call macro
+    def abstract preVisitExprCallMacro(expr:smart_ptr<ExprCallMacro>) : void
+    def abstract visitExprCallMacro(expr:smart_ptr<ExprCallMacro>) : ExpressionPtr
 
 def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
@@ -461,6 +468,14 @@ def make_reader_macro ( name : string; someClassPtr ) : ReaderMacroPtr
     else
         concept_assert(false,"expecting pointer to class")
         return [[ReaderMacroPtr]]
+
+def make_call_macro ( name : string; someClassPtr ) : CallMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_call_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[CallMacroPtr]]
 
 def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
     static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
@@ -499,6 +514,12 @@ def add_new_variant_macro ( name:string; someClassPtr )
 def add_new_reader_macro ( name:string; someClassPtr )
     var ann <- make_reader_macro(name, someClassPtr)
     this_module() |> add_reader_macro(ann)
+    unsafe
+        delete ann
+
+def add_new_call_macro ( name:string; someClassPtr )
+    var ann <- make_call_macro(name, someClassPtr)
+    this_module() |> add_call_macro(ann)
     unsafe
         delete ann
 

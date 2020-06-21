@@ -1809,6 +1809,25 @@ namespace das {
         return nullptr;
     }
 
+    // ExprCallMacro
+
+    ExpressionPtr ExprCallMacro::visit(Visitor & vis) {
+        vis.preVisit(this);
+        for ( auto & arg : arguments ) {
+            vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+            arg = arg->visit(vis);
+            arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+        }
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprCallMacro::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprCallMacro>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        cexpr->macro = macro;
+        return cexpr;
+    }
+
     // ExprLooksLikeCall
 
     ExpressionPtr ExprLooksLikeCall::visit(Visitor & vis) {
@@ -2277,9 +2296,10 @@ namespace das {
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
         library.foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findCall(funcName) )
+            if ( auto pp = pm->findCall(funcName) ) {
                 ptr.push_back(pp);
-            return false;
+            }
+            return true;
         }, moduleName);
         if ( ptr.size()==1 ) {
             return (*ptr.back())(at);

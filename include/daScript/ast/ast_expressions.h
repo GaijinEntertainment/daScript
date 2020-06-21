@@ -343,6 +343,16 @@ namespace das
         bool                    argumentsFailedToInfer = false;
     };
 
+    struct ExprCallMacro : ExprLooksLikeCall {
+        ExprCallMacro () { __rtti = "ExprCallMacro"; };
+        ExprCallMacro ( const LineInfo & a, const string & n )
+            : ExprLooksLikeCall(a,n) { __rtti = "ExprCallMacro"; }
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context &) const override { return nullptr; }
+        CallMacro * macro = nullptr;
+    };
+
     struct ExprCallFunc : ExprLooksLikeCall {
         ExprCallFunc () { __rtti = "ExprCallFunc"; };
         ExprCallFunc ( const LineInfo & a, const string & n )

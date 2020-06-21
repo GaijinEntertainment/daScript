@@ -513,6 +513,11 @@ namespace das {
             ss << "])";
             return Visitor::visit(c);
         }
+    // invoke
+        virtual void preVisit ( ExprInvoke * call ) override {
+            Visitor::preVisit(call);
+            ss << "invoke";
+        }
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);

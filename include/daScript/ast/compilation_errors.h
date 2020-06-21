@@ -115,6 +115,7 @@ namespace das
     ,   invalid_yield                           =   32104       // yield in block, yield in non generator, etc
 
     ,   unsupported_read_macro                  =   33100       // #what ""
+    ,   unsupported_call_macro                  =   33101       // apply failed etc
 
     ,   typeinfo_reference                      =   39901       //  typeinfo(sizeof type int&)
     ,   typeinfo_auto                           =   39902       //  typeinfo(typename type auto)

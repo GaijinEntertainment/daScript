@@ -1,14 +1,16 @@
 require daslib/apply
 
+struct Ups
+	t : int
+
 struct Foo
 	i : int
 	s : string
-
-def visit(name: string; value)
-	print("{name} = {value}\n")
+	u : Ups
 
 [export]
 def test
-	var foo : Foo
-	apply(foo,"visit")
+	let foo : Foo
+	apply(foo) <| $ ( name:string; value )
+		print("{name} = {value}\n")
 	return true
