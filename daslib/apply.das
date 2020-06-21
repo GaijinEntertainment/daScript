@@ -16,7 +16,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     fn.flags |= FunctionFlags generated
     fn.flags |= FunctionFlags privateFunction
     fn.result <- new [[TypeDecl() baseType=Type tVoid]]
-    push(fn.arguments, new [[Variable() name:="self",at=at, _type := clone_type(stype)]])   // self:Foo
+    push(fn.arguments, new [[Variable() name:="__self",at=at, _type := clone_type(stype)]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
     for fld in stype.structType.fields
         var argT <- new [[TypeDecl() baseType=Type tBlock]]                         // block<(name:string;x:field1type)>
@@ -27,14 +27,14 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         push(argT.argTypes, fldT)
         argT.firstType <- new [[TypeDecl() baseType=Type tVoid]]
         argT.flags = TypeDeclFlags constant
-        var argF <- new [[Variable() name:="arg_{fld.name}",at=at,_type <- argT]]   // arg_field1:block...
+        var argF <- new [[Variable() name:="__arg_{fld.name}",at=at,_type <- argT]]   // arg_field1:block...
         push(fn.arguments,argF)
         var cfield <- new [[ExprInvoke() at=at]]                                    // invoke()
-        var argb <- new [[ExprVar() at=at, name:="arg_{fld.name}"]]                 // arg_field1
+        var argb <- new [[ExprVar() at=at, name:="__arg_{fld.name}"]]                 // arg_field1
         push(cfield.arguments,argb)
         var argn <- new [[ExprConstString() at=at, value:=fld.name]]                // "name"
         push(cfield.arguments,argn)
-        var argvar <- new [[ExprVar() at=at, name:="self"]]                         // self
+        var argvar <- new [[ExprVar() at=at, name:="__self"]]                       // self
         var argfld <- new [[ExprField() at=at, name:=fld.name, value <- argvar]]    // self.name
         push(cfield.arguments,argfld)
         push(blk.list, cfield)
