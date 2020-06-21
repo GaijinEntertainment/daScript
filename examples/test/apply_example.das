@@ -2,12 +2,19 @@ require daslib/apply
 require daslib/json
 require daslib/json_boost
 
+struct Bar
+	x, y : float
+
 struct Foo
 	i : int
 	s : string
 	q : double[3]
+	b : Bar
 
 def JV ( i : int )
+	return JV ( double(i) )
+
+def JV ( i : float )
 	return JV ( double(i) )
 
 def saveToJson_any ( value ) : JsonValue?
@@ -30,6 +37,7 @@ def saveToJson ( value ) : JsonValue?
 		return saveToJson_dim(value)
 	static_elif typeinfo(is_struct value)
 		return saveToJson_struct(value)
+	// todo: support table, array, etc
 	else
 		return saveToJson_any(value)
 
