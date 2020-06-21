@@ -14,6 +14,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.dim.length==0)
     var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
     fn.flags |= FunctionFlags generated
+    fn.flags |= FunctionFlags privateFunction
     fn.result <- new [[TypeDecl() baseType=Type tVoid]]
     push(fn.arguments, new [[Variable() name:="self",at=at, _type := clone_type(stype)]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
