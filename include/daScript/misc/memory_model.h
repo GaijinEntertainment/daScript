@@ -41,9 +41,10 @@ namespace das {
             uint32_t maxt = total / 32;
             for ( uint32_t t=0; t!=maxt; ++t ) {
                 uint32_t b = bits[look];
-                if ( b != 0xffffffff ) {
-                    uint32_t j = __builtin_ctz(~b);
-                    bits[look] = b | (1<<j);
+                uint32_t nb = ~b;
+                if ( nb ) {
+                    uint32_t j = 31 - __builtin_clz(nb);
+                    bits[look] = b | (1u<<j);
                     allocated ++;
                     uint32_t ofs = (look * 32 + j);
                     DAS_ASSERT(ofs < total);
@@ -56,26 +57,26 @@ namespace das {
             return nullptr;
         }
         __forceinline void free ( char * ptr ) {
-            auto idx = (ptr - data) / size;
-            DAS_ASSERT ( idx>=0 && idx<total );
+            ptrdiff_t idx = (ptr - data) / size;
+            DAS_ASSERT ( idx>=0 && idx<ptrdiff_t(total) );
             uint32_t uidx = uint32_t(idx);
             uint32_t i = uidx >> 5;
             uint32_t j = uidx & 31;
             uint32_t b = bits[i];
-            DAS_ASSERT((b & (1<<j))!=0 && "calling free on the pointer, which is already free");
-            bits[i] = b ^ (1<<j);
+            DAS_ASSERT((b & (1u<<j))!=0 && "calling free on the pointer, which is already free");
+            bits[i] = b ^ (1u<<j);
             look = i;
             allocated --;
         }
         __forceinline void mark ( char * ptr ) {
-            auto idx = (ptr - data) / size;
-            DAS_ASSERT ( idx>=0 && idx<total );
+            ptrdiff_t idx = (ptr - data) / size;
+            DAS_ASSERT ( idx>=0 && idx<ptrdiff_t(total) );
             uint32_t uidx = uint32_t(idx);
             uint32_t i = uidx >> 5;
             uint32_t j = uidx & 31;
             uint32_t b = bits[i];
-            if ( !(b & (1<<j)) ) {
-                bits[i] = b | (1<<j);
+            if ( !(b & (1u<<j)) ) {
+                bits[i] = b | (1u<<j);
                 allocated ++;
             }
         }

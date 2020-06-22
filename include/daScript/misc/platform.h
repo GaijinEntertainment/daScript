@@ -100,11 +100,6 @@ __forceinline uint32_t __builtin_clz(uint32_t x) {
     _BitScanReverse(&r, x);
     return uint32_t(31 - r);
 }
-__forceinline uint32_t __builtin_ctz(uint32_t x) {
-    unsigned long r = 0;
-    _BitScanForward(&r, x);
-    return uint32_t(31 - r);
-}
 #endif
 
 #ifdef _MSC_VER

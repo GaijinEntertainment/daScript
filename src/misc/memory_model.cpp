@@ -225,20 +225,20 @@ namespace das {
             if ( !initialSize ) {
                 initialSize = default_initial_size;
             }
-            chunk = new HeapChunk ( max(initialSize, s), nullptr );
+            chunk = new HeapChunk ( das::max(initialSize, s), nullptr );
         }
         for ( ;; ) {
             if ( char * res = chunk->allocate(s) ) {
                 return res;
             }
-            chunk = new HeapChunk ( max(grow(chunk->size), s), chunk);
+            chunk = new HeapChunk ( das::max(grow(chunk->size), s), chunk);
         }
     }
 
     void LinearChunkAllocator::reset() {
         if ( chunk && chunk->next ) {
             auto maxAllocated = (uint32_t(bytesAllocated())+1023) & ~1023;
-            initialSize = max ( initialSize, maxAllocated);
+            initialSize = das::max(initialSize, maxAllocated);
             delete chunk;
             chunk = nullptr;
         } else if ( chunk ) {

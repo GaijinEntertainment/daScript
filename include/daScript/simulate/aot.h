@@ -1032,13 +1032,13 @@ namespace das {
 
     template <typename TT>
     struct das_new_persistent {
-        static __forceinline TT * make ( Context * __context__ ) {
+        static __forceinline TT * make ( Context * ) {
             char * data = (char *) das_aligned_alloc16(sizeof(TT));
             memset ( data, 0, sizeof(TT) );
             return (TT *) data;
         }
         template <typename QQ>
-        static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
+        static __forceinline TT * make_and_init ( Context *, QQ && init ) {
             TT * data = (TT *) das_aligned_alloc16(sizeof(TT));
             *data = init();
             return data;
