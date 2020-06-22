@@ -135,8 +135,8 @@ namespace das {
         virtual void setGrowFunction ( CustomGrowFunction && fun ) = 0;
     public:
 #if DAS_TRACK_ALLOCATIONS
-        virtual void mark_location ( void *, LineInfo * ) = 0;
-        virtual  void mark_comment ( void *, const char * ) = 0;
+        virtual void mark_location ( void *, LineInfo * )  {}
+        virtual  void mark_comment ( void *, const char * ) {}
 #else
         __forceinline void mark_location ( void *, LineInfo * ) {}
         __forceinline void mark_comment ( void *, const char * ) {}
@@ -196,6 +196,9 @@ namespace das {
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
+        virtual void mark_location ( void * ptr, LineInfo * at ) override  { model.mark_location(ptr,at); };
+        virtual  void mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); };
+
     protected:
         MemoryModel model;
     };
@@ -260,6 +263,8 @@ namespace das {
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
+        virtual void mark_location ( void * ptr, LineInfo * at ) override { model.mark_location(ptr,at); };
+        virtual  void mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); };
     protected:
         MemoryModel model;
     };

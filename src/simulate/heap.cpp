@@ -70,7 +70,7 @@ namespace das {
             das_safe_map<LineInfo,int64_t> bytesPerLocation;
             for ( const auto & ppl : model.bigStuffAt) {
                 auto ptr = ppl.first;
-                auto bytes = bigStuff[ptr];
+                auto bytes = model.bigStuff[ptr];
                 bytesPerLocation[*(ppl.second)] += bytes;
             }
             if ( !bytesPerLocation.empty() ) {
@@ -189,7 +189,6 @@ namespace das {
             if ( auto str = (char *)allocate(length + 1) ) {
 #if DAS_TRACK_ALLOCATIONS
                 if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
-                header->tracking_id = g_tracker_string ++;
 #endif
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
