@@ -17,29 +17,20 @@ def JV ( i : int )
 def JV ( i : float )
 	return JV ( double(i) )
 
-def saveToJson_any ( value ) : JsonValue?
-	return JV(value)
-
-def saveToJson_dim ( val : auto[] ) : JsonValue?
+def saveToJson ( value : auto[] ) : JsonValue?
 	var arr : array<JsonValue?>
-	for x in val
+	for x in value
 		push(arr, saveToJson(x))
 	return JV(arr)
 
-def saveToJson_struct ( value ) : JsonValue?
-	var tab : table<string; JsonValue?>
-	apply(value) <| $ ( name:string; field )
-		tab[name] = saveToJson(field)
-	return JV(tab)
-
 def saveToJson ( value ) : JsonValue?
-	static_if typeinfo(is_dim value)
-		return saveToJson_dim(value)
-	static_elif typeinfo(is_struct value)
-		return saveToJson_struct(value)
-	// todo: support table, array, etc
+	static_if typeinfo(is_struct value)
+		var tab : table<string; JsonValue?>
+		apply(value) <| $ ( name:string; field )
+			tab[name] = saveToJson(field)
+		return JV(tab)
 	else
-		return saveToJson_any(value)
+		return JV(value)
 
 [export]
 def test
