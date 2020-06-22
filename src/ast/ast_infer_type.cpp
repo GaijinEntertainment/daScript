@@ -2556,9 +2556,6 @@ namespace das {
                 } else if ( expr->trait=="is_pointer" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
-                } else if ( expr->trait=="is_string" ) {
-                    reportAstChanged();
-                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isString());
                 } else if ( expr->trait=="is_iterator" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isGoodIteratorType());
@@ -5310,7 +5307,7 @@ namespace das {
             size_t nArgs = expr->arguments.size();
             bool less = false;
             bool more = false;
-            for ( auto aI = 0; aI!=nArgs; ++aI ) {
+            for ( size_t aI = 0; aI!=nArgs; ++aI ) {
                 const auto & f1A = f1->arguments[aI]->type;
                 const auto & f2A = f2->arguments[aI]->type;
                 int cmpr = moreSpecialized(f1A,f2A,expr->arguments[aI]->type);

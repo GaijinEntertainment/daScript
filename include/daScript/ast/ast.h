@@ -682,7 +682,7 @@ namespace das
         string              extra;
         string              fixme;
         LineInfo            at;
-        CompilationError    cerr;
+        CompilationError    cerr = CompilationError::unspecified;
     };
 
     enum class ModuleAotType {
