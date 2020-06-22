@@ -196,9 +196,10 @@ namespace das {
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
+#if DAS_TRACK_ALLOCATIONS
         virtual void mark_location ( void * ptr, LineInfo * at ) override  { model.mark_location(ptr,at); };
         virtual  void mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); };
-
+#endif
     protected:
         MemoryModel model;
     };
@@ -263,8 +264,10 @@ namespace das {
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
+#if DAS_TRACK_ALLOCATIONS
         virtual void mark_location ( void * ptr, LineInfo * at ) override { model.mark_location(ptr,at); };
         virtual  void mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); };
+#endif
     protected:
         MemoryModel model;
     };
