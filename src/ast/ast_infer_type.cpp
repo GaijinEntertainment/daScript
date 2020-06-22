@@ -5192,33 +5192,7 @@ namespace das {
             return "__::" + name;
         }
 
-        int computeSubstituteDistance ( const TypeDeclPtr & argType, const TypeDeclPtr & funType ) const {
-            if ( argType->isPointer() ) {
-                bool avoid = argType->firstType != nullptr;
-                bool fvoid = funType->firstType != nullptr;
-                if ( avoid && fvoid ) return 0;         // both null, no difference
-                else if ( avoid ) return 1;             // passign void to non void function - 1
-                else if ( fvoid ) return 1;             // passing non void to void function - 1
-                else return computeSubstituteDistance(argType->firstType,funType->firstType);
-            } else if ( argType->isStructure() ) {
-                DAS_ASSERT ( argType->structType != funType->structType );
-                int distance = 0;
-                for ( auto st = argType->structType; st != nullptr; st = st->parent ) {
-                    if ( st == funType->structType ) {
-                        break;
-                    }
-                    distance ++;
-                }
-                return distance;
-            } else if ( argType->isHandle() ) {
-                DAS_ASSERT ( argType->annotation != funType->annotation );
-                return 1;
-            } else {
-                DAS_ASSERT ( 0 && "we should not be here" );
-                return 0;
-            }
-        }
-
+        // however many casts is where its at
         int computeSubstituteDistance ( ExprLooksLikeCall * expr, const FunctionPtr & fn ) const {
             int distance = 0;
             for ( size_t i=0; i!=expr->arguments.size(); ++i ) {
@@ -5226,10 +5200,128 @@ namespace das {
                 const auto & funType = fn->arguments[i]->type;
                 if ( !argType->isSameType ( *funType, RefMatters::no, ConstMatters::no,
                     TemporaryMatters::no, AllowSubstitute::no) ) {
-                    distance += computeSubstituteDistance(argType,funType);
+                    distance ++;
                 }
             }
             return distance;
+        }
+
+        // -1 - less specialized, +1 - more specialized, 0 - we don't know
+        int moreSpecialized ( const TypeDeclPtr & t1, const TypeDeclPtr & t2, TypeDeclPtr & passType  ) {
+        // 1. non auto is more specialized than auto
+            bool a1 = t1->isAutoOrAlias();
+            bool a2 = t2->isAutoOrAlias();
+            if ( a1!=a2 ) {             // if one is auto
+                return a1 ? -1 : 1;
+            }
+        // 2. if both non-auto, the one without cast is more specialized
+            if ( !a1 && !a2 ) {        // if both solid types
+                bool s1 = passType->isSameType(*t1,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no);
+                bool s2 = passType->isSameType(*t2,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no);
+                if ( s1!=s2 ) {
+                    return s1 ? 1 : -1;
+                } else {
+                    return 0;
+                }
+            }
+    // at this point we are dealing with 2 auto types
+        // 3. one with dim is more specialized, than one without
+        //      if both have dim, one with actual value is more specialized, than the other one
+            int d1 = t1->dim.size() ? t1->dim.back() : 0;
+            int d2 = t2->dim.size() ? t2->dim.back() : 0;
+            if ( d1!=d2 ) {
+                if ( d1 && d2 ) {
+                    return d1==-1 ? -1 : 1;
+                } else {
+                    return d1 ? 1 : -1;
+                }
+            }
+        // 4. the one with base type of auto\alias is less specialized
+        //      if both are auto\alias - we assume its the same level of specialization
+            bool ba1 = t1->baseType==Type::autoinfer || t1->baseType==Type::alias;
+            bool ba2 = t2->baseType==Type::autoinfer || t2->baseType==Type::alias;
+            if ( ba1!=ba2 ) {
+                return ba1 ? -1 : 1;
+            } else if ( ba1 && ba2 ) {
+                return 0;
+            }
+    // at this point base type is not auto for both, so lets compare the subtypes
+            DAS_ASSERT(t1->baseType==passType->baseType && "how did it match otherwise?");
+            DAS_ASSERT(t2->baseType==passType->baseType && "how did it match otherwise?");
+        // if its an array or a pointer, we compare specialization of subtype
+            if ( t1->baseType==Type::tPointer || t1->baseType==Type::tArray ) {
+                return moreSpecialized(t1->firstType, t2->firstType, passType->firstType);
+        // if its a table, we compare both subtypes
+            } else if ( t1->baseType==Type::tTable ) {
+                int i1 = moreSpecialized(t1->firstType, t2->firstType, passType->firstType);
+                int i2 = moreSpecialized(t1->secondType, t2->secondType, passType->secondType);
+                bool less = (i1<0) || (i2<0);
+                bool more = (i1>0) || (i2>0);
+                if ( less && more ) return 0;
+                else if ( less ) return -1;
+                else if ( more ) return 1;
+                else return 0;
+        // if its a tuple or a variant, we compare all subtypes
+            } else if ( t1->baseType==Type::tVariant || t1->baseType==Type::tTuple ) {
+                bool less = false;
+                bool more = false;
+                DAS_ASSERT(t1->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
+                DAS_ASSERT(t2->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
+                for ( size_t aI=0; aI!=t1->argTypes.size(); ++aI ) {
+                    int cmpr = moreSpecialized(
+                        t1->argTypes[aI],
+                        t2->argTypes[aI],
+                        passType->argTypes[aI]);
+                    if ( cmpr<0 ) less = true;
+                    else if ( cmpr>0 ) more = true;
+                }
+                if ( less && more ) return 0;
+                else if ( less ) return -1;
+                else if ( more ) return 1;
+                else return 0;
+        // if its a block, a function, or a lambda, we compare all subtypes and firstType (result)
+            } else if ( t1->baseType==Type::tBlock || t1->baseType==Type::tLambda || t1->baseType==Type::tFunction ) {
+                bool less = false;
+                bool more = false;
+                int cmpr = moreSpecialized(t1->firstType, t2->firstType, passType->firstType);
+                if ( cmpr<0 ) less = true;
+                else if ( cmpr>0 ) more = true;
+                DAS_ASSERT(t1->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
+                DAS_ASSERT(t2->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
+                for ( size_t aI=0; aI!=t1->argTypes.size(); ++aI ) {
+                    cmpr = moreSpecialized(
+                        t1->argTypes[aI],
+                        t2->argTypes[aI],
+                        passType->argTypes[aI]);
+                    if ( cmpr<0 ) less = true;
+                    else if ( cmpr>0 ) more = true;
+                }
+                if ( less && more ) return 0;
+                else if ( less ) return -1;
+                else if ( more ) return 1;
+                else return 0;
+            }
+            return 0;
+        }
+
+        // compares two generics
+        //  one generic is more specialized than the other, if ALL arguments are more specialized or the
+        bool copmareFunctionSpecialization ( const FunctionPtr & f1, const FunctionPtr & f2, ExprLooksLikeCall * expr ) {
+            size_t nArgs = expr->arguments.size();
+            bool less = false;
+            bool more = false;
+            for ( auto aI = 0; aI!=nArgs; ++aI ) {
+                const auto & f1A = f1->arguments[aI]->type;
+                const auto & f2A = f2->arguments[aI]->type;
+                int cmpr = moreSpecialized(f1A,f2A,expr->arguments[aI]->type);
+                if ( cmpr<0 ) less = true;
+                else if ( cmpr>0 ) more = true;
+            }
+            if ( more && !less ) {
+                return true;
+            } else {
+                return false;
+            }
         }
 
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
@@ -5266,28 +5358,13 @@ namespace das {
                     if ( fnm[count].first != depth ) break;
                     count ++;
                 }
-                /*
-                TextPrinter tp;
-                for ( auto t : fnm ) {
-                    tp << t.first << " " << t.second->getMangledName() << "\n";
-                }
-                tp << "\n";
-                */
                 if ( count == 1 ) {
                     functions.resize(1);
                     functions[0] = fnm[0].second;
                 }
             }
-
             if ( functions.size()==1 ) {
                 auto funcC = functions.back();
-                if ( funcC->fromGeneric ) { // we ignore generics, if there is solid non-generic match which did not come from a generic
-                    // if its from wrong generic, or if it could be from multiple ones - its a failure
-                    if ( (generics.size()>1) || (generics.size()==1 && funcC->fromGeneric!=generics.back().get()) ) {
-                        reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
-                        return nullptr;
-                    }
-                }
                 if ( funcC->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -5330,9 +5407,19 @@ namespace das {
                         expr->arguments[iA] = Expression::autoDereference(expr->arguments[iA]);
                 // and all good
                 return funcC;
-            } else if ( functions.size()>1 || generics.size()>1 ) {
+            } else if ( functions.size()>1 ) {
                 reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
+                // if there is more than one, we pick more specialized
+                if ( generics.size()>1 ) {
+                    stable_sort(generics.begin(), generics.end(), [&](const FunctionPtr & f1, const FunctionPtr & f2 ){
+                        return copmareFunctionSpecialization(f1,f2,expr);
+                    });
+                    // if one is most specialized, we pick it, otherwise we report all of them
+                    if ( copmareFunctionSpecialization(generics[0],generics[1],expr) ) {
+                        generics.resize(1);
+                    }
+                }
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
                     auto genName = getGenericInstanceName(oneGeneric.get());
@@ -5434,6 +5521,8 @@ namespace das {
                         expr->name = callCloneName(clone->name);
                         reportAstChanged();
                     }
+                } else if ( generics.size()>1 ) {
+                    reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {

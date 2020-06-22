@@ -1,6 +1,6 @@
 expect 30304, 30303
 
-def madd(a,b,c)
+def madd(a;b:int;c)
     return a*b+c
 
 def madd(a,b;c:int)
