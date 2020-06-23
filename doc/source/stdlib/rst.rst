@@ -76,9 +76,9 @@ Document writers
 
 .. das:function:: document(name: string const; mod: rtti::Module? const; fname: string const; substname: string const; groups: array<rst::DocGroup> const)
 
-arguments are
-
 +---------+---------------------------------------------------------+
++argument +argument type                                            +
++=========+=========================================================+
 +name     +string const                                             +
 +---------+---------------------------------------------------------+
 +mod      + :ref:`rtti::Module <handle-rtti-Module>` ? const        +
@@ -97,9 +97,9 @@ arguments are
 
 .. das:function:: document_annotations(doc_file: file; mod: rtti::Module? const)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -112,9 +112,9 @@ arguments are
 
 .. das:function:: document_bitfield(doc_file: file; value: TypeDeclPtr)
 
-arguments are
-
 +--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
 +doc_file+ :ref:`file <alias-file>`               +
 +--------+----------------------------------------+
 +value   + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
@@ -127,9 +127,9 @@ arguments are
 
 .. das:function:: document_classes(doc_file: file; mod: rtti::Module? const)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -142,9 +142,9 @@ arguments are
 
 .. das:function:: document_enumerations(doc_file: file; mod: rtti::Module? const)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -157,9 +157,9 @@ arguments are
 
 .. das:function:: document_function(doc_file: file; mod: rtti::Module? const; func: FunctionPtr)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -174,9 +174,9 @@ arguments are
 
 .. das:function:: document_function_arguments(doc_file: file; argNames: array<string> const; argTypes: array<ast::TypeDecl?> const)
 
-arguments are
-
 +--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
 +doc_file+ :ref:`file <alias-file>`                                 +
 +--------+----------------------------------------------------------+
 +argNames+array<string> const                                       +
@@ -191,9 +191,9 @@ arguments are
 
 .. das:function:: document_function_declaration(doc_file: file; domain: string const; func_name: string const; argNames: array<string> const; argTypes: array<ast::TypeDecl?> const; resType: TypeDeclPtr)
 
-arguments are
-
 +---------+----------------------------------------------------------+
++argument +argument type                                             +
++=========+==========================================================+
 +doc_file + :ref:`file <alias-file>`                                 +
 +---------+----------------------------------------------------------+
 +domain   +string const                                              +
@@ -214,9 +214,9 @@ arguments are
 
 .. das:function:: document_functions(doc_file: file; mod: rtti::Module? const; groups: array<rst::DocGroup> const)
 
-arguments are
-
 +--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
 +doc_file+ :ref:`file <alias-file>`                                +
 +--------+---------------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const        +
@@ -231,9 +231,9 @@ arguments are
 
 .. das:function:: document_global_constant(doc_file: file; mod: rtti::Module? const; value: VariablePtr)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -248,9 +248,9 @@ arguments are
 
 .. das:function:: document_global_constants(doc_file: file; mod: rtti::Module? const)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -263,9 +263,9 @@ arguments are
 
 .. das:function:: document_structure(doc_file: file; mod: rtti::Module? const; value: StructurePtr)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -280,9 +280,9 @@ arguments are
 
 .. das:function:: document_structure_annotations(doc_file: file; mod: rtti::Module? const)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -295,9 +295,9 @@ arguments are
 
 .. das:function:: document_structures(doc_file: file; mod: rtti::Module? const)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -310,9 +310,9 @@ arguments are
 
 .. das:function:: document_topic(doc_file: file; topic: string const)
 
-arguments are
-
 +--------+--------------------------+
++argument+argument type             +
++========+==========================+
 +doc_file+ :ref:`file <alias-file>` +
 +--------+--------------------------+
 +topic   +string const              +
@@ -325,9 +325,9 @@ arguments are
 
 .. das:function:: document_typedefs(doc_file: file; mod: rtti::Module? const)
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -340,9 +340,9 @@ arguments are
 
 .. das:function:: document_variant(doc_file: file; value: TypeDeclPtr)
 
-arguments are
-
 +--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
 +doc_file+ :ref:`file <alias-file>`               +
 +--------+----------------------------------------+
 +value   + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
@@ -355,9 +355,9 @@ arguments are
 
 .. das:function:: document_warning(doc_file: file; issue: string const)
 
-arguments are
-
 +--------+--------------------------+
++argument+argument type             +
++========+==========================+
 +doc_file+ :ref:`file <alias-file>` +
 +--------+--------------------------+
 +issue   +string const              +
@@ -372,9 +372,9 @@ arguments are
 
 document_annotation returns auto
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -391,9 +391,9 @@ arguments are
 
 document_class_method returns auto
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -412,9 +412,9 @@ arguments are
 
 document_enumeration returns auto
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -431,9 +431,9 @@ arguments are
 
 document_structure_annotation returns auto
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -450,9 +450,9 @@ arguments are
 
 document_typedef returns auto
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +doc_file+ :ref:`file <alias-file>`                        +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -480,11 +480,11 @@ Descriptions
 
 describe_type returns string
 
-arguments are
-
-+--+---------------------------------------------------+
-+td+ :ref:`ast::TypeDecl <handle-ast-TypeDecl>` ? const+
-+--+---------------------------------------------------+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++td      + :ref:`ast::TypeDecl <handle-ast-TypeDecl>` ? const+
++--------+---------------------------------------------------+
 
 
 |function-rst-describe_type|
@@ -495,11 +495,11 @@ arguments are
 
 describe_type returns string
 
-arguments are
-
-+--+----------------------------------------+
-+td+ :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
-+--+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++td      + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
++--------+----------------------------------------+
 
 
 |function-rst-describe_type|
@@ -510,11 +510,11 @@ arguments are
 
 describe_type_short returns string
 
-arguments are
-
-+--+---------------------------------------------------+
-+td+ :ref:`ast::TypeDecl <handle-ast-TypeDecl>` ? const+
-+--+---------------------------------------------------+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++td      + :ref:`ast::TypeDecl <handle-ast-TypeDecl>` ? const+
++--------+---------------------------------------------------+
 
 
 |function-rst-describe_type_short|
@@ -525,11 +525,11 @@ arguments are
 
 describe_type_short returns string
 
-arguments are
-
-+--+----------------------------------------+
-+td+ :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
-+--+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++td      + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
++--------+----------------------------------------+
 
 
 |function-rst-describe_type_short|
@@ -554,11 +554,11 @@ Label makers
 
 alias_label_name returns string
 
-arguments are
-
-+--+----------------------------------------+
-+td+ :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
-+--+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++td      + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
++--------+----------------------------------------+
 
 
 |function-rst-alias_label_name|
@@ -569,11 +569,11 @@ arguments are
 
 enum_label_name returns string
 
-arguments are
-
-+-----+---------------------------------------------------------+
-+value+ :ref:`ast::Enumeration <handle-ast-Enumeration>` ? const+
-+-----+---------------------------------------------------------+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++value   + :ref:`ast::Enumeration <handle-ast-Enumeration>` ? const+
++--------+---------------------------------------------------------+
 
 
 |function-rst-enum_label_name|
@@ -584,11 +584,11 @@ arguments are
 
 enum_label_name returns string
 
-arguments are
-
-+-----+----------------------------------------------+
-+value+ :ref:`EnumerationPtr <alias-EnumerationPtr>` +
-+-----+----------------------------------------------+
++--------+----------------------------------------------+
++argument+argument type                                 +
++========+==============================================+
++value   + :ref:`EnumerationPtr <alias-EnumerationPtr>` +
++--------+----------------------------------------------+
 
 
 |function-rst-enum_label_name|
@@ -599,11 +599,11 @@ arguments are
 
 function_label_name returns string
 
-arguments are
-
-+-----+----------------------------------------+
-+value+ :ref:`FunctionPtr <alias-FunctionPtr>` +
-+-----+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++value   + :ref:`FunctionPtr <alias-FunctionPtr>` +
++--------+----------------------------------------+
 
 
 |function-rst-function_label_name|
@@ -614,11 +614,11 @@ arguments are
 
 global_label_name returns string
 
-arguments are
-
-+-----+---------------------------------------------------+
-+value+ :ref:`ast::Variable <handle-ast-Variable>` ? const+
-+-----+---------------------------------------------------+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++value   + :ref:`ast::Variable <handle-ast-Variable>` ? const+
++--------+---------------------------------------------------+
 
 
 |function-rst-global_label_name|
@@ -629,11 +629,11 @@ arguments are
 
 global_label_name returns string
 
-arguments are
-
-+-----+----------------------------------------+
-+value+ :ref:`VariablePtr <alias-VariablePtr>` +
-+-----+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++value   + :ref:`VariablePtr <alias-VariablePtr>` +
++--------+----------------------------------------+
 
 
 |function-rst-global_label_name|
@@ -644,11 +644,11 @@ arguments are
 
 struct_label_name returns string
 
-arguments are
-
-+-----+-----------------------------------------------------+
-+value+ :ref:`ast::Structure <handle-ast-Structure>` ? const+
-+-----+-----------------------------------------------------+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++value   + :ref:`ast::Structure <handle-ast-Structure>` ? const+
++--------+-----------------------------------------------------+
 
 
 |function-rst-struct_label_name|
@@ -659,11 +659,11 @@ arguments are
 
 struct_label_name returns string
 
-arguments are
-
-+-----+------------------------------------------+
-+value+ :ref:`StructurePtr <alias-StructurePtr>` +
-+-----+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++value   + :ref:`StructurePtr <alias-StructurePtr>` +
++--------+------------------------------------------+
 
 
 |function-rst-struct_label_name|
@@ -674,11 +674,11 @@ arguments are
 
 handle_label_name returns auto
 
-arguments are
-
-+-----+----------+
-+value+auto const+
-+-----+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++value   +auto const   +
++--------+-------------+
 
 
 |function-rst-handle_label_name|
@@ -692,7 +692,7 @@ RST section makers
   *  :ref:`make_header (name:string const;lab:string const) : string <function-_at_rst_c__c_make_header_string_hh_const_string_hh_const>` 
   *  :ref:`make_label (name:string const) : string <function-_at_rst_c__c_make_label_string_hh_const>` 
   *  :ref:`make_ref (name:string const;text:string const) : string <function-_at_rst_c__c_make_ref_string_hh_const_string_hh_const>` 
-  *  :ref:`make_table (tab:array\<array\<string\>\> const) : string <function-_at_rst_c__c_make_table__hh_array_hh__hh_array_hh_string_hh_const>` 
+  *  :ref:`make_table (tab:array\<array\<string\>\> const;withHeader:bool const) : string <function-_at_rst_c__c_make_table__hh_array_hh__hh_array_hh_string_hh_const_bool_hh_const>` 
 
 .. _function-_at_rst_c__c_make_domain_string_hh_const:
 
@@ -700,11 +700,11 @@ RST section makers
 
 make_domain returns string
 
-arguments are
-
-+----+------------+
-+attr+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++attr    +string const +
++--------+-------------+
 
 
 |function-rst-make_domain|
@@ -715,13 +715,13 @@ arguments are
 
 make_group returns string
 
-arguments are
-
-+----+------------+
-+name+string const+
-+----+------------+
-+plus+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
++plus    +string const +
++--------+-------------+
 
 
 |function-rst-make_group|
@@ -732,13 +732,13 @@ arguments are
 
 make_header returns string
 
-arguments are
-
-+----+------------+
-+name+string const+
-+----+------------+
-+lab +string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
++lab     +string const +
++--------+-------------+
 
 
 |function-rst-make_header|
@@ -749,11 +749,11 @@ arguments are
 
 make_label returns string
 
-arguments are
-
-+----+------------+
-+name+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
 
 
 |function-rst-make_label|
@@ -764,28 +764,30 @@ arguments are
 
 make_ref returns string
 
-arguments are
-
-+----+------------+
-+name+string const+
-+----+------------+
-+text+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
++text    +string const +
++--------+-------------+
 
 
 |function-rst-make_ref|
 
-.. _function-_at_rst_c__c_make_table__hh_array_hh__hh_array_hh_string_hh_const:
+.. _function-_at_rst_c__c_make_table__hh_array_hh__hh_array_hh_string_hh_const_bool_hh_const:
 
-.. das:function:: make_table(tab: array<array<string>> const)
+.. das:function:: make_table(tab: array<array<string>> const; withHeader: bool const)
 
 make_table returns string
 
-arguments are
-
-+---+--------------------------+
-+tab+array<array<string>> const+
-+---+--------------------------+
++----------+--------------------------+
++argument  +argument type             +
++==========+==========================+
++tab       +array<array<string>> const+
++----------+--------------------------+
++withHeader+bool const                +
++----------+--------------------------+
 
 
 |function-rst-make_table|
@@ -803,11 +805,11 @@ Documentation queries
 
 function_needs_documenting returns bool const
 
-arguments are
-
-+----+----------------------------------------+
-+func+ :ref:`FunctionPtr <alias-FunctionPtr>` +
-+----+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>` +
++--------+----------------------------------------+
 
 
 |function-rst-function_needs_documenting|
@@ -818,11 +820,11 @@ arguments are
 
 argument_needs_documenting returns auto
 
-arguments are
-
-+--+----------+
-+tt+auto const+
-+--+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++tt      +auto const   +
++--------+-------------+
 
 
 |function-rst-argument_needs_documenting|
@@ -840,15 +842,15 @@ Group operations
 
 .. das:function:: append_to_group_by_regex(group: DocGroup; mod: rtti::Module? const; reg: Regex)
 
-arguments are
-
-+-----+-------------------------------------------------+
-+group+ :ref:`rst::DocGroup <struct-rst-DocGroup>`      +
-+-----+-------------------------------------------------+
-+mod  + :ref:`rtti::Module <handle-rtti-Module>` ? const+
-+-----+-------------------------------------------------+
-+reg  + :ref:`regex::Regex <struct-regex-Regex>`        +
-+-----+-------------------------------------------------+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++group   + :ref:`rst::DocGroup <struct-rst-DocGroup>`      +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++reg     + :ref:`regex::Regex <struct-regex-Regex>`        +
++--------+-------------------------------------------------+
 
 
 |function-rst-append_to_group_by_regex|
@@ -859,11 +861,11 @@ arguments are
 
 debug_group returns  :ref:`rst::DocGroup <struct-rst-DocGroup>` 
 
-arguments are
-
-+-----+--------------------------------------------+
-+group+ :ref:`rst::DocGroup <struct-rst-DocGroup>` +
-+-----+--------------------------------------------+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++group   + :ref:`rst::DocGroup <struct-rst-DocGroup>` +
++--------+--------------------------------------------+
 
 
 |function-rst-debug_group|
@@ -874,15 +876,15 @@ arguments are
 
 group_by_regex returns  :ref:`rst::DocGroup <struct-rst-DocGroup>` 
 
-arguments are
-
-+----+-------------------------------------------------+
-+name+string const                                     +
-+----+-------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const+
-+----+-------------------------------------------------+
-+reg + :ref:`regex::Regex <struct-regex-Regex>`        +
-+----+-------------------------------------------------+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++name    +string const                                     +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++reg     + :ref:`regex::Regex <struct-regex-Regex>`        +
++--------+-------------------------------------------------+
 
 
 |function-rst-group_by_regex|
@@ -893,11 +895,11 @@ arguments are
 
 hide_group returns  :ref:`rst::DocGroup <struct-rst-DocGroup>` 
 
-arguments are
-
-+-----+--------------------------------------------+
-+group+ :ref:`rst::DocGroup <struct-rst-DocGroup>` +
-+-----+--------------------------------------------+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++group   + :ref:`rst::DocGroup <struct-rst-DocGroup>` +
++--------+--------------------------------------------+
 
 
 |function-rst-hide_group|
@@ -916,11 +918,11 @@ Naming helpers
 
 topic returns string
 
-arguments are
-
-+---+-------------------------------------------------+
-+mod+ :ref:`rtti::Module <handle-rtti-Module>` ? const+
-+---+-------------------------------------------------+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
 
 
 |function-rst-topic|
@@ -931,9 +933,9 @@ arguments are
 
 topic returns string
 
-arguments are
-
 +--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
 +category+string const                                     +
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
@@ -950,13 +952,32 @@ arguments are
 
 module_name returns auto
 
-arguments are
-
-+---+----------+
-+mod+auto const+
-+---+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++mod     +auto const   +
++--------+-------------+
 
 
 |function-rst-module_name|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_rst_c__c_function_name_string_hh_const:
+
+.. das:function:: function_name(name: string const)
+
+function_name returns string
+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
+
+
+|function-rst-function_name|
 
 

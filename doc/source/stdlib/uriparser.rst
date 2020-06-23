@@ -19,15 +19,15 @@ Uncategorized
 
 escape_uri returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
-+arg1+bool const  +
-+----+------------+
-+arg2+bool const  +
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
++arg1    +bool const   +
++--------+-------------+
++arg2    +bool const   +
++--------+-------------+
 
 
 |function-uriparser-escape_uri|
@@ -38,11 +38,11 @@ arguments are
 
 file_name_to_uri returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-uriparser-file_name_to_uri|
@@ -53,11 +53,11 @@ arguments are
 
 unescape_uri returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-uriparser-unescape_uri|
@@ -68,11 +68,11 @@ arguments are
 
 unix_file_name_to_uri returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-uriparser-unix_file_name_to_uri|
@@ -83,11 +83,11 @@ arguments are
 
 uri_to_file_name returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-uriparser-uri_to_file_name|
@@ -98,11 +98,11 @@ arguments are
 
 uri_to_unix_file_name returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-uriparser-uri_to_unix_file_name|
@@ -113,11 +113,11 @@ arguments are
 
 uri_to_windows_file_name returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-uriparser-uri_to_windows_file_name|
@@ -128,11 +128,11 @@ arguments are
 
 windows_file_name_to_uri returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-uriparser-windows_file_name_to_uri|

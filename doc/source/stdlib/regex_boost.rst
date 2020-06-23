@@ -23,21 +23,21 @@ Classes
 
 accept returns bool
 
-arguments are
-
-+----+--------------------------------------------------------+
-+self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
-+----+--------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                   +
-+----+--------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
-+----+--------------------------------------------------------+
-+expr+ :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
-+----+--------------------------------------------------------+
-+ch  +int const                                               +
-+----+--------------------------------------------------------+
-+info+ :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
-+----+--------------------------------------------------------+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
++--------+--------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                   +
++--------+--------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
++--------+--------------------------------------------------------+
++expr    + :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
++--------+--------------------------------------------------------+
++ch      +int const                                               +
++--------+--------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
++--------+--------------------------------------------------------+
 
 
 |method-regex_boost-RegexReader.accept|
@@ -46,17 +46,17 @@ arguments are
 
 visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
-+----+-----------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                            +
-+----+-----------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
++--------+-----------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                            +
++--------+-----------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-regex_boost-RegexReader.visit|

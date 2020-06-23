@@ -30,6 +30,22 @@ Constants
 
 |variable-math-PI|
 
++++++++++++++
+Handled types
++++++++++++++
+
+.. _handle-math-float3x4:
+
+.. das:attribute:: float3x4
+
+|any_annotation-math-float3x4|
+
+.. _handle-math-float4x4:
+
+.. das:attribute:: float4x4
+
+|any_annotation-math-float4x4|
+
 ++++++++++++++++++++++++++++++++++++++++++
 all numerics (uint*, int*, float*, double)
 ++++++++++++++++++++++++++++++++++++++++++
@@ -65,13 +81,13 @@ all numerics (uint*, int*, float*, double)
 
 max returns double
 
-arguments are
-
-+-+------+
-+x+double+
-+-+------+
-+y+double+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double       +
++--------+-------------+
++y       +double       +
++--------+-------------+
 
 
 |function-math-max|
@@ -82,13 +98,13 @@ arguments are
 
 max returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
-+y+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
++y       +float        +
++--------+-------------+
 
 
 |function-math-max|
@@ -99,13 +115,13 @@ arguments are
 
 max returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
-+y+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
++y       +float2       +
++--------+-------------+
 
 
 |function-math-max|
@@ -116,13 +132,13 @@ arguments are
 
 max returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
-+y+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
++y       +float3       +
++--------+-------------+
 
 
 |function-math-max|
@@ -133,13 +149,13 @@ arguments are
 
 max returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
-+y+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
++y       +float4       +
++--------+-------------+
 
 
 |function-math-max|
@@ -150,13 +166,13 @@ arguments are
 
 max returns int
 
-arguments are
-
-+-+---+
-+x+int+
-+-+---+
-+y+int+
-+-+---+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int          +
++--------+-------------+
++y       +int          +
++--------+-------------+
 
 
 |function-math-max|
@@ -167,13 +183,13 @@ arguments are
 
 max returns int2
 
-arguments are
-
-+-+----+
-+x+int2+
-+-+----+
-+y+int2+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int2         +
++--------+-------------+
++y       +int2         +
++--------+-------------+
 
 
 |function-math-max|
@@ -184,13 +200,13 @@ arguments are
 
 max returns int3
 
-arguments are
-
-+-+----+
-+x+int3+
-+-+----+
-+y+int3+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int3         +
++--------+-------------+
++y       +int3         +
++--------+-------------+
 
 
 |function-math-max|
@@ -201,13 +217,13 @@ arguments are
 
 max returns int4
 
-arguments are
-
-+-+----+
-+x+int4+
-+-+----+
-+y+int4+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int4         +
++--------+-------------+
++y       +int4         +
++--------+-------------+
 
 
 |function-math-max|
@@ -218,13 +234,13 @@ arguments are
 
 max returns int64
 
-arguments are
-
-+-+-----+
-+x+int64+
-+-+-----+
-+y+int64+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int64        +
++--------+-------------+
++y       +int64        +
++--------+-------------+
 
 
 |function-math-max|
@@ -235,13 +251,13 @@ arguments are
 
 max returns uint
 
-arguments are
-
-+-+----+
-+x+uint+
-+-+----+
-+y+uint+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint         +
++--------+-------------+
++y       +uint         +
++--------+-------------+
 
 
 |function-math-max|
@@ -252,13 +268,13 @@ arguments are
 
 max returns uint64
 
-arguments are
-
-+-+------+
-+x+uint64+
-+-+------+
-+y+uint64+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint64       +
++--------+-------------+
++y       +uint64       +
++--------+-------------+
 
 
 |function-math-max|
@@ -269,13 +285,13 @@ arguments are
 
 min returns double
 
-arguments are
-
-+-+------+
-+x+double+
-+-+------+
-+y+double+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double       +
++--------+-------------+
++y       +double       +
++--------+-------------+
 
 
 |function-math-min|
@@ -286,13 +302,13 @@ arguments are
 
 min returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
-+y+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
++y       +float        +
++--------+-------------+
 
 
 |function-math-min|
@@ -303,13 +319,13 @@ arguments are
 
 min returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
-+y+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
++y       +float2       +
++--------+-------------+
 
 
 |function-math-min|
@@ -320,13 +336,13 @@ arguments are
 
 min returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
-+y+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
++y       +float3       +
++--------+-------------+
 
 
 |function-math-min|
@@ -337,13 +353,13 @@ arguments are
 
 min returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
-+y+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
++y       +float4       +
++--------+-------------+
 
 
 |function-math-min|
@@ -354,13 +370,13 @@ arguments are
 
 min returns int
 
-arguments are
-
-+-+---+
-+x+int+
-+-+---+
-+y+int+
-+-+---+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int          +
++--------+-------------+
++y       +int          +
++--------+-------------+
 
 
 |function-math-min|
@@ -371,13 +387,13 @@ arguments are
 
 min returns int2
 
-arguments are
-
-+-+----+
-+x+int2+
-+-+----+
-+y+int2+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int2         +
++--------+-------------+
++y       +int2         +
++--------+-------------+
 
 
 |function-math-min|
@@ -388,13 +404,13 @@ arguments are
 
 min returns int3
 
-arguments are
-
-+-+----+
-+x+int3+
-+-+----+
-+y+int3+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int3         +
++--------+-------------+
++y       +int3         +
++--------+-------------+
 
 
 |function-math-min|
@@ -405,13 +421,13 @@ arguments are
 
 min returns int4
 
-arguments are
-
-+-+----+
-+x+int4+
-+-+----+
-+y+int4+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int4         +
++--------+-------------+
++y       +int4         +
++--------+-------------+
 
 
 |function-math-min|
@@ -422,13 +438,13 @@ arguments are
 
 min returns int64
 
-arguments are
-
-+-+-----+
-+x+int64+
-+-+-----+
-+y+int64+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int64        +
++--------+-------------+
++y       +int64        +
++--------+-------------+
 
 
 |function-math-min|
@@ -439,13 +455,13 @@ arguments are
 
 min returns uint
 
-arguments are
-
-+-+----+
-+x+uint+
-+-+----+
-+y+uint+
-+-+----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint         +
++--------+-------------+
++y       +uint         +
++--------+-------------+
 
 
 |function-math-min|
@@ -456,13 +472,13 @@ arguments are
 
 min returns uint64
 
-arguments are
-
-+-+------+
-+x+uint64+
-+-+------+
-+y+uint64+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint64       +
++--------+-------------+
++y       +uint64       +
++--------+-------------+
 
 
 |function-math-min|
@@ -567,11 +583,11 @@ float* and double
 
 abs returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-abs|
@@ -582,11 +598,11 @@ arguments are
 
 abs returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-abs|
@@ -597,11 +613,11 @@ arguments are
 
 abs returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-abs|
@@ -612,11 +628,11 @@ arguments are
 
 abs returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-abs|
@@ -627,11 +643,11 @@ arguments are
 
 abs returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-abs|
@@ -642,11 +658,11 @@ arguments are
 
 acos returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-acos|
@@ -657,11 +673,11 @@ arguments are
 
 acos returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-acos|
@@ -672,11 +688,11 @@ arguments are
 
 acos returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-acos|
@@ -687,11 +703,11 @@ arguments are
 
 acos returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-acos|
@@ -702,11 +718,11 @@ arguments are
 
 acos returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-acos|
@@ -717,11 +733,11 @@ arguments are
 
 asin returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-asin|
@@ -732,11 +748,11 @@ arguments are
 
 asin returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-asin|
@@ -747,11 +763,11 @@ arguments are
 
 asin returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-asin|
@@ -762,11 +778,11 @@ arguments are
 
 asin returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-asin|
@@ -777,11 +793,11 @@ arguments are
 
 asin returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-asin|
@@ -792,11 +808,11 @@ arguments are
 
 atan returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-atan|
@@ -807,11 +823,11 @@ arguments are
 
 atan returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-atan|
@@ -822,11 +838,11 @@ arguments are
 
 atan returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-atan|
@@ -837,11 +853,11 @@ arguments are
 
 atan returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-atan|
@@ -852,11 +868,11 @@ arguments are
 
 atan returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-atan|
@@ -867,13 +883,13 @@ arguments are
 
 atan2 returns double
 
-arguments are
-
-+-+------------+
-+y+double const+
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +double const +
++--------+-------------+
++x       +double const +
++--------+-------------+
 
 
 |function-math-atan2|
@@ -884,13 +900,13 @@ arguments are
 
 atan2 returns float
 
-arguments are
-
-+-+-----+
-+y+float+
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float        +
++--------+-------------+
++x       +float        +
++--------+-------------+
 
 
 |function-math-atan2|
@@ -901,13 +917,13 @@ arguments are
 
 atan2 returns float2
 
-arguments are
-
-+-+------+
-+y+float2+
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float2       +
++--------+-------------+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-atan2|
@@ -918,13 +934,13 @@ arguments are
 
 atan2 returns float3
 
-arguments are
-
-+-+------+
-+y+float3+
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float3       +
++--------+-------------+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-atan2|
@@ -935,13 +951,13 @@ arguments are
 
 atan2 returns float4
 
-arguments are
-
-+-+------+
-+y+float4+
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float4       +
++--------+-------------+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-atan2|
@@ -952,11 +968,11 @@ arguments are
 
 ceil returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-ceil|
@@ -967,11 +983,11 @@ arguments are
 
 ceil returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-ceil|
@@ -982,11 +998,11 @@ arguments are
 
 ceil returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-ceil|
@@ -997,11 +1013,11 @@ arguments are
 
 ceil returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-ceil|
@@ -1012,11 +1028,11 @@ arguments are
 
 cos returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-cos|
@@ -1027,11 +1043,11 @@ arguments are
 
 cos returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-cos|
@@ -1042,11 +1058,11 @@ arguments are
 
 cos returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-cos|
@@ -1057,11 +1073,11 @@ arguments are
 
 cos returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-cos|
@@ -1072,11 +1088,11 @@ arguments are
 
 cos returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-cos|
@@ -1087,11 +1103,11 @@ arguments are
 
 exp returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-exp|
@@ -1102,11 +1118,11 @@ arguments are
 
 exp returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-exp|
@@ -1117,11 +1133,11 @@ arguments are
 
 exp returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-exp|
@@ -1132,11 +1148,11 @@ arguments are
 
 exp returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-exp|
@@ -1147,11 +1163,11 @@ arguments are
 
 exp returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-exp|
@@ -1162,11 +1178,11 @@ arguments are
 
 exp2 returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-exp2|
@@ -1177,11 +1193,11 @@ arguments are
 
 exp2 returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-exp2|
@@ -1192,11 +1208,11 @@ arguments are
 
 exp2 returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-exp2|
@@ -1207,11 +1223,11 @@ arguments are
 
 exp2 returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-exp2|
@@ -1222,11 +1238,11 @@ arguments are
 
 exp2 returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-exp2|
@@ -1237,11 +1253,11 @@ arguments are
 
 floor returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-floor|
@@ -1252,11 +1268,11 @@ arguments are
 
 floor returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-floor|
@@ -1267,11 +1283,11 @@ arguments are
 
 floor returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-floor|
@@ -1282,11 +1298,11 @@ arguments are
 
 floor returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-floor|
@@ -1297,11 +1313,11 @@ arguments are
 
 log returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-log|
@@ -1312,11 +1328,11 @@ arguments are
 
 log returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-log|
@@ -1327,11 +1343,11 @@ arguments are
 
 log returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-log|
@@ -1342,11 +1358,11 @@ arguments are
 
 log returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-log|
@@ -1357,11 +1373,11 @@ arguments are
 
 log returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-log|
@@ -1372,11 +1388,11 @@ arguments are
 
 log2 returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-log2|
@@ -1387,11 +1403,11 @@ arguments are
 
 log2 returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-log2|
@@ -1402,11 +1418,11 @@ arguments are
 
 log2 returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-log2|
@@ -1417,11 +1433,11 @@ arguments are
 
 log2 returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-log2|
@@ -1432,11 +1448,11 @@ arguments are
 
 log2 returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-log2|
@@ -1447,13 +1463,13 @@ arguments are
 
 pow returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
-+y+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
++y       +double const +
++--------+-------------+
 
 
 |function-math-pow|
@@ -1464,13 +1480,13 @@ arguments are
 
 pow returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
-+y+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
++y       +float        +
++--------+-------------+
 
 
 |function-math-pow|
@@ -1481,13 +1497,13 @@ arguments are
 
 pow returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
-+y+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
++y       +float2       +
++--------+-------------+
 
 
 |function-math-pow|
@@ -1498,13 +1514,13 @@ arguments are
 
 pow returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
-+y+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
++y       +float3       +
++--------+-------------+
 
 
 |function-math-pow|
@@ -1515,13 +1531,13 @@ arguments are
 
 pow returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
-+y+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
++y       +float4       +
++--------+-------------+
 
 
 |function-math-pow|
@@ -1532,11 +1548,11 @@ arguments are
 
 rcp returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-rcp|
@@ -1547,11 +1563,11 @@ arguments are
 
 rcp returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-rcp|
@@ -1562,11 +1578,11 @@ arguments are
 
 rcp returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-rcp|
@@ -1577,11 +1593,11 @@ arguments are
 
 rcp returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-rcp|
@@ -1592,11 +1608,11 @@ arguments are
 
 rcp returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-rcp|
@@ -1607,11 +1623,11 @@ arguments are
 
 saturate returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-saturate|
@@ -1622,11 +1638,11 @@ arguments are
 
 saturate returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-saturate|
@@ -1637,11 +1653,11 @@ arguments are
 
 saturate returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-saturate|
@@ -1652,11 +1668,11 @@ arguments are
 
 saturate returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-saturate|
@@ -1667,11 +1683,11 @@ arguments are
 
 sin returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-sin|
@@ -1682,11 +1698,11 @@ arguments are
 
 sin returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-sin|
@@ -1697,11 +1713,11 @@ arguments are
 
 sin returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-sin|
@@ -1712,11 +1728,11 @@ arguments are
 
 sin returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-sin|
@@ -1727,11 +1743,11 @@ arguments are
 
 sin returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-sin|
@@ -1740,15 +1756,15 @@ arguments are
 
 .. das:function:: sincos(x: double const; s: double& implicit; c: double& implicit)
 
-arguments are
-
-+-+----------------+
-+x+double const    +
-+-+----------------+
-+s+double& implicit+
-+-+----------------+
-+c+double& implicit+
-+-+----------------+
++--------+----------------+
++argument+argument type   +
++========+================+
++x       +double const    +
++--------+----------------+
++s       +double& implicit+
++--------+----------------+
++c       +double& implicit+
++--------+----------------+
 
 
 |function-math-sincos|
@@ -1757,15 +1773,15 @@ arguments are
 
 .. das:function:: sincos(x: float const; s: float& implicit; c: float& implicit)
 
-arguments are
-
-+-+---------------+
-+x+float const    +
-+-+---------------+
-+s+float& implicit+
-+-+---------------+
-+c+float& implicit+
-+-+---------------+
++--------+---------------+
++argument+argument type  +
++========+===============+
++x       +float const    +
++--------+---------------+
++s       +float& implicit+
++--------+---------------+
++c       +float& implicit+
++--------+---------------+
 
 
 |function-math-sincos|
@@ -1776,11 +1792,11 @@ arguments are
 
 sqrt returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-sqrt|
@@ -1791,11 +1807,11 @@ arguments are
 
 sqrt returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-sqrt|
@@ -1806,11 +1822,11 @@ arguments are
 
 sqrt returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-sqrt|
@@ -1821,11 +1837,11 @@ arguments are
 
 sqrt returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-sqrt|
@@ -1836,11 +1852,11 @@ arguments are
 
 sqrt returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-sqrt|
@@ -1851,11 +1867,11 @@ arguments are
 
 tan returns double
 
-arguments are
-
-+-+------------+
-+x+double const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
 
 
 |function-math-tan|
@@ -1866,11 +1882,11 @@ arguments are
 
 tan returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-tan|
@@ -1881,11 +1897,11 @@ arguments are
 
 tan returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-tan|
@@ -1896,11 +1912,11 @@ arguments are
 
 tan returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-tan|
@@ -1911,11 +1927,11 @@ arguments are
 
 tan returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-tan|
@@ -1963,13 +1979,13 @@ float* only
 
 atan2_est returns float
 
-arguments are
-
-+-+-----+
-+y+float+
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float        +
++--------+-------------+
++x       +float        +
++--------+-------------+
 
 
 |function-math-atan2_est|
@@ -1980,13 +1996,13 @@ arguments are
 
 atan2_est returns float2
 
-arguments are
-
-+-+------+
-+y+float2+
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float2       +
++--------+-------------+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-atan2_est|
@@ -1997,13 +2013,13 @@ arguments are
 
 atan2_est returns float3
 
-arguments are
-
-+-+------+
-+y+float3+
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float3       +
++--------+-------------+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-atan2_est|
@@ -2014,13 +2030,13 @@ arguments are
 
 atan2_est returns float4
 
-arguments are
-
-+-+------+
-+y+float4+
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float4       +
++--------+-------------+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-atan2_est|
@@ -2031,11 +2047,11 @@ arguments are
 
 ceili returns int
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-ceili|
@@ -2046,11 +2062,11 @@ arguments are
 
 ceili returns int2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-ceili|
@@ -2061,11 +2077,11 @@ arguments are
 
 ceili returns int3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-ceili|
@@ -2076,11 +2092,11 @@ arguments are
 
 ceili returns int4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-ceili|
@@ -2091,11 +2107,11 @@ arguments are
 
 floori returns int
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-floori|
@@ -2106,11 +2122,11 @@ arguments are
 
 floori returns int2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-floori|
@@ -2121,11 +2137,11 @@ arguments are
 
 floori returns int3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-floori|
@@ -2136,11 +2152,11 @@ arguments are
 
 floori returns int4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-floori|
@@ -2151,11 +2167,11 @@ arguments are
 
 rcp_est returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-rcp_est|
@@ -2166,11 +2182,11 @@ arguments are
 
 rcp_est returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-rcp_est|
@@ -2181,11 +2197,11 @@ arguments are
 
 rcp_est returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-rcp_est|
@@ -2196,11 +2212,11 @@ arguments are
 
 rcp_est returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-rcp_est|
@@ -2211,11 +2227,11 @@ arguments are
 
 roundi returns int
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-roundi|
@@ -2226,11 +2242,11 @@ arguments are
 
 roundi returns int2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-roundi|
@@ -2241,11 +2257,11 @@ arguments are
 
 roundi returns int3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-roundi|
@@ -2256,11 +2272,11 @@ arguments are
 
 roundi returns int4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-roundi|
@@ -2271,11 +2287,11 @@ arguments are
 
 rsqrt returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-rsqrt|
@@ -2286,11 +2302,11 @@ arguments are
 
 rsqrt returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-rsqrt|
@@ -2301,11 +2317,11 @@ arguments are
 
 rsqrt returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-rsqrt|
@@ -2316,11 +2332,11 @@ arguments are
 
 rsqrt returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-rsqrt|
@@ -2331,11 +2347,11 @@ arguments are
 
 rsqrt_est returns float
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-rsqrt_est|
@@ -2346,11 +2362,11 @@ arguments are
 
 rsqrt_est returns float2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-rsqrt_est|
@@ -2361,11 +2377,11 @@ arguments are
 
 rsqrt_est returns float3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-rsqrt_est|
@@ -2376,11 +2392,11 @@ arguments are
 
 rsqrt_est returns float4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-rsqrt_est|
@@ -2391,11 +2407,11 @@ arguments are
 
 trunci returns int
 
-arguments are
-
-+-+-----+
-+x+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float        +
++--------+-------------+
 
 
 |function-math-trunci|
@@ -2406,11 +2422,11 @@ arguments are
 
 trunci returns int2
 
-arguments are
-
-+-+------+
-+x+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2       +
++--------+-------------+
 
 
 |function-math-trunci|
@@ -2421,11 +2437,11 @@ arguments are
 
 trunci returns int3
 
-arguments are
-
-+-+------+
-+x+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3       +
++--------+-------------+
 
 
 |function-math-trunci|
@@ -2436,11 +2452,11 @@ arguments are
 
 trunci returns int4
 
-arguments are
-
-+-+------+
-+x+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4       +
++--------+-------------+
 
 
 |function-math-trunci|
@@ -2463,13 +2479,13 @@ float3 only
 
 cross returns float3
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
-+y+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
++y       +float3 const +
++--------+-------------+
 
 
 |function-math-cross|
@@ -2480,13 +2496,13 @@ arguments are
 
 distance returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
-+y+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
++y       +float3 const +
++--------+-------------+
 
 
 |function-math-distance|
@@ -2497,13 +2513,13 @@ arguments are
 
 distance_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
-+y+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
++y       +float3 const +
++--------+-------------+
 
 
 |function-math-distance_sq|
@@ -2514,13 +2530,13 @@ arguments are
 
 inv_distance returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
-+y+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
++y       +float3 const +
++--------+-------------+
 
 
 |function-math-inv_distance|
@@ -2531,13 +2547,13 @@ arguments are
 
 inv_distance_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
-+y+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
++y       +float3 const +
++--------+-------------+
 
 
 |function-math-inv_distance_sq|
@@ -2548,13 +2564,13 @@ arguments are
 
 reflect returns float3
 
-arguments are
-
-+-+------------+
-+v+float3 const+
-+-+------------+
-+n+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +float3 const +
++--------+-------------+
++n       +float3 const +
++--------+-------------+
 
 
 returns vector representing reflection of vector v from normal n same as ::
@@ -2568,17 +2584,17 @@ returns vector representing reflection of vector v from normal n same as ::
 
 refract returns bool
 
-arguments are
-
-+------------+------------+
-+v           +float3 const+
-+------------+------------+
-+n           +float3 const+
-+------------+------------+
-+nint        +float const +
-+------------+------------+
-+outRefracted+float3&     +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++v           +float3 const +
++------------+-------------+
++n           +float3 const +
++------------+-------------+
++nint        +float const  +
++------------+-------------+
++outRefracted+float3&      +
++------------+-------------+
 
 
 returns vector representing refractoin of vector v from normal n same as ::
@@ -2623,13 +2639,13 @@ float2, float3, float4
 
 dot returns float
 
-arguments are
-
-+-+------------+
-+x+float2 const+
-+-+------------+
-+y+float2 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
++y       +float2 const +
++--------+-------------+
 
 
 |function-math-dot|
@@ -2640,13 +2656,13 @@ arguments are
 
 dot returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
-+y+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
++y       +float3 const +
++--------+-------------+
 
 
 |function-math-dot|
@@ -2657,13 +2673,13 @@ arguments are
 
 dot returns float
 
-arguments are
-
-+-+------------+
-+x+float4 const+
-+-+------------+
-+y+float4 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
++y       +float4 const +
++--------+-------------+
 
 
 |function-math-dot|
@@ -2674,11 +2690,11 @@ arguments are
 
 fast_normalize returns float2
 
-arguments are
-
-+-+------------+
-+x+float2 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
 
 
 |function-math-fast_normalize|
@@ -2689,11 +2705,11 @@ arguments are
 
 fast_normalize returns float3
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
 
 
 |function-math-fast_normalize|
@@ -2704,11 +2720,11 @@ arguments are
 
 fast_normalize returns float4
 
-arguments are
-
-+-+------------+
-+x+float4 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
 
 
 |function-math-fast_normalize|
@@ -2719,11 +2735,11 @@ arguments are
 
 inv_length returns float
 
-arguments are
-
-+-+------------+
-+x+float2 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
 
 
 |function-math-inv_length|
@@ -2734,11 +2750,11 @@ arguments are
 
 inv_length returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
 
 
 |function-math-inv_length|
@@ -2749,11 +2765,11 @@ arguments are
 
 inv_length returns float
 
-arguments are
-
-+-+------------+
-+x+float4 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
 
 
 |function-math-inv_length|
@@ -2764,11 +2780,11 @@ arguments are
 
 inv_length_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float2 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
 
 
 |function-math-inv_length_sq|
@@ -2779,11 +2795,11 @@ arguments are
 
 inv_length_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
 
 
 |function-math-inv_length_sq|
@@ -2794,11 +2810,11 @@ arguments are
 
 inv_length_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float4 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
 
 
 |function-math-inv_length_sq|
@@ -2809,11 +2825,11 @@ arguments are
 
 length returns float
 
-arguments are
-
-+-+------------+
-+x+float2 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
 
 
 |function-math-length|
@@ -2824,11 +2840,11 @@ arguments are
 
 length returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
 
 
 |function-math-length|
@@ -2839,11 +2855,11 @@ arguments are
 
 length returns float
 
-arguments are
-
-+-+------------+
-+x+float4 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
 
 
 |function-math-length|
@@ -2854,11 +2870,11 @@ arguments are
 
 length_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float2 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
 
 
 |function-math-length_sq|
@@ -2869,11 +2885,11 @@ arguments are
 
 length_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
 
 
 |function-math-length_sq|
@@ -2884,11 +2900,11 @@ arguments are
 
 length_sq returns float
 
-arguments are
-
-+-+------------+
-+x+float4 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
 
 
 |function-math-length_sq|
@@ -2899,11 +2915,11 @@ arguments are
 
 normalize returns float2
 
-arguments are
-
-+-+------------+
-+x+float2 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
 
 
 |function-math-normalize|
@@ -2914,11 +2930,11 @@ arguments are
 
 normalize returns float3
 
-arguments are
-
-+-+------------+
-+x+float3 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
 
 
 |function-math-normalize|
@@ -2929,11 +2945,11 @@ arguments are
 
 normalize returns float4
 
-arguments are
-
-+-+------------+
-+x+float4 const+
-+-+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
 
 
 |function-math-normalize|
@@ -2953,11 +2969,11 @@ Noise functions
 
 uint32_hash returns uint
 
-arguments are
-
-+----+----------+
-+seed+uint const+
-+----+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++seed    +uint const   +
++--------+-------------+
 
 
 |function-math-uint32_hash|
@@ -2968,13 +2984,13 @@ arguments are
 
 uint_noise_1D returns uint
 
-arguments are
-
-+--------+----------+
-+position+int const +
-+--------+----------+
-+seed    +uint const+
-+--------+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++position+int const    +
++--------+-------------+
++seed    +uint const   +
++--------+-------------+
 
 
 |function-math-uint_noise_1D|
@@ -2985,13 +3001,13 @@ arguments are
 
 uint_noise_2D returns uint
 
-arguments are
-
-+--------+----------+
-+position+int2 const+
-+--------+----------+
-+seed    +uint const+
-+--------+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++position+int2 const   +
++--------+-------------+
++seed    +uint const   +
++--------+-------------+
 
 
 |function-math-uint_noise_2D|
@@ -3002,13 +3018,13 @@ arguments are
 
 uint_noise_3D returns uint
 
-arguments are
-
-+--------+----------+
-+position+int3 const+
-+--------+----------+
-+seed    +uint const+
-+--------+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++position+int3 const   +
++--------+-------------+
++seed    +uint const   +
++--------+-------------+
 
 
 |function-math-uint_noise_3D|
@@ -3039,15 +3055,15 @@ lerp/mad/clamp
 
 clamp returns float
 
-arguments are
-
-+-+-----+
-+t+float+
-+-+-----+
-+a+float+
-+-+-----+
-+b+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +float        +
++--------+-------------+
++a       +float        +
++--------+-------------+
++b       +float        +
++--------+-------------+
 
 
 |function-math-clamp|
@@ -3058,15 +3074,15 @@ arguments are
 
 clamp returns float2
 
-arguments are
-
-+-+------+
-+t+float2+
-+-+------+
-+a+float2+
-+-+------+
-+b+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +float2       +
++--------+-------------+
++a       +float2       +
++--------+-------------+
++b       +float2       +
++--------+-------------+
 
 
 |function-math-clamp|
@@ -3077,15 +3093,15 @@ arguments are
 
 clamp returns float3
 
-arguments are
-
-+-+------+
-+t+float3+
-+-+------+
-+a+float3+
-+-+------+
-+b+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +float3       +
++--------+-------------+
++a       +float3       +
++--------+-------------+
++b       +float3       +
++--------+-------------+
 
 
 |function-math-clamp|
@@ -3096,15 +3112,15 @@ arguments are
 
 clamp returns float4
 
-arguments are
-
-+-+------+
-+t+float4+
-+-+------+
-+a+float4+
-+-+------+
-+b+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +float4       +
++--------+-------------+
++a       +float4       +
++--------+-------------+
++b       +float4       +
++--------+-------------+
 
 
 |function-math-clamp|
@@ -3115,15 +3131,15 @@ arguments are
 
 lerp returns float
 
-arguments are
-
-+-+-----+
-+a+float+
-+-+-----+
-+b+float+
-+-+-----+
-+t+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float        +
++--------+-------------+
++b       +float        +
++--------+-------------+
++t       +float        +
++--------+-------------+
 
 
 |function-math-lerp|
@@ -3134,15 +3150,15 @@ arguments are
 
 lerp returns float2
 
-arguments are
-
-+-+------+
-+a+float2+
-+-+------+
-+b+float2+
-+-+------+
-+t+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float2       +
++--------+-------------+
++b       +float2       +
++--------+-------------+
++t       +float2       +
++--------+-------------+
 
 
 |function-math-lerp|
@@ -3153,15 +3169,15 @@ arguments are
 
 lerp returns float3
 
-arguments are
-
-+-+------+
-+a+float3+
-+-+------+
-+b+float3+
-+-+------+
-+t+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float3       +
++--------+-------------+
++b       +float3       +
++--------+-------------+
++t       +float3       +
++--------+-------------+
 
 
 |function-math-lerp|
@@ -3172,15 +3188,15 @@ arguments are
 
 lerp returns float4
 
-arguments are
-
-+-+------+
-+a+float4+
-+-+------+
-+b+float4+
-+-+------+
-+t+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float4       +
++--------+-------------+
++b       +float4       +
++--------+-------------+
++t       +float4       +
++--------+-------------+
 
 
 |function-math-lerp|
@@ -3191,15 +3207,15 @@ arguments are
 
 mad returns float
 
-arguments are
-
-+-+-----+
-+a+float+
-+-+-----+
-+b+float+
-+-+-----+
-+c+float+
-+-+-----+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float        +
++--------+-------------+
++b       +float        +
++--------+-------------+
++c       +float        +
++--------+-------------+
 
 
 |function-math-mad|
@@ -3210,15 +3226,15 @@ arguments are
 
 mad returns float2
 
-arguments are
-
-+-+------+
-+a+float2+
-+-+------+
-+b+float +
-+-+------+
-+c+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float2       +
++--------+-------------+
++b       +float        +
++--------+-------------+
++c       +float2       +
++--------+-------------+
 
 
 |function-math-mad|
@@ -3229,15 +3245,15 @@ arguments are
 
 mad returns float2
 
-arguments are
-
-+-+------+
-+a+float2+
-+-+------+
-+b+float2+
-+-+------+
-+c+float2+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float2       +
++--------+-------------+
++b       +float2       +
++--------+-------------+
++c       +float2       +
++--------+-------------+
 
 
 |function-math-mad|
@@ -3248,15 +3264,15 @@ arguments are
 
 mad returns float3
 
-arguments are
-
-+-+------+
-+a+float3+
-+-+------+
-+b+float +
-+-+------+
-+c+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float3       +
++--------+-------------+
++b       +float        +
++--------+-------------+
++c       +float3       +
++--------+-------------+
 
 
 |function-math-mad|
@@ -3267,15 +3283,15 @@ arguments are
 
 mad returns float3
 
-arguments are
-
-+-+------+
-+a+float3+
-+-+------+
-+b+float3+
-+-+------+
-+c+float3+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float3       +
++--------+-------------+
++b       +float3       +
++--------+-------------+
++c       +float3       +
++--------+-------------+
 
 
 |function-math-mad|
@@ -3286,15 +3302,15 @@ arguments are
 
 mad returns float4
 
-arguments are
-
-+-+------+
-+a+float4+
-+-+------+
-+b+float +
-+-+------+
-+c+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float4       +
++--------+-------------+
++b       +float        +
++--------+-------------+
++c       +float4       +
++--------+-------------+
 
 
 |function-math-mad|
@@ -3305,17 +3321,245 @@ arguments are
 
 mad returns float4
 
-arguments are
-
-+-+------+
-+a+float4+
-+-+------+
-+b+float4+
-+-+------+
-+c+float4+
-+-+------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float4       +
++--------+-------------+
++b       +float4       +
++--------+-------------+
++c       +float4       +
++--------+-------------+
 
 
 |function-math-mad|
+
++++++++++++++++++
+Matrix operations
++++++++++++++++++
+
+  *  :ref:`\!= (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : bool <function-_at_math_c__c__ex__eq___hh_handle_hh_float4x4_hh_const_hh_implicit__hh_handle_hh_float4x4_hh_const_hh_implicit>` 
+  *  :ref:`* (x:math::float3x4 const implicit;y:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_*__hh_handle_hh_float3x4_hh_const_hh_implicit__hh_handle_hh_float3x4_hh_const_hh_implicit>` 
+  *  :ref:`* (x:math::float3x4 const implicit;y:float3 const) : float3 <function-_at_math_c__c_*__hh_handle_hh_float3x4_hh_const_hh_implicit_float3_hh_const>` 
+  *  :ref:`* (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_*__hh_handle_hh_float4x4_hh_const_hh_implicit__hh_handle_hh_float4x4_hh_const_hh_implicit>` 
+  *  :ref:`== (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : bool <function-_at_math_c__c__eq__eq___hh_handle_hh_float4x4_hh_const_hh_implicit__hh_handle_hh_float4x4_hh_const_hh_implicit>` 
+
+.. _function-_at_math_c__c__ex__eq___hh_handle_hh_float4x4_hh_const_hh_implicit__hh_handle_hh_float4x4_hh_const_hh_implicit:
+
+.. das:function:: operator !=(x: float4x4 const implicit; y: float4x4 const implicit)
+
+!= returns bool
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
++y       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-!=|
+
+.. _function-_at_math_c__c_*__hh_handle_hh_float3x4_hh_const_hh_implicit__hh_handle_hh_float3x4_hh_const_hh_implicit:
+
+.. das:function:: operator *(x: float3x4 const implicit; y: float3x4 const implicit)
+
+* returns  :ref:`math::float3x4 <handle-math-float3x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
++y       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-*|
+
+.. _function-_at_math_c__c_*__hh_handle_hh_float3x4_hh_const_hh_implicit_float3_hh_const:
+
+.. das:function:: operator *(x: float3x4 const implicit; y: float3 const)
+
+* returns float3
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
++y       +float3 const                                                 +
++--------+-------------------------------------------------------------+
+
+
+|function-math-*|
+
+.. _function-_at_math_c__c_*__hh_handle_hh_float4x4_hh_const_hh_implicit__hh_handle_hh_float4x4_hh_const_hh_implicit:
+
+.. das:function:: operator *(x: float4x4 const implicit; y: float4x4 const implicit)
+
+* returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
++y       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-*|
+
+.. _function-_at_math_c__c__eq__eq___hh_handle_hh_float4x4_hh_const_hh_implicit__hh_handle_hh_float4x4_hh_const_hh_implicit:
+
+.. das:function:: operator ==(x: float4x4 const implicit; y: float4x4 const implicit)
+
+== returns bool
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
++y       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-==|
+
++++++++++++++++++++
+Matrix constructors
++++++++++++++++++++
+
+  *  :ref:`float3x4 () : math::float3x4 <function-_at_math_c__c_float3x4>` 
+  *  :ref:`float4x4 () : math::float4x4 <function-_at_math_c__c_float4x4>` 
+
+.. _function-_at_math_c__c_float3x4:
+
+.. das:function:: float3x4()
+
+float3x4 returns  :ref:`math::float3x4 <handle-math-float3x4>` 
+
+|function-math-float3x4|
+
+.. _function-_at_math_c__c_float4x4:
+
+.. das:function:: float4x4()
+
+float4x4 returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
+|function-math-float4x4|
+
++++++++++++++++++++
+Matrix manipulation
++++++++++++++++++++
+
+  *  :ref:`identity (x:math::float3x4 implicit) : void <function-_at_math_c__c_identity__hh_handle_hh_float3x4_hh_implicit>` 
+  *  :ref:`identity (x:math::float4x4 implicit) : void <function-_at_math_c__c_identity__hh_handle_hh_float4x4_hh_implicit>` 
+  *  :ref:`inverse (x:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_inverse__hh_handle_hh_float3x4_hh_const_hh_implicit>` 
+  *  :ref:`rotate (x:math::float3x4 const implicit;y:float3 const) : float3 <function-_at_math_c__c_rotate__hh_handle_hh_float3x4_hh_const_hh_implicit_float3_hh_const>` 
+  *  :ref:`translation (xyz:float3 const) : math::float4x4 <function-_at_math_c__c_translation_float3_hh_const>` 
+  *  :ref:`transpose (x:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_transpose__hh_handle_hh_float4x4_hh_const_hh_implicit>` 
+
+.. _function-_at_math_c__c_identity__hh_handle_hh_float3x4_hh_implicit:
+
+.. das:function:: identity(x: float3x4 implicit)
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++x       + :ref:`math::float3x4 <handle-math-float3x4>`  implicit+
++--------+-------------------------------------------------------+
+
+
+|function-math-identity|
+
+.. _function-_at_math_c__c_identity__hh_handle_hh_float4x4_hh_implicit:
+
+.. das:function:: identity(x: float4x4 implicit)
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++x       + :ref:`math::float4x4 <handle-math-float4x4>`  implicit+
++--------+-------------------------------------------------------+
+
+
+|function-math-identity|
+
+.. _function-_at_math_c__c_inverse__hh_handle_hh_float3x4_hh_const_hh_implicit:
+
+.. das:function:: inverse(x: float3x4 const implicit)
+
+inverse returns  :ref:`math::float3x4 <handle-math-float3x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-inverse|
+
+.. _function-_at_math_c__c_rotate__hh_handle_hh_float3x4_hh_const_hh_implicit_float3_hh_const:
+
+.. das:function:: rotate(x: float3x4 const implicit; y: float3 const)
+
+rotate returns float3
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
++y       +float3 const                                                 +
++--------+-------------------------------------------------------------+
+
+
+|function-math-rotate|
+
+.. _function-_at_math_c__c_translation_float3_hh_const:
+
+.. das:function:: translation(xyz: float3 const)
+
+translation returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
++--------+-------------+
++argument+argument type+
++========+=============+
++xyz     +float3 const +
++--------+-------------+
+
+
+produces a translation by xyz
+
+ +---+---+---+---+
+ + 1 | 0 | 0 | 0 |
+ +---+---+---+---+
+ + 0 | 1 | 0 | 0 |
+ +---+---+---+---+
+ + 0 | 0 | 1 | 0 |
+ +---+---+---+---+
+ + x | y | z | 1 |
+ +---+---+---+---+
+
+
+.. _function-_at_math_c__c_transpose__hh_handle_hh_float4x4_hh_const_hh_implicit:
+
+.. das:function:: transpose(x: float4x4 const implicit)
+
+transpose returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-transpose|
 
 

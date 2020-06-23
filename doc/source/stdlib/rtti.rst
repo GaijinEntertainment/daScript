@@ -23,19 +23,21 @@ Type aliases
 
 .. das:attribute:: ProgramFlags is a bitfield
 
-+-----------------+-+--+
-+failToCompile    +0+1 +
-+-----------------+-+--+
-+unsafe           +1+2 +
-+-----------------+-+--+
-+isCompiling      +2+4 +
-+-----------------+-+--+
-+isSimulating     +3+8 +
-+-----------------+-+--+
-+isCompilingMacros+4+16+
-+-----------------+-+--+
-+needMacroModule  +5+32+
-+-----------------+-+--+
++-----------------+---+-----+
++field            +bit+value+
++=================+===+=====+
++failToCompile    +0  +1    +
++-----------------+---+-----+
++unsafe           +1  +2    +
++-----------------+---+-----+
++isCompiling      +2  +4    +
++-----------------+---+-----+
++isSimulating     +3  +8    +
++-----------------+---+-----+
++isCompilingMacros+4  +16   +
++-----------------+---+-----+
++needMacroModule  +5  +32   +
++-----------------+---+-----+
 
 
 |typedef-rtti-ProgramFlags|
@@ -897,11 +899,11 @@ RttiValue_nothing returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tU
 
 arg_names returns iterator<string>
 
-arguments are
-
-+----+----------------------------------------------------+
-+info+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+----+----------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
 
 
 |function-rtti-arg_names|
@@ -912,11 +914,11 @@ arguments are
 
 arg_names returns iterator<string>
 
-arguments are
-
-+----+--------------------------------------------------+
-+info+ :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+----+--------------------------------------------------+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
 
 
 |function-rtti-arg_names|
@@ -927,11 +929,11 @@ arguments are
 
 arg_types returns iterator< :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const&>
 
-arguments are
-
-+----+----------------------------------------------------+
-+info+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+----+----------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
 
 
 |function-rtti-arg_types|
@@ -942,11 +944,11 @@ arguments are
 
 arg_types returns iterator< :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const&>
 
-arguments are
-
-+----+--------------------------------------------------+
-+info+ :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+----+--------------------------------------------------+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
 
 
 |function-rtti-arg_types|
@@ -955,13 +957,13 @@ arguments are
 
 .. das:function:: basic_struct_for_each_field(arg0: BasicStructureAnnotation const implicit; arg1: block<(string;string;rtti::TypeInfo const;uint):void> const implicit)
 
-arguments are
-
-+----+----------------------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  const implicit       +
-+----+----------------------------------------------------------------------------------------------------+
-+arg1+block<(string;string; :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const;uint):void> const implicit+
-+----+----------------------------------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                       +
++========+====================================================================================================+
++arg0    + :ref:`rtti::BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  const implicit       +
++--------+----------------------------------------------------------------------------------------------------+
++arg1    +block<(string;string; :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const;uint):void> const implicit+
++--------+----------------------------------------------------------------------------------------------------+
 
 
 |function-rtti-basic_struct_for_each_field|
@@ -972,21 +974,21 @@ arguments are
 
 builtin_is_same_type returns bool
 
-arguments are
-
-+----+--------------------------------------------------------------------+
-+arg0+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
-+----+--------------------------------------------------------------------+
-+arg1+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
-+----+--------------------------------------------------------------------+
-+arg2+ :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const              +
-+----+--------------------------------------------------------------------+
-+arg3+ :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const          +
-+----+--------------------------------------------------------------------+
-+arg4+ :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const  +
-+----+--------------------------------------------------------------------+
-+arg5+bool const                                                          +
-+----+--------------------------------------------------------------------+
++--------+--------------------------------------------------------------------+
++argument+argument type                                                       +
++========+====================================================================+
++arg0    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
++--------+--------------------------------------------------------------------+
++arg1    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
++--------+--------------------------------------------------------------------+
++arg2    + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const              +
++--------+--------------------------------------------------------------------+
++arg3    + :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const          +
++--------+--------------------------------------------------------------------+
++arg4    + :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const  +
++--------+--------------------------------------------------------------------+
++arg5    +bool const                                                          +
++--------+--------------------------------------------------------------------+
 
 
 |function-rtti-builtin_is_same_type|
@@ -995,15 +997,15 @@ arguments are
 
 .. das:function:: compile(arg0: string const; arg1: string const; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
-arguments are
-
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
-+arg0+string const                                                                                                                                            +
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
-+arg1+string const                                                                                                                                            +
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
-+arg2+block<(bool;smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >; :ref:`builtin::das_string <handle-builtin-das_string>`  const):void> const implicit+
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                                                                           +
++========+========================================================================================================================================================+
++arg0    +string const                                                                                                                                            +
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg1    +string const                                                                                                                                            +
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg2    +block<(bool;smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >; :ref:`builtin::das_string <handle-builtin-das_string>`  const):void> const implicit+
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
 |function-rtti-compile|
@@ -1012,15 +1014,15 @@ arguments are
 
 .. das:function:: compile_file(arg0: string const; arg1: smart_ptr<rtti::FileAccess> const implicit; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
-arguments are
-
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
-+arg0+string const                                                                                                                                            +
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` > const implicit                                                                            +
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
-+arg2+block<(bool;smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >; :ref:`builtin::das_string <handle-builtin-das_string>`  const):void> const implicit+
-+----+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                                                                           +
++========+========================================================================================================================================================+
++arg0    +string const                                                                                                                                            +
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` > const implicit                                                                            +
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
++arg2    +block<(bool;smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >; :ref:`builtin::das_string <handle-builtin-das_string>`  const):void> const implicit+
++--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
 |function-rtti-compile_file|
@@ -1029,11 +1031,11 @@ arguments are
 
 .. das:function:: context_for_each_function(blk: block<(info:rtti::FuncInfo const):void> const)
 
-arguments are
-
-+---+-----------------------------------------------------------------------------+
-+blk+block<(info: :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const+
-+---+-----------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++blk     +block<(info: :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const+
++--------+-----------------------------------------------------------------------------+
 
 
 |function-rtti-context_for_each_function|
@@ -1042,11 +1044,11 @@ arguments are
 
 .. das:function:: context_for_each_variable(blk: block<(info:rtti::VarInfo const):void> const)
 
-arguments are
-
-+---+---------------------------------------------------------------------------+
-+blk+block<(info: :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const+
-+---+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++blk     +block<(info: :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const+
++--------+---------------------------------------------------------------------------+
 
 
 |function-rtti-context_for_each_variable|
@@ -1057,11 +1059,11 @@ arguments are
 
 each_dim returns iterator<int>
 
-arguments are
-
-+----+----------------------------------------------------+
-+info+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+----+----------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
 
 
 |function-rtti-each_dim|
@@ -1072,11 +1074,11 @@ arguments are
 
 each_dim returns iterator<int>
 
-arguments are
-
-+----+--------------------------------------------------+
-+info+ :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+----+--------------------------------------------------+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
 
 
 |function-rtti-each_dim|
@@ -1087,11 +1089,11 @@ arguments are
 
 get_annotation_argument_value returns  :ref:`RttiValue <alias-RttiValue>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::AnnotationArgument <handle-rtti-AnnotationArgument>`  const implicit+
-+----+---------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++arg0    + :ref:`rtti::AnnotationArgument <handle-rtti-AnnotationArgument>`  const implicit+
++--------+---------------------------------------------------------------------------------+
 
 
 |function-rtti-get_annotation_argument_value|
@@ -1102,11 +1104,11 @@ arguments are
 
 get_das_type_name returns string
 
-arguments are
-
-+----+------------------------------------------+
-+arg0+ :ref:`rtti::Type <enum-rtti-Type>`  const+
-+----+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++arg0    + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
 
 
 |function-rtti-get_das_type_name|
@@ -1117,13 +1119,13 @@ arguments are
 
 get_dim returns int
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+arg0+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const implicit+
-+----+-------------------------------------------------------------+
-+arg1+int const                                                    +
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++arg0    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const implicit+
++--------+-------------------------------------------------------------+
++arg1    +int const                                                    +
++--------+-------------------------------------------------------------+
 
 
 |function-rtti-get_dim|
@@ -1134,13 +1136,13 @@ arguments are
 
 get_dim returns int
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+arg0+ :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const implicit+
-+----+-----------------------------------------------------------+
-+arg1+int const                                                  +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++arg0    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const implicit+
++--------+-----------------------------------------------------------+
++arg1    +int const                                                  +
++--------+-----------------------------------------------------------+
 
 
 |function-rtti-get_dim|
@@ -1151,11 +1153,11 @@ arguments are
 
 get_function_info returns  :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const&
 
-arguments are
-
-+----+---+
-+arg0+int+
-+----+---+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +int          +
++--------+-------------+
 
 
 |function-rtti-get_function_info|
@@ -1166,11 +1168,11 @@ arguments are
 
 get_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-rtti-get_module|
@@ -1181,11 +1183,11 @@ arguments are
 
 get_this_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
++--------+----------------------------------------------------------------------+
 
 
 |function-rtti-get_this_module|
@@ -1212,11 +1214,11 @@ get_total_variables returns int
 
 get_variable_info returns  :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const&
 
-arguments are
-
-+----+---+
-+arg0+int+
-+----+---+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +int          +
++--------+-------------+
 
 
 |function-rtti-get_variable_info|
@@ -1227,11 +1229,11 @@ arguments are
 
 get_variable_value returns  :ref:`RttiValue <alias-RttiValue>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+arg0+ :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const implicit+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++arg0    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const implicit+
++--------+-----------------------------------------------------------+
 
 
 |function-rtti-get_variable_value|
@@ -1242,13 +1244,13 @@ arguments are
 
 is_compatible_cast returns bool
 
-arguments are
-
-+-+--------------------------------------------------------+
-+a+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
-+-+--------------------------------------------------------+
-+b+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
-+-+--------------------------------------------------------+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++a       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
++--------+--------------------------------------------------------+
++b       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
++--------+--------------------------------------------------------+
 
 
 |function-rtti-is_compatible_cast|
@@ -1259,13 +1261,13 @@ arguments are
 
 is_compatible_cast returns bool
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
-+arg1+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
++arg1    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-rtti-is_compatible_cast|
@@ -1276,9 +1278,9 @@ arguments are
 
 is_same_type returns bool
 
-arguments are
-
 +----------------+------------------------------------------------------------------+
++argument        +argument type                                                     +
++================+==================================================================+
 +a               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
 +----------------+------------------------------------------------------------------+
 +b               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
@@ -1301,11 +1303,11 @@ arguments are
 
 make_file_access returns smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` >
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-rtti-make_file_access|
@@ -1314,13 +1316,13 @@ arguments are
 
 .. das:function:: module_for_each_annotation(arg0: rtti::Module? const implicit; arg1: block<(rtti::Annotation const):void> const implicit)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
-+----+-------------------------------------------------------------------------------------+
-+arg1+block<( :ref:`rtti::Annotation <handle-rtti-Annotation>`  const):void> const implicit+
-+----+-------------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------------+
++argument+argument type                                                                        +
++========+=====================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
++--------+-------------------------------------------------------------------------------------+
++arg1    +block<( :ref:`rtti::Annotation <handle-rtti-Annotation>`  const):void> const implicit+
++--------+-------------------------------------------------------------------------------------+
 
 
 |function-rtti-module_for_each_annotation|
@@ -1329,13 +1331,13 @@ arguments are
 
 .. das:function:: module_for_each_enumeration(arg0: rtti::Module? const implicit; arg1: block<(rtti::EnumInfo const):void> const implicit)
 
-arguments are
-
-+----+---------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
-+----+---------------------------------------------------------------------------------+
-+arg1+block<( :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>`  const):void> const implicit+
-+----+---------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
++--------+---------------------------------------------------------------------------------+
++arg1    +block<( :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>`  const):void> const implicit+
++--------+---------------------------------------------------------------------------------+
 
 
 |function-rtti-module_for_each_enumeration|
@@ -1344,13 +1346,13 @@ arguments are
 
 .. das:function:: module_for_each_function(arg0: rtti::Module? const implicit; arg1: block<(rtti::FuncInfo const):void> const implicit)
 
-arguments are
-
-+----+---------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
-+----+---------------------------------------------------------------------------------+
-+arg1+block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
-+----+---------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
++--------+---------------------------------------------------------------------------------+
++arg1    +block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
++--------+---------------------------------------------------------------------------------+
 
 
 |function-rtti-module_for_each_function|
@@ -1359,13 +1361,13 @@ arguments are
 
 .. das:function:: module_for_each_generic(arg0: rtti::Module? const implicit; arg1: block<(rtti::FuncInfo const):void> const implicit)
 
-arguments are
-
-+----+---------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
-+----+---------------------------------------------------------------------------------+
-+arg1+block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
-+----+---------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
++--------+---------------------------------------------------------------------------------+
++arg1    +block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
++--------+---------------------------------------------------------------------------------+
 
 
 |function-rtti-module_for_each_generic|
@@ -1374,13 +1376,13 @@ arguments are
 
 .. das:function:: module_for_each_global(arg0: rtti::Module? const implicit; arg1: block<(rtti::VarInfo const):void> const implicit)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                     +
-+----+-------------------------------------------------------------------------------+
-+arg1+block<( :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const implicit+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                     +
++--------+-------------------------------------------------------------------------------+
++arg1    +block<( :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const implicit+
++--------+-------------------------------------------------------------------------------+
 
 
 |function-rtti-module_for_each_global|
@@ -1389,13 +1391,13 @@ arguments are
 
 .. das:function:: module_for_each_structure(arg0: rtti::Module? const implicit; arg1: block<(rtti::StructInfo const):void> const implicit)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
-+----+-------------------------------------------------------------------------------------+
-+arg1+block<( :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const):void> const implicit+
-+----+-------------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------------+
++argument+argument type                                                                        +
++========+=====================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
++--------+-------------------------------------------------------------------------------------+
++arg1    +block<( :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const):void> const implicit+
++--------+-------------------------------------------------------------------------------------+
 
 
 |function-rtti-module_for_each_structure|
@@ -1404,13 +1406,13 @@ arguments are
 
 .. das:function:: program_for_each_module(arg0: smart_ptr<rtti::Program> const implicit; arg1: block<(rtti::Module?):void> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit  +
-+----+------------------------------------------------------------------------+
-+arg1+block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit  +
++--------+------------------------------------------------------------------------+
++arg1    +block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-rtti-program_for_each_module|
@@ -1419,11 +1421,11 @@ arguments are
 
 .. das:function:: program_for_each_registered_module(arg0: block<(rtti::Module?):void> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-rtti-program_for_each_registered_module|
@@ -1432,13 +1434,13 @@ arguments are
 
 .. das:function:: rtti_builtin_structure_for_each_annotation(arg0: StructInfo const implicit; arg1: block<> const implicit)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+arg0+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const implicit+
-+----+-----------------------------------------------------------------+
-+arg1+block<> const implicit                                           +
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++arg0    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const implicit+
++--------+-----------------------------------------------------------------+
++arg1    +block<> const implicit                                           +
++--------+-----------------------------------------------------------------+
 
 
 |function-rtti-rtti_builtin_structure_for_each_annotation|
@@ -1449,15 +1451,15 @@ arguments are
 
 set_file_source returns bool
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` > const implicit+
-+----+----------------------------------------------------------------------------+
-+arg1+string const                                                                +
-+----+----------------------------------------------------------------------------+
-+arg2+string const                                                                +
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++arg0    +smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` > const implicit+
++--------+----------------------------------------------------------------------------+
++arg1    +string const                                                                +
++--------+----------------------------------------------------------------------------+
++arg2    +string const                                                                +
++--------+----------------------------------------------------------------------------+
 
 
 |function-rtti-set_file_source|
@@ -1466,13 +1468,13 @@ arguments are
 
 .. das:function:: structure_for_each_annotation(st: StructInfo const; subexpr: block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
 
-arguments are
-
-+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+st     + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const                                                                                                        +
-+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+subexpr+block<(ann: :ref:`rtti::Annotation <handle-rtti-Annotation>`  const;args: :ref:`rtti::AnnotationArguments <handle-rtti-AnnotationArguments>`  const):void> const+
-+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                                                                                   +
++========+================================================================================================================================================================+
++st      + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const                                                                                                        +
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++subexpr +block<(ann: :ref:`rtti::Annotation <handle-rtti-Annotation>`  const;args: :ref:`rtti::AnnotationArguments <handle-rtti-AnnotationArguments>`  const):void> const+
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
 |function-rtti-structure_for_each_annotation|
@@ -1483,11 +1485,11 @@ arguments are
 
 class_info returns  :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const?
 
-arguments are
-
-+--+----------+
-+cl+auto const+
-+--+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++cl      +auto const   +
++--------+-------------+
 
 
 |function-rtti-class_info|

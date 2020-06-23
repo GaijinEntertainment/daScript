@@ -23,17 +23,17 @@ Classes
 
 visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-json_boost-BetterJsonMacro.visitExprIsVariant|
@@ -42,17 +42,17 @@ arguments are
 
 visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-json_boost-BetterJsonMacro.visitExprAsVariant|
@@ -61,17 +61,17 @@ arguments are
 
 visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`                      +
-+----+-------------------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                          +
-+----+-------------------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                              +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`                      +
++--------+-------------------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                          +
++--------+-------------------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                              +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-json_boost-BetterJsonMacro.visitExprSafeAsVariant|
@@ -86,21 +86,21 @@ arguments are
 
 accept returns bool
 
-arguments are
-
-+----+--------------------------------------------------------+
-+self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
-+----+--------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                   +
-+----+--------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
-+----+--------------------------------------------------------+
-+expr+ :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
-+----+--------------------------------------------------------+
-+ch  +int const                                               +
-+----+--------------------------------------------------------+
-+info+ :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
-+----+--------------------------------------------------------+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
++--------+--------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                   +
++--------+--------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
++--------+--------------------------------------------------------+
++expr    + :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
++--------+--------------------------------------------------------+
++ch      +int const                                               +
++--------+--------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
++--------+--------------------------------------------------------+
 
 
 |method-json_boost-JsonReader.accept|
@@ -109,17 +109,17 @@ arguments are
 
 visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
-+----+-----------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                            +
-+----+-----------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
++--------+-----------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                            +
++--------+-----------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-json_boost-JsonReader.visit|

@@ -23,17 +23,17 @@ Classes
 
 visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast_boost-BetterRttiVisitor.visitExprIsVariant|
@@ -42,17 +42,17 @@ arguments are
 
 visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast_boost-BetterRttiVisitor.visitExprAsVariant|
@@ -61,17 +61,17 @@ arguments are
 
 visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`                      +
-+----+-------------------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                          +
-+----+-------------------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                              +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`                      +
++--------+-------------------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                          +
++--------+-------------------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                              +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast_boost-BetterRttiVisitor.visitExprSafeAsVariant|
@@ -86,15 +86,15 @@ arguments are
 
 transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+------+----------------------------------------------------------------------+
-+self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
-+------+----------------------------------------------------------------------+
-+call  +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
-+------+----------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`               +
-+------+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
++--------+----------------------------------------------------------------------+
++call    +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
++--------+----------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`               +
++--------+----------------------------------------------------------------------+
 
 
 |method-ast_boost-MacroMacro.transform|
@@ -103,19 +103,19 @@ arguments are
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
-+------+--------------------------------------------------------------------------------+
-+func  + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
++--------+--------------------------------------------------------------------------------+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-MacroMacro.apply|
@@ -124,9 +124,9 @@ arguments are
 
 finish returns bool
 
-arguments are
-
 +--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
 +self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
 +--------+--------------------------------------------------------------------------------+
 +func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
@@ -158,19 +158,19 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupAnyAnnotation.apply|
@@ -179,34 +179,34 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupAnyAnnotation.finish|
 
 .. das:function:: SetupAnyAnnotation.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
-+----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
-+----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupAnyAnnotation.setup_call|
@@ -226,19 +226,19 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupCallMacro.apply|
@@ -247,34 +247,34 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupCallMacro.finish|
 
 .. das:function:: SetupCallMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
-+----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
-+----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupCallMacro.setup_call|
@@ -294,19 +294,19 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupFunctionAnnotatoin.apply|
@@ -315,34 +315,34 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupFunctionAnnotatoin.finish|
 
 .. das:function:: SetupFunctionAnnotatoin.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
-+----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
-+----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupFunctionAnnotatoin.setup_call|
@@ -362,19 +362,19 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupReaderMacro.apply|
@@ -383,34 +383,34 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupReaderMacro.finish|
 
 .. das:function:: SetupReaderMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
-+----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
-+----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupReaderMacro.setup_call|
@@ -430,19 +430,19 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupVariantMacro.apply|
@@ -451,34 +451,34 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupVariantMacro.finish|
 
 .. das:function:: SetupVariantMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
-+----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
-+----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
 
 
 |method-ast_boost-SetupVariantMacro.setup_call|
@@ -493,15 +493,15 @@ arguments are
 
 transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+------+----------------------------------------------------------------------+
-+self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
-+------+----------------------------------------------------------------------+
-+call  +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
-+------+----------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`               +
-+------+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
++--------+----------------------------------------------------------------------+
++call    +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
++--------+----------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`               +
++--------+----------------------------------------------------------------------+
 
 
 |method-ast_boost-TagFunctionAnnotation.transform|
@@ -510,19 +510,19 @@ arguments are
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
-+------+--------------------------------------------------------------------------------+
-+func  + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
++--------+--------------------------------------------------------------------------------+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-TagFunctionAnnotation.apply|
@@ -531,9 +531,9 @@ arguments are
 
 finish returns bool
 
-arguments are
-
 +--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
 +self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
 +--------+--------------------------------------------------------------------------------+
 +func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
@@ -566,19 +566,19 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-TagFunctionMacro.apply|
@@ -587,34 +587,34 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-TagFunctionMacro.finish|
 
 .. das:function:: TagFunctionMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
-+----+----------------------------------------------------------------------------+
-+st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
-+----+----------------------------------------------------------------------------+
-+cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
 
 
 |method-ast_boost-TagFunctionMacro.setup_call|
@@ -629,19 +629,19 @@ arguments are
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-TagStructureAnnotation.apply|
@@ -650,19 +650,19 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast_boost-TagStructureAnnotation.finish|
@@ -677,11 +677,11 @@ Uncategorized
 
 describe returns string const
 
-arguments are
-
-+----+--------------------------------------------------------------------------------+
-+list+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+----+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++list    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
 
 
 |function-ast_boost-describe|
@@ -692,11 +692,11 @@ arguments are
 
 describe returns string
 
-arguments are
-
-+---+------------------------------------------------------------------------------+
-+ann+ :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>`  const+
-+---+------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------+
++argument+argument type                                                                 +
++========+==============================================================================+
++ann     + :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>`  const+
++--------+------------------------------------------------------------------------------+
 
 
 |function-ast_boost-describe|
@@ -707,11 +707,11 @@ arguments are
 
 describe returns string const
 
-arguments are
-
-+----+----------------------------------------------------------------+
-+list+ :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`  const+
-+----+----------------------------------------------------------------+
++--------+----------------------------------------------------------------+
++argument+argument type                                                   +
++========+================================================================+
++list    + :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`  const+
++--------+----------------------------------------------------------------+
 
 
 |function-ast_boost-describe|
@@ -722,11 +722,11 @@ arguments are
 
 describe_function_short returns string
 
-arguments are
-
-+----+----------------------------------------+
-+func+ :ref:`FunctionPtr <alias-FunctionPtr>` +
-+----+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>` +
++--------+----------------------------------------+
 
 
 |function-ast_boost-describe_function_short|
@@ -737,13 +737,13 @@ arguments are
 
 find_arg returns  :ref:`RttiValue <alias-RttiValue>` 
 
-arguments are
-
-+----+--------------------------------------------------------------------------------+
-+argn+string const                                                                    +
-+----+--------------------------------------------------------------------------------+
-+args+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+----+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++argn    +string const                                                                    +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
 
 
 |function-ast_boost-find_arg|
@@ -754,13 +754,13 @@ arguments are
 
 isExpression returns bool
 
-arguments are
-
-+---+----------------------------------------+
-+t  + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
-+---+----------------------------------------+
-+top+bool const                              +
-+---+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++t       + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
++--------+----------------------------------------+
++top     +bool const                              +
++--------+----------------------------------------+
 
 
 |function-ast_boost-isExpression|
@@ -771,13 +771,13 @@ arguments are
 
 is_class_method returns bool const
 
-arguments are
-
-+-----+------------------------------------------+
-+cinfo+ :ref:`StructurePtr <alias-StructurePtr>` +
-+-----+------------------------------------------+
-+finfo+ :ref:`TypeDeclPtr <alias-TypeDeclPtr>`   +
-+-----+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++cinfo   + :ref:`StructurePtr <alias-StructurePtr>` +
++--------+------------------------------------------+
++finfo   + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`   +
++--------+------------------------------------------+
 
 
 |function-ast_boost-is_class_method|
@@ -788,13 +788,13 @@ arguments are
 
 is_same_or_inherited returns bool const
 
-arguments are
-
-+------+-----------------------------------------------------+
-+parent+ :ref:`ast::Structure <handle-ast-Structure>` ? const+
-+------+-----------------------------------------------------+
-+child + :ref:`ast::Structure <handle-ast-Structure>` ? const+
-+------+-----------------------------------------------------+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++parent  + :ref:`ast::Structure <handle-ast-Structure>` ? const+
++--------+-----------------------------------------------------+
++child   + :ref:`ast::Structure <handle-ast-Structure>` ? const+
++--------+-----------------------------------------------------+
 
 
 |function-ast_boost-is_same_or_inherited|
@@ -805,13 +805,13 @@ arguments are
 
 setup_macro returns  :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?
 
-arguments are
-
-+----+----------------------------------------------------+
-+name+string const                                        +
-+----+----------------------------------------------------+
-+at  + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
-+----+----------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++name    +string const                                        +
++--------+----------------------------------------------------+
++at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
++--------+----------------------------------------------------+
 
 
 |function-ast_boost-setup_macro|
@@ -822,13 +822,13 @@ arguments are
 
 convert_to_expression returns auto
 
-arguments are
-
-+-----+----------------------------------------------------+
-+value+auto&                                               +
-+-----+----------------------------------------------------+
-+at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
-+-----+----------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++value   +auto&                                               +
++--------+----------------------------------------------------+
++at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
++--------+----------------------------------------------------+
 
 
 |function-ast_boost-convert_to_expression|
@@ -839,13 +839,13 @@ arguments are
 
 describe_bitfield returns auto
 
-arguments are
-
-+------+------------+
-+bf    +auto const  +
-+------+------------+
-+merger+string const+
-+------+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++bf      +auto const   +
++--------+-------------+
++merger  +string const +
++--------+-------------+
 
 
 |function-ast_boost-describe_bitfield|
@@ -856,15 +856,15 @@ arguments are
 
 setup_tag_annotation returns auto
 
-arguments are
-
-+--------+------------+
-+name    +string const+
-+--------+------------+
-+tag     +string const+
-+--------+------------+
-+classPtr+auto const  +
-+--------+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
++tag     +string const +
++--------+-------------+
++classPtr+auto const   +
++--------+-------------+
 
 
 |function-ast_boost-setup_tag_annotation|

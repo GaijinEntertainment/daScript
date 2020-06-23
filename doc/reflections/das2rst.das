@@ -5,9 +5,10 @@ require rtti
 require ast
 require math
 require uriparser
+require strings
 require daslib/rst
 require daslib/ast_boost
-require daslib/strings
+require daslib/strings_boost
 require daslib/functional
 require daslib/json
 require daslib/json_boost
@@ -27,7 +28,10 @@ inv_distance|inv_distance_sq)$%%);
         group_by_regex("float2, float3, float4", mod, %regex~(length|length_sq|inv_length|inv_length_sq|
 dot|normalize|fast_normalize)$%%);
         group_by_regex("Noise functions", mod, %regex~(uint32_hash|uint_noise_1D|uint_noise_2D|uint_noise_3D)$%%);
-        group_by_regex("lerp/mad/clamp", mod, %regex~(lerp|mad|clamp)$%%)
+        group_by_regex("lerp/mad/clamp", mod, %regex~(lerp|mad|clamp)$%%);
+        group_by_regex("Matrix operations", mod, %regex~(\=\=|\!\=|\*)$%%);
+        group_by_regex("Matrix constructors", mod, %regex~(float3x4|float4x4)$%%);
+        group_by_regex("Matrix manipulation", mod, %regex~(identity|inverse|rotate|transpose|translation)$%%)
     }]
     document("Math library",mod,"{root}/math.rst","{root}/detail/math.rst",groups)
 
@@ -41,10 +45,10 @@ def document_module_builtin(root:string)
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|reserve|each|emplace|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|sort|to_array|to_table|to_array_move|
-to_table_move)$%%);
+to_table_move|empty)$%%);
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%);
-        group_by_regex("String manipulation", mod, %regex~(append|as_string|build_string|character_at|character_uat|
-chop|delete_string|ends_with|escape|find_first_of|format|peek|repeat|set|slice|starts_with|empty|replace|reverse|
+        group_by_regex("das::string manipulation", mod, %regex~(append|as_string|build_string|character_at|character_uat|
+chop|delete_string|ends_with|escape|find_first_of|format|peek|repeat|set|slice|starts_with|replace|reverse|
 strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|to_upper|to_upper_in_place|unescape)$%%);
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%);
         group_by_regex("Heap reporting", mod, %regex~(heap|string_heap)%%);
@@ -53,9 +57,10 @@ strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|
         group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr|get_ptr$)%%);
         group_by_regex("Macro infrastructure", mod, %regex~is_compiling%%);
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%);
-        group_by_regex("System infastructure", mod, %regex~(panic|print|terminate|breakpoint|stackwalk|get_das_root|get_clock)$%%);
+        group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|terminate|breakpoint|stackwalk|get_das_root|get_clock)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash)$%%);
-        group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%)
+        group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%);
+        group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments)$%%)
     }]
     document("Built-in runtime",mod,"{root}/builtin.rst","{root}/detail/builtin.rst",groups)
 
@@ -73,8 +78,8 @@ def document_module_fio(root:string)
 def document_module_random(root:string)
     var mod = get_module("random")
     var groups <- [{DocGroup
-        group_by_regex("stub1", mod, %regex~(stub1)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Seed and basic generators", mod, %regex~(random_seed|random_float|random_float4|random_int|random_int4)$%%);
+        group_by_regex("Specific distributions", mod, %regex~(random_unit_vector|random_in_unit_disk|random_in_unit_sphere)$%%)
     }]
     document("Random generator library",mod,"{root}/random.rst","{root}/detail/random.rst",groups)
 
@@ -125,6 +130,15 @@ def document_module_strings(root:string)
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
     document("String manipulation library",mod,"{root}/strings.rst","{root}/detail/strings.rst",groups)
+
+def document_module_strings_boost(root:string)
+    var mod = find_module("strings_boost")
+    var groups <- [{DocGroup
+        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+    }]
+    document("Boost package for string manipulation library",mod,"{root}/strings_boost.rst","{root}/detail/strings_boost.rst",groups)
+
 
 def document_module_functional(root:string)
     var mod = find_module("functional")
@@ -203,6 +217,7 @@ def test
     // document daslib modules
     document_module_ast_boost(root)
     document_module_strings(root)
+    document_module_strings_boost(root)
     document_module_functional(root)
     document_module_json(root)
     document_module_json_boost(root)

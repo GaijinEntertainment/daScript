@@ -102,3 +102,24 @@
 
 .. |variable-math-PI| replace:: The ratio of a circle's circumference to its diameter. π
 
+.. |function-math-!=| replace:: Compares x and y per component. Returns true if at least one component does not match.
+
+.. |function-math-*| replace:: Multiplies x by y.
+
+.. |function-math-==| replace:: Compares x and y per component. Returns false if at least one component does not match.
+
+.. |function-math-float3x4| replace:: Returns empty matrix, where each component is 0.
+
+.. |function-math-float4x4| replace:: Returns empty matrix, where each component is 0.
+
+.. |function-math-identity| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+
+.. |function-math-inverse| replace:: Returns the inverse of the matrix x.
+
+.. |function-math-rotate| replace:: Rotates vector y by 3x4 matrix x. Only 3x3 portion of x is multiplied by y.
+
+.. |function-math-transpose| replace:: Transposes the specified input matrix x.
+
+.. |any_annotation-math-float3x4| replace:: floating point matrix with 4 rows and 3 columns
+
+.. |any_annotation-math-float4x4| replace:: floating point matrix with 4 rows and 4 columns

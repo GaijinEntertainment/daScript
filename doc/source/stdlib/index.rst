@@ -23,13 +23,6 @@ THE SOFTWARE.
    :numbered:
 
    introduction.rst
-   stdmathlib.rst
-   stdsystemlib.rst
-   stdstringlib.rst
-   stdbloblib.rst
-   stdiolib.rst
-   stdrandom.rst
-
    builtin.rst
    math.rst
    fio.rst
@@ -40,6 +33,7 @@ THE SOFTWARE.
    ast.rst
    ast_boost.rst
    strings.rst
+   strings_boost.rst
    functional.rst
    json.rst
    json_boost.rst

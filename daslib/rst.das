@@ -56,6 +56,8 @@ def function_label_name(value:FunctionPtr)
     mn = replace(mn,"<","_ls_")
     mn = replace(mn,">","_gr_")
     mn = replace(mn,"`","_rq_")
+    mn = replace(mn,"!","_ex_")
+    mn = replace(mn,"=","_eq_")
     return "function-{mn}"
 
 def describe_type_short(td:TypeDecl?)
@@ -209,6 +211,7 @@ def make_label(name:string)
 def make_ref(name,text:string)
     var t = replace(text,"<","\\<")
     t = replace(t,">","\\>")
+    t = replace(t,"!","\\!")
     return " :ref:`{t} <{name}>` "
 
 def make_group(name:string; plus:string="+")
@@ -220,9 +223,9 @@ def make_header(name,lab:string)
     return ".. _stdlib_{lab}:\n\n{strings::repeat("=",wide)}\n{name}\n{strings::repeat("=",wide)}\n\n"
 
 [private]
-def write_table_separator(var writer:StringBuilderWriter; wid:array<int>)
+def write_table_separator(var writer:StringBuilderWriter; wid:array<int>; sep:string="-")
     for x in wid
-        write(writer,"+{strings::repeat("-",x)}")
+        write(writer,"+{strings::repeat(sep,x)}")
     write(writer,"+\n")
 
 [private]
@@ -231,7 +234,7 @@ def write_table_line(var writer:StringBuilderWriter;line:array<string>;wid:array
         write(writer,"+{wide(l,x)}")
     write(writer,"+\n")
 
-def make_table(tab:array<array<string>>)
+def make_table(tab:array<array<string>>;withHeader:bool=false)
     return build_string() <| $(writer)
         let rows = length(tab)
         var cols = 0
@@ -242,8 +245,8 @@ def make_table(tab:array<array<string>>)
         for cc in tab
             for x in range(0,cols)
                 wid[x] = max(wid[x], length(cc[x]))
-        for ccc in tab
-            write_table_separator(writer,wid)
+        for ccc,idx in tab,range(0,100500)
+            write_table_separator(writer,wid,(idx==1 & withHeader) ? "=" : "-")
             write_table_line(writer,ccc,wid)
         write_table_separator(writer,wid)
         write(writer,"\n\n")
@@ -270,13 +273,14 @@ def document_topic(doc_file:file;topic:string)
 
 def document_bitfield(doc_file:file; value:TypeDeclPtr)
     var tab : array<array<string>>
+    emplace(tab,[{string "field"; "bit"; "value"}])
     for an,bit in value.argNames,range(0,32)
         var line : array<string>
         push(line,string(an))
         push(line,string(bit))
         push(line,string(1 << bit))
         emplace(tab,line)
-    fwrite(doc_file,make_table(tab))
+    fwrite(doc_file,make_table(tab,true))
 
 def document_variant(doc_file:file; value:TypeDeclPtr)
     var tab : array<array<string>>
@@ -386,15 +390,15 @@ def document_function_declaration(doc_file:file;domain,func_name:string;
 
 def document_function_arguments(doc_file:file;argNames:array<string>;argTypes:array<TypeDecl?>)
     var tab : array<array<string>>
+    emplace(tab,[{string "argument";"argument type"}])
     for an,at in argNames,argTypes
         if argument_needs_documenting(at)
             var line : array<string>
             push(line,an)
             push(line,describe_type(at))
             emplace(tab,line)
-    if length(tab)!=0
-        fwrite(doc_file,"arguments are\n\n")
-        fwrite(doc_file,make_table(tab))
+    if length(tab)!=1
+        fwrite(doc_file,make_table(tab,true))
 
 def document_class_method(doc_file:file;mod:Module?;value;fld)
     let argNames <- [{for arg in fld._type.argNames; string(arg)}]
@@ -585,11 +589,18 @@ def document_warning(doc_file:file;issue:string)
     fwrite(doc_file,make_domain("warning"))
     fwrite(doc_file,"\n  {issue}\n\n")
 
+def function_name ( name : string )
+    if !empty(name)
+        let ch = character_at(name,0)
+        if ch!='_' & !is_alpha(ch)
+            return "operator {name}"
+    return name
+
 def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
     let argNames <- [{for arg in func.arguments; string(arg.name)}]
     let argTypes <- [{for arg in func.arguments; get_ptr(arg._type)}]
     fwrite(doc_file,make_label(function_label_name(func)))
-    document_function_declaration(doc_file,"das:function","{func.name}",
+    document_function_declaration(doc_file,"das:function",function_name(string(func.name)),
         argNames,argTypes,func.result)
     if func.result != null & !func.result.isVoid
         fwrite(doc_file,"{func.name} returns {describe_type(func.result)}\n\n")

@@ -99,13 +99,13 @@ Internal builtin functions
 
 .. das:function:: builtin_dir(arg0: string const; arg1: block<> const implicit)
 
-arguments are
-
-+----+----------------------+
-+arg0+string const          +
-+----+----------------------+
-+arg1+block<> const implicit+
-+----+----------------------+
++--------+----------------------+
++argument+argument type         +
++========+======================+
++arg0    +string const          +
++--------+----------------------+
++arg1    +block<> const implicit+
++--------+----------------------+
 
 
 |function-fio-builtin_dir|
@@ -137,11 +137,11 @@ File manipulation
 
 .. das:function:: fclose(arg0: fio::FILE const? const implicit)
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
 
 
 |function-fio-fclose|
@@ -152,11 +152,11 @@ arguments are
 
 feof returns bool
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
 
 
 |function-fio-feof|
@@ -167,11 +167,11 @@ arguments are
 
 fgets returns string
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
 
 
 |function-fio-fgets|
@@ -180,13 +180,13 @@ arguments are
 
 .. das:function:: fmap(arg0: fio::FILE const? const implicit; arg1: block<(string const#):void> const implicit)
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
-+arg1+block<(string const#):void> const implicit                +
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
++arg1    +block<(string const#):void> const implicit                +
++--------+----------------------------------------------------------+
 
 
 |function-fio-fmap|
@@ -197,13 +197,13 @@ arguments are
 
 fopen returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
-+arg1+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
++arg1    +string const +
++--------+-------------+
 
 
 |function-fio-fopen|
@@ -212,15 +212,15 @@ arguments are
 
 .. das:function:: fopen(name: string const; mode: string const; blk: block<(f:fio::FILE const? const):void> const)
 
-arguments are
-
-+----+------------------------------------------------+
-+name+string const                                    +
-+----+------------------------------------------------+
-+mode+string const                                    +
-+----+------------------------------------------------+
-+blk +block<(f: :ref:`file <alias-file>` ):void> const+
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++name    +string const                                    +
++--------+------------------------------------------------+
++mode    +string const                                    +
++--------+------------------------------------------------+
++blk     +block<(f: :ref:`file <alias-file>` ):void> const+
++--------+------------------------------------------------+
 
 
 |function-fio-fopen|
@@ -229,13 +229,13 @@ arguments are
 
 .. das:function:: fprint(arg0: fio::FILE const? const implicit; arg1: string const)
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
-+arg1+string const                                              +
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
++arg1    +string const                                              +
++--------+----------------------------------------------------------+
 
 
 |function-fio-fprint|
@@ -246,11 +246,11 @@ arguments are
 
 fread returns string
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
 
 
 |function-fio-fread|
@@ -261,11 +261,11 @@ arguments are
 
 fstat returns  :ref:`fio::FStat <handle-fio-FStat>` 
 
-arguments are
-
-+-+--------------------------+
-+f+ :ref:`file <alias-file>` +
-+-+--------------------------+
++--------+--------------------------+
++argument+argument type             +
++========+==========================+
++f       + :ref:`file <alias-file>` +
++--------+--------------------------+
 
 
 |function-fio-fstat|
@@ -276,13 +276,13 @@ arguments are
 
 fstat returns bool
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
-+arg1+ :ref:`fio::FStat <handle-fio-FStat>`  implicit           +
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
++arg1    + :ref:`fio::FStat <handle-fio-FStat>`  implicit           +
++--------+----------------------------------------------------------+
 
 
 |function-fio-fstat|
@@ -315,13 +315,13 @@ fstdout returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 .. das:function:: fwrite(arg0: fio::FILE const? const implicit; arg1: string const)
 
-arguments are
-
-+----+----------------------------------------------------------+
-+arg0+ :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+----+----------------------------------------------------------+
-+arg1+string const                                              +
-+----+----------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
++arg1    +string const                                              +
++--------+----------------------------------------------------------+
 
 
 |function-fio-fwrite|
@@ -332,11 +332,11 @@ arguments are
 
 stat returns  :ref:`fio::FStat <handle-fio-FStat>` 
 
-arguments are
-
-+----+------------+
-+path+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++path    +string const +
++--------+-------------+
 
 
 |function-fio-stat|
@@ -347,13 +347,13 @@ arguments are
 
 stat returns bool
 
-arguments are
-
-+----+-----------------------------------------------+
-+arg0+string const                                   +
-+----+-----------------------------------------------+
-+arg1+ :ref:`fio::FStat <handle-fio-FStat>`  implicit+
-+----+-----------------------------------------------+
++--------+-----------------------------------------------+
++argument+argument type                                  +
++========+===============================================+
++arg0    +string const                                   +
++--------+-----------------------------------------------+
++arg1    + :ref:`fio::FStat <handle-fio-FStat>`  implicit+
++--------+-----------------------------------------------+
 
 
 |function-fio-stat|
@@ -364,13 +364,13 @@ arguments are
 
 fload returns auto
 
-arguments are
-
-+---+--------------------------+
-+f  + :ref:`file <alias-file>` +
-+---+--------------------------+
-+buf+auto(BufType) const       +
-+---+--------------------------+
++--------+--------------------------+
++argument+argument type             +
++========+==========================+
++f       + :ref:`file <alias-file>` +
++--------+--------------------------+
++buf     +auto(BufType) const       +
++--------+--------------------------+
 
 
 |function-fio-fload|
@@ -381,13 +381,13 @@ arguments are
 
 fsave returns auto
 
-arguments are
-
-+---+--------------------------+
-+f  + :ref:`file <alias-file>` +
-+---+--------------------------+
-+buf+auto(BufType) const       +
-+---+--------------------------+
++--------+--------------------------+
++argument+argument type             +
++========+==========================+
++f       + :ref:`file <alias-file>` +
++--------+--------------------------+
++buf     +auto(BufType) const       +
++--------+--------------------------+
 
 
 |function-fio-fsave|
@@ -405,11 +405,11 @@ Path manipulation
 
 base_name returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-fio-base_name|
@@ -420,11 +420,11 @@ arguments are
 
 dir_name returns string
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-fio-dir_name|
@@ -442,11 +442,11 @@ Directory manipulation
 
 mkdir returns bool
 
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +string const +
++--------+-------------+
 
 
 |function-fio-mkdir|
@@ -457,13 +457,13 @@ arguments are
 
 dir returns auto
 
-arguments are
-
-+----+-----------------------------------------+
-+path+string const                             +
-+----+-----------------------------------------+
-+blk +block<(filename:string const):void> const+
-+----+-----------------------------------------+
++--------+-----------------------------------------+
++argument+argument type                            +
++========+=========================================+
++path    +string const                             +
++--------+-----------------------------------------+
++blk     +block<(filename:string const):void> const+
++--------+-----------------------------------------+
 
 
 |function-fio-dir|
@@ -478,11 +478,11 @@ OS thread helper
 
 .. das:function:: sleep(arg0: uint const)
 
-arguments are
-
-+----+----------+
-+arg0+uint const+
-+----+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +uint const   +
++--------+-------------+
 
 
 |function-fio-sleep|

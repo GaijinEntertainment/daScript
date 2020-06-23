@@ -19,11 +19,11 @@ Uncategorized
 
 all returns auto
 
-arguments are
-
-+--+----------+
-+it+auto const+
-+--+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++it      +auto const   +
++--------+-------------+
 
 
 |function-functional-all|
@@ -34,11 +34,11 @@ arguments are
 
 any returns auto
 
-arguments are
-
-+--+----------+
-+it+auto const+
-+--+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++it      +auto const   +
++--------+-------------+
 
 
 |function-functional-any|
@@ -49,13 +49,13 @@ arguments are
 
 count returns iterator<int>
 
-arguments are
-
-+-----+---+
-+start+int+
-+-----+---+
-+step +int+
-+-----+---+
++--------+-------------+
++argument+argument type+
++========+=============+
++start   +int          +
++--------+-------------+
++step    +int          +
++--------+-------------+
 
 
 |function-functional-count|
@@ -66,11 +66,11 @@ arguments are
 
 cycle returns auto
 
-arguments are
-
-+---+------------------+
-+src+iterator<auto(TT)>+
-+---+------------------+
++--------+------------------+
++argument+argument type     +
++========+==================+
++src     +iterator<auto(TT)>+
++--------+------------------+
 
 
 |function-functional-cycle|
@@ -81,13 +81,13 @@ arguments are
 
 echo returns auto
 
-arguments are
-
-+-----+------------+
-+x    +auto        +
-+-----+------------+
-+extra+string const+
-+-----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +auto         +
++--------+-------------+
++extra   +string const +
++--------+-------------+
 
 
 |function-functional-echo|
@@ -98,13 +98,13 @@ arguments are
 
 filter returns auto
 
-arguments are
-
-+---+------------------------------------+
-+src+iterator<auto(TT)>                  +
-+---+------------------------------------+
-+blk+function<(what:TT const):bool> const+
-+---+------------------------------------+
++--------+------------------------------------+
++argument+argument type                       +
++========+====================================+
++src     +iterator<auto(TT)>                  +
++--------+------------------------------------+
++blk     +function<(what:TT const):bool> const+
++--------+------------------------------------+
 
 
 |function-functional-filter|
@@ -115,13 +115,13 @@ arguments are
 
 filter returns auto
 
-arguments are
-
-+---+----------------------------------+
-+src+iterator<auto(TT)>                +
-+---+----------------------------------+
-+blk+lambda<(what:TT const):bool> const+
-+---+----------------------------------+
++--------+----------------------------------+
++argument+argument type                     +
++========+==================================+
++src     +iterator<auto(TT)>                +
++--------+----------------------------------+
++blk     +lambda<(what:TT const):bool> const+
++--------+----------------------------------+
 
 
 |function-functional-filter|
@@ -132,13 +132,13 @@ arguments are
 
 is_equal returns auto
 
-arguments are
-
-+-+----------+
-+a+auto const+
-+-+----------+
-+b+auto const+
-+-+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
 
 
 |function-functional-is_equal|
@@ -149,13 +149,13 @@ arguments are
 
 is_not_equal returns auto
 
-arguments are
-
-+-+----------+
-+a+auto const+
-+-+----------+
-+b+auto const+
-+-+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
 
 
 |function-functional-is_not_equal|
@@ -166,15 +166,15 @@ arguments are
 
 islice returns auto
 
-arguments are
-
-+-----+------------------+
-+src  +iterator<auto(TT)>+
-+-----+------------------+
-+start+int const         +
-+-----+------------------+
-+stop +int const         +
-+-----+------------------+
++--------+------------------+
++argument+argument type     +
++========+==================+
++src     +iterator<auto(TT)>+
++--------+------------------+
++start   +int const         +
++--------+------------------+
++stop    +int const         +
++--------+------------------+
 
 
 |function-functional-islice|
@@ -185,13 +185,13 @@ arguments are
 
 map returns auto
 
-arguments are
-
-+---+----------------------------------------+
-+src+iterator<auto(TT)>                      +
-+---+----------------------------------------+
-+blk+function<(what:TT const):auto(QQ)> const+
-+---+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++src     +iterator<auto(TT)>                      +
++--------+----------------------------------------+
++blk     +function<(what:TT const):auto(QQ)> const+
++--------+----------------------------------------+
 
 
 |function-functional-map|
@@ -202,13 +202,13 @@ arguments are
 
 map returns auto
 
-arguments are
-
-+---+--------------------------------------+
-+src+iterator<auto(TT)>                    +
-+---+--------------------------------------+
-+blk+lambda<(what:TT const):auto(QQ)> const+
-+---+--------------------------------------+
++--------+--------------------------------------+
++argument+argument type                         +
++========+======================================+
++src     +iterator<auto(TT)>                    +
++--------+--------------------------------------+
++blk     +lambda<(what:TT const):auto(QQ)> const+
++--------+--------------------------------------+
 
 
 |function-functional-map|
@@ -219,11 +219,11 @@ arguments are
 
 not returns auto
 
-arguments are
-
-+-+----------+
-+x+auto const+
-+-+----------+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +auto const   +
++--------+-------------+
 
 
 |function-functional-not|
@@ -234,13 +234,13 @@ arguments are
 
 reduce returns auto
 
-arguments are
-
-+---+----------------------------------------------------+
-+it +iterator<auto(TT)> const                            +
-+---+----------------------------------------------------+
-+blk+block<(left:TT const;right:TT const):TT const> const+
-+---+----------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++it      +iterator<auto(TT)> const                            +
++--------+----------------------------------------------------+
++blk     +block<(left:TT const;right:TT const):TT const> const+
++--------+----------------------------------------------------+
 
 
 |function-functional-reduce|
@@ -251,13 +251,13 @@ arguments are
 
 reduce returns auto
 
-arguments are
-
-+---+-------------------------------------------------------+
-+it +iterator<auto(TT)> const                               +
-+---+-------------------------------------------------------+
-+blk+function<(left:TT const;right:TT const):TT const> const+
-+---+-------------------------------------------------------+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++it      +iterator<auto(TT)> const                               +
++--------+-------------------------------------------------------+
++blk     +function<(left:TT const;right:TT const):TT const> const+
++--------+-------------------------------------------------------+
 
 
 |function-functional-reduce|
@@ -268,13 +268,13 @@ arguments are
 
 reduce returns auto
 
-arguments are
-
-+---+-----------------------------------------------------+
-+it +iterator<auto(TT)> const                             +
-+---+-----------------------------------------------------+
-+blk+lambda<(left:TT const;right:TT const):TT const> const+
-+---+-----------------------------------------------------+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++it      +iterator<auto(TT)> const                             +
++--------+-----------------------------------------------------+
++blk     +lambda<(left:TT const;right:TT const):TT const> const+
++--------+-----------------------------------------------------+
 
 
 |function-functional-reduce|
@@ -285,13 +285,13 @@ arguments are
 
 repeat returns auto
 
-arguments are
-
-+-----+--------------+
-+value+auto(TT) const+
-+-----+--------------+
-+count+int           +
-+-----+--------------+
++--------+--------------+
++argument+argument type +
++========+==============+
++value   +auto(TT) const+
++--------+--------------+
++count   +int           +
++--------+--------------+
 
 
 |function-functional-repeat|
@@ -302,11 +302,11 @@ arguments are
 
 sum returns auto
 
-arguments are
-
-+--+------------------------+
-+it+iterator<auto(TT)> const+
-+--+------------------------+
++--------+------------------------+
++argument+argument type           +
++========+========================+
++it      +iterator<auto(TT)> const+
++--------+------------------------+
 
 
 |function-functional-sum|

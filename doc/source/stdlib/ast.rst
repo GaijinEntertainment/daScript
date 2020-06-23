@@ -29,11 +29,13 @@ Type aliases
 
 .. das:attribute:: ExprAscendFlags is a bitfield
 
-+------------+-+-+
-+useStackRef +0+1+
-+------------+-+-+
-+needTypeInfo+1+2+
-+------------+-+-+
++------------+---+-----+
++field       +bit+value+
++============+===+=====+
++useStackRef +0  +1    +
++------------+---+-----+
++needTypeInfo+1  +2    +
++------------+---+-----+
 
 
 |typedef-ast-ExprAscendFlags|
@@ -42,13 +44,15 @@ Type aliases
 
 .. das:attribute:: ExprAtFlags is a bitfield
 
-+-----+-+-+
-+r2v  +0+1+
-+-----+-+-+
-+r2cr +1+2+
-+-----+-+-+
-+write+2+4+
-+-----+-+-+
++-----+---+-----+
++field+bit+value+
++=====+===+=====+
++r2v  +0  +1    +
++-----+---+-----+
++r2cr +1  +2    +
++-----+---+-----+
++write+2  +4    +
++-----+---+-----+
 
 
 |typedef-ast-ExprAtFlags|
@@ -57,29 +61,31 @@ Type aliases
 
 .. das:attribute:: ExprBlockFlags is a bitfield
 
-+--------------------------+--+----+
-+isClosure                 +0 +1   +
-+--------------------------+--+----+
-+hasReturn                 +1 +2   +
-+--------------------------+--+----+
-+copyOnReturn              +2 +4   +
-+--------------------------+--+----+
-+moveOnReturn              +3 +8   +
-+--------------------------+--+----+
-+inTheLoop                 +4 +16  +
-+--------------------------+--+----+
-+finallyBeforeBody         +5 +32  +
-+--------------------------+--+----+
-+finallyDisabled           +6 +64  +
-+--------------------------+--+----+
-+aotSkipMakeBlock          +7 +128 +
-+--------------------------+--+----+
-+aotDoNotSkipAnnotationData+8 +256 +
-+--------------------------+--+----+
-+isCollapseable            +9 +512 +
-+--------------------------+--+----+
-+needCollapse              +10+1024+
-+--------------------------+--+----+
++--------------------------+---+-----+
++field                     +bit+value+
++==========================+===+=====+
++isClosure                 +0  +1    +
++--------------------------+---+-----+
++hasReturn                 +1  +2    +
++--------------------------+---+-----+
++copyOnReturn              +2  +4    +
++--------------------------+---+-----+
++moveOnReturn              +3  +8    +
++--------------------------+---+-----+
++inTheLoop                 +4  +16   +
++--------------------------+---+-----+
++finallyBeforeBody         +5  +32   +
++--------------------------+---+-----+
++finallyDisabled           +6  +64   +
++--------------------------+---+-----+
++aotSkipMakeBlock          +7  +128  +
++--------------------------+---+-----+
++aotDoNotSkipAnnotationData+8  +256  +
++--------------------------+---+-----+
++isCollapseable            +9  +512  +
++--------------------------+---+-----+
++needCollapse              +10 +1024 +
++--------------------------+---+-----+
 
 
 |typedef-ast-ExprBlockFlags|
@@ -88,11 +94,13 @@ Type aliases
 
 .. das:attribute:: ExprCastFlags is a bitfield
 
-+---------------+-+-+
-+upcastCast     +0+1+
-+---------------+-+-+
-+reinterpretCast+1+2+
-+---------------+-+-+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++upcastCast     +0  +1    +
++---------------+---+-----+
++reinterpretCast+1  +2    +
++---------------+---+-----+
 
 
 |typedef-ast-ExprCastFlags|
@@ -101,11 +109,13 @@ Type aliases
 
 .. das:attribute:: ExprFieldDerefFlags is a bitfield
 
-+------------------+-+-+
-+unsafeDeref       +0+1+
-+------------------+-+-+
-+ignoreCaptureConst+1+2+
-+------------------+-+-+
++------------------+---+-----+
++field             +bit+value+
++==================+===+=====+
++unsafeDeref       +0  +1    +
++------------------+---+-----+
++ignoreCaptureConst+1  +2    +
++------------------+---+-----+
 
 
 |typedef-ast-ExprFieldDerefFlags|
@@ -114,13 +124,15 @@ Type aliases
 
 .. das:attribute:: ExprFieldFieldFlags is a bitfield
 
-+-----+-+-+
-+r2v  +0+1+
-+-----+-+-+
-+r2cr +1+2+
-+-----+-+-+
-+write+2+4+
-+-----+-+-+
++-----+---+-----+
++field+bit+value+
++=====+===+=====+
++r2v  +0  +1    +
++-----+---+-----+
++r2cr +1  +2    +
++-----+---+-----+
++write+2  +4    +
++-----+---+-----+
 
 
 |typedef-ast-ExprFieldFieldFlags|
@@ -129,13 +141,15 @@ Type aliases
 
 .. das:attribute:: ExprFlags is a bitfield
 
-+-------------------+-+-+
-+constexpression    +0+1+
-+-------------------+-+-+
-+noSideEffects      +1+2+
-+-------------------+-+-+
-+noNativeSideEffects+2+4+
-+-------------------+-+-+
++-------------------+---+-----+
++field              +bit+value+
++===================+===+=====+
++constexpression    +0  +1    +
++-------------------+---+-----+
++noSideEffects      +1  +2    +
++-------------------+---+-----+
++noNativeSideEffects+2  +4    +
++-------------------+---+-----+
 
 
 |typedef-ast-ExprFlags|
@@ -144,11 +158,13 @@ Type aliases
 
 .. das:attribute:: ExprGenFlags is a bitfield
 
-+----------+-+-+
-+alwaysSafe+0+1+
-+----------+-+-+
-+generated +1+2+
-+----------+-+-+
++----------+---+-----+
++field     +bit+value+
++==========+===+=====+
++alwaysSafe+0  +1    +
++----------+---+-----+
++generated +1  +2    +
++----------+---+-----+
 
 
 |typedef-ast-ExprGenFlags|
@@ -157,11 +173,13 @@ Type aliases
 
 .. das:attribute:: ExprMakeBlockFlags is a bitfield
 
-+---------------+-+-+
-+isLambda       +0+1+
-+---------------+-+-+
-+isLocalFunction+1+2+
-+---------------+-+-+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++isLambda       +0  +1    +
++---------------+---+-----+
++isLocalFunction+1  +2    +
++---------------+---+-----+
 
 
 |typedef-ast-ExprMakeBlockFlags|
@@ -170,17 +188,19 @@ Type aliases
 
 .. das:attribute:: ExprMakeLocalFlags is a bitfield
 
-+---------------+-+--+
-+useStackRef    +0+1 +
-+---------------+-+--+
-+useCMRES       +1+2 +
-+---------------+-+--+
-+doesNotNeedSp  +2+4 +
-+---------------+-+--+
-+doesNotNeedInit+3+8 +
-+---------------+-+--+
-+initAllFields  +4+16+
-+---------------+-+--+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++useStackRef    +0  +1    +
++---------------+---+-----+
++useCMRES       +1  +2    +
++---------------+---+-----+
++doesNotNeedSp  +2  +4    +
++---------------+---+-----+
++doesNotNeedInit+3  +8    +
++---------------+---+-----+
++initAllFields  +4  +16   +
++---------------+---+-----+
 
 
 |typedef-ast-ExprMakeLocalFlags|
@@ -189,11 +209,13 @@ Type aliases
 
 .. das:attribute:: ExprMakeStructFlags is a bitfield
 
-+--------------+-+-+
-+useInitializer+0+1+
-+--------------+-+-+
-+isNewHandle   +1+2+
-+--------------+-+-+
++--------------+---+-----+
++field         +bit+value+
++==============+===+=====+
++useInitializer+0  +1    +
++--------------+---+-----+
++isNewHandle   +1  +2    +
++--------------+---+-----+
 
 
 |typedef-ast-ExprMakeStructFlags|
@@ -202,13 +224,15 @@ Type aliases
 
 .. das:attribute:: ExprPrintFlags is a bitfield
 
-+-----------+-+-+
-+topLevel   +0+1+
-+-----------+-+-+
-+argLevel   +1+2+
-+-----------+-+-+
-+bottomLevel+2+4+
-+-----------+-+-+
++-----------+---+-----+
++field      +bit+value+
++===========+===+=====+
++topLevel   +0  +1    +
++-----------+---+-----+
++argLevel   +1  +2    +
++-----------+---+-----+
++bottomLevel+2  +4    +
++-----------+---+-----+
 
 
 |typedef-ast-ExprPrintFlags|
@@ -217,21 +241,23 @@ Type aliases
 
 .. das:attribute:: ExprReturnFlags is a bitfield
 
-+------------------+-+--+
-+moveSemantics     +0+1 +
-+------------------+-+--+
-+returnReference   +1+2 +
-+------------------+-+--+
-+returnInBlock     +2+4 +
-+------------------+-+--+
-+takeOverRightStack+3+8 +
-+------------------+-+--+
-+returnCallCMRES   +4+16+
-+------------------+-+--+
-+returnCMRES       +5+32+
-+------------------+-+--+
-+fromYield         +6+64+
-+------------------+-+--+
++------------------+---+-----+
++field             +bit+value+
++==================+===+=====+
++moveSemantics     +0  +1    +
++------------------+---+-----+
++returnReference   +1  +2    +
++------------------+---+-----+
++returnInBlock     +2  +4    +
++------------------+---+-----+
++takeOverRightStack+3  +8    +
++------------------+---+-----+
++returnCallCMRES   +4  +16   +
++------------------+---+-----+
++returnCMRES       +5  +32   +
++------------------+---+-----+
++fromYield         +6  +64   +
++------------------+---+-----+
 
 
 |typedef-ast-ExprReturnFlags|
@@ -240,13 +266,15 @@ Type aliases
 
 .. das:attribute:: ExprSwizzleFieldFlags is a bitfield
 
-+-----+-+-+
-+r2v  +0+1+
-+-----+-+-+
-+r2cr +1+2+
-+-----+-+-+
-+write+2+4+
-+-----+-+-+
++-----+---+-----+
++field+bit+value+
++=====+===+=====+
++r2v  +0  +1    +
++-----+---+-----+
++r2cr +1  +2    +
++-----+---+-----+
++write+2  +4    +
++-----+---+-----+
 
 
 |typedef-ast-ExprSwizzleFieldFlags|
@@ -255,21 +283,23 @@ Type aliases
 
 .. das:attribute:: ExprVarFlags is a bitfield
 
-+---------+-+--+
-+local    +0+1 +
-+---------+-+--+
-+argument +1+2 +
-+---------+-+--+
-+block    +2+4 +
-+---------+-+--+
-+thisBlock+3+8 +
-+---------+-+--+
-+r2v      +4+16+
-+---------+-+--+
-+r2cr     +5+32+
-+---------+-+--+
-+write    +6+64+
-+---------+-+--+
++---------+---+-----+
++field    +bit+value+
++=========+===+=====+
++local    +0  +1    +
++---------+---+-----+
++argument +1  +2    +
++---------+---+-----+
++block    +2  +4    +
++---------+---+-----+
++thisBlock+3  +8    +
++---------+---+-----+
++r2v      +4  +16   +
++---------+---+-----+
++r2cr     +5  +32   +
++---------+---+-----+
++write    +6  +64   +
++---------+---+-----+
 
 
 |typedef-ast-ExprVarFlags|
@@ -278,9 +308,11 @@ Type aliases
 
 .. das:attribute:: ExprYieldFlags is a bitfield
 
-+-------------+-+-+
-+moveSemantics+0+1+
-+-------------+-+-+
++-------------+---+-----+
++field        +bit+value+
++=============+===+=====+
++moveSemantics+0  +1    +
++-------------+---+-----+
 
 
 |typedef-ast-ExprYieldFlags|
@@ -295,15 +327,17 @@ Type aliases
 
 .. das:attribute:: FieldDeclarationFlags is a bitfield
 
-+----------------+-+-+
-+moveSemantics   +0+1+
-+----------------+-+-+
-+parentType      +1+2+
-+----------------+-+-+
-+capturedConstant+2+4+
-+----------------+-+-+
-+generated       +3+8+
-+----------------+-+-+
++----------------+---+-----+
++field           +bit+value+
++================+===+=====+
++moveSemantics   +0  +1    +
++----------------+---+-----+
++parentType      +1  +2    +
++----------------+---+-----+
++capturedConstant+2  +4    +
++----------------+---+-----+
++generated       +3  +8    +
++----------------+---+-----+
 
 
 |typedef-ast-FieldDeclarationFlags|
@@ -318,63 +352,65 @@ Type aliases
 
 .. das:attribute:: FunctionFlags is a bitfield
 
-+---------------------+--+---------+
-+builtIn              +0 +1        +
-+---------------------+--+---------+
-+policyBased          +1 +2        +
-+---------------------+--+---------+
-+callBased            +2 +4        +
-+---------------------+--+---------+
-+interopFn            +3 +8        +
-+---------------------+--+---------+
-+hasReturn            +4 +16       +
-+---------------------+--+---------+
-+copyOnReturn         +5 +32       +
-+---------------------+--+---------+
-+moveOnReturn         +6 +64       +
-+---------------------+--+---------+
-+exports              +7 +128      +
-+---------------------+--+---------+
-+init                 +8 +256      +
-+---------------------+--+---------+
-+addr                 +9 +512      +
-+---------------------+--+---------+
-+used                 +10+1024     +
-+---------------------+--+---------+
-+fastCall             +11+2048     +
-+---------------------+--+---------+
-+knownSideEffects     +12+4096     +
-+---------------------+--+---------+
-+hasToRunAtCompileTime+13+8192     +
-+---------------------+--+---------+
-+unsafeOperation      +14+16384    +
-+---------------------+--+---------+
-+unsafeDeref          +15+32768    +
-+---------------------+--+---------+
-+hasMakeBlock         +16+65536    +
-+---------------------+--+---------+
-+aotNeedPrologue      +17+131072   +
-+---------------------+--+---------+
-+noAot                +18+262144   +
-+---------------------+--+---------+
-+aotHybrid            +19+524288   +
-+---------------------+--+---------+
-+aotTemplate          +20+1048576  +
-+---------------------+--+---------+
-+generated            +21+2097152  +
-+---------------------+--+---------+
-+privateFunction      +22+4194304  +
-+---------------------+--+---------+
-+_generator           +23+8388608  +
-+---------------------+--+---------+
-+_lambda              +24+16777216 +
-+---------------------+--+---------+
-+firstArgReturnType   +25+33554432 +
-+---------------------+--+---------+
-+isClassMethod        +26+67108864 +
-+---------------------+--+---------+
-+safe                 +27+134217728+
-+---------------------+--+---------+
++---------------------+---+---------+
++field                +bit+value    +
++=====================+===+=========+
++builtIn              +0  +1        +
++---------------------+---+---------+
++policyBased          +1  +2        +
++---------------------+---+---------+
++callBased            +2  +4        +
++---------------------+---+---------+
++interopFn            +3  +8        +
++---------------------+---+---------+
++hasReturn            +4  +16       +
++---------------------+---+---------+
++copyOnReturn         +5  +32       +
++---------------------+---+---------+
++moveOnReturn         +6  +64       +
++---------------------+---+---------+
++exports              +7  +128      +
++---------------------+---+---------+
++init                 +8  +256      +
++---------------------+---+---------+
++addr                 +9  +512      +
++---------------------+---+---------+
++used                 +10 +1024     +
++---------------------+---+---------+
++fastCall             +11 +2048     +
++---------------------+---+---------+
++knownSideEffects     +12 +4096     +
++---------------------+---+---------+
++hasToRunAtCompileTime+13 +8192     +
++---------------------+---+---------+
++unsafeOperation      +14 +16384    +
++---------------------+---+---------+
++unsafeDeref          +15 +32768    +
++---------------------+---+---------+
++hasMakeBlock         +16 +65536    +
++---------------------+---+---------+
++aotNeedPrologue      +17 +131072   +
++---------------------+---+---------+
++noAot                +18 +262144   +
++---------------------+---+---------+
++aotHybrid            +19 +524288   +
++---------------------+---+---------+
++aotTemplate          +20 +1048576  +
++---------------------+---+---------+
++generated            +21 +2097152  +
++---------------------+---+---------+
++privateFunction      +22 +4194304  +
++---------------------+---+---------+
++_generator           +23 +8388608  +
++---------------------+---+---------+
++_lambda              +24 +16777216 +
++---------------------+---+---------+
++firstArgReturnType   +25 +33554432 +
++---------------------+---+---------+
++isClassMethod        +26 +67108864 +
++---------------------+---+---------+
++safe                 +27 +134217728+
++---------------------+---+---------+
 
 
 |typedef-ast-FunctionFlags|
@@ -389,19 +425,21 @@ Type aliases
 
 .. das:attribute:: FunctionSideEffectFlags is a bitfield
 
-+--------------+-+--+
-+unsafe        +0+1 +
-+--------------+-+--+
-+userScenario  +1+2 +
-+--------------+-+--+
-+modifyExternal+2+4 +
-+--------------+-+--+
-+modifyArgument+3+8 +
-+--------------+-+--+
-+accessGlobal  +4+16+
-+--------------+-+--+
-+invoke        +5+32+
-+--------------+-+--+
++--------------+---+-----+
++field         +bit+value+
++==============+===+=====+
++unsafe        +0  +1    +
++--------------+---+-----+
++userScenario  +1  +2    +
++--------------+---+-----+
++modifyExternal+2  +4    +
++--------------+---+-----+
++modifyArgument+3  +8    +
++--------------+---+-----+
++accessGlobal  +4  +16   +
++--------------+---+-----+
++invoke        +5  +32   +
++--------------+---+-----+
 
 
 |typedef-ast-FunctionSideEffectFlags|
@@ -410,11 +448,13 @@ Type aliases
 
 .. das:attribute:: MakeFieldDeclFlags is a bitfield
 
-+--------------+-+-+
-+moveSemantics +0+1+
-+--------------+-+-+
-+cloneSemantics+1+2+
-+--------------+-+-+
++--------------+---+-----+
++field         +bit+value+
++==============+===+=====+
++moveSemantics +0  +1    +
++--------------+---+-----+
++cloneSemantics+1  +2    +
++--------------+---+-----+
 
 
 |typedef-ast-MakeFieldDeclFlags|
@@ -453,21 +493,23 @@ Type aliases
 
 .. das:attribute:: StructureFlags is a bitfield
 
-+---------------+-+--+
-+isClass        +0+1 +
-+---------------+-+--+
-+genCtor        +1+2 +
-+---------------+-+--+
-+cppLayout      +2+4 +
-+---------------+-+--+
-+cppLayoutNotPod+3+8 +
-+---------------+-+--+
-+generated      +4+16+
-+---------------+-+--+
-+persistent     +5+32+
-+---------------+-+--+
-+isLambda       +6+64+
-+---------------+-+--+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++isClass        +0  +1    +
++---------------+---+-----+
++genCtor        +1  +2    +
++---------------+---+-----+
++cppLayout      +2  +4    +
++---------------+---+-----+
++cppLayoutNotPod+3  +8    +
++---------------+---+-----+
++generated      +4  +16   +
++---------------+---+-----+
++persistent     +5  +32   +
++---------------+---+-----+
++isLambda       +6  +64   +
++---------------+---+-----+
 
 
 |typedef-ast-StructureFlags|
@@ -482,29 +524,31 @@ Type aliases
 
 .. das:attribute:: TypeDeclFlags is a bitfield
 
-+---------------+--+----+
-+ref            +0 +1   +
-+---------------+--+----+
-+constant       +1 +2   +
-+---------------+--+----+
-+temporary      +2 +4   +
-+---------------+--+----+
-+_implicit      +3 +8   +
-+---------------+--+----+
-+removeRef      +4 +16  +
-+---------------+--+----+
-+removeConstant +5 +32  +
-+---------------+--+----+
-+removeDim      +6 +64  +
-+---------------+--+----+
-+removeTemporary+7 +128 +
-+---------------+--+----+
-+explicitConst  +8 +256 +
-+---------------+--+----+
-+aotAlias       +9 +512 +
-+---------------+--+----+
-+smartPtr       +10+1024+
-+---------------+--+----+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++ref            +0  +1    +
++---------------+---+-----+
++constant       +1  +2    +
++---------------+---+-----+
++temporary      +2  +4    +
++---------------+---+-----+
++_implicit      +3  +8    +
++---------------+---+-----+
++removeRef      +4  +16   +
++---------------+---+-----+
++removeConstant +5  +32   +
++---------------+---+-----+
++removeDim      +6  +64   +
++---------------+---+-----+
++removeTemporary+7  +128  +
++---------------+---+-----+
++explicitConst  +8  +256  +
++---------------+---+-----+
++aotAlias       +9  +512  +
++---------------+---+-----+
++smartPtr       +10 +1024 +
++---------------+---+-----+
 
 
 |typedef-ast-TypeDeclFlags|
@@ -519,17 +563,19 @@ Type aliases
 
 .. das:attribute:: VariableAccessFlags is a bitfield
 
-+-------------+-+--+
-+access_extern+0+1 +
-+-------------+-+--+
-+access_get   +1+2 +
-+-------------+-+--+
-+access_ref   +2+4 +
-+-------------+-+--+
-+access_init  +3+8 +
-+-------------+-+--+
-+access_pass  +4+16+
-+-------------+-+--+
++-------------+---+-----+
++field        +bit+value+
++=============+===+=====+
++access_extern+0  +1    +
++-------------+---+-----+
++access_get   +1  +2    +
++-------------+---+-----+
++access_ref   +2  +4    +
++-------------+---+-----+
++access_init  +3  +8    +
++-------------+---+-----+
++access_pass  +4  +16   +
++-------------+---+-----+
 
 
 |typedef-ast-VariableAccessFlags|
@@ -538,23 +584,25 @@ Type aliases
 
 .. das:attribute:: VariableFlags is a bitfield
 
-+--------------+-+---+
-+init_via_move +0+1  +
-+--------------+-+---+
-+init_via_clone+1+2  +
-+--------------+-+---+
-+used          +2+4  +
-+--------------+-+---+
-+aliasCMRES    +3+8  +
-+--------------+-+---+
-+marked_used   +4+16 +
-+--------------+-+---+
-+global_shared +5+32 +
-+--------------+-+---+
-+do_not_delete +6+64 +
-+--------------+-+---+
-+generated     +7+128+
-+--------------+-+---+
++--------------+---+-----+
++field         +bit+value+
++==============+===+=====+
++init_via_move +0  +1    +
++--------------+---+-----+
++init_via_clone+1  +2    +
++--------------+---+-----+
++used          +2  +4    +
++--------------+---+-----+
++aliasCMRES    +3  +8    +
++--------------+---+-----+
++marked_used   +4  +16   +
++--------------+---+-----+
++global_shared +5  +32   +
++--------------+---+-----+
++do_not_delete +6  +64   +
++--------------+---+-----+
++generated     +7  +128  +
++--------------+---+-----+
 
 
 |typedef-ast-VariableFlags|
@@ -3839,17 +3887,17 @@ it defines as follows
 
 visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstCallMacro.visit|
@@ -3868,15 +3916,15 @@ it defines as follows
 
 transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+------+----------------------------------------------------------------------+
-+self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
-+------+----------------------------------------------------------------------+
-+call  +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
-+------+----------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`               +
-+------+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
++--------+----------------------------------------------------------------------+
++call    +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >               +
++--------+----------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`               +
++--------+----------------------------------------------------------------------+
 
 
 |method-ast-AstFunctionAnnotation.transform|
@@ -3885,19 +3933,19 @@ arguments are
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
-+------+--------------------------------------------------------------------------------+
-+func  + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
++--------+--------------------------------------------------------------------------------+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast-AstFunctionAnnotation.apply|
@@ -3906,9 +3954,9 @@ arguments are
 
 finish returns bool
 
-arguments are
-
 +--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
 +self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
 +--------+--------------------------------------------------------------------------------+
 +func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
@@ -3939,15 +3987,15 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+----+----------------------------------------------------+
-+self+ :ref:`ast::AstPassMacro <struct-ast-AstPassMacro>` +
-+----+----------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`               +
-+----+----------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const   +
-+----+----------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++self    + :ref:`ast::AstPassMacro <struct-ast-AstPassMacro>` +
++--------+----------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`               +
++--------+----------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const   +
++--------+----------------------------------------------------+
 
 
 |method-ast-AstPassMacro.apply|
@@ -3966,21 +4014,21 @@ it defines as follows
 
 accept returns bool
 
-arguments are
-
-+----+--------------------------------------------------------+
-+self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
-+----+--------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                   +
-+----+--------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
-+----+--------------------------------------------------------+
-+expr+ :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
-+----+--------------------------------------------------------+
-+ch  +int const                                               +
-+----+--------------------------------------------------------+
-+info+ :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
-+----+--------------------------------------------------------+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
++--------+--------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                   +
++--------+--------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
++--------+--------------------------------------------------------+
++expr    + :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
++--------+--------------------------------------------------------+
++ch      +int const                                               +
++--------+--------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
++--------+--------------------------------------------------------+
 
 
 |method-ast-AstReaderMacro.accept|
@@ -3989,17 +4037,17 @@ arguments are
 
 visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
-+----+-----------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                            +
-+----+-----------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
++--------+-----------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                            +
++--------+-----------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstReaderMacro.visit|
@@ -4018,19 +4066,19 @@ it defines as follows
 
 apply returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast-AstStructureAnnotation.apply|
@@ -4039,19 +4087,19 @@ arguments are
 
 finish returns bool
 
-arguments are
-
-+------+--------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
-+------+--------------------------------------------------------------------------------+
-+st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
-+------+--------------------------------------------------------------------------------+
-+group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
-+------+--------------------------------------------------------------------------------+
-+args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+------+--------------------------------------------------------------------------------+
-+errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+------+--------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
 |method-ast-AstStructureAnnotation.finish|
@@ -4070,17 +4118,17 @@ it defines as follows
 
 visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVariantMacro.visitExprIsVariant|
@@ -4089,17 +4137,17 @@ arguments are
 
 visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
-+----+-----------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+----+-----------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`              +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVariantMacro.visitExprAsVariant|
@@ -4108,17 +4156,17 @@ arguments are
 
 visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`                      +
-+----+-------------------------------------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                          +
-+----+-------------------------------------------------------------------------------+
-+mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                              +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVariantMacro <struct-ast-AstVariantMacro>`                      +
++--------+-------------------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                          +
++--------+-------------------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                              +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVariantMacro.visitExprSafeAsVariant|
@@ -4135,52 +4183,52 @@ it defines as follows
 
 .. das:function:: AstVisitor.preVisitProgram(self: AstVisitor; prog: ProgramPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`           +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`           +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitProgram|
 
 .. das:function:: AstVisitor.visitProgram(self: AstVisitor; porg: ProgramPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+porg+ :ref:`ProgramPtr <alias-ProgramPtr>`           +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++porg    + :ref:`ProgramPtr <alias-ProgramPtr>`           +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitProgram|
 
 .. das:function:: AstVisitor.preVisitProgramBody(self: AstVisitor; prog: ProgramPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`           +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`           +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitProgramBody|
 
 .. das:function:: AstVisitor.preVisitTypeDecl(self: AstVisitor; typ: TypeDeclPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+typ + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`         +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++typ     + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`         +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitTypeDecl|
@@ -4189,28 +4237,28 @@ arguments are
 
 visitTypeDecl returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+typ + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`         +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++typ     + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`         +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitTypeDecl|
 
 .. das:function:: AstVisitor.preVisitAlias(self: AstVisitor; typ: TypeDeclPtr; name: das_string const)
 
-arguments are
-
-+----+--------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
-+----+--------------------------------------------------------------+
-+typ + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`                       +
-+----+--------------------------------------------------------------+
-+name+ :ref:`builtin::das_string <handle-builtin-das_string>`  const+
-+----+--------------------------------------------------------------+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
++--------+--------------------------------------------------------------+
++typ     + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`                       +
++--------+--------------------------------------------------------------+
++name    + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
++--------+--------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitAlias|
@@ -4219,47 +4267,47 @@ arguments are
 
 visitAlias returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
-arguments are
-
-+----+--------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
-+----+--------------------------------------------------------------+
-+typ + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`                       +
-+----+--------------------------------------------------------------+
-+name+ :ref:`builtin::das_string <handle-builtin-das_string>`  const+
-+----+--------------------------------------------------------------+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
++--------+--------------------------------------------------------------+
++typ     + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`                       +
++--------+--------------------------------------------------------------+
++name    + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
++--------+--------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitAlias|
 
 .. das:function:: AstVisitor.preVisitEnumeration(self: AstVisitor; enu: EnumerationPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+enu + :ref:`EnumerationPtr <alias-EnumerationPtr>`   +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++enu     + :ref:`EnumerationPtr <alias-EnumerationPtr>`   +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitEnumeration|
 
 .. das:function:: AstVisitor.preVisitEnumerationValue(self: AstVisitor; enu: EnumerationPtr; name: das_string const; value: ExpressionPtr; last: bool const)
 
-arguments are
-
-+-----+--------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
-+-----+--------------------------------------------------------------+
-+enu  + :ref:`EnumerationPtr <alias-EnumerationPtr>`                 +
-+-----+--------------------------------------------------------------+
-+name + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
-+-----+--------------------------------------------------------------+
-+value+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                   +
-+-----+--------------------------------------------------------------+
-+last +bool const                                                    +
-+-----+--------------------------------------------------------------+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
++--------+--------------------------------------------------------------+
++enu     + :ref:`EnumerationPtr <alias-EnumerationPtr>`                 +
++--------+--------------------------------------------------------------+
++name    + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
++--------+--------------------------------------------------------------+
++value   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                   +
++--------+--------------------------------------------------------------+
++last    +bool const                                                    +
++--------+--------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitEnumerationValue|
@@ -4268,19 +4316,19 @@ arguments are
 
 visitEnumerationValue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+-----+--------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
-+-----+--------------------------------------------------------------+
-+enu  + :ref:`EnumerationPtr <alias-EnumerationPtr>`                 +
-+-----+--------------------------------------------------------------+
-+name + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
-+-----+--------------------------------------------------------------+
-+value+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                   +
-+-----+--------------------------------------------------------------+
-+last +bool const                                                    +
-+-----+--------------------------------------------------------------+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`               +
++--------+--------------------------------------------------------------+
++enu     + :ref:`EnumerationPtr <alias-EnumerationPtr>`                 +
++--------+--------------------------------------------------------------+
++name    + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
++--------+--------------------------------------------------------------+
++value   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                   +
++--------+--------------------------------------------------------------+
++last    +bool const                                                    +
++--------+--------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitEnumerationValue|
@@ -4289,60 +4337,60 @@ arguments are
 
 visitEnumeration returns  :ref:`EnumerationPtr <alias-EnumerationPtr>` 
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+enu + :ref:`EnumerationPtr <alias-EnumerationPtr>`   +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++enu     + :ref:`EnumerationPtr <alias-EnumerationPtr>`   +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitEnumeration|
 
 .. das:function:: AstVisitor.preVisitStructure(self: AstVisitor; str: StructurePtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+str + :ref:`StructurePtr <alias-StructurePtr>`       +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++str     + :ref:`StructurePtr <alias-StructurePtr>`       +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitStructure|
 
 .. das:function:: AstVisitor.preVisitStructureField(self: AstVisitor; str: StructurePtr; decl: FieldDeclaration const; last: bool const)
 
-arguments are
-
-+----+------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                   +
-+----+------------------------------------------------------------------+
-+str + :ref:`StructurePtr <alias-StructurePtr>`                         +
-+----+------------------------------------------------------------------+
-+decl+ :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const+
-+----+------------------------------------------------------------------+
-+last+bool const                                                        +
-+----+------------------------------------------------------------------+
++--------+------------------------------------------------------------------+
++argument+argument type                                                     +
++========+==================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                   +
++--------+------------------------------------------------------------------+
++str     + :ref:`StructurePtr <alias-StructurePtr>`                         +
++--------+------------------------------------------------------------------+
++decl    + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const+
++--------+------------------------------------------------------------------+
++last    +bool const                                                        +
++--------+------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitStructureField|
 
 .. das:function:: AstVisitor.visitStructureField(self: AstVisitor; str: StructurePtr; decl: FieldDeclaration const; last: bool const)
 
-arguments are
-
-+----+------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                   +
-+----+------------------------------------------------------------------+
-+str + :ref:`StructurePtr <alias-StructurePtr>`                         +
-+----+------------------------------------------------------------------+
-+decl+ :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const+
-+----+------------------------------------------------------------------+
-+last+bool const                                                        +
-+----+------------------------------------------------------------------+
++--------+------------------------------------------------------------------+
++argument+argument type                                                     +
++========+==================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                   +
++--------+------------------------------------------------------------------+
++str     + :ref:`StructurePtr <alias-StructurePtr>`                         +
++--------+------------------------------------------------------------------+
++decl    + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const+
++--------+------------------------------------------------------------------+
++last    +bool const                                                        +
++--------+------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitStructureField|
@@ -4351,26 +4399,26 @@ arguments are
 
 visitStructure returns  :ref:`StructurePtr <alias-StructurePtr>` 
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+str + :ref:`StructurePtr <alias-StructurePtr>`       +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++str     + :ref:`StructurePtr <alias-StructurePtr>`       +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitStructure|
 
 .. das:function:: AstVisitor.preVisitFunction(self: AstVisitor; fun: FunctionPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+fun + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitFunction|
@@ -4379,30 +4427,30 @@ arguments are
 
 visitFunction returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+fun + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitFunction|
 
 .. das:function:: AstVisitor.preVisitFunctionArgument(self: AstVisitor; fun: FunctionPtr; arg: VariablePtr; lastArg: bool const)
 
-arguments are
-
-+-------+------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+-------+------------------------------------------------+
-+fun    + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+-------+------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`         +
-+-------+------------------------------------------------+
-+lastArg+bool const                                      +
-+-------+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++lastArg +bool const                                      +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitFunctionArgument|
@@ -4411,34 +4459,34 @@ arguments are
 
 visitFunctionArgument returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
-arguments are
-
-+-------+------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+-------+------------------------------------------------+
-+fun    + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+-------+------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`         +
-+-------+------------------------------------------------+
-+lastArg+bool const                                      +
-+-------+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++lastArg +bool const                                      +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitFunctionArgument|
 
 .. das:function:: AstVisitor.preVisitFunctionArgumentInit(self: AstVisitor; fun: FunctionPtr; arg: VariablePtr; value: ExpressionPtr)
 
-arguments are
-
-+-----+------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+-----+------------------------------------------------+
-+fun  + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+-----+------------------------------------------------+
-+arg  + :ref:`VariablePtr <alias-VariablePtr>`         +
-+-----+------------------------------------------------+
-+value+ :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
-+-----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++value   + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitFunctionArgumentInit|
@@ -4447,56 +4495,56 @@ arguments are
 
 visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+-----+------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+-----+------------------------------------------------+
-+fun  + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+-----+------------------------------------------------+
-+arg  + :ref:`VariablePtr <alias-VariablePtr>`         +
-+-----+------------------------------------------------+
-+value+ :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
-+-----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++value   + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitFunctionArgumentInit|
 
 .. das:function:: AstVisitor.preVisitFunctionBody(self: AstVisitor; fun: FunctionPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+fun + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitFunctionBody|
 
 .. das:function:: AstVisitor.visitFunctionBody(self: AstVisitor; fun: FunctionPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+fun + :ref:`FunctionPtr <alias-FunctionPtr>`         +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitFunctionBody|
 
 .. das:function:: AstVisitor.preVisitExpression(self: AstVisitor; expr: ExpressionPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExpression|
@@ -4505,26 +4553,26 @@ arguments are
 
 visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExpression|
 
 .. das:function:: AstVisitor.preVisitExprBlock(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprBlock|
@@ -4533,30 +4581,30 @@ arguments are
 
 visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprBlock|
 
 .. das:function:: AstVisitor.preVisitExprBlockArgument(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; lastArg: bool const)
 
-arguments are
-
-+-------+---------------------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+-------+---------------------------------------------------------------+
-+blk    +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+-------+---------------------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`                        +
-+-------+---------------------------------------------------------------+
-+lastArg+bool const                                                     +
-+-------+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                        +
++--------+---------------------------------------------------------------+
++lastArg +bool const                                                     +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprBlockArgument|
@@ -4565,34 +4613,34 @@ arguments are
 
 visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
-arguments are
-
-+-------+---------------------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+-------+---------------------------------------------------------------+
-+blk    +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+-------+---------------------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`                        +
-+-------+---------------------------------------------------------------+
-+lastArg+bool const                                                     +
-+-------+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                        +
++--------+---------------------------------------------------------------+
++lastArg +bool const                                                     +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprBlockArgument|
 
 .. das:function:: AstVisitor.preVisitExprBlockArgumentInit(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; expr: ExpressionPtr)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
-+arg + :ref:`VariablePtr <alias-VariablePtr>`                        +
-+----+---------------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                        +
++--------+---------------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprBlockArgumentInit|
@@ -4601,32 +4649,32 @@ arguments are
 
 visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
-+arg + :ref:`VariablePtr <alias-VariablePtr>`                        +
-+----+---------------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                        +
++--------+---------------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprBlockArgumentInit|
 
 .. das:function:: AstVisitor.preVisitExprBlockExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprBlockExpression|
@@ -4635,56 +4683,56 @@ arguments are
 
 visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprBlockExpression|
 
 .. das:function:: AstVisitor.preVisitExprBlockFinal(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprBlockFinal|
 
 .. das:function:: AstVisitor.visitExprBlockFinal(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprBlockFinal|
 
 .. das:function:: AstVisitor.preVisitExprBlockFinalExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprBlockFinalExpression|
@@ -4693,28 +4741,28 @@ arguments are
 
 visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
-+----+---------------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const+
++--------+---------------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprBlockFinalExpression|
 
 .. das:function:: AstVisitor.preVisitExprLet(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprLet|
@@ -4723,30 +4771,30 @@ arguments are
 
 visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprLet|
 
 .. das:function:: AstVisitor.preVisitExprLetVariable(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const; arg: VariablePtr; lastArg: bool const)
 
-arguments are
-
-+-------+-----------------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+-------+-----------------------------------------------------------+
-+expr   +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
-+-------+-----------------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`                    +
-+-------+-----------------------------------------------------------+
-+lastArg+bool const                                                 +
-+-------+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
++--------+-----------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                    +
++--------+-----------------------------------------------------------+
++lastArg +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprLetVariable|
@@ -4755,34 +4803,34 @@ arguments are
 
 visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
-arguments are
-
-+-------+-----------------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+-------+-----------------------------------------------------------+
-+expr   +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
-+-------+-----------------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`                    +
-+-------+-----------------------------------------------------------+
-+lastArg+bool const                                                 +
-+-------+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
++--------+-----------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                    +
++--------+-----------------------------------------------------------+
++lastArg +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprLetVariable|
 
 .. das:function:: AstVisitor.preVisitExprLetVariableInit(self: AstVisitor; blk: smart_ptr<ast::ExprLet> const; arg: VariablePtr; expr: ExpressionPtr)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
-+----+-----------------------------------------------------------+
-+arg + :ref:`VariablePtr <alias-VariablePtr>`                    +
-+----+-----------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
++--------+-----------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                    +
++--------+-----------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprLetVariableInit|
@@ -4791,58 +4839,58 @@ arguments are
 
 visitExprLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+blk +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
-+----+-----------------------------------------------------------+
-+arg + :ref:`VariablePtr <alias-VariablePtr>`                    +
-+----+-----------------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprLet <handle-ast-ExprLet>` > const+
++--------+-----------------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`                    +
++--------+-----------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprLetVariableInit|
 
 .. das:function:: AstVisitor.preVisitGlobalLet(self: AstVisitor; prog: ProgramPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`           +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`           +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitGlobalLet|
 
 .. das:function:: AstVisitor.visitGlobalLet(self: AstVisitor; prog: ProgramPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+prog+ :ref:`ProgramPtr <alias-ProgramPtr>`           +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`           +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitGlobalLet|
 
 .. das:function:: AstVisitor.preVisitGlobalLetVariable(self: AstVisitor; arg: VariablePtr; lastArg: bool const)
 
-arguments are
-
-+-------+------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+-------+------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`         +
-+-------+------------------------------------------------+
-+lastArg+bool const                                      +
-+-------+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++lastArg +bool const                                      +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitGlobalLetVariable|
@@ -4851,30 +4899,30 @@ arguments are
 
 visitGlobalLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
-arguments are
-
-+-------+------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+-------+------------------------------------------------+
-+arg    + :ref:`VariablePtr <alias-VariablePtr>`         +
-+-------+------------------------------------------------+
-+lastArg+bool const                                      +
-+-------+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++lastArg +bool const                                      +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitGlobalLetVariable|
 
 .. das:function:: AstVisitor.preVisitGlobalLetVariableInit(self: AstVisitor; arg: VariablePtr; expr: ExpressionPtr)
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+arg + :ref:`VariablePtr <alias-VariablePtr>`         +
-+----+------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitGlobalLetVariableInit|
@@ -4883,28 +4931,28 @@ arguments are
 
 visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
-+----+------------------------------------------------+
-+arg + :ref:`VariablePtr <alias-VariablePtr>`         +
-+----+------------------------------------------------+
-+expr+ :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
-+----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
++--------+------------------------------------------------+
++arg     + :ref:`VariablePtr <alias-VariablePtr>`         +
++--------+------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
++--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitGlobalLetVariableInit|
 
 .. das:function:: AstVisitor.preVisitExprStringBuilder(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprStringBuilder|
@@ -4913,30 +4961,30 @@ arguments are
 
 visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprStringBuilder|
 
 .. das:function:: AstVisitor.preVisitExprStringBuilderElement(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const; elem: ExpressionPtr; last: bool const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
-+----+-------------------------------------------------------------------------------+
-+elem+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
-+----+-------------------------------------------------------------------------------+
-+last+bool const                                                                     +
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
++--------+-------------------------------------------------------------------------------+
++elem    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
++--------+-------------------------------------------------------------------------------+
++last    +bool const                                                                     +
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprStringBuilderElement|
@@ -4945,30 +4993,30 @@ arguments are
 
 visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
-+----+-------------------------------------------------------------------------------+
-+elem+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
-+----+-------------------------------------------------------------------------------+
-+last+bool const                                                                     +
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` > const+
++--------+-------------------------------------------------------------------------------+
++elem    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
++--------+-------------------------------------------------------------------------------+
++last    +bool const                                                                     +
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprStringBuilderElement|
 
 .. das:function:: AstVisitor.preVisitExprNew(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprNew|
@@ -4977,30 +5025,30 @@ arguments are
 
 visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprNew|
 
 .. das:function:: AstVisitor.preVisitExprNewArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const; arg: ExpressionPtr; last: bool const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
-+----+-----------------------------------------------------------+
-+arg + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+----+-----------------------------------------------------------+
-+last+bool const                                                 +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
++--------+-----------------------------------------------------------+
++arg     + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
++last    +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprNewArgument|
@@ -5009,30 +5057,30 @@ arguments are
 
 visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
-+----+-----------------------------------------------------------+
-+arg + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+----+-----------------------------------------------------------+
-+last+bool const                                                 +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNew <handle-ast-ExprNew>` > const+
++--------+-----------------------------------------------------------+
++arg     + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
++last    +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprNewArgument|
 
 .. das:function:: AstVisitor.preVisitExprNamedCall(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprNamedCall|
@@ -5041,30 +5089,30 @@ arguments are
 
 visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprNamedCall|
 
 .. das:function:: AstVisitor.preVisitExprNamedCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const; arg: MakeFieldDeclPtr; last: bool const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
-+----+-----------------------------------------------------------------------+
-+arg + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                      +
-+----+-----------------------------------------------------------------------+
-+last+bool const                                                             +
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
++--------+-----------------------------------------------------------------------+
++arg     + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                      +
++--------+-----------------------------------------------------------------------+
++last    +bool const                                                             +
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprNamedCallArgument|
@@ -5073,30 +5121,30 @@ arguments are
 
 visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
-+----+-----------------------------------------------------------------------+
-+arg + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                      +
-+----+-----------------------------------------------------------------------+
-+last+bool const                                                             +
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNamedCall <handle-ast-ExprNamedCall>` > const+
++--------+-----------------------------------------------------------------------+
++arg     + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                      +
++--------+-----------------------------------------------------------------------+
++last    +bool const                                                             +
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprNamedCallArgument|
 
 .. das:function:: AstVisitor.preVisitExprLooksLikeCall(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprLooksLikeCall|
@@ -5105,30 +5153,30 @@ arguments are
 
 visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprLooksLikeCall|
 
 .. das:function:: AstVisitor.preVisitExprLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
-+----+-------------------------------------------------------------------------------+
-+arg + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
-+----+-------------------------------------------------------------------------------+
-+last+bool const                                                                     +
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
++--------+-------------------------------------------------------------------------------+
++arg     + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
++--------+-------------------------------------------------------------------------------+
++last    +bool const                                                                     +
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprLooksLikeCallArgument|
@@ -5137,30 +5185,30 @@ arguments are
 
 visitExprLooksLikeCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
-+----+-------------------------------------------------------------------------------+
-+arg + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
-+----+-------------------------------------------------------------------------------+
-+last+bool const                                                                     +
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
++--------+-------------------------------------------------------------------------------+
++arg     + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
++--------+-------------------------------------------------------------------------------+
++last    +bool const                                                                     +
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprLooksLikeCallArgument|
 
 .. das:function:: AstVisitor.preVisitExprCall(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprCall|
@@ -5169,30 +5217,30 @@ arguments are
 
 visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprCall|
 
 .. das:function:: AstVisitor.preVisitExprCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const; arg: ExpressionPtr; last: bool const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
-+----+-------------------------------------------------------------+
-+arg + :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
-+----+-------------------------------------------------------------+
-+last+bool const                                                   +
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
++--------+-------------------------------------------------------------+
++arg     + :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
++--------+-------------------------------------------------------------+
++last    +bool const                                                   +
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprCallArgument|
@@ -5201,30 +5249,30 @@ arguments are
 
 visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
-+----+-------------------------------------------------------------+
-+arg + :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
-+----+-------------------------------------------------------------+
-+last+bool const                                                   +
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` > const+
++--------+-------------------------------------------------------------+
++arg     + :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
++--------+-------------------------------------------------------------+
++last    +bool const                                                   +
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprCallArgument|
 
 .. das:function:: AstVisitor.preVisitExprNullCoalescing(self: AstVisitor; expr: smart_ptr<ast::ExprNullCoalescing> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                  +
-+----+---------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNullCoalescing <handle-ast-ExprNullCoalescing>` > const+
-+----+---------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                  +
++--------+---------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNullCoalescing <handle-ast-ExprNullCoalescing>` > const+
++--------+---------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprNullCoalescing|
@@ -5233,41 +5281,41 @@ arguments are
 
 visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                  +
-+----+---------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprNullCoalescing <handle-ast-ExprNullCoalescing>` > const+
-+----+---------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                  +
++--------+---------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNullCoalescing <handle-ast-ExprNullCoalescing>` > const+
++--------+---------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprNullCoalescing|
 
 .. das:function:: AstVisitor.preVisitExprNullCoalescingDefault(self: AstVisitor; expr: smart_ptr<ast::ExprNullCoalescing> const; defval: ExpressionPtr)
 
-arguments are
-
-+------+---------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                  +
-+------+---------------------------------------------------------------------------------+
-+expr  +smart_ptr< :ref:`ast::ExprNullCoalescing <handle-ast-ExprNullCoalescing>` > const+
-+------+---------------------------------------------------------------------------------+
-+defval+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                                      +
-+------+---------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                  +
++--------+---------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprNullCoalescing <handle-ast-ExprNullCoalescing>` > const+
++--------+---------------------------------------------------------------------------------+
++defval  + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                      +
++--------+---------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprNullCoalescingDefault|
 
 .. das:function:: AstVisitor.preVisitExprAt(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const)
 
-arguments are
-
-+----+---------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
-+----+---------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
-+----+---------------------------------------------------------+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
++--------+---------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
++--------+---------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprAt|
@@ -5276,41 +5324,41 @@ arguments are
 
 visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
-+----+---------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
-+----+---------------------------------------------------------+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
++--------+---------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
++--------+---------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprAt|
 
 .. das:function:: AstVisitor.preVisitExprAtIndex(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const; index: ExpressionPtr)
 
-arguments are
-
-+-----+---------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
-+-----+---------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
-+-----+---------------------------------------------------------+
-+index+ :ref:`ExpressionPtr <alias-ExpressionPtr>`              +
-+-----+---------------------------------------------------------+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
++--------+---------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
++--------+---------------------------------------------------------+
++index   + :ref:`ExpressionPtr <alias-ExpressionPtr>`              +
++--------+---------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprAtIndex|
 
 .. das:function:: AstVisitor.preVisitExprSafeAt(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAt> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAt <handle-ast-ExprSafeAt>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeAt <handle-ast-ExprSafeAt>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprSafeAt|
@@ -5319,41 +5367,41 @@ arguments are
 
 visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAt <handle-ast-ExprSafeAt>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeAt <handle-ast-ExprSafeAt>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprSafeAt|
 
 .. das:function:: AstVisitor.preVisitExprSafeAtIndex(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const; index: ExpressionPtr)
 
-arguments are
-
-+-----+---------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
-+-----+---------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
-+-----+---------------------------------------------------------+
-+index+ :ref:`ExpressionPtr <alias-ExpressionPtr>`              +
-+-----+---------------------------------------------------------+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
++--------+---------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
++--------+---------------------------------------------------------+
++index   + :ref:`ExpressionPtr <alias-ExpressionPtr>`              +
++--------+---------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprSafeAtIndex|
 
 .. das:function:: AstVisitor.preVisitExprIs(self: AstVisitor; expr: smart_ptr<ast::ExprIs> const)
 
-arguments are
-
-+----+---------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
-+----+---------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIs <handle-ast-ExprIs>` > const+
-+----+---------------------------------------------------------+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
++--------+---------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIs <handle-ast-ExprIs>` > const+
++--------+---------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprIs|
@@ -5362,22 +5410,22 @@ arguments are
 
 visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
-+----+---------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIs <handle-ast-ExprIs>` > const+
-+----+---------------------------------------------------------+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
++--------+---------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIs <handle-ast-ExprIs>` > const+
++--------+---------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprIs|
 
 .. das:function:: AstVisitor.preVisitExprIsType(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const; typeDecl: TypeDeclPtr)
 
-arguments are
-
 +--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
 +self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`          +
 +--------+---------------------------------------------------------+
 +expr    +smart_ptr< :ref:`ast::ExprAt <handle-ast-ExprAt>` > const+
@@ -5390,13 +5438,13 @@ arguments are
 
 .. das:function:: AstVisitor.preVisitExprOp2(self: AstVisitor; expr: smart_ptr<ast::ExprOp2> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprOp2 <handle-ast-ExprOp2>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp2 <handle-ast-ExprOp2>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprOp2|
@@ -5405,41 +5453,41 @@ arguments are
 
 visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprOp2 <handle-ast-ExprOp2>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp2 <handle-ast-ExprOp2>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprOp2|
 
 .. das:function:: AstVisitor.preVisitExprOp2Right(self: AstVisitor; expr: smart_ptr<ast::ExprOp2> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+-----------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+-----+-----------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprOp2 <handle-ast-ExprOp2>` > const+
-+-----+-----------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+-----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp2 <handle-ast-ExprOp2>` > const+
++--------+-----------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprOp2Right|
 
 .. das:function:: AstVisitor.preVisitExprOp3(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprOp3|
@@ -5448,56 +5496,56 @@ arguments are
 
 visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprOp3|
 
 .. das:function:: AstVisitor.preVisitExprOp3Left(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const; left: ExpressionPtr)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
-+----+-----------------------------------------------------------+
-+left+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
++--------+-----------------------------------------------------------+
++left    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprOp3Left|
 
 .. das:function:: AstVisitor.preVisitExprOp3Right(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+-----------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+-----+-----------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
-+-----+-----------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+-----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp3 <handle-ast-ExprOp3>` > const+
++--------+-----------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprOp3Right|
 
 .. das:function:: AstVisitor.preVisitExprCopy(self: AstVisitor; expr: smart_ptr<ast::ExprCopy> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCopy <handle-ast-ExprCopy>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCopy <handle-ast-ExprCopy>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprCopy|
@@ -5506,41 +5554,41 @@ arguments are
 
 visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCopy <handle-ast-ExprCopy>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCopy <handle-ast-ExprCopy>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprCopy|
 
 .. das:function:: AstVisitor.preVisitExprCopyRight(self: AstVisitor; expr: smart_ptr<ast::ExprCopy> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+-------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+-----+-------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprCopy <handle-ast-ExprCopy>` > const+
-+-----+-------------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
-+-----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCopy <handle-ast-ExprCopy>` > const+
++--------+-------------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprCopyRight|
 
 .. das:function:: AstVisitor.preVisitExprMove(self: AstVisitor; expr: smart_ptr<ast::ExprMove> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMove <handle-ast-ExprMove>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMove <handle-ast-ExprMove>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMove|
@@ -5549,41 +5597,41 @@ arguments are
 
 visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMove <handle-ast-ExprMove>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMove <handle-ast-ExprMove>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMove|
 
 .. das:function:: AstVisitor.preVisitExprMoveRight(self: AstVisitor; expr: smart_ptr<ast::ExprMove> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+-------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+-----+-------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMove <handle-ast-ExprMove>` > const+
-+-----+-------------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
-+-----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMove <handle-ast-ExprMove>` > const+
++--------+-------------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMoveRight|
 
 .. das:function:: AstVisitor.preVisitExprClone(self: AstVisitor; expr: smart_ptr<ast::ExprClone> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprClone <handle-ast-ExprClone>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprClone <handle-ast-ExprClone>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprClone|
@@ -5592,41 +5640,41 @@ arguments are
 
 visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprClone <handle-ast-ExprClone>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprClone <handle-ast-ExprClone>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprClone|
 
 .. das:function:: AstVisitor.preVisitExprCloneRight(self: AstVisitor; expr: smart_ptr<ast::ExprClone> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+---------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+-----+---------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprClone <handle-ast-ExprClone>` > const+
-+-----+---------------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+-----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprClone <handle-ast-ExprClone>` > const+
++--------+---------------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprCloneRight|
 
 .. das:function:: AstVisitor.preVisitExprWith(self: AstVisitor; expr: smart_ptr<ast::ExprWith> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprWith <handle-ast-ExprWith>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprWith <handle-ast-ExprWith>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprWith|
@@ -5635,41 +5683,41 @@ arguments are
 
 visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprWith <handle-ast-ExprWith>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprWith <handle-ast-ExprWith>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprWith|
 
 .. das:function:: AstVisitor.preVisitExprWithBody(self: AstVisitor; expr: smart_ptr<ast::ExprWith> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+-------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+-----+-------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprWith <handle-ast-ExprWith>` > const+
-+-----+-------------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
-+-----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprWith <handle-ast-ExprWith>` > const+
++--------+-------------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                  +
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprWithBody|
 
 .. das:function:: AstVisitor.preVisitExprWhile(self: AstVisitor; expr: smart_ptr<ast::ExprWhile> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprWhile <handle-ast-ExprWhile>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprWhile <handle-ast-ExprWhile>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprWhile|
@@ -5678,41 +5726,41 @@ arguments are
 
 visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprWhile <handle-ast-ExprWhile>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprWhile <handle-ast-ExprWhile>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprWhile|
 
 .. das:function:: AstVisitor.preVisitExprWhileBody(self: AstVisitor; expr: smart_ptr<ast::ExprWhile> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+---------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+-----+---------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprWhile <handle-ast-ExprWhile>` > const+
-+-----+---------------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
-+-----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprWhile <handle-ast-ExprWhile>` > const+
++--------+---------------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                    +
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprWhileBody|
 
 .. das:function:: AstVisitor.preVisitExprTryCatch(self: AstVisitor; expr: smart_ptr<ast::ExprTryCatch> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprTryCatch <handle-ast-ExprTryCatch>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprTryCatch <handle-ast-ExprTryCatch>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprTryCatch|
@@ -5721,41 +5769,41 @@ arguments are
 
 visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprTryCatch <handle-ast-ExprTryCatch>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprTryCatch <handle-ast-ExprTryCatch>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprTryCatch|
 
 .. das:function:: AstVisitor.preVisitExprTryCatchCatch(self: AstVisitor; expr: smart_ptr<ast::ExprTryCatch> const; right: ExpressionPtr)
 
-arguments are
-
-+-----+---------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+-----+---------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprTryCatch <handle-ast-ExprTryCatch>` > const+
-+-----+---------------------------------------------------------------------+
-+right+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                          +
-+-----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprTryCatch <handle-ast-ExprTryCatch>` > const+
++--------+---------------------------------------------------------------------+
++right   + :ref:`ExpressionPtr <alias-ExpressionPtr>`                          +
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprTryCatchCatch|
 
 .. das:function:: AstVisitor.preVisitExprIfThenElse(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIfThenElse <handle-ast-ExprIfThenElse>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIfThenElse <handle-ast-ExprIfThenElse>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprIfThenElse|
@@ -5764,37 +5812,37 @@ arguments are
 
 visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIfThenElse <handle-ast-ExprIfThenElse>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIfThenElse <handle-ast-ExprIfThenElse>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprIfThenElse|
 
 .. das:function:: AstVisitor.preVisitExprIfThenElseIfBlock(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const; ifBlock: ExpressionPtr)
 
-arguments are
-
-+-------+-------------------------------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+-------+-------------------------------------------------------------------------+
-+expr   +smart_ptr< :ref:`ast::ExprIfThenElse <handle-ast-ExprIfThenElse>` > const+
-+-------+-------------------------------------------------------------------------+
-+ifBlock+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                              +
-+-------+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIfThenElse <handle-ast-ExprIfThenElse>` > const+
++--------+-------------------------------------------------------------------------+
++ifBlock + :ref:`ExpressionPtr <alias-ExpressionPtr>`                              +
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprIfThenElseIfBlock|
 
 .. das:function:: AstVisitor.preVisitExprIfThenElseElseBlock(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const; elseBlock: ExpressionPtr)
 
-arguments are
-
 +---------+-------------------------------------------------------------------------+
++argument +argument type                                                            +
++=========+=========================================================================+
 +self     + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
 +---------+-------------------------------------------------------------------------+
 +expr     +smart_ptr< :ref:`ast::ExprIfThenElse <handle-ast-ExprIfThenElse>` > const+
@@ -5807,13 +5855,13 @@ arguments are
 
 .. das:function:: AstVisitor.preVisitExprFor(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprFor|
@@ -5822,30 +5870,30 @@ arguments are
 
 visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprFor|
 
 .. das:function:: AstVisitor.preVisitExprForVariable(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; svar: VariablePtr; last: bool const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+----+-----------------------------------------------------------+
-+svar+ :ref:`VariablePtr <alias-VariablePtr>`                    +
-+----+-----------------------------------------------------------+
-+last+bool const                                                 +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
++svar    + :ref:`VariablePtr <alias-VariablePtr>`                    +
++--------+-----------------------------------------------------------+
++last    +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprForVariable|
@@ -5854,34 +5902,34 @@ arguments are
 
 visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+----+-----------------------------------------------------------+
-+svar+ :ref:`VariablePtr <alias-VariablePtr>`                    +
-+----+-----------------------------------------------------------+
-+last+bool const                                                 +
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
++svar    + :ref:`VariablePtr <alias-VariablePtr>`                    +
++--------+-----------------------------------------------------------+
++last    +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprForVariable|
 
 .. das:function:: AstVisitor.preVisitExprForSource(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; source: ExpressionPtr; last: bool const)
 
-arguments are
-
-+------+-----------------------------------------------------------+
-+self  + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+------+-----------------------------------------------------------+
-+expr  +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+------+-----------------------------------------------------------+
-+source+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+------+-----------------------------------------------------------+
-+last  +bool const                                                 +
-+------+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
++source  + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
++last    +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprForSource|
@@ -5890,56 +5938,56 @@ arguments are
 
 visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+------+-----------------------------------------------------------+
-+self  + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+------+-----------------------------------------------------------+
-+expr  +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+------+-----------------------------------------------------------+
-+source+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
-+------+-----------------------------------------------------------+
-+last  +bool const                                                 +
-+------+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
++source  + :ref:`ExpressionPtr <alias-ExpressionPtr>`                +
++--------+-----------------------------------------------------------+
++last    +bool const                                                 +
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprForSource|
 
 .. das:function:: AstVisitor.preVisitExprForStack(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprForStack|
 
 .. das:function:: AstVisitor.preVisitExprForBody(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFor <handle-ast-ExprFor>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprForBody|
 
 .. das:function:: AstVisitor.preVisitExprMakeVariant(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeVariant|
@@ -5948,32 +5996,32 @@ arguments are
 
 visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeVariant|
 
 .. das:function:: AstVisitor.preVisitExprMakeVariantField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
-arguments are
-
-+-----+---------------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+-----+---------------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
-+-----+---------------------------------------------------------------------------+
-+index+int const                                                                  +
-+-----+---------------------------------------------------------------------------+
-+decl + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                          +
-+-----+---------------------------------------------------------------------------+
-+last +bool const                                                                 +
-+-----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
++--------+---------------------------------------------------------------------------+
++index   +int const                                                                  +
++--------+---------------------------------------------------------------------------+
++decl    + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                          +
++--------+---------------------------------------------------------------------------+
++last    +bool const                                                                 +
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeVariantField|
@@ -5982,32 +6030,32 @@ arguments are
 
 visitExprMakeVariantField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
 
-arguments are
-
-+-----+---------------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+-----+---------------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
-+-----+---------------------------------------------------------------------------+
-+index+int const                                                                  +
-+-----+---------------------------------------------------------------------------+
-+decl + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                          +
-+-----+---------------------------------------------------------------------------+
-+last +bool const                                                                 +
-+-----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeVariant <handle-ast-ExprMakeVariant>` > const+
++--------+---------------------------------------------------------------------------+
++index   +int const                                                                  +
++--------+---------------------------------------------------------------------------+
++decl    + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                          +
++--------+---------------------------------------------------------------------------+
++last    +bool const                                                                 +
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeVariantField|
 
 .. das:function:: AstVisitor.preVisitExprMakeStruct(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeStruct|
@@ -6016,66 +6064,66 @@ arguments are
 
 visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeStruct|
 
 .. das:function:: AstVisitor.preVisitExprMakeStructIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; last: bool const)
 
-arguments are
-
-+-----+-------------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+-----+-------------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
-+-----+-------------------------------------------------------------------------+
-+index+int const                                                                +
-+-----+-------------------------------------------------------------------------+
-+last +bool const                                                               +
-+-----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
++index   +int const                                                                +
++--------+-------------------------------------------------------------------------+
++last    +bool const                                                               +
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeStructIndex|
 
 .. das:function:: AstVisitor.visitExprMakeStructIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; last: bool const)
 
-arguments are
-
-+-----+-------------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+-----+-------------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
-+-----+-------------------------------------------------------------------------+
-+index+int const                                                                +
-+-----+-------------------------------------------------------------------------+
-+last +bool const                                                               +
-+-----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
++index   +int const                                                                +
++--------+-------------------------------------------------------------------------+
++last    +bool const                                                               +
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeStructIndex|
 
 .. das:function:: AstVisitor.preVisitExprMakeStructField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
-arguments are
-
-+-----+-------------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+-----+-------------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
-+-----+-------------------------------------------------------------------------+
-+index+int const                                                                +
-+-----+-------------------------------------------------------------------------+
-+decl + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                        +
-+-----+-------------------------------------------------------------------------+
-+last +bool const                                                               +
-+-----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
++index   +int const                                                                +
++--------+-------------------------------------------------------------------------+
++decl    + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                        +
++--------+-------------------------------------------------------------------------+
++last    +bool const                                                               +
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeStructField|
@@ -6084,32 +6132,32 @@ arguments are
 
 visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
 
-arguments are
-
-+-----+-------------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+-----+-------------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
-+-----+-------------------------------------------------------------------------+
-+index+int const                                                                +
-+-----+-------------------------------------------------------------------------+
-+decl + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                        +
-+-----+-------------------------------------------------------------------------+
-+last +bool const                                                               +
-+-----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
++index   +int const                                                                +
++--------+-------------------------------------------------------------------------+
++decl    + :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`                        +
++--------+-------------------------------------------------------------------------+
++last    +bool const                                                               +
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeStructField|
 
 .. das:function:: AstVisitor.preVisitExprMakeArray(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeArray|
@@ -6118,32 +6166,32 @@ arguments are
 
 visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeArray|
 
 .. das:function:: AstVisitor.preVisitExprMakeArrayIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const; index: int const; init: ExpressionPtr; last: bool const)
 
-arguments are
-
-+-----+-----------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+-----+-----------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
-+-----+-----------------------------------------------------------------------+
-+index+int const                                                              +
-+-----+-----------------------------------------------------------------------+
-+init + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
-+-----+-----------------------------------------------------------------------+
-+last +bool const                                                             +
-+-----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
++--------+-----------------------------------------------------------------------+
++index   +int const                                                              +
++--------+-----------------------------------------------------------------------+
++init    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
++--------+-----------------------------------------------------------------------+
++last    +bool const                                                             +
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeArrayIndex|
@@ -6152,32 +6200,32 @@ arguments are
 
 visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+-----+-----------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+-----+-----------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
-+-----+-----------------------------------------------------------------------+
-+index+int const                                                              +
-+-----+-----------------------------------------------------------------------+
-+init + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
-+-----+-----------------------------------------------------------------------+
-+last +bool const                                                             +
-+-----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeArray <handle-ast-ExprMakeArray>` > const+
++--------+-----------------------------------------------------------------------+
++index   +int const                                                              +
++--------+-----------------------------------------------------------------------+
++init    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
++--------+-----------------------------------------------------------------------+
++last    +bool const                                                             +
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeArrayIndex|
 
 .. das:function:: AstVisitor.preVisitExprMakeTuple(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeTuple|
@@ -6186,32 +6234,32 @@ arguments are
 
 visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeTuple|
 
 .. das:function:: AstVisitor.preVisitExprMakeTupleIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const; index: int const; init: ExpressionPtr; last: bool const)
 
-arguments are
-
-+-----+-----------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+-----+-----------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
-+-----+-----------------------------------------------------------------------+
-+index+int const                                                              +
-+-----+-----------------------------------------------------------------------+
-+init + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
-+-----+-----------------------------------------------------------------------+
-+last +bool const                                                             +
-+-----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
++--------+-----------------------------------------------------------------------+
++index   +int const                                                              +
++--------+-----------------------------------------------------------------------+
++init    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
++--------+-----------------------------------------------------------------------+
++last    +bool const                                                             +
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeTupleIndex|
@@ -6220,32 +6268,32 @@ arguments are
 
 visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+-----+-----------------------------------------------------------------------+
-+self + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+-----+-----------------------------------------------------------------------+
-+expr +smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
-+-----+-----------------------------------------------------------------------+
-+index+int const                                                              +
-+-----+-----------------------------------------------------------------------+
-+init + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
-+-----+-----------------------------------------------------------------------+
-+last +bool const                                                             +
-+-----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeTuple <handle-ast-ExprMakeTuple>` > const+
++--------+-----------------------------------------------------------------------+
++index   +int const                                                              +
++--------+-----------------------------------------------------------------------+
++init    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                            +
++--------+-----------------------------------------------------------------------+
++last    +bool const                                                             +
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeTupleIndex|
 
 .. das:function:: AstVisitor.preVisitExprArrayComprehension(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
-+----+-----------------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
-+----+-----------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------------------+
++argument+argument type                                                                            +
++========+=========================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
++--------+-----------------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
++--------+-----------------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprArrayComprehension|
@@ -6254,56 +6302,56 @@ arguments are
 
 visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
-+----+-----------------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
-+----+-----------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------------------+
++argument+argument type                                                                            +
++========+=========================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
++--------+-----------------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
++--------+-----------------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprArrayComprehension|
 
 .. das:function:: AstVisitor.preVisitExprArrayComprehensionSubexpr(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const; subexrp: ExpressionPtr)
 
-arguments are
-
-+-------+-----------------------------------------------------------------------------------------+
-+self   + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
-+-------+-----------------------------------------------------------------------------------------+
-+expr   +smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
-+-------+-----------------------------------------------------------------------------------------+
-+subexrp+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                                              +
-+-------+-----------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------------------+
++argument+argument type                                                                            +
++========+=========================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
++--------+-----------------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
++--------+-----------------------------------------------------------------------------------------+
++subexrp + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                              +
++--------+-----------------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprArrayComprehensionSubexpr|
 
 .. das:function:: AstVisitor.preVisitExprArrayComprehensionWhere(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const; filter: ExpressionPtr)
 
-arguments are
-
-+------+-----------------------------------------------------------------------------------------+
-+self  + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
-+------+-----------------------------------------------------------------------------------------+
-+expr  +smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
-+------+-----------------------------------------------------------------------------------------+
-+filter+ :ref:`ExpressionPtr <alias-ExpressionPtr>`                                              +
-+------+-----------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------------------+
++argument+argument type                                                                            +
++========+=========================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                          +
++--------+-----------------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprArrayComprehension <handle-ast-ExprArrayComprehension>` > const+
++--------+-----------------------------------------------------------------------------------------+
++filter  + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                              +
++--------+-----------------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprArrayComprehensionWhere|
 
 .. das:function:: AstVisitor.preVisitExprTypeInfo(self: AstVisitor; expr: smart_ptr<ast::ExprTypeInfo> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprTypeInfo|
@@ -6312,26 +6360,26 @@ arguments are
 
 visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprTypeInfo|
 
 .. das:function:: AstVisitor.preVisitExprPtr2Ref(self: AstVisitor; expr: smart_ptr<ast::ExprPtr2Ref> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprPtr2Ref <handle-ast-ExprPtr2Ref>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprPtr2Ref <handle-ast-ExprPtr2Ref>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprPtr2Ref|
@@ -6340,26 +6388,26 @@ arguments are
 
 visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprPtr2Ref <handle-ast-ExprPtr2Ref>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprPtr2Ref <handle-ast-ExprPtr2Ref>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprPtr2Ref|
 
 .. das:function:: AstVisitor.preVisitExprLabel(self: AstVisitor; expr: smart_ptr<ast::ExprLabel> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLabel <handle-ast-ExprLabel>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLabel <handle-ast-ExprLabel>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprLabel|
@@ -6368,26 +6416,26 @@ arguments are
 
 visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprLabel <handle-ast-ExprLabel>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLabel <handle-ast-ExprLabel>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprLabel|
 
 .. das:function:: AstVisitor.preVisitExprGoto(self: AstVisitor; expr: smart_ptr<ast::ExprGoto> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprGoto <handle-ast-ExprGoto>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprGoto <handle-ast-ExprGoto>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprGoto|
@@ -6396,26 +6444,26 @@ arguments are
 
 visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprGoto <handle-ast-ExprGoto>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprGoto <handle-ast-ExprGoto>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprGoto|
 
 .. das:function:: AstVisitor.preVisitExprRef2Value(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Value> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprRef2Value <handle-ast-ExprRef2Value>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprRef2Value <handle-ast-ExprRef2Value>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprRef2Value|
@@ -6424,26 +6472,26 @@ arguments are
 
 visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprRef2Value <handle-ast-ExprRef2Value>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprRef2Value <handle-ast-ExprRef2Value>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprRef2Value|
 
 .. das:function:: AstVisitor.preVisitExprRef2Ptr(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Ptr> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprRef2Ptr <handle-ast-ExprRef2Ptr>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprRef2Ptr <handle-ast-ExprRef2Ptr>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprRef2Ptr|
@@ -6452,26 +6500,26 @@ arguments are
 
 visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprRef2Ptr <handle-ast-ExprRef2Ptr>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprRef2Ptr <handle-ast-ExprRef2Ptr>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprRef2Ptr|
 
 .. das:function:: AstVisitor.preVisitExprAddr(self: AstVisitor; expr: smart_ptr<ast::ExprAddr> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAddr <handle-ast-ExprAddr>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAddr <handle-ast-ExprAddr>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprAddr|
@@ -6480,26 +6528,26 @@ arguments are
 
 visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAddr <handle-ast-ExprAddr>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAddr <handle-ast-ExprAddr>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprAddr|
 
 .. das:function:: AstVisitor.preVisitExprAssert(self: AstVisitor; expr: smart_ptr<ast::ExprAssert> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAssert <handle-ast-ExprAssert>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAssert <handle-ast-ExprAssert>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprAssert|
@@ -6508,26 +6556,26 @@ arguments are
 
 visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAssert <handle-ast-ExprAssert>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAssert <handle-ast-ExprAssert>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprAssert|
 
 .. das:function:: AstVisitor.preVisitExprStaticAssert(self: AstVisitor; expr: smart_ptr<ast::ExprStaticAssert> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
-+----+-----------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprStaticAssert <handle-ast-ExprStaticAssert>` > const+
-+----+-----------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
++--------+-----------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprStaticAssert <handle-ast-ExprStaticAssert>` > const+
++--------+-----------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprStaticAssert|
@@ -6536,26 +6584,26 @@ arguments are
 
 visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
-+----+-----------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprStaticAssert <handle-ast-ExprStaticAssert>` > const+
-+----+-----------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
++--------+-----------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprStaticAssert <handle-ast-ExprStaticAssert>` > const+
++--------+-----------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprStaticAssert|
 
 .. das:function:: AstVisitor.preVisitExprDebug(self: AstVisitor; expr: smart_ptr<ast::ExprDebug> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprDebug <handle-ast-ExprDebug>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprDebug <handle-ast-ExprDebug>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprDebug|
@@ -6564,26 +6612,26 @@ arguments are
 
 visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprDebug <handle-ast-ExprDebug>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprDebug <handle-ast-ExprDebug>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprDebug|
 
 .. das:function:: AstVisitor.preVisitExprInvoke(self: AstVisitor; expr: smart_ptr<ast::ExprInvoke> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprInvoke <handle-ast-ExprInvoke>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprInvoke <handle-ast-ExprInvoke>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprInvoke|
@@ -6592,26 +6640,26 @@ arguments are
 
 visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprInvoke <handle-ast-ExprInvoke>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprInvoke <handle-ast-ExprInvoke>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprInvoke|
 
 .. das:function:: AstVisitor.preVisitExprErase(self: AstVisitor; expr: smart_ptr<ast::ExprErase> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprErase <handle-ast-ExprErase>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprErase <handle-ast-ExprErase>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprErase|
@@ -6620,26 +6668,26 @@ arguments are
 
 visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprErase <handle-ast-ExprErase>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprErase <handle-ast-ExprErase>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprErase|
 
 .. das:function:: AstVisitor.preVisitExprFind(self: AstVisitor; expr: smart_ptr<ast::ExprFind> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFind <handle-ast-ExprFind>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFind <handle-ast-ExprFind>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprFind|
@@ -6648,26 +6696,26 @@ arguments are
 
 visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFind <handle-ast-ExprFind>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFind <handle-ast-ExprFind>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprFind|
 
 .. das:function:: AstVisitor.preVisitExprKeyExists(self: AstVisitor; expr: smart_ptr<ast::ExprKeyExists> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprKeyExists <handle-ast-ExprKeyExists>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprKeyExists <handle-ast-ExprKeyExists>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprKeyExists|
@@ -6676,26 +6724,26 @@ arguments are
 
 visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprKeyExists <handle-ast-ExprKeyExists>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprKeyExists <handle-ast-ExprKeyExists>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprKeyExists|
 
 .. das:function:: AstVisitor.preVisitExprAscend(self: AstVisitor; expr: smart_ptr<ast::ExprAscend> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAscend <handle-ast-ExprAscend>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAscend <handle-ast-ExprAscend>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprAscend|
@@ -6704,26 +6752,26 @@ arguments are
 
 visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAscend <handle-ast-ExprAscend>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAscend <handle-ast-ExprAscend>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprAscend|
 
 .. das:function:: AstVisitor.preVisitExprCast(self: AstVisitor; expr: smart_ptr<ast::ExprCast> const)
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCast <handle-ast-ExprCast>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCast <handle-ast-ExprCast>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprCast|
@@ -6732,26 +6780,26 @@ arguments are
 
 visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCast <handle-ast-ExprCast>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`              +
++--------+-------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCast <handle-ast-ExprCast>` > const+
++--------+-------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprCast|
 
 .. das:function:: AstVisitor.preVisitExprDelete(self: AstVisitor; expr: smart_ptr<ast::ExprDelete> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprDelete <handle-ast-ExprDelete>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprDelete <handle-ast-ExprDelete>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprDelete|
@@ -6760,26 +6808,26 @@ arguments are
 
 visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprDelete <handle-ast-ExprDelete>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprDelete <handle-ast-ExprDelete>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprDelete|
 
 .. das:function:: AstVisitor.preVisitExprVar(self: AstVisitor; expr: smart_ptr<ast::ExprVar> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprVar <handle-ast-ExprVar>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprVar <handle-ast-ExprVar>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprVar|
@@ -6788,26 +6836,26 @@ arguments are
 
 visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprVar <handle-ast-ExprVar>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprVar <handle-ast-ExprVar>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprVar|
 
 .. das:function:: AstVisitor.preVisitExprField(self: AstVisitor; expr: smart_ptr<ast::ExprField> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprField <handle-ast-ExprField>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprField <handle-ast-ExprField>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprField|
@@ -6816,26 +6864,26 @@ arguments are
 
 visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprField <handle-ast-ExprField>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprField <handle-ast-ExprField>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprField|
 
 .. das:function:: AstVisitor.preVisitExprSafeField(self: AstVisitor; expr: smart_ptr<ast::ExprSafeField> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeField <handle-ast-ExprSafeField>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeField <handle-ast-ExprSafeField>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprSafeField|
@@ -6844,26 +6892,26 @@ arguments are
 
 visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeField <handle-ast-ExprSafeField>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeField <handle-ast-ExprSafeField>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprSafeField|
 
 .. das:function:: AstVisitor.preVisitExprSwizzle(self: AstVisitor; expr: smart_ptr<ast::ExprSwizzle> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSwizzle <handle-ast-ExprSwizzle>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSwizzle <handle-ast-ExprSwizzle>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprSwizzle|
@@ -6872,26 +6920,26 @@ arguments are
 
 visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSwizzle <handle-ast-ExprSwizzle>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSwizzle <handle-ast-ExprSwizzle>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprSwizzle|
 
 .. das:function:: AstVisitor.preVisitExprIsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprIsVariant> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprIsVariant|
@@ -6900,26 +6948,26 @@ arguments are
 
 visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprIsVariant <handle-ast-ExprIsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprIsVariant|
 
 .. das:function:: AstVisitor.preVisitExprAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprAsVariant> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprAsVariant|
@@ -6928,26 +6976,26 @@ arguments are
 
 visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAsVariant <handle-ast-ExprAsVariant>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprAsVariant|
 
 .. das:function:: AstVisitor.preVisitExprSafeAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAsVariant> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprSafeAsVariant|
@@ -6956,26 +7004,26 @@ arguments are
 
 visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprSafeAsVariant <handle-ast-ExprSafeAsVariant>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprSafeAsVariant|
 
 .. das:function:: AstVisitor.preVisitExprOp1(self: AstVisitor; expr: smart_ptr<ast::ExprOp1> const)
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprOp1 <handle-ast-ExprOp1>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp1 <handle-ast-ExprOp1>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprOp1|
@@ -6984,26 +7032,26 @@ arguments are
 
 visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
-+----+-----------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprOp1 <handle-ast-ExprOp1>` > const+
-+----+-----------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`            +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprOp1 <handle-ast-ExprOp1>` > const+
++--------+-----------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprOp1|
 
 .. das:function:: AstVisitor.preVisitExprReturn(self: AstVisitor; expr: smart_ptr<ast::ExprReturn> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprReturn <handle-ast-ExprReturn>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReturn <handle-ast-ExprReturn>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprReturn|
@@ -7012,26 +7060,26 @@ arguments are
 
 visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprReturn <handle-ast-ExprReturn>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReturn <handle-ast-ExprReturn>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprReturn|
 
 .. das:function:: AstVisitor.preVisitExprYield(self: AstVisitor; expr: smart_ptr<ast::ExprYield> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprYield <handle-ast-ExprYield>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprYield <handle-ast-ExprYield>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprYield|
@@ -7040,26 +7088,26 @@ arguments are
 
 visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprYield <handle-ast-ExprYield>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprYield <handle-ast-ExprYield>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprYield|
 
 .. das:function:: AstVisitor.preVisitExprBreak(self: AstVisitor; expr: smart_ptr<ast::ExprBreak> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprBreak <handle-ast-ExprBreak>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprBreak <handle-ast-ExprBreak>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprBreak|
@@ -7068,26 +7116,26 @@ arguments are
 
 visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprBreak <handle-ast-ExprBreak>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprBreak <handle-ast-ExprBreak>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprBreak|
 
 .. das:function:: AstVisitor.preVisitExprContinue(self: AstVisitor; expr: smart_ptr<ast::ExprContinue> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprContinue <handle-ast-ExprContinue>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprContinue <handle-ast-ExprContinue>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprContinue|
@@ -7096,26 +7144,26 @@ arguments are
 
 visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprContinue <handle-ast-ExprContinue>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprContinue <handle-ast-ExprContinue>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprContinue|
 
 .. das:function:: AstVisitor.preVisitExprMakeBlock(self: AstVisitor; expr: smart_ptr<ast::ExprMakeBlock> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeBlock <handle-ast-ExprMakeBlock>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeBlock <handle-ast-ExprMakeBlock>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeBlock|
@@ -7124,26 +7172,26 @@ arguments are
 
 visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeBlock <handle-ast-ExprMakeBlock>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeBlock <handle-ast-ExprMakeBlock>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeBlock|
 
 .. das:function:: AstVisitor.preVisitExprMakeGenerator(self: AstVisitor; expr: smart_ptr<ast::ExprMakeGenerator> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeGenerator <handle-ast-ExprMakeGenerator>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeGenerator <handle-ast-ExprMakeGenerator>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMakeGenerator|
@@ -7152,26 +7200,26 @@ arguments are
 
 visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMakeGenerator <handle-ast-ExprMakeGenerator>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeGenerator <handle-ast-ExprMakeGenerator>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMakeGenerator|
 
 .. das:function:: AstVisitor.preVisitExprMemZero(self: AstVisitor; expr: smart_ptr<ast::ExprMemZero> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMemZero <handle-ast-ExprMemZero>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMemZero <handle-ast-ExprMemZero>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprMemZero|
@@ -7180,26 +7228,26 @@ arguments are
 
 visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
-+----+-------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprMemZero <handle-ast-ExprMemZero>` > const+
-+----+-------------------------------------------------------------------+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                    +
++--------+-------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMemZero <handle-ast-ExprMemZero>` > const+
++--------+-------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprMemZero|
 
 .. das:function:: AstVisitor.preVisitExprConst(self: AstVisitor; expr: smart_ptr<ast::ExprConst> const)
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConst <handle-ast-ExprConst>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConst <handle-ast-ExprConst>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConst|
@@ -7208,26 +7256,26 @@ arguments are
 
 visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
-+----+---------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConst <handle-ast-ExprConst>` > const+
-+----+---------------------------------------------------------------+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                +
++--------+---------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConst <handle-ast-ExprConst>` > const+
++--------+---------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConst|
 
 .. das:function:: AstVisitor.preVisitExprConstPtr(self: AstVisitor; expr: smart_ptr<ast::ExprConstPtr> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstPtr <handle-ast-ExprConstPtr>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstPtr <handle-ast-ExprConstPtr>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstPtr|
@@ -7236,26 +7284,26 @@ arguments are
 
 visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstPtr <handle-ast-ExprConstPtr>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstPtr <handle-ast-ExprConstPtr>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstPtr|
 
 .. das:function:: AstVisitor.preVisitExprConstEnumeration(self: AstVisitor; expr: smart_ptr<ast::ExprConstEnumeration> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                      +
-+----+-------------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstEnumeration <handle-ast-ExprConstEnumeration>` > const+
-+----+-------------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------------+
++argument+argument type                                                                        +
++========+=====================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                      +
++--------+-------------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstEnumeration <handle-ast-ExprConstEnumeration>` > const+
++--------+-------------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstEnumeration|
@@ -7264,26 +7312,26 @@ arguments are
 
 visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                      +
-+----+-------------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstEnumeration <handle-ast-ExprConstEnumeration>` > const+
-+----+-------------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------------+
++argument+argument type                                                                        +
++========+=====================================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                      +
++--------+-------------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstEnumeration <handle-ast-ExprConstEnumeration>` > const+
++--------+-------------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstEnumeration|
 
 .. das:function:: AstVisitor.preVisitExprConstBitfield(self: AstVisitor; expr: smart_ptr<ast::ExprConstBitfield> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstBitfield <handle-ast-ExprConstBitfield>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstBitfield <handle-ast-ExprConstBitfield>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstBitfield|
@@ -7292,26 +7340,26 @@ arguments are
 
 visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
-+----+-------------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstBitfield <handle-ast-ExprConstBitfield>` > const+
-+----+-------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstBitfield <handle-ast-ExprConstBitfield>` > const+
++--------+-------------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstBitfield|
 
 .. das:function:: AstVisitor.preVisitExprConstInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt8> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt8 <handle-ast-ExprConstInt8>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt8 <handle-ast-ExprConstInt8>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstInt8|
@@ -7320,26 +7368,26 @@ arguments are
 
 visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt8 <handle-ast-ExprConstInt8>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt8 <handle-ast-ExprConstInt8>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstInt8|
 
 .. das:function:: AstVisitor.preVisitExprConstInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt16> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt16 <handle-ast-ExprConstInt16>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt16 <handle-ast-ExprConstInt16>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstInt16|
@@ -7348,26 +7396,26 @@ arguments are
 
 visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt16 <handle-ast-ExprConstInt16>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt16 <handle-ast-ExprConstInt16>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstInt16|
 
 .. das:function:: AstVisitor.preVisitExprConstInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt64> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt64 <handle-ast-ExprConstInt64>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt64 <handle-ast-ExprConstInt64>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstInt64|
@@ -7376,26 +7424,26 @@ arguments are
 
 visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt64 <handle-ast-ExprConstInt64>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt64 <handle-ast-ExprConstInt64>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstInt64|
 
 .. das:function:: AstVisitor.preVisitExprConstInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt <handle-ast-ExprConstInt>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt <handle-ast-ExprConstInt>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstInt|
@@ -7404,26 +7452,26 @@ arguments are
 
 visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
-+----+---------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt <handle-ast-ExprConstInt>` > const+
-+----+---------------------------------------------------------------------+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                      +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt <handle-ast-ExprConstInt>` > const+
++--------+---------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstInt|
 
 .. das:function:: AstVisitor.preVisitExprConstInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt2> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt2 <handle-ast-ExprConstInt2>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt2 <handle-ast-ExprConstInt2>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstInt2|
@@ -7432,26 +7480,26 @@ arguments are
 
 visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt2 <handle-ast-ExprConstInt2>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt2 <handle-ast-ExprConstInt2>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstInt2|
 
 .. das:function:: AstVisitor.preVisitExprConstInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt3> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt3 <handle-ast-ExprConstInt3>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt3 <handle-ast-ExprConstInt3>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstInt3|
@@ -7460,26 +7508,26 @@ arguments are
 
 visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt3 <handle-ast-ExprConstInt3>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt3 <handle-ast-ExprConstInt3>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstInt3|
 
 .. das:function:: AstVisitor.preVisitExprConstInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt4> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt4 <handle-ast-ExprConstInt4>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt4 <handle-ast-ExprConstInt4>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstInt4|
@@ -7488,26 +7536,26 @@ arguments are
 
 visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstInt4 <handle-ast-ExprConstInt4>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstInt4 <handle-ast-ExprConstInt4>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstInt4|
 
 .. das:function:: AstVisitor.preVisitExprConstUInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt8> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt8 <handle-ast-ExprConstUInt8>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt8 <handle-ast-ExprConstUInt8>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstUInt8|
@@ -7516,26 +7564,26 @@ arguments are
 
 visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt8 <handle-ast-ExprConstUInt8>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt8 <handle-ast-ExprConstUInt8>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstUInt8|
 
 .. das:function:: AstVisitor.preVisitExprConstUInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt16> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt16 <handle-ast-ExprConstUInt16>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt16 <handle-ast-ExprConstUInt16>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstUInt16|
@@ -7544,26 +7592,26 @@ arguments are
 
 visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt16 <handle-ast-ExprConstUInt16>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt16 <handle-ast-ExprConstUInt16>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstUInt16|
 
 .. das:function:: AstVisitor.preVisitExprConstUInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt64> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt64 <handle-ast-ExprConstUInt64>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt64 <handle-ast-ExprConstUInt64>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstUInt64|
@@ -7572,26 +7620,26 @@ arguments are
 
 visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt64 <handle-ast-ExprConstUInt64>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt64 <handle-ast-ExprConstUInt64>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstUInt64|
 
 .. das:function:: AstVisitor.preVisitExprConstUInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt <handle-ast-ExprConstUInt>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt <handle-ast-ExprConstUInt>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstUInt|
@@ -7600,26 +7648,26 @@ arguments are
 
 visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt <handle-ast-ExprConstUInt>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt <handle-ast-ExprConstUInt>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstUInt|
 
 .. das:function:: AstVisitor.preVisitExprConstUInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt2> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt2 <handle-ast-ExprConstUInt2>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt2 <handle-ast-ExprConstUInt2>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstUInt2|
@@ -7628,26 +7676,26 @@ arguments are
 
 visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt2 <handle-ast-ExprConstUInt2>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt2 <handle-ast-ExprConstUInt2>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstUInt2|
 
 .. das:function:: AstVisitor.preVisitExprConstUInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt3> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt3 <handle-ast-ExprConstUInt3>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt3 <handle-ast-ExprConstUInt3>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstUInt3|
@@ -7656,26 +7704,26 @@ arguments are
 
 visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt3 <handle-ast-ExprConstUInt3>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt3 <handle-ast-ExprConstUInt3>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstUInt3|
 
 .. das:function:: AstVisitor.preVisitExprConstUInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt4> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt4 <handle-ast-ExprConstUInt4>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt4 <handle-ast-ExprConstUInt4>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstUInt4|
@@ -7684,26 +7732,26 @@ arguments are
 
 visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstUInt4 <handle-ast-ExprConstUInt4>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstUInt4 <handle-ast-ExprConstUInt4>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstUInt4|
 
 .. das:function:: AstVisitor.preVisitExprConstRange(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstRange <handle-ast-ExprConstRange>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstRange <handle-ast-ExprConstRange>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstRange|
@@ -7712,26 +7760,26 @@ arguments are
 
 visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstRange <handle-ast-ExprConstRange>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstRange <handle-ast-ExprConstRange>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstRange|
 
 .. das:function:: AstVisitor.preVisitExprConstURange(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstURange <handle-ast-ExprConstURange>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstURange <handle-ast-ExprConstURange>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstURange|
@@ -7740,26 +7788,26 @@ arguments are
 
 visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstURange <handle-ast-ExprConstURange>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstURange <handle-ast-ExprConstURange>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstURange|
 
 .. das:function:: AstVisitor.preVisitExprConstBool(self: AstVisitor; expr: smart_ptr<ast::ExprConstBool> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstBool <handle-ast-ExprConstBool>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstBool <handle-ast-ExprConstBool>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstBool|
@@ -7768,26 +7816,26 @@ arguments are
 
 visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstBool <handle-ast-ExprConstBool>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstBool <handle-ast-ExprConstBool>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstBool|
 
 .. das:function:: AstVisitor.preVisitExprConstFloat(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat> const)
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat <handle-ast-ExprConstFloat>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat <handle-ast-ExprConstFloat>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstFloat|
@@ -7796,26 +7844,26 @@ arguments are
 
 visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
-+----+-------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat <handle-ast-ExprConstFloat>` > const+
-+----+-------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat <handle-ast-ExprConstFloat>` > const+
++--------+-------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstFloat|
 
 .. das:function:: AstVisitor.preVisitExprConstFloat2(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat2> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat2 <handle-ast-ExprConstFloat2>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat2 <handle-ast-ExprConstFloat2>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstFloat2|
@@ -7824,26 +7872,26 @@ arguments are
 
 visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat2 <handle-ast-ExprConstFloat2>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat2 <handle-ast-ExprConstFloat2>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstFloat2|
 
 .. das:function:: AstVisitor.preVisitExprConstFloat3(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat3> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat3 <handle-ast-ExprConstFloat3>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat3 <handle-ast-ExprConstFloat3>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstFloat3|
@@ -7852,26 +7900,26 @@ arguments are
 
 visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat3 <handle-ast-ExprConstFloat3>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat3 <handle-ast-ExprConstFloat3>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstFloat3|
 
 .. das:function:: AstVisitor.preVisitExprConstFloat4(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat4> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat4 <handle-ast-ExprConstFloat4>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat4 <handle-ast-ExprConstFloat4>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstFloat4|
@@ -7880,26 +7928,26 @@ arguments are
 
 visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstFloat4 <handle-ast-ExprConstFloat4>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstFloat4 <handle-ast-ExprConstFloat4>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstFloat4|
 
 .. das:function:: AstVisitor.preVisitExprConstString(self: AstVisitor; expr: smart_ptr<ast::ExprConstString> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstString <handle-ast-ExprConstString>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstString <handle-ast-ExprConstString>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstString|
@@ -7908,26 +7956,26 @@ arguments are
 
 visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstString <handle-ast-ExprConstString>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstString <handle-ast-ExprConstString>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstString|
 
 .. das:function:: AstVisitor.preVisitExprConstDouble(self: AstVisitor; expr: smart_ptr<ast::ExprConstDouble> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstDouble <handle-ast-ExprConstDouble>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstDouble <handle-ast-ExprConstDouble>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprConstDouble|
@@ -7936,26 +7984,26 @@ arguments are
 
 visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprConstDouble <handle-ast-ExprConstDouble>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstDouble <handle-ast-ExprConstDouble>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprConstDouble|
 
 .. das:function:: AstVisitor.preVisitExprFakeContext(self: AstVisitor; expr: smart_ptr<ast::ExprFakeContext> const)
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFakeContext <handle-ast-ExprFakeContext>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFakeContext <handle-ast-ExprFakeContext>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprFakeContext|
@@ -7964,26 +8012,26 @@ arguments are
 
 visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+---------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
-+----+---------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFakeContext <handle-ast-ExprFakeContext>` > const+
-+----+---------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                            +
++--------+---------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFakeContext <handle-ast-ExprFakeContext>` > const+
++--------+---------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprFakeContext|
 
 .. das:function:: AstVisitor.preVisitExprFakeLineInfo(self: AstVisitor; expr: smart_ptr<ast::ExprFakeLineInfo> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
-+----+-----------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFakeLineInfo <handle-ast-ExprFakeLineInfo>` > const+
-+----+-----------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
++--------+-----------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFakeLineInfo <handle-ast-ExprFakeLineInfo>` > const+
++--------+-----------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprFakeLineInfo|
@@ -7992,26 +8040,26 @@ arguments are
 
 visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
-+----+-----------------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprFakeLineInfo <handle-ast-ExprFakeLineInfo>` > const+
-+----+-----------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
++--------+-----------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprFakeLineInfo <handle-ast-ExprFakeLineInfo>` > const+
++--------+-----------------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprFakeLineInfo|
 
 .. das:function:: AstVisitor.preVisitExprReader(self: AstVisitor; expr: smart_ptr<ast::ExprReader> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprReader|
@@ -8020,26 +8068,26 @@ arguments are
 
 visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprReader|
 
 .. das:function:: AstVisitor.preVisitExprUnsafe(self: AstVisitor; expr: smart_ptr<ast::ExprUnsafe> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprUnsafe <handle-ast-ExprUnsafe>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprUnsafe <handle-ast-ExprUnsafe>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprUnsafe|
@@ -8048,26 +8096,26 @@ arguments are
 
 visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprUnsafe <handle-ast-ExprUnsafe>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprUnsafe <handle-ast-ExprUnsafe>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprUnsafe|
 
 .. das:function:: AstVisitor.preVisitExprCallMacro(self: AstVisitor; expr: smart_ptr<ast::ExprCallMacro> const)
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitExprCallMacro|
@@ -8076,13 +8124,13 @@ arguments are
 
 visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-----------------------------------------------------------------------+
-+self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
-+----+-----------------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+----+-----------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++--------+-----------------------------------------------------------------------+
 
 
 |method-ast-AstVisitor.visitExprCallMacro|
@@ -8097,11 +8145,11 @@ Uncategorized
 
 FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
-arguments are
-
-+---+---------------------------------------------------+
-+fun+ :ref:`ast::Function <handle-ast-Function>` ? const+
-+---+---------------------------------------------------+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++fun     + :ref:`ast::Function <handle-ast-Function>` ? const+
++--------+---------------------------------------------------+
 
 
 |function-ast-FunctionPtr|
@@ -8110,13 +8158,13 @@ arguments are
 
 .. das:function:: add_call_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::CallMacro> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit              +
-+----+------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` > const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit              +
++--------+------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` > const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-add_call_macro|
@@ -8125,13 +8173,13 @@ arguments are
 
 .. das:function:: add_dirty_infer_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::PassMacro> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit              +
-+----+------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` > const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit              +
++--------+------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` > const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-add_dirty_infer_macro|
@@ -8142,13 +8190,13 @@ arguments are
 
 add_function returns bool
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit            +
-+----+----------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit            +
++--------+----------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-add_function|
@@ -8157,13 +8205,13 @@ arguments are
 
 .. das:function:: add_function_annotation(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::FunctionAnnotation> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                +
-+----+------------------------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` > const implicit+
-+----+------------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------------------+
++argument+argument type                                                                             +
++========+==========================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                +
++--------+------------------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` > const implicit+
++--------+------------------------------------------------------------------------------------------+
 
 
 |function-ast-add_function_annotation|
@@ -8172,13 +8220,13 @@ arguments are
 
 .. das:function:: add_function_annotation(arg0: smart_ptr<ast::Function> const implicit; arg1: smart_ptr<ast::FunctionAnnotation> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit                    +
-+----+------------------------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` > const implicit+
-+----+------------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------------------+
++argument+argument type                                                                             +
++========+==========================================================================================+
++arg0    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit                    +
++--------+------------------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` > const implicit+
++--------+------------------------------------------------------------------------------------------+
 
 
 |function-ast-add_function_annotation|
@@ -8187,13 +8235,13 @@ arguments are
 
 .. das:function:: add_reader_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::ReaderMacro> const implicit)
 
-arguments are
-
-+----+----------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                  +
-+----+----------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` > const implicit+
-+----+----------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                  +
++--------+----------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` > const implicit+
++--------+----------------------------------------------------------------------------+
 
 
 |function-ast-add_reader_macro|
@@ -8202,13 +8250,13 @@ arguments are
 
 .. das:function:: add_structure_annotation(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::StructureAnnotation> const implicit)
 
-arguments are
-
-+----+--------------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                  +
-+----+--------------------------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` > const implicit+
-+----+--------------------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------------------+
++argument+argument type                                                                               +
++========+============================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                  +
++--------+--------------------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` > const implicit+
++--------+--------------------------------------------------------------------------------------------+
 
 
 |function-ast-add_structure_annotation|
@@ -8217,13 +8265,13 @@ arguments are
 
 .. das:function:: add_structure_annotation(arg0: smart_ptr<ast::Structure> const implicit; arg1: smart_ptr<ast::StructureAnnotation> const implicit)
 
-arguments are
-
-+----+--------------------------------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` > const implicit                    +
-+----+--------------------------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` > const implicit+
-+----+--------------------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------------------+
++argument+argument type                                                                               +
++========+============================================================================================+
++arg0    +smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` > const implicit                    +
++--------+--------------------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` > const implicit+
++--------+--------------------------------------------------------------------------------------------+
 
 
 |function-ast-add_structure_annotation|
@@ -8232,13 +8280,13 @@ arguments are
 
 .. das:function:: add_variant_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::VariantMacro> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                    +
-+----+------------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` > const implicit+
-+----+------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------+
++argument+argument type                                                                 +
++========+==============================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                    +
++--------+------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` > const implicit+
++--------+------------------------------------------------------------------------------+
 
 
 |function-ast-add_variant_macro|
@@ -8247,15 +8295,15 @@ arguments are
 
 .. das:function:: any_array_foreach(arg0: void? const implicit; arg1: int const; arg2: block<(void?):void> const implicit)
 
-arguments are
-
-+----+----------------------------------+
-+arg0+void? const implicit              +
-+----+----------------------------------+
-+arg1+int const                         +
-+----+----------------------------------+
-+arg2+block<(void?):void> const implicit+
-+----+----------------------------------+
++--------+----------------------------------+
++argument+argument type                     +
++========+==================================+
++arg0    +void? const implicit              +
++--------+----------------------------------+
++arg1    +int const                         +
++--------+----------------------------------+
++arg2    +block<(void?):void> const implicit+
++--------+----------------------------------+
 
 
 |function-ast-any_array_foreach|
@@ -8266,11 +8314,11 @@ arguments are
 
 any_array_size returns int
 
-arguments are
-
-+----+--------------------+
-+arg0+void? const implicit+
-+----+--------------------+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++arg0    +void? const implicit+
++--------+--------------------+
 
 
 |function-ast-any_array_size|
@@ -8279,17 +8327,17 @@ arguments are
 
 .. das:function:: any_table_foreach(arg0: void? const implicit; arg1: int const; arg2: int const; arg3: block<(void?;void?):void> const implicit)
 
-arguments are
-
-+----+----------------------------------------+
-+arg0+void? const implicit                    +
-+----+----------------------------------------+
-+arg1+int const                               +
-+----+----------------------------------------+
-+arg2+int const                               +
-+----+----------------------------------------+
-+arg3+block<(void?;void?):void> const implicit+
-+----+----------------------------------------+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++arg0    +void? const implicit                    +
++--------+----------------------------------------+
++arg1    +int const                               +
++--------+----------------------------------------+
++arg2    +int const                               +
++--------+----------------------------------------+
++arg3    +block<(void?;void?):void> const implicit+
++--------+----------------------------------------+
 
 
 |function-ast-any_table_foreach|
@@ -8300,11 +8348,11 @@ arguments are
 
 any_table_size returns int
 
-arguments are
-
-+----+--------------------+
-+arg0+void? const implicit+
-+----+--------------------+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++arg0    +void? const implicit+
++--------+--------------------+
 
 
 |function-ast-any_table_size|
@@ -8315,11 +8363,11 @@ arguments are
 
 clone_expression returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 
-arguments are
-
-+----+--------------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
-+----+--------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------+
++argument+argument type                                                             +
++========+==========================================================================+
++arg0    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
++--------+--------------------------------------------------------------------------+
 
 
 |function-ast-clone_expression|
@@ -8330,11 +8378,11 @@ arguments are
 
 clone_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-clone_type|
@@ -8361,11 +8409,11 @@ compiling_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` 
 
 das_to_string returns string
 
-arguments are
-
-+----+------------------------------------------+
-+arg0+ :ref:`rtti::Type <enum-rtti-Type>`  const+
-+----+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++arg0    + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
 
 
 |function-ast-das_to_string|
@@ -8376,11 +8424,11 @@ arguments are
 
 describe_expression returns string
 
-arguments are
-
-+----+--------------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
-+----+--------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------+
++argument+argument type                                                             +
++========+==========================================================================+
++arg0    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
++--------+--------------------------------------------------------------------------+
 
 
 |function-ast-describe_expression|
@@ -8391,11 +8439,11 @@ arguments are
 
 describe_function returns string
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-describe_function|
@@ -8406,17 +8454,17 @@ arguments are
 
 describe_typedecl returns string
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----+----------------------------------------------------------------------+
-+arg1+bool const                                                            +
-+----+----------------------------------------------------------------------+
-+arg2+bool const                                                            +
-+----+----------------------------------------------------------------------+
-+arg3+bool const                                                            +
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++arg1    +bool const                                                            +
++--------+----------------------------------------------------------------------+
++arg2    +bool const                                                            +
++--------+----------------------------------------------------------------------+
++arg3    +bool const                                                            +
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-describe_typedecl|
@@ -8427,13 +8475,13 @@ arguments are
 
 find_bitfield_name returns string
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----+----------------------------------------------------------------------+
-+arg1+bitfield<> const                                                      +
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++arg1    +bitfield<> const                                                      +
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-find_bitfield_name|
@@ -8444,11 +8492,11 @@ arguments are
 
 find_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
-arguments are
-
-+----+------------+
-+name+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
 
 
 |function-ast-find_module|
@@ -8457,13 +8505,13 @@ arguments are
 
 .. das:function:: for_each_enumeration(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Enumeration>):void> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                +
-+----+------------------------------------------------------------------------------------------+
-+arg1+block<(smart_ptr< :ref:`ast::Enumeration <handle-ast-Enumeration>` >):void> const implicit+
-+----+------------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------------------+
++argument+argument type                                                                             +
++========+==========================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                +
++--------+------------------------------------------------------------------------------------------+
++arg1    +block<(smart_ptr< :ref:`ast::Enumeration <handle-ast-Enumeration>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_enumeration|
@@ -8472,13 +8520,13 @@ arguments are
 
 .. das:function:: for_each_field(arg0: BasicStructureAnnotation const implicit; arg1: block<(string;string;smart_ptr<ast::TypeDecl>;uint):void> const implicit)
 
-arguments are
-
-+----+-------------------------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  const implicit          +
-+----+-------------------------------------------------------------------------------------------------------+
-+arg1+block<(string;string;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >;uint):void> const implicit+
-+----+-------------------------------------------------------------------------------------------------------+
++--------+-------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                          +
++========+=======================================================================================================+
++arg0    + :ref:`rtti::BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  const implicit          +
++--------+-------------------------------------------------------------------------------------------------------+
++arg1    +block<(string;string;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >;uint):void> const implicit+
++--------+-------------------------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_field|
@@ -8487,15 +8535,15 @@ arguments are
 
 .. das:function:: for_each_function(arg0: rtti::Module? const implicit; arg1: string const; arg2: block<(smart_ptr<ast::Function>):void> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+----+------------------------------------------------------------------------------------+
-+arg1+string const                                                                        +
-+----+------------------------------------------------------------------------------------+
-+arg2+block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
-+----+------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++arg1    +string const                                                                        +
++--------+------------------------------------------------------------------------------------+
++arg2    +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_function|
@@ -8504,13 +8552,13 @@ arguments are
 
 .. das:function:: for_each_generic(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Function>):void> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+----+------------------------------------------------------------------------------------+
-+arg1+block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
-+----+------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++arg1    +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_generic|
@@ -8519,15 +8567,15 @@ arguments are
 
 .. das:function:: for_each_generic(arg0: rtti::Module? const implicit; arg1: string const; arg2: block<(smart_ptr<ast::Function>):void> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+----+------------------------------------------------------------------------------------+
-+arg1+string const                                                                        +
-+----+------------------------------------------------------------------------------------+
-+arg2+block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
-+----+------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++arg1    +string const                                                                        +
++--------+------------------------------------------------------------------------------------+
++arg2    +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_generic|
@@ -8536,13 +8584,13 @@ arguments are
 
 .. das:function:: for_each_global(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Variable>):void> const implicit)
 
-arguments are
-
-+----+------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+----+------------------------------------------------------------------------------------+
-+arg1+block<(smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >):void> const implicit+
-+----+------------------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++arg1    +block<(smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_global|
@@ -8551,13 +8599,13 @@ arguments are
 
 .. das:function:: for_each_structure(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Structure>):void> const implicit)
 
-arguments are
-
-+----+--------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                            +
-+----+--------------------------------------------------------------------------------------+
-+arg1+block<(smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` >):void> const implicit+
-+----+--------------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------------+
++argument+argument type                                                                         +
++========+======================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                            +
++--------+--------------------------------------------------------------------------------------+
++arg1    +block<(smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` >):void> const implicit+
++--------+--------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_structure|
@@ -8566,13 +8614,13 @@ arguments are
 
 .. das:function:: for_each_typedef(arg0: rtti::Module? const implicit; arg1: block<(string#;smart_ptr<ast::TypeDecl>):void> const implicit)
 
-arguments are
-
-+----+--------------------------------------------------------------------------------------------+
-+arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                  +
-+----+--------------------------------------------------------------------------------------------+
-+arg1+block<(string#;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >):void> const implicit+
-+----+--------------------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------------------------------+
++argument+argument type                                                                               +
++========+============================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                  +
++--------+--------------------------------------------------------------------------------------------+
++arg1    +block<(string#;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >):void> const implicit+
++--------+--------------------------------------------------------------------------------------------+
 
 
 |function-ast-for_each_typedef|
@@ -8583,11 +8631,11 @@ arguments are
 
 get_mangled_name returns string
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-get_mangled_name|
@@ -8598,13 +8646,13 @@ arguments are
 
 get_tuple_field_offset returns int
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----+----------------------------------------------------------------------+
-+arg1+int const                                                             +
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++arg1    +int const                                                             +
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-get_tuple_field_offset|
@@ -8615,13 +8663,13 @@ arguments are
 
 get_variant_field_offset returns int
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----+----------------------------------------------------------------------+
-+arg1+int const                                                             +
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++arg1    +int const                                                             +
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-get_variant_field_offset|
@@ -8632,19 +8680,19 @@ arguments are
 
 is_same_type returns bool
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----+----------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----+----------------------------------------------------------------------+
-+arg2+ :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const                +
-+----+----------------------------------------------------------------------+
-+arg3+ :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const            +
-+----+----------------------------------------------------------------------+
-+arg4+ :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const    +
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++arg2    + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const                +
++--------+----------------------------------------------------------------------+
++arg3    + :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const            +
++--------+----------------------------------------------------------------------+
++arg4    + :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const    +
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-is_same_type|
@@ -8653,15 +8701,15 @@ arguments are
 
 .. das:function:: macro_error(arg0: smart_ptr<rtti::Program> const implicit; arg1: LineInfo const implicit; arg2: string const)
 
-arguments are
-
-+----+----------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
-+----+----------------------------------------------------------------------+
-+arg1+ :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const implicit         +
-+----+----------------------------------------------------------------------+
-+arg2+string const                                                          +
-+----+----------------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
++--------+----------------------------------------------------------------------+
++arg1    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const implicit         +
++--------+----------------------------------------------------------------------+
++arg2    +string const                                                          +
++--------+----------------------------------------------------------------------+
 
 
 |function-ast-macro_error|
@@ -8672,15 +8720,15 @@ arguments are
 
 make_call_macro returns smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` >
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+string const                                                            +
-+----+------------------------------------------------------------------------+
-+arg1+void? const implicit                                                    +
-+----+------------------------------------------------------------------------+
-+arg2+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +string const                                                            +
++--------+------------------------------------------------------------------------+
++arg1    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg2    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-make_call_macro|
@@ -8691,15 +8739,15 @@ arguments are
 
 make_function_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+string const                                                            +
-+----+------------------------------------------------------------------------+
-+arg1+void? const implicit                                                    +
-+----+------------------------------------------------------------------------+
-+arg2+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +string const                                                            +
++--------+------------------------------------------------------------------------+
++arg1    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg2    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-make_function_annotation|
@@ -8710,15 +8758,15 @@ arguments are
 
 make_pass_macro returns smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+string const                                                            +
-+----+------------------------------------------------------------------------+
-+arg1+void? const implicit                                                    +
-+----+------------------------------------------------------------------------+
-+arg2+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +string const                                                            +
++--------+------------------------------------------------------------------------+
++arg1    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg2    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-make_pass_macro|
@@ -8729,15 +8777,15 @@ arguments are
 
 make_reader_macro returns smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+string const                                                            +
-+----+------------------------------------------------------------------------+
-+arg1+void? const implicit                                                    +
-+----+------------------------------------------------------------------------+
-+arg2+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +string const                                                            +
++--------+------------------------------------------------------------------------+
++arg1    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg2    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-make_reader_macro|
@@ -8748,15 +8796,15 @@ arguments are
 
 make_structure_annotation returns smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+string const                                                            +
-+----+------------------------------------------------------------------------+
-+arg1+void? const implicit                                                    +
-+----+------------------------------------------------------------------------+
-+arg2+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +string const                                                            +
++--------+------------------------------------------------------------------------+
++arg1    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg2    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-make_structure_annotation|
@@ -8767,15 +8815,15 @@ arguments are
 
 make_variant_macro returns smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` >
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+string const                                                            +
-+----+------------------------------------------------------------------------+
-+arg1+void? const implicit                                                    +
-+----+------------------------------------------------------------------------+
-+arg2+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +string const                                                            +
++--------+------------------------------------------------------------------------+
++arg1    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg2    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-make_variant_macro|
@@ -8786,13 +8834,13 @@ arguments are
 
 make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >
 
-arguments are
-
-+----+------------------------------------------------------------------------+
-+arg0+void? const implicit                                                    +
-+----+------------------------------------------------------------------------+
-+arg1+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+----+------------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg1    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
 |function-ast-make_visitor|
@@ -8817,13 +8865,13 @@ this_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
 
 .. das:function:: visit(arg0: smart_ptr<rtti::Program> const implicit; arg1: smart_ptr<ast::VisitorAdapter> const implicit)
 
-arguments are
-
-+----+----------------------------------------------------------------------------------+
-+arg0+smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
-+----+----------------------------------------------------------------------------------+
-+arg1+smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
-+----+----------------------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------------+
++argument+argument type                                                                     +
++========+==================================================================================+
++arg0    +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
++--------+----------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
++--------+----------------------------------------------------------------------------------+
 
 
 |function-ast-visit|
@@ -8834,11 +8882,11 @@ arguments are
 
 ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
-arguments are
-
-+----+-------------------------+
-+expr+smart_ptr<auto(TT)> const+
-+----+-------------------------+
++--------+-------------------------+
++argument+argument type            +
++========+=========================+
++expr    +smart_ptr<auto(TT)> const+
++--------+-------------------------+
 
 
 |function-ast-ExpressionPtr|
@@ -8849,13 +8897,13 @@ arguments are
 
 add_new_call_macro returns auto
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-add_new_call_macro|
@@ -8866,13 +8914,13 @@ arguments are
 
 add_new_function_annotation returns auto
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-add_new_function_annotation|
@@ -8883,13 +8931,13 @@ arguments are
 
 add_new_reader_macro returns auto
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-add_new_reader_macro|
@@ -8900,13 +8948,13 @@ arguments are
 
 add_new_structure_annotation returns auto
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-add_new_structure_annotation|
@@ -8917,13 +8965,13 @@ arguments are
 
 add_new_variant_macro returns auto
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-add_new_variant_macro|
@@ -8934,11 +8982,11 @@ arguments are
 
 describe returns auto
 
-arguments are
-
-+----+-----------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const+
-+----+-----------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const+
++--------+-----------------------------------------------------------------+
 
 
 |function-ast-describe|
@@ -8949,11 +8997,11 @@ arguments are
 
 describe returns auto
 
-arguments are
-
-+----+-------------------------------------------------------------+
-+expr+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const+
-+----+-------------------------------------------------------------+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++expr    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const+
++--------+-------------------------------------------------------------+
 
 
 |function-ast-describe|
@@ -8964,9 +9012,9 @@ arguments are
 
 describe returns auto
 
-arguments are
-
 +---------+-------------------------------------------------------------+
++argument +argument type                                                +
++=========+=============================================================+
 +decl     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const+
 +---------+-------------------------------------------------------------+
 +extra    +bool const                                                   +
@@ -8985,13 +9033,13 @@ arguments are
 
 make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>` 
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-make_call_macro|
@@ -9002,13 +9050,13 @@ arguments are
 
 make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>` 
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-make_function_annotation|
@@ -9019,13 +9067,13 @@ arguments are
 
 make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>` 
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-make_pass_macro|
@@ -9036,13 +9084,13 @@ arguments are
 
 make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>` 
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-make_reader_macro|
@@ -9053,13 +9101,13 @@ arguments are
 
 make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-StructureAnnotationPtr>` 
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-make_structure_annotation|
@@ -9070,13 +9118,13 @@ arguments are
 
 make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>` 
 
-arguments are
-
-+------------+------------+
-+name        +string const+
-+------------+------------+
-+someClassPtr+auto const  +
-+------------+------------+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
 
 
 |function-ast-make_variant_macro|
@@ -9087,11 +9135,11 @@ arguments are
 
 make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >
 
-arguments are
-
-+---------+----------+
-+someClass+auto const+
-+---------+----------+
++---------+-------------+
++argument +argument type+
++=========+=============+
++someClass+auto const   +
++---------+-------------+
 
 
 |function-ast-make_visitor|

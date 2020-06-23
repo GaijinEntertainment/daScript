@@ -171,11 +171,11 @@ Uncategorized
 
 .. das:function:: debug_set(cset: CharSet)
 
-arguments are
-
-+----+--------------------------------+
-+cset+ :ref:`CharSet <alias-CharSet>` +
-+----+--------------------------------+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++cset    + :ref:`CharSet <alias-CharSet>` +
++--------+--------------------------------+
 
 
 |function-regex-debug_set|
@@ -186,11 +186,11 @@ arguments are
 
 is_valid returns bool
 
-arguments are
-
-+--+------------------------------------------+
-+re+ :ref:`regex::Regex <struct-regex-Regex>` +
-+--+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++re      + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
 
 
 |function-regex-is_valid|
@@ -201,13 +201,13 @@ arguments are
 
 re_early_out returns bool
 
-arguments are
-
-+----+---------------------------------------------------+
-+cset+ :ref:`CharSet <alias-CharSet>`                    +
-+----+---------------------------------------------------+
-+node+ :ref:`regex::ReNode <struct-regex-ReNode>` ? const+
-+----+---------------------------------------------------+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++cset    + :ref:`CharSet <alias-CharSet>`                    +
++--------+---------------------------------------------------+
++node    + :ref:`regex::ReNode <struct-regex-ReNode>` ? const+
++--------+---------------------------------------------------+
 
 
 |function-regex-re_early_out|
@@ -218,11 +218,11 @@ arguments are
 
 regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>` 
 
-arguments are
-
-+--+------------------------------------------+
-+re+ :ref:`regex::Regex <struct-regex-Regex>` +
-+--+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++re      + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
 
 
 |function-regex-regex_compile|
@@ -233,13 +233,13 @@ arguments are
 
 regex_compile returns bool
 
-arguments are
-
-+----+------------------------------------------+
-+re  + :ref:`regex::Regex <struct-regex-Regex>` +
-+----+------------------------------------------+
-+expr+string const                              +
-+----+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++re      + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
++expr    +string const                              +
++--------+------------------------------------------+
 
 
 |function-regex-regex_compile|
@@ -250,11 +250,11 @@ arguments are
 
 regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>` 
 
-arguments are
-
-+----+------------+
-+expr+string const+
-+----+------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++expr    +string const +
++--------+-------------+
 
 
 |function-regex-regex_compile|
@@ -263,11 +263,11 @@ arguments are
 
 .. das:function:: regex_debug(regex: Regex const)
 
-arguments are
-
-+-----+------------------------------------------------+
-+regex+ :ref:`regex::Regex <struct-regex-Regex>`  const+
-+-----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>`  const+
++--------+------------------------------------------------+
 
 
 |function-regex-regex_debug|
@@ -276,15 +276,15 @@ arguments are
 
 .. das:function:: regex_foreach(regex: Regex; str: string const; blk: block<(at:range const):bool> const)
 
-arguments are
-
-+-----+------------------------------------------+
-+regex+ :ref:`regex::Regex <struct-regex-Regex>` +
-+-----+------------------------------------------+
-+str  +string const                              +
-+-----+------------------------------------------+
-+blk  +block<(at:range const):bool> const        +
-+-----+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
++str     +string const                              +
++--------+------------------------------------------+
++blk     +block<(at:range const):bool> const        +
++--------+------------------------------------------+
 
 
 |function-regex-regex_foreach|
@@ -295,15 +295,15 @@ arguments are
 
 regex_group returns string
 
-arguments are
-
-+-----+------------------------------------------------+
-+regex+ :ref:`regex::Regex <struct-regex-Regex>`  const+
-+-----+------------------------------------------------+
-+index+int const                                       +
-+-----+------------------------------------------------+
-+match+string const                                    +
-+-----+------------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>`  const+
++--------+------------------------------------------------+
++index   +int const                                       +
++--------+------------------------------------------------+
++match   +string const                                    +
++--------+------------------------------------------------+
 
 
 |function-regex-regex_group|
@@ -314,15 +314,15 @@ arguments are
 
 regex_match returns int
 
-arguments are
-
-+------+------------------------------------------+
-+regex + :ref:`regex::Regex <struct-regex-Regex>` +
-+------+------------------------------------------+
-+str   +string const                              +
-+------+------------------------------------------+
-+offset+int const                                 +
-+------+------------------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
++str     +string const                              +
++--------+------------------------------------------+
++offset  +int const                                 +
++--------+------------------------------------------+
 
 
 |function-regex-regex_match|
