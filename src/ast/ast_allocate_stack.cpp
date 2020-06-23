@@ -160,7 +160,7 @@ namespace das {
                                 func->fastCall = true;
                             }
                         } else if ( func->result->isVoid() ) {
-                            if (block->list.size()==1 && block->finalList.size()==0 ) {
+                            if ( block->list.size()==1 && block->finalList.size()==0 && !block->list.back()->rtti_isBlock() ) {
                                 func->fastCall = true;
                             }
                         }

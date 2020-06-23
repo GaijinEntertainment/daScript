@@ -479,6 +479,7 @@ namespace das {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->lambda = true;
+        pFunc->generated = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
         auto fb = make_smart<ExprBlock>();
