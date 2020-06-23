@@ -1,4 +1,5 @@
 // options log=true, log_stack=true, log_nodes=true, optimize=true
+require math
 
 [export]
 def test

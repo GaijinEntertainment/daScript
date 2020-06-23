@@ -97,7 +97,6 @@ src/builtin/module_builtin_runtime.cpp
 src/builtin/module_builtin_runtime_sort.cpp
 src/builtin/module_builtin_vector.cpp
 src/builtin/module_builtin_vector_ctor.cpp
-src/builtin/module_builtin_matrix.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_das.cpp
 src/builtin/module_builtin_math.cpp

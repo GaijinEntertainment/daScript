@@ -1,3 +1,5 @@
+require math
+
 [sideeffects]
 def test_mat(m:float3x4)
     var t : float3x4 = m

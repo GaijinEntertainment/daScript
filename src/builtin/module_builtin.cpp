@@ -161,7 +161,6 @@ namespace das
         // VECTOR & MATRIX TYPES
         addVectorTypes(lib);
         addVectorCtor(lib);
-        addMatrixTypes(lib);
         // ARRAYS
         addArrayTypes(lib);
         // RUNTIME

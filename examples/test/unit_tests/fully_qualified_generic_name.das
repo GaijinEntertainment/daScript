@@ -1,4 +1,5 @@
 require UnitTest
+require math
 
 def on_armor_hit_fx_effect_es(visual_armor_hit_dot_effectName : string)
     var tm: float3x4

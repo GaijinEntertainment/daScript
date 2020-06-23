@@ -502,6 +502,7 @@ void tableMojo ( TTable<char *,int> & in, const TBlock<void,TTable<char *,int>> 
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
+    lib.addModule(Module::require("math"));
     lib.addBuiltInModule();
     addEnumTest(lib);
     // structure annotations
