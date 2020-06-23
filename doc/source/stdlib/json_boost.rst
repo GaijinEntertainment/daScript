@@ -5,6 +5,8 @@
 Boost package for JSON
 ======================
 
+.. include:: detail/json_boost.rst
+
 |module-json_boost|
 
 +++++++

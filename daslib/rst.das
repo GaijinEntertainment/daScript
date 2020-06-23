@@ -710,8 +710,30 @@ def generate_substitute_stub(mod:Module?;substname:string)
             for_each_generic(mod) <| $(func)
                 if function_needs_documenting(func)
                     generate_topic_stub(tab,stub_file,topic("function",mod,"{func.name}"))
+            // annotations
+            module_for_each_annotation(mod) <| $(value)
+                if value.isBasicStructureAnnotation
+                    generate_topic_stub(tab,stub_file,topic("structure_annotation",mod,string(value.name)))
+                elif value.isTypeAnnotation
+                    generate_topic_stub(tab,stub_file,topic("any_annotation",mod,string(value.name)))
+            // variables
+            for_each_global(mod) <| $(value)
+                if is_global_constant(value)
+                    generate_topic_stub(tab,stub_file,topic("variable",mod,string(value.name)))
         else
             panic("can't generate stub at {substname}\n")
+
+[private]
+def getDetailIncludePath ( fname, substname : string )
+    var fnp <- split_by_chars(fname,"\\/")
+    var snp <- split_by_chars(substname,"\\/")
+    var index = 0
+    for f,s in fnp,snp
+        if f != s
+            break
+        index ++
+    var ipath = join ( [[ for i in range(index,length(snp)); snp[i] ]], "/" )
+    return ipath
 
 def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGroup>)
     static_if log_documentation
@@ -725,7 +747,7 @@ def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGrou
     let mod_name = string(mod.name)
     fwrite(doc_file,make_header(name,mod_name))
     if length(substname)!=0
-        fwrite(doc_file,".. include:: {substname}\n\n")
+        fwrite(doc_file,".. include:: {getDetailIncludePath(fname,substname)}\n\n")
         generate_substitute_stub(mod,substname)
     document_topic(doc_file,topic(mod))
     document_typedefs(doc_file,mod)

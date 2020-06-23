@@ -5,6 +5,8 @@
 Random generator library
 ========================
 
+.. include:: detail/random.rst
+
 |module-random|
 
 +++++++++++++

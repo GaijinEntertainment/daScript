@@ -5,6 +5,8 @@
 Runtime type information library
 ================================
 
+.. include:: detail/rtti.rst
+
 |module-rtti|
 
 ++++++++++++

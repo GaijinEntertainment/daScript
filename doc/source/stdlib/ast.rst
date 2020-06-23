@@ -5,11 +5,19 @@
 AST manipulation library
 ========================
 
+.. include:: detail/ast.rst
+
 |module-ast|
 
 ++++++++++++
 Type aliases
 ++++++++++++
+
+.. _alias-CallMacroPtr:
+
+.. das:attribute:: CallMacroPtr = smart_ptr<ast::CallMacro>
+
+|typedef-ast-CallMacroPtr|
 
 .. _alias-EnumerationPtr:
 
@@ -602,6 +610,21 @@ Enumerations
 Handled structures
 ++++++++++++++++++
 
+.. _handle-ast-CallMacro:
+
+.. das:attribute:: CallMacro
+
+CallMacro fields are
+
++-------+--------------------------------------------------------+
++_module+ :ref:`rtti::Module <handle-rtti-Module>` ?             +
++-------+--------------------------------------------------------+
++name   + :ref:`builtin::das_string <handle-builtin-das_string>` +
++-------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-CallMacro|
+
 .. _handle-ast-EnumEntry:
 
 .. das:attribute:: EnumEntry
@@ -973,6 +996,37 @@ ExprCallFunc fields are
 
 
 |structure_annotation-ast-ExprCallFunc|
+
+.. _handle-ast-ExprCallMacro:
+
+.. das:attribute:: ExprCallMacro
+
+ExprCallMacro fields are
+
++----------------------+----------------------------------------------------------------------------------------+
++arguments             + :ref:`ast::dasvector`smart_ptr`Expression <handle-ast-dasvector`smart_ptr`Expression>` +
++----------------------+----------------------------------------------------------------------------------------+
++macro                 + :ref:`ast::CallMacro <handle-ast-CallMacro>` ?                                         +
++----------------------+----------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                           +
++----------------------+----------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                           +
++----------------------+----------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                 +
++----------------------+----------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                    +
++----------------------+----------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                               +
++----------------------+----------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                 +
++----------------------+----------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                     +
++----------------------+----------------------------------------------------------------------------------------+
++__rtti                +string const                                                                            +
++----------------------+----------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprCallMacro|
 
 .. _handle-ast-ExprCast:
 
@@ -3591,6 +3645,8 @@ TypeDecl properties are
 +---------------+----+
 +baseSizeOf     +int +
 +---------------+----+
++isString       +bool+
++---------------+----+
 +canCopy        +bool+
 +---------------+----+
 +countOf        +int +
@@ -3768,6 +3824,35 @@ Handled types
 +++++++
 Classes
 +++++++
+
+.. _struct-ast-AstCallMacro:
+
+.. das:attribute:: AstCallMacro
+
+|class-ast-AstCallMacro|
+
+it defines as follows
+
+  __rtti : void?
+
+.. das:function:: AstCallMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
+
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+arguments are
+
++----+-----------------------------------------------------------------------+
++self+ :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
++----+-----------------------------------------------------------------------+
++prog+ :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++----+-----------------------------------------------------------------------+
++mod + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++----+-----------------------------------------------------------------------+
++expr+smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++----+-----------------------------------------------------------------------+
+
+
+|method-ast-AstCallMacro.visit|
 
 .. _struct-ast-AstFunctionAnnotation:
 
@@ -7974,6 +8059,34 @@ arguments are
 
 |method-ast-AstVisitor.visitExprUnsafe|
 
+.. das:function:: AstVisitor.preVisitExprCallMacro(self: AstVisitor; expr: smart_ptr<ast::ExprCallMacro> const)
+
+arguments are
+
++----+-----------------------------------------------------------------------+
++self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++----+-----------------------------------------------------------------------+
++expr+smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++----+-----------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.preVisitExprCallMacro|
+
+.. das:function:: AstVisitor.visitExprCallMacro(self: AstVisitor; expr: smart_ptr<ast::ExprCallMacro> const)
+
+visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+arguments are
+
++----+-----------------------------------------------------------------------+
++self+ :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++----+-----------------------------------------------------------------------+
++expr+smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++----+-----------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.visitExprCallMacro|
+
 +++++++++++++
 Uncategorized
 +++++++++++++
@@ -7993,6 +8106,21 @@ arguments are
 
 |function-ast-FunctionPtr|
 
+.. _function-_at_ast_c__c_add_call_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_CallMacro_hh_const_hh_implicit__hh_const:
+
+.. das:function:: add_call_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::CallMacro> const implicit)
+
+arguments are
+
++----+------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit              +
++----+------------------------------------------------------------------------+
++arg1+smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` > const implicit+
++----+------------------------------------------------------------------------+
+
+
+|function-ast-add_call_macro|
+
 .. _function-_at_ast_c__c_add_dirty_infer_macro__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_PassMacro_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_dirty_infer_macro(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::PassMacro> const implicit)
@@ -8011,6 +8139,8 @@ arguments are
 .. _function-_at_ast_c__c_add_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_const:
 
 .. das:function:: add_function(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::Function> const implicit)
+
+add_function returns bool
 
 arguments are
 
@@ -8385,6 +8515,23 @@ arguments are
 
 |function-ast-for_each_generic|
 
+.. _function-_at_ast_c__c_for_each_generic__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit_string_hh_const__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Function_hh__c_void_hh_const_hh_implicit__hh_const__hh_const:
+
+.. das:function:: for_each_generic(arg0: rtti::Module? const implicit; arg1: string const; arg2: block<(smart_ptr<ast::Function>):void> const implicit)
+
+arguments are
+
++----+------------------------------------------------------------------------------------+
++arg0+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++----+------------------------------------------------------------------------------------+
++arg1+string const                                                                        +
++----+------------------------------------------------------------------------------------+
++arg2+block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++----+------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_generic|
+
 .. _function-_at_ast_c__c_for_each_global__hh_ptr_hh__hh_handle_hh_Module_hh_const_hh_implicit__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Variable_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: for_each_global(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Variable>):void> const implicit)
@@ -8518,6 +8665,25 @@ arguments are
 
 
 |function-ast-macro_error|
+
+.. _function-_at_ast_c__c_make_call_macro_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
+
+.. das:function:: make_call_macro(arg0: string const; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
+
+make_call_macro returns smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` >
+
+arguments are
+
++----+------------------------------------------------------------------------+
++arg0+string const                                                            +
++----+------------------------------------------------------------------------+
++arg1+void? const implicit                                                    +
++----+------------------------------------------------------------------------+
++arg2+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++----+------------------------------------------------------------------------+
+
+
+|function-ast-make_call_macro|
 
 .. _function-_at_ast_c__c_make_function_annotation_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_const:
 
@@ -8677,6 +8843,23 @@ arguments are
 
 |function-ast-ExpressionPtr|
 
+.. _function-_at_ast_c__c_add_new_call_macro_string_hh_const__hh_auto_hh_const:
+
+.. das:function:: add_new_call_macro(name: string const; someClassPtr: auto const)
+
+add_new_call_macro returns auto
+
+arguments are
+
++------------+------------+
++name        +string const+
++------------+------------+
++someClassPtr+auto const  +
++------------+------------+
+
+
+|function-ast-add_new_call_macro|
+
 .. _function-_at_ast_c__c_add_new_function_annotation_string_hh_const__hh_auto_hh_const:
 
 .. das:function:: add_new_function_annotation(name: string const; someClassPtr: auto const)
@@ -8795,6 +8978,23 @@ arguments are
 
 
 |function-ast-describe|
+
+.. _function-_at_ast_c__c_make_call_macro_string_hh_const__hh_auto_hh_const:
+
+.. das:function:: make_call_macro(name: string const; someClassPtr: auto const)
+
+make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>` 
+
+arguments are
+
++------------+------------+
++name        +string const+
++------------+------------+
++someClassPtr+auto const  +
++------------+------------+
+
+
+|function-ast-make_call_macro|
 
 .. _function-_at_ast_c__c_make_function_annotation_string_hh_const__hh_auto_hh_const:
 

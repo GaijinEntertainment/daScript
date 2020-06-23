@@ -5,6 +5,8 @@
 Boost package for the AST
 =========================
 
+.. include:: detail/ast_boost.rst
+
 |module-ast_boost|
 
 +++++++
@@ -208,6 +210,74 @@ arguments are
 
 
 |method-ast_boost-SetupAnyAnnotation.setup_call|
+
+.. _struct-ast_boost-SetupCallMacro:
+
+.. das:attribute:: SetupCallMacro : SetupAnyAnnotation
+
+|class-ast_boost-SetupCallMacro|
+
+it defines as follows
+
+  annotation_function_call : string
+  name                     : string
+
+.. das:function:: SetupCallMacro.apply(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+apply returns bool
+
+arguments are
+
++------+--------------------------------------------------------------------------------+
++self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++------+--------------------------------------------------------------------------------+
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++------+--------------------------------------------------------------------------------+
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++------+--------------------------------------------------------------------------------+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++------+--------------------------------------------------------------------------------+
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++------+--------------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCallMacro.apply|
+
+.. das:function:: SetupCallMacro.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+finish returns bool
+
+arguments are
+
++------+--------------------------------------------------------------------------------+
++self  + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++------+--------------------------------------------------------------------------------+
++st    + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++------+--------------------------------------------------------------------------------+
++group + :ref:`ast::ModuleGroup <handle-ast-ModuleGroup>`                               +
++------+--------------------------------------------------------------------------------+
++args  + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++------+--------------------------------------------------------------------------------+
++errors+ :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++------+--------------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCallMacro.finish|
+
+.. das:function:: SetupCallMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
+
+arguments are
+
++----+----------------------------------------------------------------------------+
++self+ :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++----+----------------------------------------------------------------------------+
++st  + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++----+----------------------------------------------------------------------------+
++cll +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++----+----------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCallMacro.setup_call|
 
 .. _struct-ast_boost-SetupFunctionAnnotatoin:
 

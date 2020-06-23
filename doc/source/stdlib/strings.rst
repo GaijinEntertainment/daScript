@@ -5,6 +5,8 @@
 String manipulation library
 ===========================
 
+.. include:: detail/strings.rst
+
 |module-strings|
 
 +++++++++++++

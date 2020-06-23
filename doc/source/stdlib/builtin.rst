@@ -5,7 +5,32 @@
 Built-in runtime
 ================
 
+.. include:: detail/builtin.rst
+
 |module-builtin|
+
+++++++++++++
+Type aliases
+++++++++++++
+
+.. _alias-print_flags:
+
+.. das:attribute:: print_flags is a bitfield
+
++------------------+-+--+
++escapeString      +0+1 +
++------------------+-+--+
++namesAndDimensions+1+2 +
++------------------+-+--+
++typeQualifiers    +2+4 +
++------------------+-+--+
++refAddresses      +3+8 +
++------------------+-+--+
++humanReadable     +4+16+
++------------------+-+--+
+
+
+|typedef-builtin-print_flags|
 
 +++++++++
 Constants
@@ -71,6 +96,12 @@ Constants
 
 |variable-builtin-ULONG_MAX|
 
+.. _global-builtin-print_flags_debugger:
+
+.. das:attribute:: print_flags_debugger = bitfield(0x1f)
+
+|variable-builtin-print_flags_debugger|
+
 ++++++++++++++++++
 Handled structures
 ++++++++++++++++++
@@ -116,9 +147,23 @@ Internal builtin functions
 .. warning:: 
   This group of functions is hidden. It will not be in the final documentation.
 
+  *  :ref:`builtin_get_command_line_arguments (arg0:array implicit) : void <function-_at__builtin__c__c_builtin_get_command_line_arguments__hh_array_hh_implicit>` 
   *  :ref:`builtin_strdup (arg0:any) : void <function-_at__builtin__c__c_builtin_strdup_any>` 
   *  :ref:`builtin_string_split (arg0:string const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : void <function-_at__builtin__c__c_builtin_string_split_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
   *  :ref:`builtin_string_split_by_char (arg0:string const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : void <function-_at__builtin__c__c_builtin_string_split_by_char_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
+
+.. _function-_at__builtin__c__c_builtin_get_command_line_arguments__hh_array_hh_implicit:
+
+.. das:function:: builtin_get_command_line_arguments(arg0: array implicit)
+
+arguments are
+
++----+--------------+
++arg0+array implicit+
++----+--------------+
+
+
+|function-builtin-builtin_get_command_line_arguments|
 
 .. _function-_at__builtin__c__c_builtin_strdup_any:
 
@@ -1615,7 +1660,6 @@ String manipulation
 +++++++++++++++++++
 
   *  :ref:`append (arg0:$::das_string implicit;arg1:int const) : void <function-_at__builtin__c__c_append__hh_handle_hh_das_string_hh_implicit_int_hh_const>` 
-  *  :ref:`append (arg0:string const;arg1:int const;arg2: const) : string <function-_at__builtin__c__c_append_string_hh_const_int_hh_const__hh_const>` 
   *  :ref:`as_string (arg0:array\<uint8\> const implicit;arg1: const) : string <function-_at__builtin__c__c_as_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const>` 
   *  :ref:`build_string (arg0:block\<($::StringBuilderWriter):void\> const implicit;arg1: const) : string <function-_at__builtin__c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const>` 
   *  :ref:`character_at (arg0:string const;arg1:int const;arg2: const) : int <function-_at__builtin__c__c_character_at_string_hh_const_int_hh_const__hh_const>` 
@@ -1673,26 +1717,6 @@ arguments are
 +----+-----------------------------------------------------------------+
 +arg1+int const                                                        +
 +----+-----------------------------------------------------------------+
-
-
-|function-builtin-append|
-
-.. _function-_at__builtin__c__c_append_string_hh_const_int_hh_const__hh_const:
-
-.. das:function:: append(arg0: string const; arg1: int const)
-
-append returns string
-
-.. warning:: 
-  This is unsafe operation.
-
-arguments are
-
-+----+------------+
-+arg0+string const+
-+----+------------+
-+arg1+int const   +
-+----+------------+
 
 
 |function-builtin-append|
@@ -2514,21 +2538,19 @@ arguments are
 Heap reporting
 ++++++++++++++
 
-  *  :ref:`heap_bytes_allocated (arg0: const) : uint <function-_at__builtin__c__c_heap_bytes_allocated__hh_const>` 
+  *  :ref:`heap_bytes_allocated (arg0: const) : uint64 <function-_at__builtin__c__c_heap_bytes_allocated__hh_const>` 
   *  :ref:`heap_depth (arg0: const) : int <function-_at__builtin__c__c_heap_depth__hh_const>` 
-  *  :ref:`heap_high_watermark (arg0: const) : uint <function-_at__builtin__c__c_heap_high_watermark__hh_const>` 
   *  :ref:`heap_report (arg0: const) : void <function-_at__builtin__c__c_heap_report__hh_const>` 
-  *  :ref:`string_heap_bytes_allocated (arg0: const) : uint <function-_at__builtin__c__c_string_heap_bytes_allocated__hh_const>` 
+  *  :ref:`string_heap_bytes_allocated (arg0: const) : uint64 <function-_at__builtin__c__c_string_heap_bytes_allocated__hh_const>` 
   *  :ref:`string_heap_collect (arg0: const;arg1: const) : void <function-_at__builtin__c__c_string_heap_collect__hh_const__hh_const>` 
   *  :ref:`string_heap_depth (arg0: const) : int <function-_at__builtin__c__c_string_heap_depth__hh_const>` 
-  *  :ref:`string_heap_high_watermark (arg0: const) : uint <function-_at__builtin__c__c_string_heap_high_watermark__hh_const>` 
   *  :ref:`string_heap_report (arg0: const) : void <function-_at__builtin__c__c_string_heap_report__hh_const>` 
 
 .. _function-_at__builtin__c__c_heap_bytes_allocated__hh_const:
 
 .. das:function:: heap_bytes_allocated()
 
-heap_bytes_allocated returns uint
+heap_bytes_allocated returns uint64
 
 |function-builtin-heap_bytes_allocated|
 
@@ -2540,14 +2562,6 @@ heap_depth returns int
 
 |function-builtin-heap_depth|
 
-.. _function-_at__builtin__c__c_heap_high_watermark__hh_const:
-
-.. das:function:: heap_high_watermark()
-
-heap_high_watermark returns uint
-
-|function-builtin-heap_high_watermark|
-
 .. _function-_at__builtin__c__c_heap_report__hh_const:
 
 .. das:function:: heap_report()
@@ -2558,7 +2572,7 @@ heap_high_watermark returns uint
 
 .. das:function:: string_heap_bytes_allocated()
 
-string_heap_bytes_allocated returns uint
+string_heap_bytes_allocated returns uint64
 
 |function-builtin-string_heap_bytes_allocated|
 
@@ -2578,14 +2592,6 @@ string_heap_bytes_allocated returns uint
 string_heap_depth returns int
 
 |function-builtin-string_heap_depth|
-
-.. _function-_at__builtin__c__c_string_heap_high_watermark__hh_const:
-
-.. das:function:: string_heap_high_watermark()
-
-string_heap_high_watermark returns uint
-
-|function-builtin-string_heap_high_watermark|
 
 .. _function-_at__builtin__c__c_string_heap_report__hh_const:
 
@@ -3149,5 +3155,49 @@ arguments are
 
 
 |function-builtin-binary_save|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at__builtin__c__c_get_command_line_arguments:
+
+.. das:function:: get_command_line_arguments()
+
+get_command_line_arguments returns array<string>
+
+|function-builtin-get_command_line_arguments|
+
+.. _function-_at__builtin__c__c_is_new_line_int_hh_const:
+
+.. das:function:: is_new_line(arg0: int const)
+
+is_new_line returns bool
+
+arguments are
+
++----+---------+
++arg0+int const+
++----+---------+
+
+
+|function-builtin-is_new_line|
+
+.. _function-_at__builtin__c__c_sprint_any__hh_bitfield_hh__rq_escapeString_hh__rq_namesAndDimensions_hh__rq_typeQualifiers_hh__rq_refAddresses_hh__rq_humanReadable:
+
+.. das:function:: sprint(arg0: any; arg1: print_flags)
+
+sprint returns string
+
+arguments are
+
++----+----------------------------------------+
++arg0+any                                     +
++----+----------------------------------------+
++arg1+ :ref:`print_flags <alias-print_flags>` +
++----+----------------------------------------+
+
+
+|function-builtin-sprint|
 
 

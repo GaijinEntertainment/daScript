@@ -5,6 +5,8 @@
 Documentation generator
 =======================
 
+.. include:: detail/rst.rst
+
 |module-rst|
 
 +++++++++

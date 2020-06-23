@@ -5,6 +5,8 @@
 Network socket library
 ======================
 
+.. include:: detail/network.rst
+
 |module-network|
 
 ++++++++++++++++++

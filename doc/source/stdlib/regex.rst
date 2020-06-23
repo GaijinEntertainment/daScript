@@ -5,6 +5,8 @@
 Regular expression library
 ==========================
 
+.. include:: detail/regex.rst
+
 |module-regex|
 
 ++++++++++++

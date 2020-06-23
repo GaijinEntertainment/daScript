@@ -5,6 +5,8 @@
 Functional programming library
 ==============================
 
+.. include:: detail/functional.rst
+
 |module-functional|
 
 +++++++++++++

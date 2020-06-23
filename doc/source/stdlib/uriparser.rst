@@ -5,6 +5,8 @@
 URI manipulation library based on UriParser
 ===========================================
 
+.. include:: detail/uriparser.rst
+
 |module-uriparser|
 
 +++++++++++++

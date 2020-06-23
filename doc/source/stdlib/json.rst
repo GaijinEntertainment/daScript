@@ -5,6 +5,8 @@
 JSON manipulation library
 =========================
 
+.. include:: detail/json.rst
+
 |module-json|
 
 ++++++++++++

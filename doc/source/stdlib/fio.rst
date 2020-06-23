@@ -5,6 +5,8 @@
 File input output library
 =========================
 
+.. include:: detail/fio.rst
+
 |module-fio|
 
 ++++++++++++

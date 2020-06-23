@@ -5,6 +5,8 @@
 Boost package for REGEX
 =======================
 
+.. include:: detail/regex_boost.rst
+
 |module-regex_boost|
 
 +++++++

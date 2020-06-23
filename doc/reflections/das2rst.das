@@ -56,7 +56,7 @@ strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash)$%%);
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%)
     }]
-    document("Built-in runtime",mod,"{root}/builtin.rst","",groups)
+    document("Built-in runtime",mod,"{root}/builtin.rst","{root}/detail/builtin.rst",groups)
 
 def document_module_fio(root:string)
     var mod = get_module("fio")
@@ -67,7 +67,7 @@ def document_module_fio(root:string)
         group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir)$%%);
         group_by_regex("OS thread helper", mod, %regex~(sleep)$%%)
     }]
-    document("File input output library",mod,"{root}/fio.rst","",groups)
+    document("File input output library",mod,"{root}/fio.rst","{root}/detail/fio.rst",groups)
 
 def document_module_random(root:string)
     var mod = get_module("random")
@@ -75,7 +75,7 @@ def document_module_random(root:string)
         group_by_regex("stub1", mod, %regex~(stub1)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Random generator library",mod,"{root}/random.rst","",groups)
+    document("Random generator library",mod,"{root}/random.rst","{root}/detail/random.rst",groups)
 
 def document_module_network(root:string)
     var mod = get_module("network")
@@ -83,7 +83,7 @@ def document_module_network(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Network socket library",mod,"{root}/network.rst","",groups)
+    document("Network socket library",mod,"{root}/network.rst","{root}/detail/network.rst",groups)
 
 def document_module_uriparser(root:string)
     var mod = get_module("uriparser")
@@ -91,7 +91,7 @@ def document_module_uriparser(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("URI manipulation library based on UriParser",mod,"{root}/uriparser.rst","",groups)
+    document("URI manipulation library based on UriParser",mod,"{root}/uriparser.rst","{root}/detail/uriparser.rst",groups)
 
 def document_module_rtti(root:string)
     var mod = get_module("rtti")
@@ -99,7 +99,7 @@ def document_module_rtti(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Runtime type information library",mod,"{root}/rtti.rst","",groups)
+    document("Runtime type information library",mod,"{root}/rtti.rst","{root}/detail/rtti.rst",groups)
 
 def document_module_ast(root:string)
     var mod = get_module("ast")
@@ -107,7 +107,7 @@ def document_module_ast(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("AST manipulation library",mod,"{root}/ast.rst","",groups)
+    document("AST manipulation library",mod,"{root}/ast.rst","{root}/detail/ast.rst",groups)
 
 def document_module_ast_boost(root:string)
     var mod = find_module("ast_boost")
@@ -115,7 +115,7 @@ def document_module_ast_boost(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Boost package for the AST",mod,"{root}/ast_boost.rst","",groups)
+    document("Boost package for the AST",mod,"{root}/ast_boost.rst","{root}/detail/ast_boost.rst",groups)
 
 def document_module_strings(root:string)
     var mod = find_module("strings")
@@ -123,7 +123,7 @@ def document_module_strings(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("String manipulation library",mod,"{root}/strings.rst","",groups)
+    document("String manipulation library",mod,"{root}/strings.rst","{root}/detail/strings.rst",groups)
 
 def document_module_functional(root:string)
     var mod = find_module("functional")
@@ -131,7 +131,7 @@ def document_module_functional(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Functional programming library",mod,"{root}/functional.rst","",groups)
+    document("Functional programming library",mod,"{root}/functional.rst","{root}/detail/functional.rst",groups)
 
 def document_module_json(root:string)
     var mod = find_module("json")
@@ -139,7 +139,7 @@ def document_module_json(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("JSON manipulation library",mod,"{root}/json.rst","",groups)
+    document("JSON manipulation library",mod,"{root}/json.rst","{root}/detail/json.rst",groups)
 
 def document_module_json_boost(root:string)
     var mod = find_module("json_boost")
@@ -147,7 +147,7 @@ def document_module_json_boost(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Boost package for JSON",mod,"{root}/json_boost.rst","",groups)
+    document("Boost package for JSON",mod,"{root}/json_boost.rst","{root}/detail/json_boost.rst",groups)
 
 def document_module_regex(root:string)
     var mod = find_module("regex")
@@ -155,7 +155,7 @@ def document_module_regex(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Regular expression library",mod,"{root}/regex.rst","",groups)
+    document("Regular expression library",mod,"{root}/regex.rst","{root}/detail/regex.rst",groups)
 
 def document_module_regex_boost(root:string)
     var mod = find_module("regex_boost")
@@ -163,7 +163,7 @@ def document_module_regex_boost(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Boost package for REGEX",mod,"{root}/regex_boost.rst","",groups)
+    document("Boost package for REGEX",mod,"{root}/regex_boost.rst","{root}/detail/regex_boost.rst",groups)
 
 def document_module_regex_rst(root:string)
     var mod = find_module("rst")
@@ -176,7 +176,7 @@ def document_module_regex_rst(root:string)
         group_by_regex("Group operations", mod, %regex~.*group%%);
         group_by_regex("Naming helpers", mod, %regex~(topic|module_name)$%%)
     }]
-    document("Documentation generator",mod,"{root}/rst.rst","",groups)
+    document("Documentation generator",mod,"{root}/rst.rst","{root}/detail/rst.rst",groups)
 
 [export]
 def test
