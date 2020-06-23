@@ -9,6 +9,7 @@ require daslib/ast_boost
         invoke(arg_field2,"field2",self.field2)
         ...
 */
+[private]
 def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tStructure)
     assert(stype.dim.length==0)

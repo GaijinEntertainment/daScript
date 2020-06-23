@@ -13,6 +13,7 @@ require daslib/json
 require daslib/json_boost
 require daslib/regex
 require daslib/regex_boost
+require daslib/apply
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -178,6 +179,14 @@ def document_module_regex_rst(root:string)
     }]
     document("Documentation generator",mod,"{root}/rst.rst","{root}/detail/rst.rst",groups)
 
+def document_module_apply(root:string)
+    var mod = find_module("apply")
+    var groups <- [{DocGroup
+        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+    }]
+    document("Apply reflection pattern",mod,"{root}/apply.rst","{root}/detail/apply.rst",groups)
+
 [export]
 def test
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -200,4 +209,5 @@ def test
     document_module_regex(root)
     document_module_regex_boost(root)
     document_module_regex_rst(root)
+    document_module_apply(root)
     return true

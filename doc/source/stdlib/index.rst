@@ -46,5 +46,5 @@ THE SOFTWARE.
    regex.rst
    regex_boost.rst
    rst.rst
-
+   apply.rst
 
