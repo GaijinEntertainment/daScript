@@ -3,6 +3,7 @@
 #include "module_builtin.h"
 
 #include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/hash.h"
@@ -12,6 +13,7 @@
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/aot.h"
+#include "daScript/misc/sysos.h"
 
 namespace das
 {
@@ -754,10 +756,50 @@ namespace das
         return cast<char *>::from(sres);
     }
 
+    Array  g_CommandLineArguments;
+
+    void setCommandLineArguments ( int argc, char * argv[] ) {
+        g_CommandLineArguments.data = (char *) argv;
+        g_CommandLineArguments.capacity = argc;
+        g_CommandLineArguments.size = argc;
+        g_CommandLineArguments.lock = 1;
+        g_CommandLineArguments.flags = 0;
+    }
+
+    void getCommandLineArguments( Array & arr ) {
+        arr = g_CommandLineArguments;
+    }
+
+    char * builtin_das_root ( Context * context ) {
+        return context->stringHeap->allocateString(getDasRoot());
+    }
+
+    char * to_das_string(const string & str, Context * ctx) {
+        return ctx->stringHeap->allocateString(str);
+    }
+
+    void set_das_string(string & str, const char * bs) {
+        str = bs ? bs : "";
+    }
+
+    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context) {
+        vec4f args[1];
+        args[0] = cast<const char *>::from(str.c_str());
+        context->invoke(block, args, nullptr);
+    }
+
+    char * builtin_string_clone ( const char *str, Context * context ) {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if (!strLen)
+            return nullptr;
+        return context->stringHeap->allocateString(str, strLen);
+    }
+
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
-        // unesacpe macro
+        // unescape macro
         addReaderMacro(make_smart<UnescapedStringMacro>());
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
@@ -778,6 +820,11 @@ namespace das
         addAnnotation(make_smart<PersistentStructureAnnotation>());
         // typeinfo macros
         addTypeInfoMacro(make_smart<ClassInfoMacro>());
+        // command line arguments
+        addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
+            SideEffects::accessExternal,"builtin_das_root");
+        addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
+                SideEffects::accessExternal,"getCommandLineArguments");
         // compile-time functions
         addExtern<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling",
             SideEffects::accessExternal, "is_compiling");
@@ -921,6 +968,12 @@ namespace das
         addExtern<DAS_BIND_FUN(i_das_ptr_diff)>(*this, lib, "i_das_ptr_diff", SideEffects::none, "i_das_ptr_diff");
         // profile
         addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal, "builtin_profile");
-        addString(lib);
+        // das string binding
+        addAnnotation(make_smart<DasStringTypeAnnotation>());
+        addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");
+        addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::modifyArgument,"set_das_string");
+        addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
+            SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
+        addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string", SideEffects::none, "builtin_string_clone");
     }
 }

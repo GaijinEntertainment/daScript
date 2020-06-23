@@ -4,8 +4,8 @@ module ast_boost
 
 require rtti
 require ast
-
-require daslib/strings
+require strings
+require daslib/strings_boost
 
 [export]
 def describe(list:AnnotationArgumentList)

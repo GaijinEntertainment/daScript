@@ -4,8 +4,9 @@ require fio
 require math
 require rtti
 require ast
+require strings
 require daslib/ast_boost
-require daslib/strings
+require daslib/strings_boost
 require daslib/regex
 require daslib/regex_boost
 
@@ -212,16 +213,16 @@ def make_ref(name,text:string)
 
 def make_group(name:string; plus:string="+")
     let len = length(name)
-    return "{builtin`::repeat(plus,len)}\n{name}\n{builtin`::repeat(plus,len)}\n\n"
+    return "{strings::repeat(plus,len)}\n{name}\n{strings::repeat(plus,len)}\n\n"
 
 def make_header(name,lab:string)
     let wide = length(name)
-    return ".. _stdlib_{lab}:\n\n{builtin`::repeat("=",wide)}\n{name}\n{builtin`::repeat("=",wide)}\n\n"
+    return ".. _stdlib_{lab}:\n\n{strings::repeat("=",wide)}\n{name}\n{strings::repeat("=",wide)}\n\n"
 
 [private]
 def write_table_separator(var writer:StringBuilderWriter; wid:array<int>)
     for x in wid
-        write(writer,"+{builtin`::repeat("-",x)}")
+        write(writer,"+{strings::repeat("-",x)}")
     write(writer,"+\n")
 
 [private]

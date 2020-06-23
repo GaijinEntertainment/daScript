@@ -1,6 +1,7 @@
 // options log_nodes=true
 
 require math
+require strings
 
 let
     primes = [[uint

@@ -4,6 +4,7 @@ module json_boost
 
 require rtti
 require ast
+require strings
 require daslib/json
 require daslib/ast_boost
 

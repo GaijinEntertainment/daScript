@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/simulate/aot_builtin_ast.h"
+#include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/performance_time.h"
 
 using namespace das;

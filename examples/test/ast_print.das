@@ -6,7 +6,7 @@ options rtti = true
 require ast
 require rtti
 require daslib/ast_boost
-require daslib/strings
+require daslib/strings_boost
 
 //////////
 // example

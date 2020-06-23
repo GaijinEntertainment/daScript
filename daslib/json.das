@@ -2,6 +2,8 @@ options indenting = 4
 
 module json
 
+require strings
+
 variant JsValue
     _object : table<string; JsonValue?>
     _array  : array<JsonValue?>

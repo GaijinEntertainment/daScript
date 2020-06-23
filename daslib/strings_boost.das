@@ -1,6 +1,8 @@
 options indenting = 4
 
-module strings
+module strings_boost
+
+require strings public
 
 [export]
 def wide (text:string; width:int)

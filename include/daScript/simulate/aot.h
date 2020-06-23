@@ -2090,9 +2090,21 @@ namespace das {
     __forceinline void das_vector_resize ( vector<TT> & vec, int32_t newSize ) {
         vec.resize(newSize);
     }
-}
 
-#include "daScript/simulate/aot_builtin_string.h"
+    template <typename TT>
+    void peek_das_string_T(const string & str, TT && block, Context *) {
+        block((char *)str.c_str());
+    }
+
+    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context);
+
+    char * builtin_string_clone ( const char *str, Context * context );
+
+    __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
+
+    char * to_das_string(const string & str, Context * ctx);
+    void set_das_string(string & str, const char * bs);
+}
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop

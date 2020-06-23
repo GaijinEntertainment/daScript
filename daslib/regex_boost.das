@@ -3,6 +3,7 @@ options indenting = 4
 module regex_boost
 
 require ast
+require strings
 require daslib/ast_boost
 require daslib/regex
 

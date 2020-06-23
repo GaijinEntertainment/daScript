@@ -8,7 +8,6 @@ namespace das {
         Module_BuiltIn();
         virtual ~Module_BuiltIn();
     protected:
-        void addString(ModuleLibrary & lib);
         void addRuntime(ModuleLibrary & lib);
         void addRuntimeSort(ModuleLibrary & lib);
         void addVectorTypes(ModuleLibrary & lib);

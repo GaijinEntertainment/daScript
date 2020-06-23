@@ -1,4 +1,5 @@
-require daslib/strings
+require strings
+require daslib/strings_boost
 
 typedef
     module_info = tuple<string;string;string> const

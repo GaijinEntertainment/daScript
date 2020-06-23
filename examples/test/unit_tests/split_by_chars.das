@@ -1,4 +1,4 @@
-require daslib/strings
+require daslib/strings_boost
 
 [sideeffects]
 def expect0(a)

@@ -42,9 +42,6 @@ namespace das {
     double string_to_double ( const char *str, Context * context );
     float fast_to_float ( const char *str );
     int fast_to_int ( const char *str );
-    char * to_das_string(const string & str, Context * ctx);
-    void set_das_string(string & str, const char * bs);
-    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context);
     void builtin_append_char_to_string(string & str, int32_t Ch);
     bool builtin_string_ends_with(const string &str, char * substr, Context * context);
     int32_t builtin_ext_string_length(string & str);
@@ -56,14 +53,11 @@ namespace das {
     void write_escape_string ( StringBuilderWriter & writer, char * str );
     void builtin_string_split_by_char ( const char * str, const char * delim, const Block & sblk, Context * context );
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context );
-    char * builtin_string_clone ( const char *str, Context * context );
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context );
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context );
 
     __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
     __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }
-
-    __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
 
     template <typename TT>
     __forceinline char * format ( const char * fmt, TT value, Context * context ) {
@@ -77,11 +71,6 @@ namespace das {
         char buf[256];
         snprintf(buf, 256, fmt, value);
         writer.writeStr(buf, strlen(buf));
-    }
-
-    template <typename TT>
-    void peek_das_string_T(const string & str, TT && block, Context *) {
-        block((char *)str.c_str());
     }
 
     template <typename TT>

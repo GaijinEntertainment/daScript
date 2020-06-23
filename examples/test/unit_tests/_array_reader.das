@@ -2,6 +2,7 @@ module _array_reader
 
 require rtti
 require ast
+require strings
 require daslib/ast_boost
 
 [reader_macro(name="arr")]

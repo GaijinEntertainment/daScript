@@ -2,6 +2,8 @@
 
 // options logCpp=true
 
+require strings
+
 [export]
 def test:bool
     let s:string = "hello, world!"

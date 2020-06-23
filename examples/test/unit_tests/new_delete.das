@@ -3,6 +3,7 @@
 
 options persistent_heap = true
 
+require strings
 require UnitTest
 
 struct SomethingSmall

@@ -4,11 +4,10 @@
 
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
-
+#include "daScript/misc/performance_time.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/string_writer.h"
 #include "daScript/misc/debug_break.h"
-#include "daScript/misc/sysos.h"
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
@@ -246,14 +245,6 @@ namespace das
         return str ? atoi(str) : 0;
     }
 
-    char * to_das_string(const string & str, Context * ctx) {
-        return ctx->stringHeap->allocateString(str);
-    }
-
-    void set_das_string(string & str, const char * bs) {
-        str = bs ? bs : "";
-    }
-
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context ) {
         StringBuilderWriter writer;
         vec4f args[1];
@@ -305,12 +296,6 @@ namespace das
             memcpy ( s, str, len );
         }
         return res;
-    }
-
-    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context) {
-        vec4f args[1];
-        args[0] = cast<const char *>::from(str.c_str());
-        context->invoke(block, args, nullptr);
     }
 
     void builtin_string_split_by_char ( const char * str, const char * delim, const Block & block, Context * context ) {
@@ -404,13 +389,6 @@ namespace das
         return context->stringHeap->allocateString(data);
     }
 
-    char * builtin_string_clone ( const char *str, Context * context ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        if (!strLen)
-            return nullptr;
-        return context->stringHeap->allocateString(str, strLen);
-    }
-
     class StrdupDataWalker : public DataWalker {
         virtual void String ( char * & str ) {
             if (str) str = strdup(str);
@@ -467,10 +445,6 @@ namespace das
         return context->stringHeap->allocateString(bytes.data, bytes.size);
     }
 
-    char * builtin_das_root ( Context * context ) {
-        return context->stringHeap->allocateString(getDasRoot());
-    }
-
     void delete_string ( char * & str, Context * context ) {
         if ( !str ) return;
         uint32_t len = stringLengthSafe(*context, str);
@@ -497,119 +471,108 @@ namespace das
         str.resize(newLength);
     }
 
-    Array  g_CommandLineArguments;
-
-    void setCommandLineArguments ( int argc, char * argv[] ) {
-        g_CommandLineArguments.data = (char *) argv;
-        g_CommandLineArguments.capacity = argc;
-        g_CommandLineArguments.size = argc;
-        g_CommandLineArguments.lock = 1;
-        g_CommandLineArguments.flags = 0;
-    }
-
-    void getCommandLineArguments( Array & arr ) {
-        arr = g_CommandLineArguments;
-    }
-
-    void Module_BuiltIn::addString(ModuleLibrary & lib) {
-        // command line
-        addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
-                SideEffects::accessExternal,"getCommandLineArguments");
-        // string builder writer
-        addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
-        addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
-            SideEffects::accessExternal,"builtin_das_root");
-        addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
-            SideEffects::modifyExternal,"delete_string")->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
-            SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
-        addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
-            SideEffects::modifyExternal, "builtin_write_string");
-        addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::modifyExternal, "write_string_char");
-        addExtern<DAS_BIND_FUN(write_string_chars)>(*this, lib, "write_chars", SideEffects::modifyExternal, "write_string_chars");
-        addExtern<DAS_BIND_FUN(write_escape_string)>(*this, lib, "write_escape_string", SideEffects::modifyExternal, "write_escape_string");
-        addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
-        addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
-        addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
-        addExtern<DAS_BIND_FUN(format_and_write<uint64_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint64_t>");
-        addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<float>");
-        addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<double>");
-        addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string", SideEffects::none, "builtin_string_from_array");
-        // dup
-        auto bsd = addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
-                                                          SideEffects::modifyArgumentAndExternal, "builtin_strdup");
-        bsd->unsafeOperation = true;
-        // das string binding
-        addAnnotation(make_smart<DasStringTypeAnnotation>());
-        addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string", SideEffects::none, "to_das_string");
-        addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "set", SideEffects::modifyArgument,"set_das_string");
-        addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
-            SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
-        // regular string
-        addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at", SideEffects::none, "get_character_at");
-        addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat", SideEffects::none, "get_character_uat")->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
-        addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char", SideEffects::none, "to_string_char");
-        addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with", SideEffects::none, "builtin_string_endswith");
-        addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with", SideEffects::none, "builtin_string_startswith");
-        addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");
-        addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", SideEffects::none, "builtin_string_strip_right");
-        addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", SideEffects::none, "builtin_string_strip_left");
-        addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
-            SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string", SideEffects::none, "builtin_as_string");
-        addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice1");
-        addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice2");
-        addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", SideEffects::none, "builtin_string_find1");
-        addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", SideEffects::none, "builtin_string_find2");
-        addExtern<DAS_BIND_FUN(builtin_find_first_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_of");
-        addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_char_of");
-        addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
-        addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
-        addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
-            SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string");
-        addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
-            SideEffects::none, "builtin_string_ends_with");
-        addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
-            SideEffects::modifyArgumentAndExternal, "builtin_resize_string");
-        addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
-            SideEffects::none, "builtin_ext_string_length");
-        addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
-        addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
-        addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");
-        addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty", SideEffects::none, "builtin_empty_das_string");
-        addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
-            SideEffects::none, "builtin_string_tolower_in_place")->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
-            SideEffects::none, "builtin_string_toupper_in_place")->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
-            SideEffects::modifyExternal, "builtin_string_split_by_char");
-        addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
-            SideEffects::modifyExternal, "builtin_string_split");
-        addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string", SideEffects::none, "builtin_string_clone");
-        addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
-        addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
-        addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
-        addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double", SideEffects::none, "string_to_double");
-        addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", SideEffects::none, "fast_to_int");
-        addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none, "fast_to_float");
-        addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape", SideEffects::none, "builtin_string_escape");
-        addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape", SideEffects::none, "builtin_string_unescape");
-        addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace", SideEffects::none, "builtin_string_replace");
-        // format
-        addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format", SideEffects::none, "format<int32_t>");
-        addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format", SideEffects::none, "format<uint32_t>");
-        addExtern<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format", SideEffects::none, "format<int64_t>");
-        addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format", SideEffects::none, "format<uint64_t>");
-        addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format", SideEffects::none, "format<float>");
-        addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format", SideEffects::none, "format<double>");
-        // queries
-        addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha", SideEffects::none, "is_alpha");
-        addExtern<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line", SideEffects::none, "is_new_line");
-        addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space", SideEffects::none, "is_white_space");
-        addExtern<DAS_BIND_FUN(is_number)> (*this, lib, "is_number", SideEffects::none, "is_number");
-        // bitset helpers
-        addExtern<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
-            SideEffects::none,"is_char_in_set");
-    }
+    class Module_Strings : public Module {
+    public:
+        Module_Strings() : Module("strings") {
+            DAS_PROFILE_SECTION("Module_Strings");
+            ModuleLibrary lib;
+            lib.addModule(this);
+            lib.addBuiltInModule();
+            // string builder writer
+            addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
+            addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
+                SideEffects::modifyExternal,"delete_string")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
+                SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
+            addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
+                SideEffects::modifyExternal, "builtin_write_string");
+            addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::modifyExternal, "write_string_char");
+            addExtern<DAS_BIND_FUN(write_string_chars)>(*this, lib, "write_chars", SideEffects::modifyExternal, "write_string_chars");
+            addExtern<DAS_BIND_FUN(write_escape_string)>(*this, lib, "write_escape_string", SideEffects::modifyExternal, "write_escape_string");
+            addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int32_t>");
+            addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint32_t>");
+            addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<int64_t>");
+            addExtern<DAS_BIND_FUN(format_and_write<uint64_t>)>(*this, lib, "format", SideEffects::modifyExternal, "format_and_write<uint64_t>");
+            addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<float>");
+            addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format", SideEffects::modifyExternal, "format_and_write<double>");
+            addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string", SideEffects::none, "builtin_string_from_array");
+            // dup
+            auto bsd = addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
+                                                            SideEffects::modifyArgumentAndExternal, "builtin_strdup");
+            bsd->unsafeOperation = true;
+            // regular string
+            addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at", SideEffects::none, "get_character_at");
+            addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat", SideEffects::none, "get_character_uat")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
+            addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char", SideEffects::none, "to_string_char");
+            addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with", SideEffects::none, "builtin_string_endswith");
+            addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with", SideEffects::none, "builtin_string_startswith");
+            addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");
+            addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", SideEffects::none, "builtin_string_strip_right");
+            addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", SideEffects::none, "builtin_string_strip_left");
+            addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
+                SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string", SideEffects::none, "builtin_as_string");
+            addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice1");
+            addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice2");
+            addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", SideEffects::none, "builtin_string_find1");
+            addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", SideEffects::none, "builtin_string_find2");
+            addExtern<DAS_BIND_FUN(builtin_find_first_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_of");
+            addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_char_of");
+            addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
+            addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
+            addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
+                SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string");
+            addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
+                SideEffects::none, "builtin_string_ends_with");
+            addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
+                SideEffects::modifyArgumentAndExternal, "builtin_resize_string");
+            addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
+                SideEffects::none, "builtin_ext_string_length");
+            addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
+            addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
+            addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");
+            addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty", SideEffects::none, "builtin_empty_das_string");
+            addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
+                SideEffects::none, "builtin_string_tolower_in_place")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
+                SideEffects::none, "builtin_string_toupper_in_place")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
+                SideEffects::modifyExternal, "builtin_string_split_by_char");
+            addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
+                SideEffects::modifyExternal, "builtin_string_split");
+            addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
+            addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
+            addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
+            addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double", SideEffects::none, "string_to_double");
+            addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", SideEffects::none, "fast_to_int");
+            addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none, "fast_to_float");
+            addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape", SideEffects::none, "builtin_string_escape");
+            addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape", SideEffects::none, "builtin_string_unescape");
+            addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace", SideEffects::none, "builtin_string_replace");
+            // format
+            addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format", SideEffects::none, "format<int32_t>");
+            addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format", SideEffects::none, "format<uint32_t>");
+            addExtern<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format", SideEffects::none, "format<int64_t>");
+            addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format", SideEffects::none, "format<uint64_t>");
+            addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format", SideEffects::none, "format<float>");
+            addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format", SideEffects::none, "format<double>");
+            // queries
+            addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha", SideEffects::none, "is_alpha");
+            addExtern<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line", SideEffects::none, "is_new_line");
+            addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space", SideEffects::none, "is_white_space");
+            addExtern<DAS_BIND_FUN(is_number)> (*this, lib, "is_number", SideEffects::none, "is_number");
+            // bitset helpers
+            addExtern<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
+                SideEffects::none,"is_char_in_set");
+            // lets make sure its all aot ready
+            verifyAotReady();
+        }
+        virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/simulate/aot_builtin_string.h\"\n";
+            return ModuleAotType::cpp;
+        }
+    };
 }
+
+REGISTER_MODULE_IN_NAMESPACE(Module_Strings,das);

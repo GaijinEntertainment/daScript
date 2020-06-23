@@ -2,6 +2,8 @@ options indenting = 4
 
 module regex
 
+require strings
+
 enum ReOp
     Char
     Set

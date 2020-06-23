@@ -1,3 +1,5 @@
+require strings
+
 [export]
 def test()
 	assert(replace("hello, worlld","ll","goo") == "hegooo, worgood")
