@@ -42,9 +42,9 @@ namespace das {
         if ( !model.bigStuff.empty() ) {
             tout << "big stuff:\n";
 #if DAS_TRACK_ALLOCATIONS
-            tout << "size\tpointer\t\tid\n";
+            tout << "\tsize\tpointer\t\tid\n";
 #else
-            tout << "size\tpointer\n";
+            tout << "\tsize\tpointer\n";
 #endif
             for ( const auto & it : model.bigStuff ) {
 #if DAS_TRACK_ALLOCATIONS

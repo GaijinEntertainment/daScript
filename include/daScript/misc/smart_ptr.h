@@ -21,9 +21,11 @@ namespace das {
             return ptr;
         }
         __forceinline T * operator -> () const {
+            DAS_ASSERT(ptr && "null pointer dereference");
             return ptr;
         }
         __forceinline T & operator * () const {
+            DAS_ASSERT(ptr && "null pointer dereference");
             return *ptr;
         }
         __forceinline operator smart_ptr_raw<void> & () const {
@@ -52,7 +54,10 @@ namespace das {
         __forceinline static void addRef ( T * p ) { p->addRef(); }
         __forceinline static bool delRef ( T * p ) { return p->delRef(); }
         __forceinline static unsigned int use_count ( T * p ) { return p->use_count(); }
-        __forceinline static T & get_value ( T * p ) { return *p; }
+        __forceinline static T & get_value ( T * p ) {
+            DAS_ASSERT(p && "null pointer dereference");
+            return *p;
+        }
     };
 
     template <>
@@ -60,7 +65,10 @@ namespace das {
         __forceinline static void addRef ( void * ) { }
         __forceinline static bool delRef ( void * ) { return false; }
         __forceinline static unsigned int use_count ( void * ) { return 0; }
-        __forceinline static void * get_value ( void * p ) { return p; }
+        __forceinline static void * get_value ( void * p ) {
+            DAS_ASSERT(p && "null pointer dereference");
+            return p;
+        }
     };
 
     template<typename T, typename TP = smart_ptr_policy<T>>
@@ -133,6 +141,7 @@ namespace das {
             return TP::get_value(ptr);
         }
         __forceinline T * operator -> () const {
+            DAS_ASSERT(ptr && "null pointer dereference");
             return ptr;
         }
         __forceinline T * get() const {

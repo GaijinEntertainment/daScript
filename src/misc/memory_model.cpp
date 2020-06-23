@@ -60,7 +60,9 @@ namespace das {
         size = (size + alignMask) & ~alignMask;
         totalAllocated += size;
         maxAllocated = das::max(maxAllocated, totalAllocated);
+#if !DAS_TRACK_ALLOCATIONS
         if ( size >= DAS_MAX_SHOE_ALLOCATION ) {
+#endif
             char * ptr = (char *) das_aligned_alloc16(size);
             bigStuff[ptr] = size;
 #if DAS_TRACK_ALLOCATIONS
@@ -68,6 +70,7 @@ namespace das {
             bigStuffId[ptr] = g_tracker ++;
 #endif
             return ptr;
+#if !DAS_TRACK_ALLOCATIONS
         } else {
             if ( char * res = shoe.allocate(size) ) {
                 return res;
@@ -79,6 +82,7 @@ namespace das {
             shoe.chunks[si] = new Deck(total, size, shoe.chunks[si]);
             return shoe.chunks[si]->allocate();
         }
+#endif
     }
 
     bool MemoryModel::free ( char * ptr, uint32_t size ) {
@@ -88,11 +92,13 @@ namespace das {
 #if DAS_SANITIZER
         memset(ptr, 0xcd, size);
 #endif
+#if !DAS_TRACK_ALLOCATIONS
         if ( size < DAS_MAX_SHOE_ALLOCATION ) {
             shoe.free(ptr, size);
             totalAllocated -= size;
             return true;
         }
+#endif
 #if DAS_SANITIZER
         auto itd = deletedBigStuff.find(ptr);
         if ( itd!= deletedBigStuff.end() ) {
@@ -168,6 +174,7 @@ namespace das {
 
     void MemoryModel::sweep() {
         totalAllocated = 0;
+#if !DAS_TRACK_ALLOCATIONS
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {   // we re-track all small allocations
             for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
                 uint32_t utotal = ch->total / 32;
@@ -181,6 +188,7 @@ namespace das {
                 }
             }
         }
+#endif
         for ( auto it = bigStuff.begin(); it!=bigStuff.end() ; ) {
             if ( it->second & DAS_PAGE_GC_MASK ) {
                 it->second &= ~DAS_PAGE_GC_MASK;
