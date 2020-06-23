@@ -179,7 +179,7 @@ namespace das {
                     bytes += ch->allocated * ch->size;
                     totalBytes += ch->total * ch->size + (ch->total/32*4);
                 }
-                depth = max(depth, d);
+                depth = das::max(depth, d);
             }
         }
         uint32_t depth ( ) const {
