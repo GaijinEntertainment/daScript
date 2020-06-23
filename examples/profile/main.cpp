@@ -27,12 +27,16 @@ void operator delete(void * p) throw()
 
 MAKE_TYPE_FACTORY(Object, Object)
 
+namespace das {
+
 template <>
 struct typeName<ObjectArray> {
     static string name() {
         return "ObjectArray";
     }
 };
+
+}
 
 TextPrinter tout;
 
