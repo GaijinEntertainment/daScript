@@ -279,6 +279,7 @@ namespace das
             walker.walk(argValues[i], types[i]);
         }
         int length = writer.tellp();
+        writer.writeChars('\0', 1);
         if ( length ) {
             auto pStr = context.stringHeap->allocateString(writer.c_str(), length);
             if ( !pStr  ) {
