@@ -53,9 +53,13 @@ namespace das {
             Visitor::preVisitStructureField(var,decl,last);
             DAS_ASSERT(decl.at.column && decl.at.line);
         }
-        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-            Visitor::preVisitLet(let,var,last);
+        virtual void preVisitFor ( ExprFor * expr ) {
+            Visitor::preVisit(expr);
+        }
+        virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(expr,var,last);
             DAS_ASSERT(var->at.column && var->at.line);
+            DAS_ASSERT(expr->atInit.line);
         }
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
@@ -120,6 +124,8 @@ namespace das {
         // let temp
         auto pLet = make_smart<ExprLet>();
         pLet->at = expr->at;
+        pLet->atInit = expr->at;
+        pLet->visibility = static_pointer_cast<ExprFor>(expr->exprFor)->visibility;
         pLet->variables.push_back(pVar);
         pClosure->list.push_back(pLet);
         // push(temp, subexpr)
@@ -972,6 +978,8 @@ namespace das {
         }
         auto leqt = make_smart<ExprLet>();
         leqt->at = expr->at;
+        leqt->atInit = expr->at;
+        leqt->visibility = expr->visibility;
         auto lvar = make_smart<Variable>();
         lvar->generated = true;
         lvar->at = expr->at;
@@ -990,6 +998,8 @@ namespace das {
             // let src0 = each(blah) or let src0 = blah if its iterator
             auto seqt = make_smart<ExprLet>();
             seqt->at = expr->at;
+            seqt->atInit = expr->at;
+            seqt->visibility = expr->visibility;
             auto svar = make_smart<Variable>();
             svar->generated = true;
             svar->at = expr->at;
@@ -1010,6 +1020,8 @@ namespace das {
             // let it0 : type_of_iterable
             auto srci = make_smart<ExprLet>();
             srci->at = expr->at;
+            srci->atInit = expr->at;
+            srci->visibility = expr->visibility;
             auto srcv = make_smart<Variable>();
             srcv->at = iterv->at;
             srcv->name = srcVarName;
@@ -1041,6 +1053,8 @@ namespace das {
             rein->alwaysSafe = true;
             auto veqt = make_smart<ExprLet>();
             veqt->at = expr->at;
+            veqt->atInit = expr->at;
+            veqt->visibility = expr->visibility;
             auto vvar = make_smart<Variable>();
             vvar->generated = true;
             vvar->at = expr->at;
@@ -1390,6 +1404,7 @@ namespace das {
         auto block = make_smart<ExprBlock>();
         block->at = func->at;
         auto wth = make_smart<ExprWith>();
+        wth->at = func->at;
         auto wvar = make_smart<ExprVar>(func->at,"self");
         wvar->generated = true;
         wth->with = wvar;
@@ -1417,11 +1432,14 @@ namespace das {
         }
         // lef self = [[Foo()]]
         auto makeT = make_smart<ExprMakeStruct>(baseClass->at);
+        makeT->at = func->at;
         makeT->useInitializer = true;
         makeT->makeType = make_smart<TypeDecl>(baseClass);
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto letS = make_smart<ExprLet>();
         letS->at = func->at;
+        letS->atInit = func->at;
+        letS->visibility = func->atDecl;
         auto argT = make_smart<TypeDecl>(baseClass);
         argT->constant = false;
         auto argV = make_smart<Variable>();
@@ -1442,7 +1460,9 @@ namespace das {
         block->list.push_back(cll);
         // return self
         auto selfV = make_smart<ExprVar>(baseClass->at,"self");
+        selfV->at = func->at;
         auto returnDecl = make_smart<ExprReturn>(baseClass->at,selfV);
+        returnDecl->at = func->at;
         returnDecl->moveSemantics = true;
         block->list.push_back(returnDecl);
         // and done

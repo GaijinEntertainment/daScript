@@ -729,6 +729,7 @@ namespace das {
 
     ExpressionPtr ExprConstEnumeration::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprConstEnumeration>(expr);
+        ExprConst::clone(cexpr);
         cexpr->enumType = enumType;
         cexpr->text = text;
         cexpr->value = value;
@@ -1745,6 +1746,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->iterators = iterators;
         cexpr->iteratorsAt = iteratorsAt;
+        cexpr->visibility = visibility;
         for ( auto & src : sources )
             cexpr->sources.push_back(src->clone());
         for ( auto & var : iteratorVariables )
@@ -1797,6 +1799,8 @@ namespace das {
         for ( auto & var : variables )
             cexpr->variables.push_back(var->clone());
         cexpr->inScope = inScope;
+        cexpr->visibility = visibility;
+        cexpr->atInit = atInit;
         return cexpr;
     }
 

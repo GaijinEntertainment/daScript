@@ -150,8 +150,13 @@ namespace das {
                     var->at, CompilationError::invalid_name );
             }
         }
+        virtual void preVisit(ExprFor * expr) override {
+            Visitor::preVisit(expr);
+            DAS_ASSERT(expr->visibility.line);
+        }
         virtual void preVisit(ExprLet * expr) override {
             Visitor::preVisit(expr);
+            DAS_ASSERT(expr->visibility.line);
             for (const auto & var : expr->variables) {
                 if (!isValidVarName(var->name)) {
                     program->error("invalid variable name " + var->name, "", "",

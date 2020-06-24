@@ -4750,6 +4750,7 @@ namespace das {
     // ExprFor
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);
+            DAS_ASSERT(expr->visibility.line);
             loop.push_back(expr);
             pushVarStack();
         }
@@ -4854,6 +4855,7 @@ namespace das {
             expr->visibility.line = expr->atInit.last_line;
             expr->visibility.last_column = scope->at.last_column;
             expr->visibility.last_line = scope->at.last_line;
+            DAS_ASSERT(expr->visibility.line);
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
