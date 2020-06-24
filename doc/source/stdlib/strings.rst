@@ -32,8 +32,8 @@ Internal builtin functions
   This group of functions is hidden. It will not be in the final documentation.
 
   *  :ref:`builtin_strdup (arg0:any) : void <function-_at_strings_c__c_builtin_strdup_any>` 
-  *  :ref:`builtin_string_split (arg0:string const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : void <function-_at_strings_c__c_builtin_string_split_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`builtin_string_split_by_char (arg0:string const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : void <function-_at_strings_c__c_builtin_string_split_by_char_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`builtin_string_split (str:string const;delimiter:string const;block:block\<\> const implicit;context: const) : void <function-_at_strings_c__c_builtin_string_split_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`builtin_string_split_by_char (str:string const;delimiter:string const;block:block\<\> const implicit;context: const) : void <function-_at_strings_c__c_builtin_string_split_by_char_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
 
 .. _function-_at_strings_c__c_builtin_strdup_any:
 
@@ -53,34 +53,34 @@ Internal builtin functions
 
 .. _function-_at_strings_c__c_builtin_string_split_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
 
-.. das:function:: builtin_string_split(arg0: string const; arg1: string const; arg2: block<> const implicit)
+.. das:function:: builtin_string_split(str: string const; delimiter: string const; block: block<> const implicit)
 
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+arg0    +string const          +
-+--------+----------------------+
-+arg1    +string const          +
-+--------+----------------------+
-+arg2    +block<> const implicit+
-+--------+----------------------+
++---------+----------------------+
++argument +argument type         +
++=========+======================+
++str      +string const          +
++---------+----------------------+
++delimiter+string const          +
++---------+----------------------+
++block    +block<> const implicit+
++---------+----------------------+
 
 
 |function-strings-builtin_string_split|
 
 .. _function-_at_strings_c__c_builtin_string_split_by_char_string_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
 
-.. das:function:: builtin_string_split_by_char(arg0: string const; arg1: string const; arg2: block<> const implicit)
+.. das:function:: builtin_string_split_by_char(str: string const; delimiter: string const; block: block<> const implicit)
 
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+arg0    +string const          +
-+--------+----------------------+
-+arg1    +string const          +
-+--------+----------------------+
-+arg2    +block<> const implicit+
-+--------+----------------------+
++---------+----------------------+
++argument +argument type         +
++=========+======================+
++str      +string const          +
++---------+----------------------+
++delimiter+string const          +
++---------+----------------------+
++block    +block<> const implicit+
++---------+----------------------+
 
 
 |function-strings-builtin_string_split_by_char|
@@ -176,21 +176,21 @@ is_white_space returns bool
 Character by index
 ++++++++++++++++++
 
-  *  :ref:`character_at (arg0:string const;arg1:int const;arg2: const) : int <function-_at_strings_c__c_character_at_string_hh_const_int_hh_const__hh_const>` 
-  *  :ref:`character_uat (arg0:string const;arg1:int const) : int <function-_at_strings_c__c_character_uat_string_hh_const_int_hh_const>` 
+  *  :ref:`character_at (str:string const;idx:int const;context: const) : int <function-_at_strings_c__c_character_at_string_hh_const_int_hh_const__hh_const>` 
+  *  :ref:`character_uat (str:string const;idx:int const) : int <function-_at_strings_c__c_character_uat_string_hh_const_int_hh_const>` 
 
 .. _function-_at_strings_c__c_character_at_string_hh_const_int_hh_const__hh_const:
 
-.. das:function:: character_at(arg0: string const; arg1: int const)
+.. das:function:: character_at(str: string const; idx: int const)
 
 character_at returns int
 
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+arg0    +string const +
++str     +string const +
 +--------+-------------+
-+arg1    +int const    +
++idx     +int const    +
 +--------+-------------+
 
 
@@ -198,7 +198,7 @@ character_at returns int
 
 .. _function-_at_strings_c__c_character_uat_string_hh_const_int_hh_const:
 
-.. das:function:: character_uat(arg0: string const; arg1: int const)
+.. das:function:: character_uat(str: string const; idx: int const)
 
 character_uat returns int
 
@@ -208,9 +208,9 @@ character_uat returns int
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+arg0    +string const +
++str     +string const +
 +--------+-------------+
-+arg1    +int const    +
++idx     +int const    +
 +--------+-------------+
 
 
@@ -343,7 +343,7 @@ starts_with returns bool
 String builder
 ++++++++++++++
 
-  *  :ref:`build_string (arg0:block\<(strings::StringBuilderWriter):void\> const implicit;arg1: const) : string <function-_at_strings_c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`build_string (block:block\<(strings::StringBuilderWriter):void\> const implicit;context: const) : string <function-_at_strings_c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const>` 
   *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:double const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_double_hh_const>` 
   *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:float const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_float_hh_const>` 
   *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:int const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int_hh_const>` 
@@ -363,14 +363,14 @@ String builder
 
 .. _function-_at_strings_c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const:
 
-.. das:function:: build_string(arg0: block<(strings::StringBuilderWriter):void> const implicit)
+.. das:function:: build_string(block: block<(strings::StringBuilderWriter):void> const implicit)
 
 build_string returns string
 
 +--------+-------------------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                          +
 +========+=======================================================================================================+
-+arg0    +block<( :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> const implicit+
++block   +block<( :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> const implicit+
 +--------+-------------------------------------------------------------------------------------------------------+
 
 
@@ -1014,7 +1014,7 @@ find returns int
 String conversion routines
 ++++++++++++++++++++++++++
 
-  *  :ref:`as_string (arg0:array\<uint8\> const implicit;arg1: const) : string <function-_at_strings_c__c_as_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`as_string (arr:array\<uint8\> const implicit;context: const) : string <function-_at_strings_c__c_as_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const>` 
   *  :ref:`double (arg0:string const;arg1: const) : double <function-_at_strings_c__c_double_string_hh_const__hh_const>` 
   *  :ref:`float (arg0:string const;arg1: const) : float <function-_at_strings_c__c_float_string_hh_const__hh_const>` 
   *  :ref:`int (arg0:string const;arg1: const) : int <function-_at_strings_c__c_int_string_hh_const__hh_const>` 
@@ -1026,14 +1026,14 @@ String conversion routines
 
 .. _function-_at_strings_c__c_as_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const:
 
-.. das:function:: as_string(arg0: array<uint8> const implicit)
+.. das:function:: as_string(arr: array<uint8> const implicit)
 
 as_string returns string
 
 +--------+---------------------------+
 +argument+argument type              +
 +========+===========================+
-+arg0    +array<uint8> const implicit+
++arr     +array<uint8> const implicit+
 +--------+---------------------------+
 
 

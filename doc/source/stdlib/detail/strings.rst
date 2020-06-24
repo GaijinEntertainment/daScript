@@ -1,18 +1,18 @@
 .. |function-strings-append| replace:: Appends single character `ch` to das::string `str`.
 
-.. |function-strings-as_string| replace:: to be documented
+.. |function-strings-as_string| replace:: Convert array of uint8_t `arr` to string.
 
-.. |function-strings-build_string| replace:: to be documented
+.. |function-strings-build_string| replace:: Create StringBuilderWriter and pass it to the block. Upon completion of a block, return whatever was written as string.
 
-.. |function-strings-builtin_strdup| replace:: to be documented
+.. |function-strings-builtin_strdup| replace:: Creates copy of a string via "C" strdup function. This way string will persist outside of the context lifetime.
 
-.. |function-strings-builtin_string_split| replace:: to be documented
+.. |function-strings-builtin_string_split| replace:: Split string by the delimiter string.
 
-.. |function-strings-builtin_string_split_by_char| replace:: to be documented
+.. |function-strings-builtin_string_split_by_char| replace:: Split string by any of the delimiter characters.
 
-.. |function-strings-character_at| replace:: to be documented
+.. |function-strings-character_at| replace:: Returns character of the string 'str' at index 'idx'.
 
-.. |function-strings-character_uat| replace:: to be documented
+.. |function-strings-character_uat| replace:: Returns character of the string 'str' at index 'idx'. This function does not check bounds of index.
 
 .. |function-strings-chop| replace:: to be documented
 

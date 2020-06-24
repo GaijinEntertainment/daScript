@@ -471,7 +471,7 @@ namespace das
             addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
                 SideEffects::modifyExternal,"delete_string")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
-                SideEffects::modifyExternal,"builtin_build_string_T")->setAotTemplate();
+                SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context"})->setAotTemplate();
             addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
                 SideEffects::modifyExternal, "builtin_write_string");
             addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char", SideEffects::modifyExternal, "write_string_char");
@@ -489,10 +489,14 @@ namespace das
                                                             SideEffects::modifyArgumentAndExternal, "builtin_strdup");
             bsd->unsafeOperation = true;
             // regular string
-            addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at", SideEffects::none, "get_character_at");
-            addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat", SideEffects::none, "get_character_uat")->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
-            addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char", SideEffects::none, "to_string_char");
+            addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
+                SideEffects::none, "get_character_at")->args({"str","idx","context"});
+            addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
+                SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
+                SideEffects::none, "string_repeat");
+            addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char",
+                SideEffects::none, "to_string_char");
             addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with",
                 SideEffects::none, "builtin_string_endswith")->args({"str","cmp","context"});
             addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
@@ -507,7 +511,8 @@ namespace das
                 SideEffects::none, "builtin_string_strip_left")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
                 SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
-            addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string", SideEffects::none, "builtin_as_string");
+            addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string",
+                SideEffects::none, "builtin_as_string")->args({"arr","context"});
             addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice",
                 SideEffects::none, "builtin_string_slice1")->args({"str","start","end","context"});
             addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice",
@@ -539,9 +544,9 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
                 SideEffects::none, "builtin_string_toupper_in_place")->arg("str")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
-                SideEffects::modifyExternal, "builtin_string_split_by_char");
+                SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context"});
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
-                SideEffects::modifyExternal, "builtin_string_split");
+                SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context"});
             addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
             addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
             addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
