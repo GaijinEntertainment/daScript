@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional> // std::hash
+
 namespace das
 {
     struct SimNode;
