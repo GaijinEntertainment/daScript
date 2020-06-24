@@ -344,22 +344,22 @@ String builder
 ++++++++++++++
 
   *  :ref:`build_string (block:block\<(strings::StringBuilderWriter):void\> const implicit;context: const) : string <function-_at_strings_c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:double const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_double_hh_const>` 
-  *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:float const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_float_hh_const>` 
-  *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:int const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int_hh_const>` 
-  *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:int64 const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int64_hh_const>` 
-  *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:uint const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint_hh_const>` 
-  *  :ref:`format (arg0:strings::StringBuilderWriter implicit;arg1:string const;arg2:uint64 const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint64_hh_const>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const;value:double const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_double_hh_const>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const;value:float const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_float_hh_const>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const;value:int const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int_hh_const>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const;value:int64 const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int64_hh_const>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const;value:uint const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint_hh_const>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const;value:uint64 const) : void <function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint64_hh_const>` 
   *  :ref:`format (arg0:string const;arg1:double const;arg2: const) : string <function-_at_strings_c__c_format_string_hh_const_double_hh_const__hh_const>` 
   *  :ref:`format (arg0:string const;arg1:float const;arg2: const) : string <function-_at_strings_c__c_format_string_hh_const_float_hh_const__hh_const>` 
   *  :ref:`format (arg0:string const;arg1:int const;arg2: const) : string <function-_at_strings_c__c_format_string_hh_const_int_hh_const__hh_const>` 
   *  :ref:`format (arg0:string const;arg1:int64 const;arg2: const) : string <function-_at_strings_c__c_format_string_hh_const_int64_hh_const__hh_const>` 
   *  :ref:`format (arg0:string const;arg1:uint const;arg2: const) : string <function-_at_strings_c__c_format_string_hh_const_uint_hh_const__hh_const>` 
   *  :ref:`format (arg0:string const;arg1:uint64 const;arg2: const) : string <function-_at_strings_c__c_format_string_hh_const_uint64_hh_const__hh_const>` 
-  *  :ref:`write (arg0:strings::StringBuilderWriter;arg1:any) : void <function-_at_strings_c__c_write__hh_handle_hh_StringBuilderWriter_any>` 
-  *  :ref:`write_char (arg0:strings::StringBuilderWriter implicit;arg1:int const) : void <function-_at_strings_c__c_write_char__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const>` 
-  *  :ref:`write_chars (arg0:strings::StringBuilderWriter implicit;arg1:int const;arg2:int const) : void <function-_at_strings_c__c_write_chars__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const_int_hh_const>` 
-  *  :ref:`write_escape_string (arg0:strings::StringBuilderWriter implicit;arg1:string const) : void <function-_at_strings_c__c_write_escape_string__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const>` 
+  *  :ref:`write (writer:strings::StringBuilderWriter;anything:any) : void <function-_at_strings_c__c_write__hh_handle_hh_StringBuilderWriter_any>` 
+  *  :ref:`write_char (writer:strings::StringBuilderWriter implicit;ch:int const) : void <function-_at_strings_c__c_write_char__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const>` 
+  *  :ref:`write_chars (writer:strings::StringBuilderWriter implicit;ch:int const;count:int const) : void <function-_at_strings_c__c_write_chars__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const_int_hh_const>` 
+  *  :ref:`write_escape_string (writer:strings::StringBuilderWriter implicit;str:string const) : void <function-_at_strings_c__c_write_escape_string__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const>` 
 
 .. _function-_at_strings_c__c_build_string__hh_block_hh__hh_handle_hh_StringBuilderWriter_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -378,16 +378,16 @@ build_string returns string
 
 .. _function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_double_hh_const:
 
-.. das:function:: format(arg0: StringBuilderWriter implicit; arg1: string const; arg2: double const)
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string const; value: double const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +string const                                                                       +
++format  +string const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
-+arg2    +double const                                                                       +
++value   +double const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -395,16 +395,16 @@ build_string returns string
 
 .. _function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_float_hh_const:
 
-.. das:function:: format(arg0: StringBuilderWriter implicit; arg1: string const; arg2: float const)
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string const; value: float const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +string const                                                                       +
++format  +string const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
-+arg2    +float const                                                                        +
++value   +float const                                                                        +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -412,16 +412,16 @@ build_string returns string
 
 .. _function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int_hh_const:
 
-.. das:function:: format(arg0: StringBuilderWriter implicit; arg1: string const; arg2: int const)
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string const; value: int const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +string const                                                                       +
++format  +string const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
-+arg2    +int const                                                                          +
++value   +int const                                                                          +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -429,16 +429,16 @@ build_string returns string
 
 .. _function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_int64_hh_const:
 
-.. das:function:: format(arg0: StringBuilderWriter implicit; arg1: string const; arg2: int64 const)
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string const; value: int64 const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +string const                                                                       +
++format  +string const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
-+arg2    +int64 const                                                                        +
++value   +int64 const                                                                        +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -446,16 +446,16 @@ build_string returns string
 
 .. _function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint_hh_const:
 
-.. das:function:: format(arg0: StringBuilderWriter implicit; arg1: string const; arg2: uint const)
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string const; value: uint const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +string const                                                                       +
++format  +string const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
-+arg2    +uint const                                                                         +
++value   +uint const                                                                         +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -463,16 +463,16 @@ build_string returns string
 
 .. _function-_at_strings_c__c_format__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const_uint64_hh_const:
 
-.. das:function:: format(arg0: StringBuilderWriter implicit; arg1: string const; arg2: uint64 const)
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string const; value: uint64 const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +string const                                                                       +
++format  +string const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
-+arg2    +uint64 const                                                                       +
++value   +uint64 const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -582,14 +582,14 @@ format returns string
 
 .. _function-_at_strings_c__c_write__hh_handle_hh_StringBuilderWriter_any:
 
-.. das:function:: write(arg0: StringBuilderWriter; arg1: any)
+.. das:function:: write(writer: StringBuilderWriter; anything: any)
 
 +--------+--------------------------------------------------------------------------+
 +argument+argument type                                                             +
 +========+==========================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` +
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` +
 +--------+--------------------------------------------------------------------------+
-+arg1    +any                                                                       +
++anything+any                                                                       +
 +--------+--------------------------------------------------------------------------+
 
 
@@ -597,14 +597,14 @@ format returns string
 
 .. _function-_at_strings_c__c_write_char__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const:
 
-.. das:function:: write_char(arg0: StringBuilderWriter implicit; arg1: int const)
+.. das:function:: write_char(writer: StringBuilderWriter implicit; ch: int const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +int const                                                                          +
++ch      +int const                                                                          +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -612,16 +612,16 @@ format returns string
 
 .. _function-_at_strings_c__c_write_chars__hh_handle_hh_StringBuilderWriter_hh_implicit_int_hh_const_int_hh_const:
 
-.. das:function:: write_chars(arg0: StringBuilderWriter implicit; arg1: int const; arg2: int const)
+.. das:function:: write_chars(writer: StringBuilderWriter implicit; ch: int const; count: int const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +int const                                                                          +
++ch      +int const                                                                          +
 +--------+-----------------------------------------------------------------------------------+
-+arg2    +int const                                                                          +
++count   +int const                                                                          +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -629,14 +629,14 @@ format returns string
 
 .. _function-_at_strings_c__c_write_escape_string__hh_handle_hh_StringBuilderWriter_hh_implicit_string_hh_const:
 
-.. das:function:: write_escape_string(arg0: StringBuilderWriter implicit; arg1: string const)
+.. das:function:: write_escape_string(writer: StringBuilderWriter implicit; str: string const)
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
-+arg0    + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
 +--------+-----------------------------------------------------------------------------------+
-+arg1    +string const                                                                       +
++str     +string const                                                                       +
 +--------+-----------------------------------------------------------------------------------+
 
 
@@ -1014,30 +1014,14 @@ find returns int
 String conversion routines
 ++++++++++++++++++++++++++
 
-  *  :ref:`as_string (arr:array\<uint8\> const implicit;context: const) : string <function-_at_strings_c__c_as_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const>` 
   *  :ref:`double (arg0:string const;arg1: const) : double <function-_at_strings_c__c_double_string_hh_const__hh_const>` 
   *  :ref:`float (arg0:string const;arg1: const) : float <function-_at_strings_c__c_float_string_hh_const__hh_const>` 
   *  :ref:`int (arg0:string const;arg1: const) : int <function-_at_strings_c__c_int_string_hh_const__hh_const>` 
-  *  :ref:`string (arg0:array\<uint8\> const implicit;arg1: const) : string <function-_at_strings_c__c_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`string (bytes:array\<uint8\> const implicit;context: const) : string <function-_at_strings_c__c_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const>` 
   *  :ref:`to_char (arg0:int const;arg1: const) : string <function-_at_strings_c__c_to_char_int_hh_const__hh_const>` 
   *  :ref:`to_float (arg0:string const) : float <function-_at_strings_c__c_to_float_string_hh_const>` 
   *  :ref:`to_int (arg0:string const) : int <function-_at_strings_c__c_to_int_string_hh_const>` 
   *  :ref:`uint (arg0:string const;arg1: const) : uint <function-_at_strings_c__c_uint_string_hh_const__hh_const>` 
-
-.. _function-_at_strings_c__c_as_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const:
-
-.. das:function:: as_string(arr: array<uint8> const implicit)
-
-as_string returns string
-
-+--------+---------------------------+
-+argument+argument type              +
-+========+===========================+
-+arr     +array<uint8> const implicit+
-+--------+---------------------------+
-
-
-|function-strings-as_string|
 
 .. _function-_at_strings_c__c_double_string_hh_const__hh_const:
 
@@ -1086,14 +1070,14 @@ int returns int
 
 .. _function-_at_strings_c__c_string__hh_array_hh_uint8_hh_const_hh_implicit__hh_const:
 
-.. das:function:: string(arg0: array<uint8> const implicit)
+.. das:function:: string(bytes: array<uint8> const implicit)
 
 string returns string
 
 +--------+---------------------------+
 +argument+argument type              +
 +========+===========================+
-+arg0    +array<uint8> const implicit+
++bytes   +array<uint8> const implicit+
 +--------+---------------------------+
 
 
@@ -1163,11 +1147,11 @@ uint returns uint
 Low level memory allocation
 +++++++++++++++++++++++++++
 
-  *  :ref:`delete_string (arg0:string& implicit;arg1: const) : void <function-_at_strings_c__c_delete_string_string_hh_ref_hh_implicit__hh_const>` 
+  *  :ref:`delete_string (str:string& implicit;context: const) : void <function-_at_strings_c__c_delete_string_string_hh_ref_hh_implicit__hh_const>` 
 
 .. _function-_at_strings_c__c_delete_string_string_hh_ref_hh_implicit__hh_const:
 
-.. das:function:: delete_string(arg0: string& implicit)
+.. das:function:: delete_string(str: string& implicit)
 
 .. warning:: 
   This is unsafe operation.
@@ -1175,7 +1159,7 @@ Low level memory allocation
 +--------+----------------+
 +argument+argument type   +
 +========+================+
-+arg0    +string& implicit+
++str     +string& implicit+
 +--------+----------------+
 
 
