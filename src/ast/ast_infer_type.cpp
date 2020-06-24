@@ -2053,7 +2053,7 @@ namespace das {
                             string lname = generateNewLambdaName(block->at);
                             auto ls = generateLambdaStruct(lname, block.get(), cl.capt, true);
                             if ( program->addStructure(ls) ) {
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, true);
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, true);
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                     if ( program->addFunction(pFnFin) ) {
@@ -2114,7 +2114,7 @@ namespace das {
                         string lname = generateNewLambdaName(block->at);
                         auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
                         if ( program->addStructure(ls) ) {
-                            auto pFn = generateLambdaFunction(lname, block.get(), ls, false);
+                            auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, false);
                             if ( program->addFunction(pFn) ) {
                                 auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                 if ( program->addFunction(pFnFin) ) {

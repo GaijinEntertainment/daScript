@@ -5,7 +5,7 @@ class Foo
 		i = 5
 	def kaboom : lambda<int>
 		var counter <- @ <| ()
-			return i ++
+			return i ++             // NOTE: lambda captures 'self' here. good thing 'self' is captured as REF by default
 		return <- counter
 
 [export]

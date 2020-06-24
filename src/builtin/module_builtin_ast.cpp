@@ -1095,7 +1095,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "VariableFlags";
         ft->argNames = { "init_via_move", "init_via_clone", "used", "aliasCMRES",
-            "marked_used", "global_shared", "do_not_delete", "generated" };
+            "marked_used", "global_shared", "do_not_delete", "generated", "capture_as_ref" };
         return ft;
     }
 

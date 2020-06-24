@@ -227,6 +227,7 @@ namespace das
                 bool    global_shared : 1;
                 bool    do_not_delete : 1;
                 bool    generated : 1;
+                bool    capture_as_ref : 1;
             };
             uint32_t flags = 0;
         };

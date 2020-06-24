@@ -173,7 +173,7 @@ namespace das {
                 ...block_body...    // with finally section removed
      */
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, bool needYield );
+                                        const StructurePtr & ls, const das_safe_set<VariablePtr> & capt, bool needYield );
 
     /*
         local function, i.e.

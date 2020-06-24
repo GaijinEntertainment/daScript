@@ -480,8 +480,12 @@ namespace das {
         return pFunc;
     }
 
+    bool isCaptureAsRef ( const VariablePtr & var ) {
+        return var->capture_as_ref;
+    }
+
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, bool needYield ) {
+                                        const StructurePtr & ls, const das_safe_set<VariablePtr> & capt, bool needYield ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->lambda = true;
@@ -519,8 +523,13 @@ namespace das {
         pFunc->arguments.push_back(cTHIS);
         for ( auto & arg : block->arguments ) {
             auto cA = arg->clone();
-            cA->marked_used = true;             // to avoid 'unsued argument' error
+            cA->marked_used = true;             // to avoid 'unused argument' error
             pFunc->arguments.push_back(cA);
+        }
+        for ( auto & var : capt ) {
+            if ( isCaptureAsRef(var) ) {
+                replaceRef2Ptr(pFunc->body, var->name);
+            }
         }
         verifyGenerated(pFunc->body);
         return pFunc;
@@ -561,11 +570,21 @@ namespace das {
         }
         for ( auto var : capt ) {
             auto td = make_smart<TypeDecl>(*var->type);
-            td->ref = false;
             td->constant = false;
-            pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
-            pStruct->fields.back().capturedConstant = var->type->constant;
-            pStruct->fields.back().type->sanitize();
+            if ( isCaptureAsRef(var) ) {
+                td->ref = false;
+                auto ptd = make_smart<TypeDecl>(Type::tPointer);
+                ptd->firstType = td;
+                td = ptd;
+                pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
+                pStruct->fields.back().capturedConstant = var->type->constant;
+                pStruct->fields.back().type->sanitize();
+            } else {
+                td->ref = false;
+                pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
+                pStruct->fields.back().capturedConstant = var->type->constant;
+                pStruct->fields.back().type->sanitize();
+            }
         }
         return pStruct;
     }
@@ -588,9 +607,17 @@ namespace das {
         auto mTHISF = make_smart<MakeFieldDecl>(lf->at, "__finalize", atTHISF, false, false);
         ms->push_back(mTHISF);
         for ( auto cV : capt ) {
-            auto varV = make_smart<ExprVar>(cV->at, cV->name);
-            auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, !cV->type->canCopy(), false);
-            ms->push_back(mV);
+            if ( isCaptureAsRef(cV) ) {
+                auto varV = make_smart<ExprVar>(cV->at, cV->name);
+                auto addrV = make_smart<ExprRef2Ptr>(cV->at, varV);
+                addrV->alwaysSafe = true;
+                auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, addrV, false, false);
+                ms->push_back(mV);
+            } else {
+                auto varV = make_smart<ExprVar>(cV->at, cV->name);
+                auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, !cV->type->canCopy(), false);
+                ms->push_back(mV);
+            }
         }
         makeS->structs.push_back(ms);
         asc->subexpr = makeS;
@@ -1399,6 +1426,7 @@ namespace das {
         argV->type = argT;
         argV->at = func->at;
         argV->generated = true;
+        argV->capture_as_ref = true;
         func->arguments.insert(func->arguments.begin(), argV);
         // with self ...
         auto block = make_smart<ExprBlock>();
@@ -1447,6 +1475,7 @@ namespace das {
         argV->type = argT;
         argV->at = func->at;
         argV->generated = true;
+        argV->capture_as_ref = true;
         argV->init = makeT;
         argV->init_via_move = true;
         letS->variables.push_back(argV);
@@ -1530,6 +1559,7 @@ namespace das {
         argV->type = argT;
         argV->at = func->at;
         argV->generated = true;
+        argV->capture_as_ref = true;
         func->arguments.push_back(argV);
         // delete
         auto vself = make_smart<ExprVar>(func->at, "self");
