@@ -259,7 +259,12 @@ namespace das {
         }
         ~HeapChunk() {
             das_aligned_free16(data);
-            if ( next ) delete next;
+            while (next) {
+                HeapChunk * toDelete = next;
+                next = toDelete->next;
+                toDelete->next = nullptr;
+                delete toDelete;
+            }
         }
         __forceinline char * allocate ( uint32_t s ) {
             if ( offset + s > size ) return nullptr;
