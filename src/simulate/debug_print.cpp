@@ -19,7 +19,9 @@ namespace das {
                 auto Ch = *it;
                 result += Ch;
                 if ( Ch=='[' ) tab += "  ";
-                else if ( Ch==']' ) tab.resize(tab.size()-2);
+                else if ( Ch==']' ) {
+                    if ( tab.size()>=2 ) tab.resize(tab.size()-2); // note: we don't track mismatch
+                }
                 it ++;
             }
             if ( it == tail ) break;

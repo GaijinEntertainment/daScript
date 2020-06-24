@@ -145,21 +145,28 @@ namespace das {
         char * allocateName ( const string & name );
     };
 
+    struct StrHashEntry {
+        const char * ptr;
+        uint32_t     length;
+        StrHashEntry() : ptr(nullptr), length(0) {}
+        StrHashEntry( const char * p, uint32_t l ) : ptr(p), length(l) {}
+    };
+
     struct StrEqPred {
-        __forceinline bool operator()(const char * a, const char * b) const {
-            if ( a==b ) return true;
-            if ( !a || !b ) return false;
-            return strcmp(a,b)==0;
+        __forceinline bool operator()( const StrHashEntry & a, const StrHashEntry & b ) const {
+            if ( a.ptr==b.ptr ) return true;
+            else if ( a.length!=b.length ) return false;
+            else return strncmp(a.ptr, b.ptr, a.length)==0;
         }
     };
 
     struct StrHashPred {
-        __forceinline size_t operator()(const char * a) const {
-            return a ? hash_blockz32((const uint8_t *)a) : 16777619;
+        __forceinline size_t operator() ( const StrHashEntry & a ) const {
+            return hash_block32((const uint8_t *)a.ptr, a.length);
         }
     };
 
-    typedef das_hash_set<const char *,StrHashPred,StrEqPred> das_string_set;
+    typedef das_hash_set<StrHashEntry,StrHashPred,StrEqPred> das_string_set;
 
     class StringHeapAllocator : public AnyHeapAllocator {
     public:
@@ -171,7 +178,7 @@ namespace das {
         void freeString ( char * text, uint32_t length );
         void setIntern ( bool on );
         bool isIntern() const { return needIntern; }
-        char * intern ( const char * str ) const;
+        char * intern ( const char * str, uint32_t length ) const;
         void recognize ( char * str );
     protected:
         das_string_set internMap;
@@ -240,7 +247,7 @@ namespace das {
             return allocateString ( str.c_str(), uint32_t(str.length()) );
         }
         virtual void reset () override;
-        char * intern ( const char * str ) const;
+        char * intern ( const char * str, uint32_t length ) const;
     protected:
         das_string_set internMap;
     };

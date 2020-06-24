@@ -133,24 +133,26 @@ namespace das {
         swap ( internMap, empty );
     }
 
-    char * StringHeapAllocator::intern(const char * str) const {
+    char * StringHeapAllocator::intern(const char * str, uint32_t length) const {
         if ( needIntern ) {
-            auto it = internMap.find(str);
-            return it != internMap.end() ? ((char *)*it) : nullptr;
+            auto it = internMap.find(StrHashEntry(str,length));
+            return it != internMap.end() ? (char *)it->ptr : nullptr;
         } else {
             return nullptr;
         }
     }
 
     void StringHeapAllocator::recognize ( char * str ) {
-        if ( needIntern && str && isOwnPtr(str, uint32_t(strlen(str)+1)) ) {
-            internMap.insert(str);
+        if ( !str ) return;
+        uint32_t length = uint32_t(strlen(str));
+        if ( needIntern && isOwnPtr(str, length+1) ) {
+            internMap.insert(StrHashEntry(str,length));
         }
     }
 
-    char * ConstStringAllocator::intern(const char * str) const {
-        auto it = internMap.find(str);
-        return it != internMap.end() ? ((char *)*it) : nullptr;
+    char * ConstStringAllocator::intern(const char * str, uint32_t length) const {
+        auto it = internMap.find(StrHashEntry(str,length));
+        return it != internMap.end() ? (char*)it->ptr : nullptr;
     }
 
     void ConstStringAllocator::reset () {
@@ -162,15 +164,15 @@ namespace das {
     char * ConstStringAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
             if ( text ) {
-                auto it = internMap.find(text);
+                auto it = internMap.find(StrHashEntry(text,length));
                 if ( it != internMap.end() ) {
-                    return (char *) *it;
+                    return (char *) it->ptr;
                 }
             }
             if ( auto str = (char *)allocate(length + 1) ) {
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
-                internMap.insert(str);
+                internMap.insert(StrHashEntry(str,length));
                 return str;
             }
         }
@@ -180,9 +182,9 @@ namespace das {
     char * StringHeapAllocator::allocateString ( const char * text, uint32_t length ) {
         if ( length ) {
             if ( needIntern && text ) {
-                auto it = internMap.find(text);
+                auto it = internMap.find(StrHashEntry(text,length));
                 if ( it != internMap.end() ) {
-                    return (char *) *it;
+                    return (char *) it->ptr;
                 }
             }
             if ( auto str = (char *)allocate(length + 1) ) {
@@ -191,7 +193,7 @@ namespace das {
 #endif
                 if ( text ) memcpy(str, text, length);
                 str[length] = 0;
-                if ( needIntern && text ) internMap.insert(str);
+                if ( needIntern && text ) internMap.insert(StrHashEntry(str,length));
                 return str;
             }
         }
@@ -199,7 +201,7 @@ namespace das {
     }
 
     void StringHeapAllocator::freeString ( char * text, uint32_t length ) {
-        if ( needIntern ) internMap.erase(text);
+        if ( needIntern ) internMap.erase(StrHashEntry(text,length));
         free ( text, length + 1 );
     }
 
@@ -237,7 +239,8 @@ namespace das {
             das_string_set empty;
             swap ( internMap, empty );
             forEachString([&](const char * str){
-                internMap.insert(str);
+                uint32_t length = uint32_t(strlen(str));
+                internMap.insert(StrHashEntry(str,length));
             });
         }
     }

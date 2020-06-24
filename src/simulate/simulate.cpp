@@ -706,9 +706,10 @@ namespace das
 
     char * Context::intern(const char * str) {
         if ( !str ) return nullptr;
-        char * ist = constStringHeap->intern(str);
-        if ( !ist ) ist = stringHeap->intern(str);
-        return ist ? ist : stringHeap->allocateString(str,uint32_t(strlen(str)));
+        uint32_t len = uint32_t(strlen(str));
+        char * ist = constStringHeap->intern(str,len);
+        if ( !ist ) ist = stringHeap->intern(str,len);
+        return ist ? ist : stringHeap->allocateString(str,len);
     }
 
     class SharedDataWalker : public DataWalker {

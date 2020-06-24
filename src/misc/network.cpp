@@ -100,7 +100,7 @@ namespace das {
         return true;
     }
 
-    void Server::onData(char * buf, int size) {
+    void Server::onData(char *, int) {
         // printf("%s\n", buf);
         // send_msg(buf, size);
     }
@@ -111,11 +111,11 @@ namespace das {
     void Server::onDisconnect() {
     }
 
-    void Server::onError(const char * msg, int code) {
+    void Server::onError(const char *, int) {
         // printf("server error %i - %s\n", code, msg);
     }
 
-    void Server::onLog(const char * msg) {
+    void Server::onLog(const char *) {
         // printf("server log %s\n", msg);
     }
 
