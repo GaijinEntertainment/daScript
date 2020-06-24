@@ -418,18 +418,6 @@ namespace das
         return context->stringHeap->allocateString(estr);
     }
 
-    int builtin_find_first_of ( const char * str, const char * substr, Context * context ) {
-        uint32_t strlen = stringLengthSafe ( *context, str );
-        uint32_t substrlen = stringLengthSafe ( *context, str );
-        for ( uint32_t o=0; o!=strlen; ++o ) {
-            auto ch = str[o];
-            for ( uint32_t s=0; s!=substrlen; ++s ) {
-                if ( ch == substr[s] ) return int(o);
-            }
-        }
-        return -1;
-    }
-
     int builtin_find_first_char_of ( const char * str, int Ch, Context * context ) {
         uint32_t strlen = stringLengthSafe ( *context, str );
         for ( uint32_t o=0; o!=strlen; ++o ) {
@@ -505,38 +493,51 @@ namespace das
             addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat", SideEffects::none, "get_character_uat")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat", SideEffects::none, "string_repeat");
             addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char", SideEffects::none, "to_string_char");
-            addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with", SideEffects::none, "builtin_string_endswith");
-            addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with", SideEffects::none, "builtin_string_startswith");
-            addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip", SideEffects::none, "builtin_string_strip");
-            addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right", SideEffects::none, "builtin_string_strip_right");
-            addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left", SideEffects::none, "builtin_string_strip_left");
+            addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with",
+                SideEffects::none, "builtin_string_endswith")->args({"str","cmp","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
+                SideEffects::none, "builtin_string_ends_with")->args({"str","cmp","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_string_startswith")->args({"str","cmp","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
+                SideEffects::none, "builtin_string_strip")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",
+                SideEffects::none, "builtin_string_strip_right")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left",
+                SideEffects::none, "builtin_string_strip_left")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
                 SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_as_string)>(*this, lib, "as_string", SideEffects::none, "builtin_as_string");
-            addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice1");
-            addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice", SideEffects::none, "builtin_string_slice2");
-            addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find", SideEffects::none, "builtin_string_find1");
-            addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find", SideEffects::none, "builtin_string_find2");
-            addExtern<DAS_BIND_FUN(builtin_find_first_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_of");
-            addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find_first_of", SideEffects::none, "builtin_find_first_char_of");
-            addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length", SideEffects::none, "builtin_string_length");
-            addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse", SideEffects::none, "builtin_string_reverse");
+            addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice",
+                SideEffects::none, "builtin_string_slice1")->args({"str","start","end","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice",
+                SideEffects::none, "builtin_string_slice2")->args({"str","start","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find",
+                SideEffects::none, "builtin_string_find1")->args({"str","substr","start","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find",
+                SideEffects::none, "builtin_string_find2")->args({"str","substr"});
+            addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find",
+                SideEffects::none, "builtin_find_first_char_of")->args({"str","substr","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
+                SideEffects::none, "builtin_string_length")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",
+                SideEffects::none, "builtin_string_reverse")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
-                SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string");
-            addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
-                SideEffects::none, "builtin_string_ends_with");
+                SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string")->args({"str","ch"});
             addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
                 SideEffects::modifyArgumentAndExternal, "builtin_resize_string");
             addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
-                SideEffects::none, "builtin_ext_string_length");
-            addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper", SideEffects::none, "builtin_string_toupper");
-            addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower", SideEffects::none, "builtin_string_tolower");
+                SideEffects::none, "builtin_ext_string_length")->arg("str");
+            addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper",
+                SideEffects::none, "builtin_string_toupper")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
+                SideEffects::none, "builtin_string_tolower")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");
             addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty", SideEffects::none, "builtin_empty_das_string");
             addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
-                SideEffects::none, "builtin_string_tolower_in_place")->unsafeOperation = true;
+                SideEffects::none, "builtin_string_tolower_in_place")->arg("str")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
-                SideEffects::none, "builtin_string_toupper_in_place")->unsafeOperation = true;
+                SideEffects::none, "builtin_string_toupper_in_place")->arg("str")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
                 SideEffects::modifyExternal, "builtin_string_split_by_char");
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",

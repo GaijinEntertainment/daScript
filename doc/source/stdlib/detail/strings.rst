@@ -1,4 +1,4 @@
-.. |function-strings-append| replace:: to be documented
+.. |function-strings-append| replace:: Appends single character `ch` to das::string `str`.
 
 .. |function-strings-as_string| replace:: to be documented
 
@@ -22,11 +22,11 @@
 
 .. |function-strings-empty| replace:: to be documented
 
-.. |function-strings-ends_with| replace:: to be documented
+.. |function-strings-ends_with| replace:: returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
 
 .. |function-strings-escape| replace:: to be documented
 
-.. |function-strings-find| replace:: to be documented
+.. |function-strings-find| replace:: Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
 .. |function-strings-find_first_of| replace:: to be documented
 
@@ -46,7 +46,7 @@
 
 .. |function-strings-is_white_space| replace:: to be documented
 
-.. |function-strings-length| replace:: to be documented
+.. |function-strings-length| replace:: Return length of string
 
 .. |function-strings-repeat| replace:: to be documented
 
@@ -54,19 +54,19 @@
 
 .. |function-strings-resize| replace:: to be documented
 
-.. |function-strings-reverse| replace:: to be documented
+.. |function-strings-reverse| replace:: Return reversed string
 
-.. |function-strings-slice| replace:: to be documented
+.. |function-strings-slice| replace:: Return all part of the strings starting at start and ending by end. Start can be negative (-1 means "1 from the end").
 
-.. |function-strings-starts_with| replace:: to be documented
+.. |function-strings-starts_with| replace:: returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
 
 .. |function-strings-string| replace:: to be documented
 
-.. |function-strings-strip| replace:: to be documented
+.. |function-strings-strip| replace:: Strips white-space-only characters that might appear at the beginning or end of the given string and returns the new stripped string.
 
-.. |function-strings-strip_left| replace:: to be documented
+.. |function-strings-strip_left| replace:: Strips white-space-only characters that might appear at the beginning of the given string and returns the new stripped string.
 
-.. |function-strings-strip_right| replace:: to be documented
+.. |function-strings-strip_right| replace:: Strips white-space-only characters that might appear at the end of the given string and returns the new stripped string.
 
 .. |function-strings-to_char| replace:: to be documented
 
@@ -74,13 +74,13 @@
 
 .. |function-strings-to_int| replace:: to be documented
 
-.. |function-strings-to_lower| replace:: to be documented
+.. |function-strings-to_lower| replace:: Return all lower case string
 
-.. |function-strings-to_lower_in_place| replace:: to be documented
+.. |function-strings-to_lower_in_place| replace:: Modify string in place to be all lower case
 
-.. |function-strings-to_upper| replace:: to be documented
+.. |function-strings-to_upper| replace:: Return all upper case string
 
-.. |function-strings-to_upper_in_place| replace:: to be documented
+.. |function-strings-to_upper_in_place| replace:: Modify string in place to be all upper case string
 
 .. |function-strings-uint| replace:: to be documented
 

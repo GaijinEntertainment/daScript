@@ -171,11 +171,11 @@ let
 
 [private]
 def is_meta_character(ch:int) : bool
-    return find_first_of(meta,ch) != -1
+    return find(meta,ch) != -1
 
 [private]
 def is_set_character(ch:int) : bool
-    return find_first_of(meta_set,ch) != -1
+    return find(meta_set,ch) != -1
 
 // <char>	::=	any non metacharacter | "\" metacharacter
 [private]

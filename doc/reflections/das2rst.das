@@ -47,9 +47,7 @@ find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|sort|to_array|to_table|to_array_move|
 to_table_move|empty)$%%);
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%);
-        group_by_regex("das::string manipulation", mod, %regex~(append|as_string|build_string|character_at|character_uat|
-chop|delete_string|ends_with|escape|find_first_of|format|peek|repeat|set|slice|starts_with|replace|reverse|
-strip|strip_left|strip_right|to_char|to_float|to_int|to_lower|to_lower_in_place|to_upper|to_upper_in_place|unescape)$%%);
+        group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%);
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%);
         group_by_regex("Heap reporting", mod, %regex~(heap|string_heap)%%);
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
@@ -126,8 +124,17 @@ def document_module_ast_boost(root:string)
 def document_module_strings(root:string)
     var mod = find_module("strings")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%));
+        group_by_regex("Character groups", mod, %regex~is.+%%);
+        group_by_regex("Character by index", mod, %regex~(character_at|character_uat)$%%);
+        group_by_regex("String properties", mod, %regex~(empty|ends_with|length|starts_with)$%%);
+        group_by_regex("String builder", mod, %regex~(build_string|format|write|write_char|write_chars|write_escape_string)$%%);
+        group_by_regex("das::string manipulation", mod, %regex~(append|resize)$%%);
+        group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
+strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place)$%%);
+        group_by_regex("Search substrings", mod, %regex~find.*%%);
+        group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|to_float|to_int|as_string|string|to_char)$%%);
+        group_by_regex("Low level memory allocation", mod, %regex~(delete_string)$%%)
     }]
     document("String manipulation library",mod,"{root}/strings.rst","{root}/detail/strings.rst",groups)
 
