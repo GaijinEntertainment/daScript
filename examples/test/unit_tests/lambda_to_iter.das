@@ -5,7 +5,7 @@ struct Foo
 def test()
     // regular
     var count = 0
-    let lam = @ <| (var a:int &) : bool
+    let lam <- @ <| (var a:int &) : bool
         if count < 10
             a = count++
             return true
@@ -14,7 +14,7 @@ def test()
     for x,tx in each(lam),range(0,10)
         assert(x==tx)
     // structure
-    let lamF = @ <| (var a:Foo) : bool
+    let lamF <- @ <| (var a:Foo) : bool
         if count < 10
             a.value = count++
             return true

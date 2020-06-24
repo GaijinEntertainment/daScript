@@ -624,6 +624,8 @@ namespace das
             return true;
         } else if (baseType == Type::tPointer) {
             return !smartPtr;
+        } if ( baseType == Type::tLambda ) {
+            return false;
         } else {
             return true;
         }

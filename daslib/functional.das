@@ -3,7 +3,7 @@ options indenting = 4
 module functional
 
 [private]
-def filter_any(var src:iterator<auto(TT)>; blk )
+def filter_any(var src:iterator<auto(TT)>; var blk )
     static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> () <| $ ()
             for w in src
@@ -25,7 +25,7 @@ def filter(var src:iterator<auto(TT)>; blk:function<(what:TT -&):bool> )
     return <- filter_any(src,blk)
 
 [private]
-def map_any(var src:iterator<auto(TT)>; blk)
+def map_any(var src:iterator<auto(TT)>; var blk)
     static_if typeinfo(can_copy type<QQ>)
         return <- generator<QQ -&> () <| $ ()
             for w in src
