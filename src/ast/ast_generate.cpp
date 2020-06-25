@@ -53,9 +53,6 @@ namespace das {
             Visitor::preVisitStructureField(var,decl,last);
             DAS_ASSERT(decl.at.column && decl.at.line);
         }
-        virtual void preVisitFor ( ExprFor * expr ) {
-            Visitor::preVisit(expr);
-        }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr,var,last);
             DAS_ASSERT(var->at.column && var->at.line);
@@ -1468,6 +1465,7 @@ namespace das {
         letS->at = func->at;
         letS->atInit = func->at;
         letS->visibility = func->atDecl;
+        letS->alwaysSafe = true;    // this is due to local class variable
         auto argT = make_smart<TypeDecl>(baseClass);
         argT->constant = false;
         auto argV = make_smart<Variable>();

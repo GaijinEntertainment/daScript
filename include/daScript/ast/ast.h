@@ -177,6 +177,7 @@ namespace das
         bool isLocal( das_set<Structure *> & dep ) const;
         bool isTemp( das_set<Structure *> & dep ) const;
         bool isShareable ( das_set<Structure *> & dep ) const;
+        bool hasClasses( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;

@@ -41,28 +41,29 @@ class Foo3D : Foo
         delFoo3D ++
 
 def test_foo
-    var f = Foo()
-    assert(f.x==1 & f.y==1)
-    f->set(1,2)
-    assert(f.x==1 & f.y==2)
-    f = Foo(11,12)
-    assert(f.x==11 & f.y==12)
-    f = Foo(13)
-    assert(f.x==13 & f.y==13)
-    var f3d = Foo3D()
-    assert(f3d.x==1 & f3d.y==1 & f3d.z==3)
-    f3d->set(1,2)
-    assert(f3d.x==1 & f3d.y==2 & f3d.z==0)
-    f3d.z = 13
-    f3d->set(3,4)
-    assert(f3d.x==3 & f3d.y==4 & f3d.z==0)
-    assert(delFoo==0 & delFoo3D==0)
-    delete f
-    assert(delFoo==1 & delFoo3D==0)
-    delete f3d
-    assert(delFoo==2 & delFoo3D==1)
-    delFoo = 0
-    delFoo3D = 0
+    unsafe
+        var f = Foo()                   // this is unsafe
+        assert(f.x==1 & f.y==1)
+        f->set(1,2)
+        assert(f.x==1 & f.y==2)
+        f = Foo(11,12)
+        assert(f.x==11 & f.y==12)
+        f = Foo(13)
+        assert(f.x==13 & f.y==13)
+        var f3d = Foo3D()               // this is unsafe
+        assert(f3d.x==1 & f3d.y==1 & f3d.z==3)
+        f3d->set(1,2)
+        assert(f3d.x==1 & f3d.y==2 & f3d.z==0)
+        f3d.z = 13
+        f3d->set(3,4)
+        assert(f3d.x==3 & f3d.y==4 & f3d.z==0)
+        assert(delFoo==0 & delFoo3D==0)
+        delete f
+        assert(delFoo==1 & delFoo3D==0)
+        delete f3d
+        assert(delFoo==2 & delFoo3D==1)
+        delFoo = 0
+        delFoo3D = 0
 
 def test_foo_ptr
     var f = new Foo()
@@ -85,31 +86,32 @@ class Goo
     a : int
 
 def test_rtti
-    var g = Goo()
-    var f = Foo()
-    var f2 = Foo()
-    var f3d = Foo3D()
-    var f3d2 = Foo3D()
-    assert(f.__rtti!=g.__rtti)
-    assert(f3d.__rtti!=g.__rtti)
-    assert(f.__rtti==f2.__rtti)
-    assert(f3d.__rtti==f3d2.__rtti)
-    assert(f.__rtti!=f3d.__rtti)
-    assert(class_info(f)!=class_info(g))
-    assert(class_info(f3d)!=class_info(g))
-    assert(class_info(f)==class_info(f2))
-    assert(class_info(f3d)==class_info(f3d2))
-    assert(class_info(f)!=class_info(f3d))
-    verify(is_compatible_cast(class_info(f),class_info(f)))   // can cast from f to f
-    verify(is_compatible_cast(class_info(f),class_info(f3d)))   // can cast from f3d to f
-    verify(!is_compatible_cast(class_info(f3d),class_info(f)))  // can't cast from f to f3d
-    verify(!is_compatible_cast(class_info(g),class_info(f)))  // can't cast from f to g
-    verify(!is_compatible_cast(class_info(f),class_info(g)))  // can't cast from g to f
-    verify(!is_compatible_cast(class_info(g),class_info(f3d)))  // can't cast from f3d to g
-    verify(!is_compatible_cast(class_info(f3d),class_info(g)))  // can't cast from g to f3d
-    assert(class_info(f).name=="Foo")
-    assert(class_info(f3d).name=="Foo3D")
-    assert(class_info(g).name=="Goo")
+    unsafe
+        var g = Goo()       // unsafe
+        var f = Foo()       // unsafe
+        var f2 = Foo()      // unsafe
+        var f3d = Foo3D()   // unsafe
+        var f3d2 = Foo3D()  // unsafe
+        assert(f.__rtti!=g.__rtti)
+        assert(f3d.__rtti!=g.__rtti)
+        assert(f.__rtti==f2.__rtti)
+        assert(f3d.__rtti==f3d2.__rtti)
+        assert(f.__rtti!=f3d.__rtti)
+        assert(class_info(f)!=class_info(g))
+        assert(class_info(f3d)!=class_info(g))
+        assert(class_info(f)==class_info(f2))
+        assert(class_info(f3d)==class_info(f3d2))
+        assert(class_info(f)!=class_info(f3d))
+        verify(is_compatible_cast(class_info(f),class_info(f)))   // can cast from f to f
+        verify(is_compatible_cast(class_info(f),class_info(f3d)))   // can cast from f3d to f
+        verify(!is_compatible_cast(class_info(f3d),class_info(f)))  // can't cast from f to f3d
+        verify(!is_compatible_cast(class_info(g),class_info(f)))  // can't cast from f to g
+        verify(!is_compatible_cast(class_info(f),class_info(g)))  // can't cast from g to f
+        verify(!is_compatible_cast(class_info(g),class_info(f3d)))  // can't cast from f3d to g
+        verify(!is_compatible_cast(class_info(f3d),class_info(g)))  // can't cast from g to f3d
+        assert(class_info(f).name=="Foo")
+        assert(class_info(f3d).name=="Foo3D")
+        assert(class_info(g).name=="Goo")
 
 [export]
 def test

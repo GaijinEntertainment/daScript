@@ -777,6 +777,31 @@ namespace das
         return ss.str();
     }
 
+    bool TypeDecl::hasClasses() const {
+        das_set<Structure *> dep;
+        return hasClasses(dep);
+    }
+
+    bool TypeDecl::hasClasses(das_set<Structure *> & dep) const {
+        if ( isStructure() ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->hasClasses(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->hasClasses(dep) ) {
+                    return true;
+                }
+            }
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && firstType->hasClasses() ) return true;
+            if ( secondType && secondType->hasClasses() ) return true;
+        }
+        return false;
+    }
+
     bool TypeDecl::isLocal() const {
         das_set<Structure *> dep;
         return isLocal(dep);

@@ -33,7 +33,8 @@ def init(var objects:array<CObject>)
     resize(objects, 50000)
     var i = 0
     for obj in objects
-		obj = CObject(i++)
+        unsafe
+		    obj = CObject(i++)
 
 struct NObject
     position : float3
@@ -69,18 +70,19 @@ def init(var objects:array<NObject>)
 [export]
 def test()
     var objects:array<NObject>
-	var classes:array<CObject>
     init(objects)
-	init(classes)
     let total=20
     profile(total,"particles kinematics") <|
         testSim2(objects,100)
     profile(total,"particles kinematics, inlined") <|
         testSim2I(objects,100)
-    profile(total,"particles kinematics OOP, virtual") <|
-        testVirtual2(classes,100)
-    profile(total,"particles kinematics OOP, method") <|
-        testMethod2(classes,100)
+    unsafe
+        var classes:array<CObject>
+	    init(classes)
+        profile(total,"particles kinematics OOP, virtual") <|
+            testVirtual2(classes,100)
+        profile(total,"particles kinematics OOP, method") <|
+            testMethod2(classes,100)
     profile(total,"particles kinematics, C++") <|
         testProfile::testParticles(100)
     profile(total,"particles kinematics, inlined C++") <|

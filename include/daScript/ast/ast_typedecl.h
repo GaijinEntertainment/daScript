@@ -122,6 +122,8 @@ namespace das {
         bool isBitfield() const;
         bool isLocal() const;
         bool isLocal( das_set<Structure*> & dep ) const;
+        bool hasClasses() const;
+        bool hasClasses( das_set<Structure*> & dep ) const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
         bool canInitWithZero() const;

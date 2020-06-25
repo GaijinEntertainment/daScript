@@ -324,6 +324,16 @@ namespace das {
         return true;
     }
 
+    bool Structure::hasClasses(das_set<Structure *> & dep) const {    // ||
+        if ( isClass ) return true;
+        for ( const auto & fd : fields ) {
+            if ( fd.type && fd.type->hasClasses(dep) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Structure::isTemp(das_set<Structure *> & dep) const {    // ||
         for ( const auto & fd : fields ) {
             if ( fd.type && fd.type->isTemp(true, true, dep) ) {

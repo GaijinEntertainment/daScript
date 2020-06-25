@@ -4238,6 +4238,9 @@ namespace das {
                         expr->at, CompilationError::unsafe);
                     return Visitor::visit(expr);
                 }
+            } else if ( expr->left->type->hasClasses() && !safeExpression(expr) ) {
+                error("moving classes requires unsafe"+moveErrorInfo(expr), "", "",
+                    expr->at, CompilationError::unsafe);
             }
             expr->type = make_smart<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
@@ -4261,6 +4264,9 @@ namespace das {
             } else if ( expr->right->type->isTemp(true,false) ) {
                     error("can't copy temporary value"+copyErrorInfo(expr), "", "",
                         expr->at, CompilationError::cant_pass_temporary);
+            } else if ( expr->left->type->hasClasses() && !safeExpression(expr) ) {
+                error("copying classes requires unsafe"+copyErrorInfo(expr), "", "",
+                    expr->at, CompilationError::unsafe);
             }
             if ( !expr->left->type->canCopy() ) {
                 error("this type can't be copied"+copyErrorInfo(expr),
@@ -4909,6 +4915,10 @@ namespace das {
             if ( !var->type->isLocal() && !var->type->ref )
                 error("can't have local variable of type " + var->type->describe(), "", "",
                       var->at, CompilationError::invalid_variable_type);
+            if ( var->type->hasClasses() && !safeExpression(expr) ) {
+                error("local class requires unsafe " + var->type->describe(), "", "",
+                      var->at, CompilationError::invalid_variable_type);
+            }
             if ( !var->type->isAutoOrAlias() ){
                 if ( var->init && var->init->rtti_isCast() ) {
                     auto castExpr = static_pointer_cast<ExprCast>(var->init);
