@@ -405,19 +405,40 @@ namespace das {
     template <typename TT>
     struct das_index;
 
+    template <typename TT>
+    struct das_default_vector_size;
+
+    template <typename TT>
+    struct das_default_vector_size<vector<TT>> {
+        static __forceinline uint32_t size( const vector<TT> & value ) {
+            return uint32_t(value.size());
+        }
+    };
+
     template <typename TT, typename OT>
     struct das_default_vector_index {
-        static __forceinline OT & at ( TT & value, int32_t index, Context * ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        static __forceinline OT & at ( TT & value, int32_t index, Context * __context__ ) {
+            uint32_t size = SIZE_POLICY::size(value);
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
             return value[index];
         }
-        static __forceinline const OT & at ( const TT & value, int32_t index, Context * ) {
+        static __forceinline const OT & at ( const TT & value, int32_t index, Context * __context__ ) {
+            uint32_t size = SIZE_POLICY::size(value);
+            uint32_t idx = uint32_t(index);
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
             return value[index];
         }
-        static __forceinline OT & at ( TT & value, uint32_t index, Context * ) {
-            return value[index];
+        static __forceinline OT & at ( TT & value, uint32_t idx, Context * __context__ ) {
+            uint32_t size = SIZE_POLICY::size(value);
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
+            return value[idx];
         }
-        static __forceinline const OT & at ( const TT & value, uint32_t index, Context * ) {
-            return value[index];
+        static __forceinline const OT & at ( const TT & value, uint32_t idx, Context * __context__ ) {
+            uint32_t size = SIZE_POLICY::size(value);
+            if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
+            return value[idx];
         }
     };
 
