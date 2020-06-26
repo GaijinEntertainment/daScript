@@ -763,8 +763,8 @@ def allExpr(arg:int)
     var tab <- {{ 1 => "one"; 2 => "two" }}
     erase(tab,1)
     // ExprFind
-    find(tab, 2) <| $(arg)
-        print("{arg}")
+    find(tab, 2) <| $(argX)
+        print("{argX}")
     // ExprKeyExists
     assert(key_exists(tab,2))
     // ExprAscend
@@ -798,8 +798,8 @@ def allExpr(arg:int)
 
 [export]
 def test
-    var astVisitor = PrintVisitor()
-    var astVisitorAdapter <- make_visitor(astVisitor)
+    var astVisitor = new PrintVisitor()
+    var astVisitorAdapter <- make_visitor(*astVisitor)
     visit(this_program(), astVisitorAdapter)
 
 /*

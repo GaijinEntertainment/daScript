@@ -3423,6 +3423,25 @@ namespace das {
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
+            if ( !var->can_shadow ) {
+                for ( auto & fna : func->arguments ) {
+                    if ( fna->name==var->name ) {
+                        error("block argument " + var->name +" is shadowed by function argument argument "
+                            + fna->name + " : " + fna->type->describe() + " at line " + to_string(fna->at.line), "", "",
+                                var->at, CompilationError::variable_not_found);
+                    }
+                }
+                for ( auto & blk : blocks ) {
+                    if ( blk == block ) continue;
+                    for ( auto & bna : blk->arguments ) {
+                        if ( bna->name==var->name ) {
+                            error("block argument " + var->name +" is shadowed by another block argument "
+                                + bna->name + " : " + bna->type->describe() + " at line " + to_string(bna->at.line), "", "",
+                                    var->at, CompilationError::variable_not_found);
+                        }
+                    }
+                }
+            }
             for ( auto & lv : local ) {
                 if ( lv->name==var->name ) {
                     error("block argument " + var->name +" is shadowed by local variable "
@@ -4882,6 +4901,22 @@ namespace das {
             if ( var->type->isAuto() && !var->init) {
                 error("local variable type can't be infered, it needs an initializer", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
+            }
+            for ( auto & fna : func->arguments ) {
+                if ( fna->name==var->name ) {
+                    error("local variable " + var->name +" is shadowed by function argument "
+                          + fna->name + " : " + fna->type->describe() + " at line " + to_string(fna->at.line), "", "",
+                              var->at, CompilationError::variable_not_found);
+                }
+            }
+            for ( auto & blk : blocks ) {
+                for ( auto & bna : blk->arguments ) {
+                    if ( bna->name==var->name ) {
+                        error("local variable " + var->name +" is shadowed by block argument "
+                            + bna->name + " : " + bna->type->describe() + " at line " + to_string(bna->at.line), "", "",
+                                var->at, CompilationError::variable_not_found);
+                    }
+                }
             }
             for ( auto & lv : local ) {
                 if ( lv->name==var->name ) {

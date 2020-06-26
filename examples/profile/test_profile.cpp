@@ -438,6 +438,26 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
         }
         return true;
     }
+    virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
+        if ( call->arguments.size()!=2 || !call->arguments[0]->rtti_isMakeBlock() ) {
+            err = "expecting make block, i.e <| $";
+            return nullptr;
+        }
+        auto mkb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
+        auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+        bool any = false;
+        for ( auto & arg : blk->arguments ) {
+            if ( !arg->can_shadow ) {
+                arg->can_shadow = true;
+                any = true;
+            }
+        }
+        if ( any ) {
+            return call->clone();
+        } else {
+            return nullptr;
+        }
+    }
 };
 
 vector<float3>          g_pos;

@@ -3,6 +3,7 @@
 
 require daslib/regex
 require daslib/regex_boost
+require strings
 require fio
 
 let

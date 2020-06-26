@@ -509,6 +509,8 @@ namespace das {
         }
         auto wb = static_pointer_cast<ExprBlock>(with->body);
         wb->blockFlags = 0;
+        wb->arguments.clear();
+        wb->returnType.reset();
         fb->list.push_back(with);
         pFunc->body = fb;
         pFunc->result = make_smart<TypeDecl>(*block->type);

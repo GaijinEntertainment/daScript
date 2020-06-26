@@ -229,6 +229,7 @@ namespace das
                 bool    do_not_delete : 1;
                 bool    generated : 1;
                 bool    capture_as_ref : 1;
+                bool    can_shadow : 1;             // can shadow block or function arguments, as block argument
             };
             uint32_t flags = 0;
         };

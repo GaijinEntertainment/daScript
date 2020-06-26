@@ -17,9 +17,9 @@ def Foo3D_setXY(var that:Foo3D;x,y:int)
     that.y = y
     that.z = 0
 
-def Foo3D_setXY2(var that:Foo;x,y:int)
+def Foo3D_setXY2(var _that:Foo;x,y:int)
     unsafe
-        var that : Foo3D& = upcast<auto> that
+        var that : Foo3D& = upcast<auto> _that
         that.x = x
         that.y = y
         that.z = 0
