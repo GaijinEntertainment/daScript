@@ -821,6 +821,21 @@ namespace das
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
 
+    enum class CaptureMode {
+        capture_any
+    ,   capture_by_copy
+    ,   capture_by_reference
+    ,   capture_by_clone
+    ,   capture_by_move
+    };
+
+    struct CaptureEntry {
+        string  name;
+        CaptureMode mode = CaptureMode::capture_any;
+        CaptureEntry() {}
+        CaptureEntry( const string n, CaptureMode m ) : name(n), mode(m) {}
+    };
+
     struct ExprMakeBlock : Expression {
         ExprMakeBlock () { __rtti = "ExprMakeBlock"; };
         ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b, bool isl = false, bool islf = false )
@@ -835,6 +850,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual bool rtti_isMakeBlock() const override { return true; }
+        vector<CaptureEntry>    capture;
         ExpressionPtr block;
         uint32_t stackTop = 0;
         union {
@@ -853,6 +869,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         TypeDeclPtr iterType;
+        vector<CaptureEntry> capture;
     };
 
     struct ExprYield : Expression {

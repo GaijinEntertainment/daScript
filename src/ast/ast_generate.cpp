@@ -482,7 +482,8 @@ namespace das {
     }
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, const das_safe_set<VariablePtr> & capt, bool needYield ) {
+                                        const StructurePtr & ls, const das_safe_set<VariablePtr> & capt,
+                                        const vector<CaptureEntry> & capture, bool needYield ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->lambda = true;
@@ -526,7 +527,14 @@ namespace das {
             pFunc->arguments.push_back(cA);
         }
         for ( auto & var : capt ) {
-            if ( isCaptureAsRef(var) ) {
+            CaptureMode mode = CaptureMode::capture_any;
+            auto it = find_if ( capture.begin(), capture.end(), [&] ( const auto & entry ){
+                return entry.name == var->name;
+            });
+            if ( it != capture.end() ) {
+                mode = it->mode;
+            }
+            if ( isCaptureAsRef(var) || mode==CaptureMode::capture_by_reference ) {
                 replaceRef2Ptr(pFunc->body, var->name);
             }
         }
@@ -535,7 +543,8 @@ namespace das {
     }
 
     StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block,
-                                       const das_safe_set<VariablePtr> & capt, bool needYield ) {
+                                       const das_safe_set<VariablePtr> & capt,
+                                       const vector<CaptureEntry> & capture, bool needYield ) {
         auto lsn = lambdaName;
         auto pStruct = make_smart<Structure>(lsn);
         pStruct->generated = true;
@@ -570,7 +579,14 @@ namespace das {
         for ( auto var : capt ) {
             auto td = make_smart<TypeDecl>(*var->type);
             td->constant = false;
-            if ( isCaptureAsRef(var) ) {
+            CaptureMode mode = CaptureMode::capture_any;
+            auto it = find_if ( capture.begin(), capture.end(), [&] ( const auto & entry ){
+                return entry.name == var->name;
+            });
+            if ( it != capture.end() ) {
+                mode = it->mode;
+            }
+            if ( isCaptureAsRef(var) || mode==CaptureMode::capture_by_reference ) {
                 td->ref = false;
                 auto ptd = make_smart<TypeDecl>(Type::tPointer);
                 ptd->firstType = td;
@@ -591,7 +607,7 @@ namespace das {
     }
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
-                                            const das_safe_set<VariablePtr> & capt, const LineInfo & at ) {
+                                            const das_safe_set<VariablePtr> & capt, const vector<CaptureEntry> & capture, const LineInfo & at ) {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
@@ -608,15 +624,30 @@ namespace das {
         auto mTHISF = make_smart<MakeFieldDecl>(lf->at, "__finalize", atTHISF, false, false);
         ms->push_back(mTHISF);
         for ( auto cV : capt ) {
-            if ( isCaptureAsRef(cV) ) {
+            CaptureMode mode = CaptureMode::capture_any;
+            auto it = find_if ( capture.begin(), capture.end(), [&] ( const auto & entry ){
+                return entry.name == cV->name;
+            });
+            if ( it != capture.end() ) {
+                mode = it->mode;
+            }
+            if ( isCaptureAsRef(cV) || mode==CaptureMode::capture_by_reference ) {
                 auto varV = make_smart<ExprVar>(cV->at, cV->name);
                 auto addrV = make_smart<ExprRef2Ptr>(cV->at, varV);
                 addrV->alwaysSafe = true;
                 auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, addrV, false, false);
                 ms->push_back(mV);
             } else {
+                bool moveS = false;
+                bool cloneS = false;
+                switch ( mode ) {
+                    case CaptureMode::capture_by_clone:     cloneS = true; break;
+                    case CaptureMode::capture_by_move:      moveS = true; break;
+                    case CaptureMode::capture_any:          moveS = !cV->type->canCopy(); break;
+                    default: ;
+                }
                 auto varV = make_smart<ExprVar>(cV->at, cV->name);
-                auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, !cV->type->canCopy(), false);
+                auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, moveS, cloneS);
                 ms->push_back(mV);
             }
         }

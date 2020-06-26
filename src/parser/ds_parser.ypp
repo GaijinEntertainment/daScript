@@ -116,6 +116,8 @@
     Enumeration *                   pEnum;
     Structure *                     pStructure;
     Function *                      pFuncDecl;
+    CaptureEntry *                  pCapt;
+    vector<CaptureEntry> *          pCaptList;
 }
 
 %destructor { delete $$; } <s>
@@ -131,6 +133,8 @@
 %destructor { delete $$; } <faList>
 %destructor { delete $$; } <pMakeStruct>
 %destructor { delete $$; } <pEnum>
+%destructor { delete $$; } <pCapt>
+%destructor { delete $$; } <pCaptList>
 
 %token  LEXER_ERROR         "lexer error"
 
@@ -393,6 +397,10 @@
 
 %type <pFuncDecl>       function_declaration
 %type <pFuncDecl>       function_declaration_header
+
+%type <pCapt>           capture_entry
+%type <pCaptList>       capture_list
+%type <pCaptList>       optional_capture_list
 
 %type <s>               character_sequence
 %type <s>               string_constant
@@ -1271,15 +1279,41 @@ block_or_lambda
     |   '@' '@' { $$ = 2;   /* local function */ }
     ;
 
+capture_entry
+    :   '&' NAME[name]         { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_reference); delete $name; }
+    |   '=' NAME[name]         { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_copy); delete $name; }
+    |   LARROW NAME[name]      { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_move); delete $name; }
+    |   CLONEEQU NAME[name]    { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_clone); delete $name; }
+    ;
+
+capture_list
+    :  capture_entry[ce] {
+        $$ = new vector<CaptureEntry>();
+        $$->push_back(*$ce);
+        delete $ce;
+    }
+    |   capture_list[cl] ',' capture_entry[ce] {
+        $cl->push_back(*$ce);
+        delete $ce;
+        $$ = $cl;
+    }
+    ;
+
+optional_capture_list
+    :   { $$ = nullptr; }
+    |   BRABRAB capture_list[cl] ']' ']' { $$ = $cl; }
+    ;
+
 expr_block
     :   expression_block[block]             {
         ExprBlock * closure = (ExprBlock *) $block;
         $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block));
         closure->returnType = make_smart<TypeDecl>(Type::autoinfer);
     }
-    |   block_or_lambda[bal] optional_annotation_list[annL] optional_function_argument_list[list]
+    |   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
-        $$ = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block), $bal==1, $bal==2);
+        auto mkb = new ExprMakeBlock(tokAt(@block),ExpressionPtr($block), $bal==1, $bal==2);
+        $$ = mkb;
         ExprBlock * closure = (ExprBlock *) $block;
         closure->returnType = TypeDeclPtr($result);
         if ( $list ) {
@@ -1308,6 +1342,14 @@ expr_block
                 }
             }
             deleteVariableDeclarationList($list);
+        }
+        if ( $clist ) {
+            swap ( mkb->capture, *$clist );
+            delete $clist;
+            if ( $bal != 1 ) {   // if its not lambda, can't capture
+                das_yyerror("can only have capture section for lambda",
+                    mkb->at,CompilationError::invalid_capture);
+            }
         }
         if ( $annL ) {
             for ( auto pA : *$annL ) {
@@ -1485,14 +1527,22 @@ expr
     |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(@loc),ExpressionPtr($subexpr)); }
-    |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' '(' ')' {
+    |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' optional_capture_list[clist] '(' ')' {
         auto gen = new ExprMakeGenerator(tokAt(@loc));
         gen->iterType = TypeDeclPtr($typeDecl);
+        if ( $clist ) {
+            swap ( gen->capture, *$clist );
+            delete $clist;
+        }
         $$ = gen;
     }
-    |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' '(' expr[subexpr] ')' {
+    |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' optional_capture_list[clist] '(' expr[subexpr] ')' {
         auto gen = new ExprMakeGenerator(tokAt(@loc), ExpressionPtr($subexpr));
         gen->iterType = TypeDeclPtr($typeDecl);
+        if ( $clist ) {
+            swap ( gen->capture, *$clist );
+            delete $clist;
+        }
         $$ = gen;
     }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }

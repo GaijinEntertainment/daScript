@@ -2051,14 +2051,14 @@ namespace das {
                             }
                             // make it all
                             string lname = generateNewLambdaName(block->at);
-                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, true);
+                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, true);
                             if ( program->addStructure(ls) ) {
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, true);
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, true);
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                     if ( program->addFunction(pFnFin) ) {
                                         reportAstChanged();
-                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
+                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
                                         // each ( [[ ]]] )
                                         auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
                                         cEach->generated = true;
@@ -2112,14 +2112,14 @@ namespace das {
                             cl.capt.erase(ba);
                         }
                         string lname = generateNewLambdaName(block->at);
-                        auto ls = generateLambdaStruct(lname, block.get(), cl.capt);
+                        auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture);
                         if ( program->addStructure(ls) ) {
-                            auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, false);
+                            auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, false);
                             if ( program->addFunction(pFn) ) {
                                 auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                 if ( program->addFunction(pFnFin) ) {
                                     reportAstChanged();
-                                    auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->at );
+                                    auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
                                     return ms;
                                 } else {
                                     error("lambda finalizer name mismatch",  "", "",

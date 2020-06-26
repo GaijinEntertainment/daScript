@@ -825,6 +825,7 @@ namespace das {
         if ( iterType ) {
             cexpr->iterType = make_smart<TypeDecl>(*iterType);
         }
+        cexpr->capture = capture;
         return cexpr;
     }
 
@@ -862,6 +863,8 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->block = block->clone();
         cexpr->isLambda = isLambda;
+        cexpr->isLocalFunction = isLocalFunction;
+        cexpr->capture = capture;
         return cexpr;
     }
 
