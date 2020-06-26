@@ -7,6 +7,31 @@ namespace das
 {
     struct GcMarkStringHeap : DataWalker {
         Context * context = nullptr;
+        using loop_point = pair<void *,uint32_t>;
+        vector<loop_point> visited;
+        vector<loop_point> visited_handles;
+        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited.end();
+        }
+        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited.end();
+        }
+        virtual void beforeStructure ( char * ps, StructInfo * info ) override {
+            visited.emplace_back(make_pair(ps,info->hash));
+        }
+        virtual void afterStructure ( char *, StructInfo * ) override {
+            visited.pop_back();
+        }
+        virtual void beforeHandle ( char * ps, TypeInfo * ti ) override {
+            visited_handles.emplace_back(make_pair(ps,ti->hash));
+        }
+        virtual void afterHandle ( char *, TypeInfo * ) override {
+            visited_handles.pop_back();
+        }
         virtual void String ( char * & st ) {
             DataWalker::String(st);
             if ( !st ) {
