@@ -235,6 +235,7 @@ namespace das {
             this->addField<DAS_BIND_MANAGED_FIELD(last_line)>("last_line");
         }
         virtual bool canCopy() const override { return true; }
+        virtual bool isLocal() const override { return true; }
     };
 
     TypeDeclPtr makeProgramFlags() {
@@ -831,6 +832,10 @@ namespace das {
         }
     };
 
+    LineInfo getCurrentLineInfo( LineInfoArg * lineInfo ) {
+        return *lineInfo;
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -941,6 +946,9 @@ namespace das {
                 SideEffects::modifyExternal, "isCompatibleCast");
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name");
+            // current line info
+            addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
+                "get_line_info", SideEffects::none, "getCurrentLineInfo");
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready

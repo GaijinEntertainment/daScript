@@ -127,5 +127,7 @@ namespace das {
     struct BasicStructureAnnotation;
     void rtti_builtin_basic_struct_for_each_field(const BasicStructureAnnotation & ann,
         const TBlock<void, char *, char*, const TypeInfo, uint32_t> & block, Context * context);
+
+    LineInfo getCurrentLineInfo( LineInfoArg * lineInfo );
 }
 
