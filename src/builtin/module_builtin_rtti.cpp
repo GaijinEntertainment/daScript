@@ -790,6 +790,11 @@ namespace das {
     void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
+
+    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context ) {
+        context->throw_error("not supported with DAS_NO_FILEIO");
+        return false;
+    }
 #endif
 
     struct SimNode_RttiGetTypeDecl : SimNode_CallBase {
