@@ -5,13 +5,13 @@ module functional
 [private]
 def filter_any(var src:iterator<auto(TT)>; var blk )
     static_if !typeinfo(is_ref_type type<TT>)
-        return <- generator<TT -&> () <| $ ()
+        return <- generator<TT -&> [[<-src,<-blk]] () <| $ ()
             for w in src
                 if invoke(blk,w)
                     yield w
             return false
     else
-        return <- generator<TT&> () <| $ ()
+        return <- generator<TT&> [[<-src,<-blk]] () <| $ ()
             for w in src
                 if invoke(blk,w)
                     yield w
@@ -27,12 +27,12 @@ def filter(var src:iterator<auto(TT)>; blk:function<(what:TT -&):bool> )
 [private]
 def map_any(var src:iterator<auto(TT)>; var blk)
     static_if typeinfo(can_copy type<QQ>)
-        return <- generator<QQ -&> () <| $ ()
+        return <- generator<QQ -&> [[<-src,<-blk]] () <| $ ()
             for w in src
                 yield invoke(blk,w)
             return false
     static_elif typeinfo(can_move type<QQ>)
-        return <- generator<QQ -&> () <| $ ()
+        return <- generator<QQ -&> [[<-src,<-blk]] () <| $ ()
             for w in src
                 yield <- invoke(blk,w)
             return false
@@ -109,7 +109,7 @@ def all ( it )
 
 def cycle(var src:iterator<auto(TT)>)
     static_if !typeinfo(is_ref_type type<TT>)
-        return <- generator<TT -&> () <| $ ()
+        return <- generator<TT -&> [[<-src]] () <| $ ()
             var arr : array<TT -&>
             for x in src
                 yield x
@@ -121,7 +121,7 @@ def cycle(var src:iterator<auto(TT)>)
         finally
             __builtin_array_clear_lock(arr)
     else
-        return <- generator<TT &> () <| $ ()
+        return <- generator<TT &> [[<-src]] () <| $ ()
             var arr : array<TT -&>
             for x in src
                 yield x
@@ -135,13 +135,13 @@ def cycle(var src:iterator<auto(TT)>)
 
 def islice( var src : iterator<auto(TT)>; start,stop : int )
     static_if !typeinfo(is_ref_type type<TT>)
-        return <- generator<TT -&> () <| $ ()
+        return <- generator<TT -&> [[<-src]] () <| $ ()
             for x,i in src,range(0,stop)
                 if i>=start
                     yield x
             return false
     else
-        return <- generator<TT &> () <| $ ()
+        return <- generator<TT &> [[<-src]] () <| $ ()
             for x,i in src,range(0,stop)
                 if i>=start
                     yield x

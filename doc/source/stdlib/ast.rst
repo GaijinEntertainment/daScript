@@ -338,6 +338,8 @@ Type aliases
 +----------------+---+-----+
 +generated       +3  +8    +
 +----------------+---+-----+
++capturedRef     +4  +16   +
++----------------+---+-----+
 
 
 |typedef-ast-FieldDeclarationFlags|

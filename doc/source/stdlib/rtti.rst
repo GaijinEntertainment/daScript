@@ -1162,6 +1162,14 @@ get_function_info returns  :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const&
 
 |function-rtti-get_function_info|
 
+.. _function-_at_rtti_c__c_get_line_info__hh_const:
+
+.. das:function:: get_line_info()
+
+get_line_info returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>` 
+
+|function-rtti-get_line_info|
+
 .. _function-_at_rtti_c__c_get_module_string_hh_const:
 
 .. das:function:: get_module(arg0: string const)

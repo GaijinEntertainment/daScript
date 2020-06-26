@@ -2050,31 +2050,34 @@ namespace das {
                                 block->arguments.push_back(yva);
                             }
                             // make it all
-                            string lname = generateNewLambdaName(block->at);
-                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, true);
-                            if ( program->addStructure(ls) ) {
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, true);
-                                if ( program->addFunction(pFn) ) {
-                                    auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
-                                    if ( program->addFunction(pFnFin) ) {
-                                        reportAstChanged();
-                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
-                                        // each ( [[ ]]] )
-                                        auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
-                                        cEach->generated = true;
-                                        cEach->arguments.push_back(ms);
-                                        return cEach;
+                            bool isUnsafe = !safeExpression(expr);
+                            if ( verifyCapture(expr->capture, cl, isUnsafe, expr->at) ) {
+                                string lname = generateNewLambdaName(block->at);
+                                auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, true);
+                                if ( program->addStructure(ls) ) {
+                                    auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, true);
+                                    if ( program->addFunction(pFn) ) {
+                                        auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
+                                        if ( program->addFunction(pFnFin) ) {
+                                            reportAstChanged();
+                                            auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
+                                            // each ( [[ ]]] )
+                                            auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
+                                            cEach->generated = true;
+                                            cEach->arguments.push_back(ms);
+                                            return cEach;
+                                        } else {
+                                            error("generator finalizer name mismatch",  "", "",
+                                                expr->at, CompilationError::invalid_block);
+                                        }
                                     } else {
-                                        error("generator finalizer name mismatch",  "", "",
+                                        error("generator function name mismatch",  "", "",
                                             expr->at, CompilationError::invalid_block);
                                     }
                                 } else {
-                                    error("generator function name mismatch",  "", "",
+                                    error("generator struct name mismatch " + ls->name,  "", "",
                                         expr->at, CompilationError::invalid_block);
                                 }
-                            } else {
-                                error("generator struct name mismatch " + ls->name,  "", "",
-                                    expr->at, CompilationError::invalid_block);
                             }
                             // in case of error
                             if ( !expr->iterType->isVoid() ) {
@@ -2087,6 +2090,55 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMakeBlock
+        bool verifyCapture ( const vector<CaptureEntry> & capture, const CaptureLambda & cl, bool isUnsafe, const LineInfo & at ) {
+            for ( auto & cV : cl.capt ) {
+                CaptureMode mode = CaptureMode::capture_any;
+                auto it = find_if ( capture.begin(), capture.end(), [&] ( const auto & entry ){
+                    return entry.name == cV->name;
+                });
+                if ( it != capture.end() ) {
+                    mode = it->mode;
+                }
+                if ( mode == CaptureMode::capture_any ) {
+                    if ( cV->capture_as_ref ) {
+                        // this is ok by default
+                    } else if ( !cV->type->canCopy() && !cV->type->canMove() ) {
+                        error("can't captured variable " + cV->name,  "it can't be copied or moved", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
+                    } else if ( !cV->type->canCopy() && isUnsafe ) {
+                        error("implicit capture by move requires unsafe, while capturing " + cV->name,  "", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
+                    }
+                } else if ( mode == CaptureMode::capture_by_reference ) {
+                    if ( !cV->capture_as_ref && isUnsafe ) {
+                        error("capture by reference requires unsafe, while capturing " + cV->name,  "", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
+                    }
+                } else if ( mode == CaptureMode::capture_by_copy ) {
+                    if ( !cV->type->canCopy() ) {
+                        error("can't copy captured variable " + cV->name,  "", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
+                    }
+                } else if ( mode == CaptureMode::capture_by_move ) {
+                    if ( !cV->type->canMove() ) {
+                        error("can't move captured variable " + cV->name,  "", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
+                    }
+                } else if ( mode == CaptureMode::capture_by_copy ) {
+                    if ( !cV->type->canCopy() ) {
+                        error("can't copy captured variable " + cV->name,  "", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
         ExpressionPtr convertBlockToLambda ( ExprMakeBlock * expr ) {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
             if ( auto bT = block->makeBlockType() ) {
@@ -2111,27 +2163,30 @@ namespace das {
                         for ( auto ba : block->arguments ) {
                             cl.capt.erase(ba);
                         }
-                        string lname = generateNewLambdaName(block->at);
-                        auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture);
-                        if ( program->addStructure(ls) ) {
-                            auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, false);
-                            if ( program->addFunction(pFn) ) {
-                                auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
-                                if ( program->addFunction(pFnFin) ) {
-                                    reportAstChanged();
-                                    auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
-                                    return ms;
+                        bool isUnsafe = !safeExpression(expr);
+                        if ( verifyCapture(expr->capture, cl, isUnsafe, expr->at) ) {
+                            string lname = generateNewLambdaName(block->at);
+                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture);
+                            if ( program->addStructure(ls) ) {
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, false);
+                                if ( program->addFunction(pFn) ) {
+                                    auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
+                                    if ( program->addFunction(pFnFin) ) {
+                                        reportAstChanged();
+                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
+                                        return ms;
+                                    } else {
+                                        error("lambda finalizer name mismatch",  "", "",
+                                            expr->at, CompilationError::invalid_block);
+                                    }
                                 } else {
-                                    error("lambda finalizer name mismatch",  "", "",
+                                    error("lambda function name mismatch",  "", "",
                                         expr->at, CompilationError::invalid_block);
                                 }
                             } else {
-                                error("lambda function name mismatch",  "", "",
+                                error("lambda struct name mismatch",  "", "",
                                     expr->at, CompilationError::invalid_block);
                             }
-                        } else {
-                            error("lambda struct name mismatch",  "", "",
-                                expr->at, CompilationError::invalid_block);
                         }
                     }
                 }

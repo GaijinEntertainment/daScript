@@ -744,8 +744,9 @@ def getDetailIncludePath ( fname, substname : string )
         if f != s
             break
         index ++
-    var ipath = join ( [[ for i in range(index,length(snp)); snp[i] ]], "/" )
-    return ipath
+    unsafe
+        var ipath = join ( [[ for i in range(index,length(snp)); snp[i] ]], "/" )
+        return ipath
 
 def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGroup>)
     static_if log_documentation
