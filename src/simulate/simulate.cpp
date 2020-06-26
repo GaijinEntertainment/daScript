@@ -811,8 +811,12 @@ namespace das
         FPE_DISABLE;
         TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
+        ssw << "\n";
+        if ( at ) {
+            ssw << "from " << at->describe() << "\n";
+        }
         char * sp = stack.ap();
-        ssw << "\nCALL STACK (sp=" << (stack.top() - stack.ap())
+        ssw << "CALL STACK (sp=" << (stack.top() - stack.ap())
             << ",sptr=0x" << HEX  << intptr_t(sp) << DEC << "):\n";
         const LineInfo * lineAt = at;
         while (  sp < stack.top() ) {
