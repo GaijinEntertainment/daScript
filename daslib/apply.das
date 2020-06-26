@@ -19,7 +19,10 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     fn.flags |= FunctionFlags generated
     fn.flags |= FunctionFlags privateFunction
     fn.result <- new [[TypeDecl() baseType=Type tVoid]]
-    push(fn.arguments, new [[Variable() name:="__self",at=at, _type := clone_type(stype)]])   // self:Foo
+    var selfT := clone_type(stype)
+    selfT.flags |= TypeDeclFlags isExplicit
+    selfT.flags |= TypeDeclFlags explicitConst
+    push(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
     for fld in stype.structType.fields
         var argT <- new [[TypeDecl() baseType=Type tBlock]]                         // block<(name:string;x:field1type)>

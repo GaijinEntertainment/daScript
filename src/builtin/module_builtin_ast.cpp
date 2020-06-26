@@ -944,7 +944,8 @@ namespace das {
         ft->alias = "TypeDeclFlags";
         ft->argNames = { "ref", "constant", "temporary", "_implicit",
             "removeRef", "removeConstant", "removeDim",
-            "removeTemporary", "explicitConst", "aotAlias", "smartPtr" };
+            "removeTemporary", "explicitConst", "aotAlias", "smartPtr",
+            "smartPtrNative", "isExplicit" };
         return ft;
     }
 
