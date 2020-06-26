@@ -294,6 +294,32 @@ namespace das {
             if ( printRef ) ss << ")";
             return Visitor::visit(expr);
         }
+    // make block
+        void describeCapture ( const vector<CaptureEntry> & capture ) {
+            if ( !capture.empty() ) {
+                ss << " [[";
+                bool first = true;
+                for ( const auto & ce : capture ) {
+                    if ( first ) first = false; else ss << ",";
+                    switch ( ce.mode ) {
+                        case CaptureMode::capture_by_clone:     ss << ":="; break;
+                        case CaptureMode::capture_by_copy:      ss << "="; break;
+                        case CaptureMode::capture_by_move:      ss << "<-"; break;
+                        case CaptureMode::capture_by_reference: ss << "&"; break;
+                        default:;
+                    }
+                    ss << ce.name;
+                }
+                ss << "]] ";
+            }
+        }
+        virtual void preVisit ( ExprMakeBlock * expr ) {
+            Visitor::preVisit(expr);
+            if ( expr->isLambda ) ss << "@";
+            else if ( expr->isLocalFunction ) ss << "@@";
+            else ss << "$";
+            describeCapture(expr->capture);
+        }
     // block
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockExpression(block, expr);
@@ -308,7 +334,7 @@ namespace das {
             Visitor::preVisit(block);
             if ( block->isClosure ) {
                 if ( block->returnType || block->arguments.size() ) {
-                    ss << "$(";
+                    ss << "(";
                     for ( auto & arg : block->arguments ) {
                         if (!arg->annotation.empty()) {
                             ss << "[";
