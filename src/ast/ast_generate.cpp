@@ -384,7 +384,7 @@ namespace das {
         // now finalize
         for ( const auto & fl : ls->fields ) {
             if ( fl.type->needDelete() ) {
-                if ( !fl.annotation.getBoolOption("do_not_delete", false) ) {
+                if ( !fl.annotation.getBoolOption("do_not_delete", false) && !fl.capturedRef ) {
                     auto fva = make_smart<ExprVar>(fl.at, "__this");
                     auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
                     fld->ignoreCaptureConst = true;
@@ -576,8 +576,10 @@ namespace das {
                 ptd->firstType = td;
                 td = ptd;
                 pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
-                pStruct->fields.back().capturedConstant = var->type->constant;
-                pStruct->fields.back().type->sanitize();
+                auto & bfld = pStruct->fields.back();
+                bfld.capturedConstant = var->type->constant;
+                bfld.capturedRef = true;
+                bfld.type->sanitize();
             } else {
                 td->ref = false;
                 pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
