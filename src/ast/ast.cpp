@@ -1811,7 +1811,6 @@ namespace das {
         Expression::clone(cexpr);
         for ( auto & var : variables )
             cexpr->variables.push_back(var->clone());
-        cexpr->inScope = inScope;
         cexpr->visibility = visibility;
         cexpr->atInit = atInit;
         return cexpr;

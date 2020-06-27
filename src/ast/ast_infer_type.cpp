@@ -5088,24 +5088,6 @@ namespace das {
             return Visitor::visitLetInit(expr, var, init);
         }
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
-            if ( expr->inScope ) {
-                for ( auto & var : expr->variables ) {
-                    if ( var->type->isExprType() || var->type->isAutoOrAlias() ) {
-                        error("type not ready yet", "", "", var->at);
-                        return Visitor::visit(expr);
-                    }
-                }
-                for ( auto & var : expr->variables ) {
-                    if ( var->type->canDelete() ) {
-                        auto scope = scopes.back();
-                        auto del = makeDelete(var);
-                        scope->finalList.insert(scope->finalList.begin(), del);
-                    }
-                }
-                expr->inScope = false;
-                reportAstChanged();
-                return Visitor::visit(expr);
-            }
             if ( func && func->generator ) {
                 // only topmost
                 //  which in case of generator is 2, due to

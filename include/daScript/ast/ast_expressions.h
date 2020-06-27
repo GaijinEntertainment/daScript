@@ -755,7 +755,6 @@ namespace das
         vector<VariablePtr>     variables;
         LineInfo                visibility;
         LineInfo                atInit;
-        bool                    inScope = false;
     };
 
     // for a,b in foo,bar where a>b ...

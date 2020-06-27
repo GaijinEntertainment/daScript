@@ -422,7 +422,6 @@ namespace das {
                 }
             }
             ss << (isLet ? "let " : "var ");
-            if ( let->inScope ) ss << "in scope ";
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);

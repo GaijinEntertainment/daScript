@@ -334,7 +334,6 @@ void YYNEWLINE() {
 <normal>"is"                                            return DAS_IS;
 <normal>"deref"                                         return DAS_DEREF;
 <normal>"addr"                                          return DAS_ADDR;
-<normal>"scope"                                         return DAS_SCOPE;
 <normal>"null"                                          return DAS_NULL;
 <normal>"return"                                        return DAS_RETURN;
 <normal>"yield"                                         return DAS_YIELD;

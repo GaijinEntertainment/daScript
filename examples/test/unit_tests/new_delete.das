@@ -68,11 +68,14 @@ def test_delete_handle_array
 
 [sideeffects]
 def da_inscope(x)
-    var in scope b = new SomethingSmall
-    var in scope a = new SomethingSmall[10]
+    var b = new SomethingSmall
+    var a = new SomethingSmall[10]
     b.a = x
     for pA in a
         pA.a = x
+finally
+    delete a
+    delete b
 
 def test_delete_struct_array_in_scope
     let w0 = heap_bytes_allocated()

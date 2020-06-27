@@ -174,7 +174,6 @@
 %token  DAS_FINALLY         "finally"
 %token  DAS_DELETE          "delete"
 %token  DAS_DEREF           "deref"
-%token  DAS_SCOPE           "scope"
 %token  DAS_TYPEDEF         "typedef"
 %token  DAS_WITH            "with"
 %token  DAS_CAST            "cast"
@@ -328,7 +327,6 @@
 
 %type <b>               class_or_struct
 %type <b>               copy_or_move
-%type <b>               let_scope
 %type <b>               optional_override
 %type <b>               kwd_let
 %type <b>               is_public_module
@@ -1151,22 +1149,16 @@ expression_try_catch
     }
     ;
 
-let_scope
-    :               { $$ = false; }
-    |   DAS_IN DAS_SCOPE  { $$ = true; }
-    ;
-
 kwd_let
     :   DAS_LET  { $$ = true; }
     |   DAS_VAR  { $$ = false; }
     ;
 
 expression_let
-    :   kwd_let let_scope[inScope] let_variable_declaration[decl] {
+    :   kwd_let let_variable_declaration[decl] {
         auto pLet = new ExprLet();
         pLet->at = tokAt(@kwd_let);
         pLet->atInit = tokAt(@decl);
-        pLet->inScope = $inScope;
         if ( $decl->pTypeDecl ) {
             for ( const auto & name_at : *$decl->pNameList ) {
                 if ( !pLet->find(name_at.first) ) {

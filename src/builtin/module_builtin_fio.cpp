@@ -201,7 +201,9 @@ namespace das {
         char * res = context->stringHeap->allocateString(nullptr, st.st_size);
         fseek((FILE*)f, 0, SEEK_SET);
         auto bytes = fread(res, 1, st.st_size, (FILE *)f);
-        if ( bytes != st.st_size ) context->throw_error_ex("uncorrect fread result, expected %d, got %d bytes", st.st_size, bytes);
+        if ( uint64_t(bytes) != uint64_t(st.st_size) ) {
+            context->throw_error_ex("incorrect fread result, expected %d, got %d bytes. read requires binary file mode", st.st_size, bytes);
+        }
         return res;
     }
 

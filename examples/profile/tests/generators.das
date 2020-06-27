@@ -31,10 +31,14 @@ def testGen(total,mod:int)
     )
 
 def testArr(total,mod:int)
-    var in scope a1 <- each_a(range(0,total))
-    var in scope a2 <- filter_a(a1,$(x) => (x%mod)==0)
-    var in scope a3 <- map_a(a2, $(x) => "{x}")
+    var a1 <- each_a(range(0,total))
+    var a2 <- filter_a(a1,$(x) => (x%mod)==0)
+    var a3 <- map_a(a2, $(x) => "{x}")
     return join(a3,",")
+finally
+    delete a1
+    delete a2
+    delete a3
 
 def testLoop(total,mod:int)
     let st = build_string() <| $ (var writer)

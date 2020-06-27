@@ -3,10 +3,14 @@ struct Foo
 
 [sideeffects]
 def buggy(skip:bool)
-    var in scope a = new Foo
+    var a = new Foo
     if skip
         return
-    var in scope b = new Foo
+    var b = new Foo
+finally
+    unsafe
+        delete a
+        delete b
 
 [export]
 def test

@@ -169,7 +169,7 @@ class PrintVisitor : AstVisitor
             if pv._type!=null & pv._type.flags.constant
                 isLet = false
                 break
-        print("{isLet ? "let" : "var"} {expr.inScope ? "in_scope " : ""}")
+        print("{isLet ? "let" : "var"} ")
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool)
         if arg.isAccessUnused
             print(" /*unused*/ ")

@@ -234,7 +234,6 @@ namespace das {
         AstExprLetAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprLet> ("ExprLet", ml) {
             addField<DAS_BIND_MANAGED_FIELD(variables)>("variables");
-            addField<DAS_BIND_MANAGED_FIELD(inScope)>("inScope");
         }
     };
 

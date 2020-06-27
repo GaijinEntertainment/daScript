@@ -1,9 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.4.1.  */
+/* A Bison parser, made by GNU Bison 3.2.1.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
-   Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -52,7 +51,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "ds_parser.ypp"
+#line 2 "ds_parser.ypp" /* yacc.c:1912  */
 
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
@@ -112,7 +111,7 @@ extern int das_yydebug;
 
     extern Structure * g_thisStructure;
 
-#line 116 "ds_parser.hpp"
+#line 115 "ds_parser.hpp" /* yacc.c:1912  */
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -155,127 +154,127 @@ extern int das_yydebug;
     DAS_FINALLY = 291,
     DAS_DELETE = 292,
     DAS_DEREF = 293,
-    DAS_SCOPE = 294,
-    DAS_TYPEDEF = 295,
-    DAS_WITH = 296,
-    DAS_CAST = 297,
-    DAS_OVERRIDE = 298,
-    DAS_ABSTRACT = 299,
-    DAS_UPCAST = 300,
-    DAS_ITERATOR = 301,
-    DAS_VAR = 302,
-    DAS_ADDR = 303,
-    DAS_CONTINUE = 304,
-    DAS_WHERE = 305,
-    DAS_PASS = 306,
-    DAS_REINTERPRET = 307,
-    DAS_MODULE = 308,
-    DAS_PUBLIC = 309,
-    DAS_LABEL = 310,
-    DAS_GOTO = 311,
-    DAS_IMPLICIT = 312,
-    DAS_EXPLICIT = 313,
-    DAS_SHARED = 314,
-    DAS_SMART_PTR = 315,
-    DAS_UNSAFE = 316,
-    DAS_TBOOL = 317,
-    DAS_TVOID = 318,
-    DAS_TSTRING = 319,
-    DAS_TAUTO = 320,
-    DAS_TINT = 321,
-    DAS_TINT2 = 322,
-    DAS_TINT3 = 323,
-    DAS_TINT4 = 324,
-    DAS_TUINT = 325,
-    DAS_TBITFIELD = 326,
-    DAS_TUINT2 = 327,
-    DAS_TUINT3 = 328,
-    DAS_TUINT4 = 329,
-    DAS_TFLOAT = 330,
-    DAS_TFLOAT2 = 331,
-    DAS_TFLOAT3 = 332,
-    DAS_TFLOAT4 = 333,
-    DAS_TRANGE = 334,
-    DAS_TURANGE = 335,
-    DAS_TBLOCK = 336,
-    DAS_TINT64 = 337,
-    DAS_TUINT64 = 338,
-    DAS_TDOUBLE = 339,
-    DAS_TFUNCTION = 340,
-    DAS_TLAMBDA = 341,
-    DAS_TINT8 = 342,
-    DAS_TUINT8 = 343,
-    DAS_TINT16 = 344,
-    DAS_TUINT16 = 345,
-    DAS_TTUPLE = 346,
-    DAS_TVARIANT = 347,
-    DAS_GENERATOR = 348,
-    DAS_YIELD = 349,
-    ADDEQU = 350,
-    SUBEQU = 351,
-    DIVEQU = 352,
-    MULEQU = 353,
-    MODEQU = 354,
-    ANDEQU = 355,
-    OREQU = 356,
-    XOREQU = 357,
-    SHL = 358,
-    SHR = 359,
-    ADDADD = 360,
-    SUBSUB = 361,
-    LEEQU = 362,
-    SHLEQU = 363,
-    SHREQU = 364,
-    GREQU = 365,
-    EQUEQU = 366,
-    NOTEQU = 367,
-    RARROW = 368,
-    LARROW = 369,
-    QQ = 370,
-    QDOT = 371,
-    QBRA = 372,
-    LPIPE = 373,
-    LBPIPE = 374,
-    LAPIPE = 375,
-    RPIPE = 376,
-    CLONEEQU = 377,
-    ROTL = 378,
-    ROTR = 379,
-    ROTLEQU = 380,
-    ROTREQU = 381,
-    MAPTO = 382,
-    COLCOL = 383,
-    BRABRAB = 384,
-    BRACBRB = 385,
-    CBRCBRB = 386,
-    INTEGER = 387,
-    LONG_INTEGER = 388,
-    UNSIGNED_INTEGER = 389,
-    UNSIGNED_LONG_INTEGER = 390,
-    FLOAT = 391,
-    DOUBLE = 392,
-    NAME = 393,
-    BEGIN_STRING = 394,
-    STRING_CHARACTER = 395,
-    END_STRING = 396,
-    BEGIN_STRING_EXPR = 397,
-    END_STRING_EXPR = 398,
-    END_OF_READ = 399,
-    UNARY_MINUS = 400,
-    UNARY_PLUS = 401,
-    PRE_INC = 402,
-    PRE_DEC = 403,
-    POST_INC = 404,
-    POST_DEC = 405,
-    DEREF = 406
+    DAS_TYPEDEF = 294,
+    DAS_WITH = 295,
+    DAS_CAST = 296,
+    DAS_OVERRIDE = 297,
+    DAS_ABSTRACT = 298,
+    DAS_UPCAST = 299,
+    DAS_ITERATOR = 300,
+    DAS_VAR = 301,
+    DAS_ADDR = 302,
+    DAS_CONTINUE = 303,
+    DAS_WHERE = 304,
+    DAS_PASS = 305,
+    DAS_REINTERPRET = 306,
+    DAS_MODULE = 307,
+    DAS_PUBLIC = 308,
+    DAS_LABEL = 309,
+    DAS_GOTO = 310,
+    DAS_IMPLICIT = 311,
+    DAS_EXPLICIT = 312,
+    DAS_SHARED = 313,
+    DAS_SMART_PTR = 314,
+    DAS_UNSAFE = 315,
+    DAS_TBOOL = 316,
+    DAS_TVOID = 317,
+    DAS_TSTRING = 318,
+    DAS_TAUTO = 319,
+    DAS_TINT = 320,
+    DAS_TINT2 = 321,
+    DAS_TINT3 = 322,
+    DAS_TINT4 = 323,
+    DAS_TUINT = 324,
+    DAS_TBITFIELD = 325,
+    DAS_TUINT2 = 326,
+    DAS_TUINT3 = 327,
+    DAS_TUINT4 = 328,
+    DAS_TFLOAT = 329,
+    DAS_TFLOAT2 = 330,
+    DAS_TFLOAT3 = 331,
+    DAS_TFLOAT4 = 332,
+    DAS_TRANGE = 333,
+    DAS_TURANGE = 334,
+    DAS_TBLOCK = 335,
+    DAS_TINT64 = 336,
+    DAS_TUINT64 = 337,
+    DAS_TDOUBLE = 338,
+    DAS_TFUNCTION = 339,
+    DAS_TLAMBDA = 340,
+    DAS_TINT8 = 341,
+    DAS_TUINT8 = 342,
+    DAS_TINT16 = 343,
+    DAS_TUINT16 = 344,
+    DAS_TTUPLE = 345,
+    DAS_TVARIANT = 346,
+    DAS_GENERATOR = 347,
+    DAS_YIELD = 348,
+    ADDEQU = 349,
+    SUBEQU = 350,
+    DIVEQU = 351,
+    MULEQU = 352,
+    MODEQU = 353,
+    ANDEQU = 354,
+    OREQU = 355,
+    XOREQU = 356,
+    SHL = 357,
+    SHR = 358,
+    ADDADD = 359,
+    SUBSUB = 360,
+    LEEQU = 361,
+    SHLEQU = 362,
+    SHREQU = 363,
+    GREQU = 364,
+    EQUEQU = 365,
+    NOTEQU = 366,
+    RARROW = 367,
+    LARROW = 368,
+    QQ = 369,
+    QDOT = 370,
+    QBRA = 371,
+    LPIPE = 372,
+    LBPIPE = 373,
+    LAPIPE = 374,
+    RPIPE = 375,
+    CLONEEQU = 376,
+    ROTL = 377,
+    ROTR = 378,
+    ROTLEQU = 379,
+    ROTREQU = 380,
+    MAPTO = 381,
+    COLCOL = 382,
+    BRABRAB = 383,
+    BRACBRB = 384,
+    CBRCBRB = 385,
+    INTEGER = 386,
+    LONG_INTEGER = 387,
+    UNSIGNED_INTEGER = 388,
+    UNSIGNED_LONG_INTEGER = 389,
+    FLOAT = 390,
+    DOUBLE = 391,
+    NAME = 392,
+    BEGIN_STRING = 393,
+    STRING_CHARACTER = 394,
+    END_STRING = 395,
+    BEGIN_STRING_EXPR = 396,
+    END_STRING_EXPR = 397,
+    END_OF_READ = 398,
+    UNARY_MINUS = 399,
+    UNARY_PLUS = 400,
+    PRE_INC = 401,
+    PRE_DEC = 402,
+    POST_INC = 403,
+    POST_DEC = 404,
+    DEREF = 405
   };
 #endif
 
 /* Value type.  */
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
+
 union DAS_YYSTYPE
 {
-#line 94 "ds_parser.ypp"
+#line 94 "ds_parser.ypp" /* yacc.c:1912  */
 
     char                            ch;
     bool                            b;
@@ -304,9 +303,9 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 308 "ds_parser.hpp"
-
+#line 307 "ds_parser.hpp" /* yacc.c:1912  */
 };
+
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
 # define DAS_YYSTYPE_IS_TRIVIAL 1
 # define DAS_YYSTYPE_IS_DECLARED 1
