@@ -2,6 +2,7 @@ options indenting=4
 
 require ast
 require rtti public
+require strings
 
 typedef
     ExpressionPtr = smart_ptr<Expression>

@@ -85,8 +85,8 @@ int main(int argc, char * argv[]) {
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
     string main_das;
-    if ( argc!=2 ) {
-        tout << "dasContDev [script.das]\n";
+    if ( argc<2 ) {
+        tout << "dasContDev [script.das] {arguments}\n";
         return -1;
     }
     main_das = argv[1];
@@ -98,6 +98,7 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
+    NEED_MODULE(Module_UriParser);
     require_project_specific_modules();
     for ( ;; ) {
         if ( !compile_and_run(main_das) ) {
