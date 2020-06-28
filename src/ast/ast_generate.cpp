@@ -384,7 +384,7 @@ namespace das {
         // now finalize
         for ( const auto & fl : ls->fields ) {
             if ( fl.type->needDelete() ) {
-                if ( !fl.annotation.getBoolOption("do_not_delete", false) && !fl.capturedRef ) {
+                if ( !fl.doNotDelete && !fl.capturedRef ) {
                     auto fva = make_smart<ExprVar>(fl.at, "__this");
                     auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
                     fld->ignoreCaptureConst = true;
@@ -573,8 +573,9 @@ namespace das {
         if ( needYield ) {
             auto yt = make_smart<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
-            pStruct->fields.back().generated = true;
-            pStruct->fields.back().type->sanitize();
+            auto & fldb = pStruct->fields.back();
+            fldb.generated = true;
+            fldb.type->sanitize();
         }
         for ( auto var : capt ) {
             auto td = make_smart<TypeDecl>(*var->type);
@@ -599,8 +600,12 @@ namespace das {
             } else {
                 td->ref = false;
                 pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
-                pStruct->fields.back().capturedConstant = var->type->constant;
-                pStruct->fields.back().type->sanitize();
+                auto & bfld = pStruct->fields.back();
+                bfld.capturedConstant = var->type->constant;
+                if ( mode==CaptureMode::capture_by_move || mode==CaptureMode::capture_by_clone ) {
+                    bfld.doNotDelete = true;
+                }
+                bfld.type->sanitize();
             }
         }
         return pStruct;
@@ -867,17 +872,17 @@ namespace das {
             } else {
                 vtd->constant = false;
             }
-            AnnotationArgumentList aaList;
-            if ( isRef || var->do_not_delete ) {
-                aaList.emplace_back("do_not_delete",true);
-            }
             capture->fields.emplace_back(var->name,
                                          vtd,
                                          nullptr,
-                                         aaList,
+                                         AnnotationArgumentList(),
                                          false,
                                          expr->at);
-            capture->fields.back().capturedConstant = var->type->constant;
+            auto & fldb = capture->fields.back();
+            if ( isRef || var->do_not_delete ) {
+                fldb.doNotDelete = true;
+            }
+            fldb.capturedConstant = var->type->constant;
             auto cvar = make_smart<ExprVar>(var->at, func->arguments[0]->name);
             auto lvar = make_smart<ExprField>(var->at, cvar, var->name);
             lvar->ignoreCaptureConst = true;
