@@ -124,6 +124,7 @@ MAKE_TYPE_FACTORY(ExprConstFloat3,ExprConstFloat3);
 MAKE_TYPE_FACTORY(ExprConstFloat4,ExprConstFloat4);
 MAKE_TYPE_FACTORY(ExprConstString,ExprConstString);
 MAKE_TYPE_FACTORY(ExprConstDouble,ExprConstDouble);
+MAKE_TYPE_FACTORY(CaptureEntry,CaptureEntry);
 MAKE_TYPE_FACTORY(ExprMakeBlock,ExprMakeBlock);
 MAKE_TYPE_FACTORY(ExprMakeGenerator,ExprMakeGenerator);
 MAKE_TYPE_FACTORY(ExprMemZero,ExprMemZero);
@@ -135,6 +136,8 @@ DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
     none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
     modifyArgumentAndExternal, worstDefault, accessGlobal, invoke, inferedSideEffects)
 
+DAS_BASE_BIND_ENUM(das::CaptureMode, CaptureMode,
+    capture_any, capture_by_copy, capture_by_reference, capture_by_clone, capture_by_move)
 
 namespace das {
     TypeDeclPtr makeExprGenFlagsFlags() {
@@ -799,6 +802,14 @@ namespace das {
         }
     };
 
+    struct AstCaptureEntryAnnotation : ManagedStructureAnnotation<CaptureEntry> {
+        AstCaptureEntryAnnotation(ModuleLibrary & ml)
+            :  ManagedStructureAnnotation<CaptureEntry> ("CaptureEntry", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(mode)>("mode");
+        }
+    };
+
     TypeDeclPtr makeExprMakeBlockFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprMakeBlockFlags";
@@ -811,6 +822,7 @@ namespace das {
             :  AstExpressionAnnotation<ExprMakeBlock> ("ExprMakeBlock", ml) {
             addField<DAS_BIND_MANAGED_FIELD(block)>("block");
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addField<DAS_BIND_MANAGED_FIELD(capture)>("capture");
             addFieldEx ( "mmFlags", "mmFlags", offsetof(ExprMakeBlock, mmFlags), makeExprMakeBlockFlags() );
         }
     };
@@ -819,6 +831,7 @@ namespace das {
         AstExprMakeGeneratorAnnotation(ModuleLibrary & ml)
             :  AstExprLooksLikeCallAnnotation<ExprMakeGenerator> ("ExprMakeGenerator", ml) {
             addField<DAS_BIND_MANAGED_FIELD(iterType)>("iterType");
+            addField<DAS_BIND_MANAGED_FIELD(capture)>("capture");
         }
     };
 
@@ -2414,6 +2427,7 @@ namespace das {
             addAlias(makeExprMakeBlockFlags());
             // ENUMS
             addEnumeration(make_smart<EnumerationSideEffects>());
+            addEnumeration(make_smart<EnumerationCaptureMode>());
             // modules
             addAnnotation(make_smart<AstModuleLibraryAnnotation>(lib));
             addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
@@ -2538,6 +2552,7 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat4 ,float4>>("ExprConstFloat4",lib))->from("ExprConst");
             addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstDouble,double>> ("ExprConstDouble",lib))->from("ExprConst");
             addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstBool,bool>> ("ExprConstBool",lib))->from("ExprConst");
+            addAnnotation(make_smart<AstCaptureEntryAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprMakeBlockAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprMakeGeneratorAnnotation>(lib))->from("ExprLooksLikeCall");
             addExpressionAnnotation(make_smart<AstExprLikeCallAnnotation<ExprMemZero>>("ExprMemZero",lib))->from("ExprLooksLikeCall");
