@@ -82,6 +82,14 @@ namespace das {
             write(&argV,sizeof(argV));
             write(argN);
         }
+        virtual void arg ( float argV,  const char * argN ) override {
+            write(&argV,sizeof(argV));
+            write(argN);
+        }
+        virtual void arg ( double argV,  const char * argN ) override {
+            write(&argV,sizeof(argV));
+            write(argN);
+        }
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * argN ) override {
             write(&count, sizeof(count));
             write(argN);

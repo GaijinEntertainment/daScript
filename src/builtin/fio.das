@@ -5,6 +5,7 @@ require fio
 typedef
     file = FILE const?
 
+[generic]
 def fopen(name:string;mode:string;blk:block<(f:file):void>)
     let f = fopen(name,mode)
     invoke(blk,f)
@@ -15,12 +16,14 @@ def fopen(name:string;mode:string;blk:block<(f:file):void>)
 def dir(path:string;blk:block<(filename:string):void>)
     builtin_dir(path,blk)
 
+[generic]
 def stat(path:string):FStat
     var fs : FStat
     if stat(path,fs)
         fs.is_valid = true
     return fs
 
+[generic]
 def fstat(f:file):FStat
     var fs : FStat
     if fstat(f,fs)

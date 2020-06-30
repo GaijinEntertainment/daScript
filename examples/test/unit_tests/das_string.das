@@ -10,7 +10,7 @@ def test
         assert(string(s)=="test_das_string")
         peek(s) <| $(st:string)
             assert(st=="test_das_string")
-        set(s,"out_of_it")
+        s := "out_of_it"
         assert("{s}"=="out_of_it")
         assert(string(s)=="out_of_it")
     return true

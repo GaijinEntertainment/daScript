@@ -96,6 +96,7 @@ bool unit_test ( const string & fn, bool useAot ) {
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
+    policies.fail_on_no_aot = true;
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
     // policies.no_unsafe = true;
@@ -121,6 +122,13 @@ bool unit_test ( const string & fn, bool useAot ) {
                 AotLibrary aotLib;
                 AotListBase::registerAot(aotLib);
                 program->linkCppAot(ctx, aotLib, tout);
+                if ( program->failed() ) {
+                    tout << "failed to link AOT\n";
+                    for ( auto & err : program->errors ) {
+                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+                    }
+                    return false;
+                }
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
                 if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {

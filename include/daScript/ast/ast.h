@@ -940,6 +940,7 @@ namespace das
         bool smart_pointer_by_value_unsafe = false;     // is passing smart_ptr by value unsafe?
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
+        bool fail_on_no_aot = true;                     // AOT link failure is error
     // debugger
         //  when enabled
         //      1. disables [fastcall]

@@ -1,12 +1,40 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/ast/ast.h"
 
 namespace das {
 
     struct SimPrint : SimVisitor {
-        SimPrint ( TextWriter & wr ) : ss(wr) {
+        Context * context = nullptr;
+        bool displayHash = true;
+        SimPrint ( TextWriter & wr, Context * ctx ) : ss(wr), context(ctx) {
         }
+        // 64 bit FNV1a
+        const uint64_t fnv_prime = 1099511628211ul;
+        uint64_t offset_basis = 14695981039346656037ul;
+        __forceinline void write ( const void * pb, uint32_t size ) {
+            const uint8_t * block = (const uint8_t *) pb;
+            while ( size-- ) {
+                offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            }
+            if ( displayHash ) {
+                ss << " " << HEX << offset_basis << DEC << " ";
+            }
+        }
+        __forceinline void write ( const void * pb ) {
+            const uint8_t * block = (const uint8_t *) pb;
+            for (; *block; block++) {
+                offset_basis = ( offset_basis ^ *block ) * fnv_prime;
+            }
+            if ( displayHash ) {
+                ss << " " <<  HEX << offset_basis << DEC << " ";
+            }
+        }
+        __forceinline uint64_t getHash() const  {
+            return (offset_basis <= 1) ? fnv_prime : offset_basis;
+        }
+        // regular print
         void crlf() {
             if ( CR ) {
                 ss << "\n" << string(tab,'\t');
@@ -31,43 +59,83 @@ namespace das {
         virtual void cr () override {
             CR = true;
         }
-        virtual void op ( const char * name, size_t typeSize, const string & typeName ) override {
+        virtual void op ( const char * name, size_t sz, const string & TT ) override {
             SimVisitor::op(name);
+            // hash
+            write(name);
+            if ( sz ) write(&sz, sizeof(sz));
+            if ( !TT.empty() ) write(TT.c_str());
+            // regular print
             ss << name;
-            if ( !typeName.empty() ) {
-                ss << "_TT<" << typeName << ">";
-            } else if ( typeSize ) {
-                ss << "_TT<(" << typeSize << ")>";
+            if ( !TT.empty() ) {
+                ss << "_TT<" << TT << ">";
+            } else if ( sz ) {
+                ss << "_TT<(" << sz << ")>";
             }
         }
-        virtual void arg ( Func argV,  const char * argN ) override {
-            SimVisitor::arg(argV,argN);
-            crlf();
-            ss << "@@" << argV.index;
-        }
-        virtual void sp ( uint32_t stackTop, const char * name ) override {
-            SimVisitor::sp(stackTop,name);
+        virtual void sp ( uint32_t stackTop, const char * op ) override {
+            SimVisitor::sp(stackTop,op);
+            // hash
+            write(&stackTop, sizeof(stackTop));
+            write(op);
+            // regular print
             crlf();
             ss << "#" << stackTop;
         }
+        virtual void arg ( Func fun,  const char * argN ) override {
+            SimVisitor::arg(fun,argN);
+            // hash
+            SimFunction * simFun = context->getFunction(fun.index - 1);
+            DAS_ASSERT(simFun);
+            write(simFun->mangledName);
+            write(argN);
+            // regular print
+            crlf();
+            ss << "@@" << fun.index << "/*" << simFun->mangledName << "*/";
+        }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
+            // hash
+            write(&argV,sizeof(argV));
+            write(argN);
+            // regular print
             crlf();
             ss << argV;
         }
         virtual void arg ( uint32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
+            // hash
+            write(&argV,sizeof(argV));
+            write(argN);
+            // regular print
             crlf();
             ss << argV;
         }
         virtual void arg ( const char * argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
+            // hash
+            if ( argV ) write(argV);
+            write(argN);
+            // regular print
             crlf();
             if ( argV ) {
                 ss << "\"" << argV << "\"";
             } else {
                 ss << "null";
             }
+        }
+        virtual void arg ( vec4f argV,  const char * argN ) override {
+            SimVisitor::arg(argV,argN);
+            // hash
+            write(&argV,sizeof(argV));
+            write(argN);
+            // regular print
+            union {
+                uint32_t    ui[4];
+                vec4f       v;
+            } X; X.v = argV;
+            crlf();
+            ss << "{" << X.ui[0] << "," << X.ui[1] << "," << X.ui[2] << "," << X.ui[3] << "}";
         }
         virtual void arg ( int64_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
@@ -76,45 +144,56 @@ namespace das {
         }
         virtual void arg ( uint64_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
-            crlf();
-            ss << argV;
-        }
-        virtual void arg ( float argV,  const char * argN ) override {
-            SimVisitor::arg(argV,argN);
-            crlf();
-            ss << argV;
-        }
-        virtual void arg ( double argV,  const char * argN ) override {
-            SimVisitor::arg(argV,argN);
+            // hash
+            write(&argV,sizeof(argV));
+            write(argN);
+            // regular print
             crlf();
             ss << argV;
         }
         virtual void arg ( bool argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
+            // hash
+            write(&argV,sizeof(argV));
+            write(argN);
+            // regular print
             crlf();
             ss << (argV ? "true" : "false");
         }
-        virtual void arg ( vec4f argV,  const char * argN ) override {
+        virtual void arg ( float argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
-            union {
-                uint32_t    ui[4];
-                vec4f       v;
-            } X; X.v = argV;
+            // hash
+            write(&argV,sizeof(argV));
+            write(argN);
+            // regular print
             crlf();
-            ss << "{" << X.ui[0] << "," << X.ui[1] << "," << X.ui[2] << "," << X.ui[3] << "}";
+            ss << argV;
         }
-
-        virtual void sub ( SimNode ** nodes, uint32_t count, const char * ) override {
-            if ( count==0 ) return;
+        virtual void arg ( double argV,  const char * argN ) override {
+            SimVisitor::arg(argV,argN);
+            // hash
+            write(&argV,sizeof(argV));
+            write(argN);
+            // regular print
+            crlf();
+            ss << argV;
+        }
+        virtual void sub ( SimNode ** nodes, uint32_t count, const char * argN ) override {
+            // mixed hash and regular print
+            write(&count, sizeof(count));
+            write(argN);
             crlf();
             for ( uint32_t t = 0; t!=count; ++t ) {
                 if ( t ) crlf();
                 nodes[t] = nodes[t]->visit(*this);
             }
         }
-        virtual SimNode * sub ( SimNode * node, const char *  ) override {
+        virtual SimNode * sub ( SimNode * node, const char * opN ) override {
+            // hash
+            write(opN);
+            // regular print
             crlf();
-            return node ? node->visit(*this) : nullptr;
+            return SimVisitor::sub(node, opN);
         }
         TextWriter & ss;
         int tab = 0;
@@ -122,9 +201,25 @@ namespace das {
         vector<bool> xcr;
     };
 
-    void printSimNode ( TextWriter & ss, SimNode * node ) {
-        SimPrint prv(ss);
+    void printSimFunction ( TextWriter & ss, Context * context, Function * fun, SimNode * node, bool debugHash ) {
+        SimPrint prv(ss,context);
+        prv.displayHash = debugHash;
+        // append return type and result type
+        if ( debugHash ) {
+            ss << "// " << fun->name << "\n";
+        }
+        string resT = fun->result->describe();
+        prv.write(resT.c_str(), uint32_t(resT.length()));
+        for ( auto & arg : fun->arguments ) {
+            string argT = arg->type->describe();
+            prv.write(argT.c_str(), uint32_t(argT.length()));
+        }
         node->visit(prv);
     }
 
+    void printSimNode ( TextWriter & ss, Context * context, SimNode * node, bool debugHash ) {
+        SimPrint prv(ss,context);
+        prv.displayHash = debugHash;
+        node->visit(prv);
+    }
 }

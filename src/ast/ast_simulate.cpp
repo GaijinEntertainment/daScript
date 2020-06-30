@@ -2552,6 +2552,7 @@ namespace das
         context.relocateCode();
         context.restart();
         // now call annotation simulate
+        das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
             for (auto & it : pm->functions) {
                 auto pfun = it.second;
@@ -2565,6 +2566,7 @@ namespace das
                             LineInfo(), CompilationError::cant_initialize);
                     }
                 }
+                indexToFunction[pfun->index] = pfun.get();
             }
         }
         // verify code and string heaps
@@ -2573,18 +2575,19 @@ namespace das
         context.stringHeap->setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
         // log all functions
         if ( options.getBoolOption("log_nodes",false) ) {
+            bool displayHash = options.getBoolOption("log_nodes_aot_hash",false);
             for ( int i=0; i!=context.totalVariables; ++i ) {
                 auto & pv = context.globalVariables[i];
                 if ( pv.init ) {
                     logs << "// init " << pv.name << "\n";
-                    printSimNode(logs, pv.init);
+                    printSimNode(logs, &context, pv.init, displayHash);
                     logs << "\n\n";
                 }
             }
             for ( int i=0; i!=context.totalFunctions; ++i ) {
                 if (SimFunction * fn = context.getFunction(i)) {
                     logs << "// " << fn->name << "\n";
-                    printSimNode(logs, fn->code);
+                    printSimFunction(logs, &context, indexToFunction[i], fn->code, displayHash);
                     logs << "\n\n";
                 }
             }
@@ -2655,12 +2658,14 @@ namespace das
 
         // make list of functions
         vector<Function *> fnn; fnn.reserve(totalFunctions);
+        das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
             for (auto & it : pm->functions) {
                 auto pfun = it.second;
                 if (pfun->index < 0 || !pfun->used)
                     continue;
                 fnn.push_back(pfun.get());
+                indexToFunction[pfun->index] = pfun.get();
             }
         }
 
@@ -2684,6 +2689,13 @@ namespace das
                     fn.aotFunction = fcb->aotFunction;
                 } else {
                     if ( logIt ) logs << "NOT FOUND " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
+                    if ( policies.fail_on_no_aot ) {
+                        TextWriter tp;
+                        tp << "semantic hash is " << HEX << semHash << DEC << "\n";
+                        printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
+                        error("AOT linking failed for " + string(fn.mangledName), tp.str(), "",
+                            LineInfo(), CompilationError::missing_aot);
+                    }
                 }
             }
         }

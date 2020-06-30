@@ -146,5 +146,6 @@ namespace das
 // integration errors
 
     ,   missing_node                            =   50100       // handled type requires simulateGetXXX
+    ,   missing_aot                             =   50101       // AOT hash function missing
     };
 }

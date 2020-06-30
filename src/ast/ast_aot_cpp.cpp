@@ -685,7 +685,9 @@ namespace das {
 
     string aotFuncName ( Function * func ) {
         if ( func->hash ) {
-            return aotFuncNameEx(func->name) + "_" + to_string(func->hash);
+            TextWriter tw;
+            tw << aotFuncNameEx(func->name) << "_" << HEX << func->hash << DEC;
+            return tw.str();
         } else {
             return aotFuncNameEx(func->name);
         }

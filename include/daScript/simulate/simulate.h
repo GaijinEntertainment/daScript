@@ -172,7 +172,9 @@ namespace das
         virtual SimNode * visit ( SimNode * node ) { return node; }
     };
 
-    void printSimNode ( TextWriter & ss, SimNode * node );
+    void printSimNode ( TextWriter & ss, Context * context, SimNode * node, bool debugHash=false );
+    class Function;
+    void printSimFunction ( TextWriter & ss, Context * context, Function * fun, SimNode * node, bool debugHash=false );
     uint64_t getSemanticHash ( SimNode * node, Context * context );
 
     class Context {

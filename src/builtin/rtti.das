@@ -88,6 +88,7 @@ def class_info ( cl ) : StructInfo const?
         concept_assert(false,"not a class")
         return null
 
+[generic]
 def RttiValue_nothing
     var t : RttiValue
     unsafe
