@@ -205,7 +205,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_GetBlockArgumentR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(GetBlockArgument);
+        V_OP_TT(GetBlockArgumentR2V);
         subexpr.visit(vis);
         V_END();
     }
