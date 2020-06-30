@@ -241,8 +241,12 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 #endif
 }
 
-bool run_unit_tests( const string & path ) {
-    return run_tests(path, unit_test, false) && run_tests(path, unit_test, true);
+bool run_unit_tests( const string & path, bool check_aot = false ) {
+    if ( check_aot ) {
+        return run_tests(path, unit_test, false) && run_tests(path, unit_test, true);
+    } else {
+        return run_tests(path, unit_test, false);
+    }
 }
 
 bool run_compilation_fail_tests( const string & path ) {
@@ -419,7 +423,7 @@ int main( int argc, char * argv[] ) {
     uint64_t timeStamp = ref_time_ticks();
     bool ok = true;
     ok = run_compilation_fail_tests(getDasRoot() + "/examples/test/compilation_fail_tests") && ok;
-    ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests") && ok;
+    ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests", true) && ok;
     ok = run_unit_tests(getDasRoot() +  "/examples/test/optimizations") && ok;
     ok = run_exception_tests(getDasRoot() +  "/examples/test/runtime_errors") && ok;
     ok = run_module_test(getDasRoot() +  "/examples/test/module", "main.das", true) && ok;
