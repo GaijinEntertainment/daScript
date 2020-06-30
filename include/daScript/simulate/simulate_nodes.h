@@ -46,8 +46,9 @@ namespace das {
                 };
                 uint32_t    offset;
             };
+            vec4f __dummy = v_zero();
         };
-        SimSourceType   type;
+        SimSourceType   type = SimSourceType::sSimNode;
         union {
             struct {
                 bool    isStringConstant : 1;
