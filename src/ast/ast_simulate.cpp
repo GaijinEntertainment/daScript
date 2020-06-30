@@ -2650,6 +2650,16 @@ namespace das
             }
         }
         uint64_t res = getVariableListAotHash(globs, initHash);
+        // add init functions to dependencies
+        const uint64_t fnv_prime = 1099511628211ul;
+        for (auto& pm : library.modules) {
+            for (auto& it : pm->functions) {
+                auto pfun = it.second;
+                if (pfun->index < 0 || !pfun->used || !pfun->init)
+                    continue;
+                res = (res ^ pfun->aotHash) * fnv_prime;
+            }
+        }
         return res;
     }
 
