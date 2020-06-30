@@ -94,6 +94,7 @@ class TagFunctionAnnotation : AstFunctionAnnotation
             if !(val is tBool)
                 errors := "tag_function annotation expects only tag names"
                 return false
+        func.flags |= FunctionFlags exports
         return true
 
 class TagStructureAnnotation : AstStructureAnnotation
@@ -105,7 +106,7 @@ class TagStructureAnnotation : AstStructureAnnotation
                 return false
         return true
 
-[private]
+[private,export]
 def for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:FunctionPtr):void> )
     for_each_function(mod, "") <| $ ( func )
         for ann in func.annotations
@@ -127,7 +128,7 @@ def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
             return get_annotation_argument_value(a)
     return RttiValue_nothing()
 
-[private]
+[private,export]
 def apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
     for_each_tag_function(this_module(), tag) <| $ ( func )
         add_function_annotation(func, ann)
