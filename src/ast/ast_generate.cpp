@@ -482,7 +482,7 @@ namespace das {
     }
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls, const das_safe_set<VariablePtr> & capt,
+                                        const StructurePtr & ls, const safe_var_set & capt,
                                         const vector<CaptureEntry> & capture, bool needYield ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
@@ -543,7 +543,7 @@ namespace das {
     }
 
     StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block,
-                                       const das_safe_set<VariablePtr> & capt,
+                                       const safe_var_set & capt,
                                        const vector<CaptureEntry> & capture, bool needYield ) {
         auto lsn = lambdaName;
         auto pStruct = make_smart<Structure>(lsn);
@@ -612,7 +612,7 @@ namespace das {
     }
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
-                                            const das_safe_set<VariablePtr> & capt, const vector<CaptureEntry> & capture, const LineInfo & at ) {
+                                            const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at ) {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;

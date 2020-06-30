@@ -248,6 +248,14 @@ namespace das
         AnnotationArgumentList  annotation;
     };
 
+    struct VarLessPred {
+        __forceinline bool operator () ( const VariablePtr & a, const VariablePtr & b ) const {
+            return a->name < b->name;
+        }
+    };
+
+    typedef das_safe_set<VariablePtr,VarLessPred> safe_var_set;
+
     struct ExprBlock;
     struct ExprCallFunc;
 

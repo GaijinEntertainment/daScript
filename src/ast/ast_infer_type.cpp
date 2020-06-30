@@ -21,9 +21,9 @@ namespace das {
                 }
             }
         }
-        das_safe_set<VariablePtr>    scope;
-        das_safe_set<VariablePtr>    capt;
-        bool                fail = false;
+        safe_var_set    scope;
+        safe_var_set    capt;
+        bool            fail = false;
     };
 
 // type inference
