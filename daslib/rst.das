@@ -65,7 +65,7 @@ def describe_type_short(td:TypeDecl?)
         return describe_type_short(reinterpret<TypeDeclPtr> td)
 
 def describe_type_short(td:TypeDeclPtr)
-    if !empty(td.alias) & !td.isAuto & !td.isAlias
+    if !empty(td.alias) && !td.isAuto && !td.isAlias
         return string(td.alias)
     let tp = describe(td,false,false,false)
     return replace(tp,"$::","")
@@ -76,7 +76,7 @@ def describe_type(td:TypeDecl?)
 
 def describe_type(td:TypeDeclPtr)
     return build_string() <| $ (var writer)
-        if !empty(td.alias) & !td.isAuto & !td.isAlias
+        if !empty(td.alias) && !td.isAuto && !td.isAlias
             write(writer,make_ref(alias_label_name(td),string(td.alias)))
             return
         let baseType = td.baseType
@@ -93,7 +93,7 @@ def describe_type(td:TypeDeclPtr)
             write(writer,make_ref(handle_label_name(td.annotation),"{module_name(td.annotation._module)}::{td.annotation.name}"))
         elif baseType==Type tStructure
             write(writer,make_ref(struct_label_name(td.structType),"{module_name(td.structType._module)}::{td.structType.name}"))
-        elif baseType==Type tEnumeration | baseType==Type tEnumeration8 | baseType==Type tEnumeration16
+        elif baseType==Type tEnumeration || baseType==Type tEnumeration8 || baseType==Type tEnumeration16
             write(writer,make_ref(enum_label_name(td.enumType),"{module_name(td.enumType._module)}::{td.enumType.name}"))
         elif baseType==Type tPointer
             if td.flags.smartPtr
@@ -123,7 +123,7 @@ def describe_type(td:TypeDeclPtr)
                 write(writer,"<")
                 write(writer,describe_type(td.firstType))
                 write(writer,">")
-        elif baseType==Type tBlock | baseType==Type tFunction | baseType==Type tLambda
+        elif baseType==Type tBlock || baseType==Type tFunction || baseType==Type tLambda
             write(writer,das_to_string(baseType))
             write(writer,"<")
             if td.argTypes.length!=0
@@ -151,7 +151,7 @@ def describe_type(td:TypeDeclPtr)
                     write(writer,":")
                     write(writer,describe_type(td.firstType))
             write(writer,">")
-        elif baseType==Type tTuple | baseType==Type tVariant
+        elif baseType==Type tTuple || baseType==Type tVariant
             write(writer,das_to_string(baseType))
             write(writer,"<")
             if td.argTypes.length!=0
@@ -246,7 +246,7 @@ def make_table(tab:array<array<string>>;withHeader:bool=false)
             for x in range(0,cols)
                 wid[x] = max(wid[x], length(cc[x]))
         for ccc,idx in tab,range(0,100500)
-            write_table_separator(writer,wid,(idx==1 & withHeader) ? "=" : "-")
+            write_table_separator(writer,wid,(idx==1 && withHeader) ? "=" : "-")
             write_table_line(writer,ccc,wid)
         write_table_separator(writer,wid)
         write(writer,"\n\n")
@@ -405,7 +405,7 @@ def document_class_method(doc_file:file;mod:Module?;value;fld)
     let argTypes <- [{for arg in fld._type.argTypes; get_ptr(arg)}]
     document_function_declaration(doc_file,"das:function","{value.name}.{fld.name}",
         argNames,argTypes,fld._type.firstType)
-    if fld._type.firstType != null & !fld._type.firstType.isVoid
+    if fld._type.firstType != null && !fld._type.firstType.isVoid
         fwrite(doc_file,"{fld.name} returns {describe_type(fld._type.firstType)}\n\n")
     if length(argTypes) > 1
         document_function_arguments(doc_file,argNames,argTypes)
@@ -431,16 +431,16 @@ def document_classes(doc_file:file;mod:Module?)
         document_topic(doc_file,topic("class",mod,string(value.name)))
         var w  = 0
         for fld in value.fields
-            if !is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
+            if !is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
                 w = max(w,length(fld.name))
         if w != 0
             fwrite(doc_file,"it defines as follows\n\n")
             for fld in value.fields
-                if !is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
+                if !is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
                     fwrite(doc_file,"  {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
             fwrite(doc_file,"\n")
         for fld in value.fields
-            if is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
+            if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
                 document_class_method(doc_file,mod,value,fld)
 
 def document_structure(doc_file:file;mod:Module?;value:StructurePtr)
@@ -463,14 +463,14 @@ def document_structure(doc_file:file;mod:Module?;value:StructurePtr)
 def document_structures(doc_file:file;mod:Module?)
     var any = false
     for_each_structure(mod) <| $(value)
-        if value.flags.isClass | value.flags.generated
+        if value.flags.isClass || value.flags.generated
             return
         any = true
     if !any
         return
     make_group("Structures")
     for_each_structure(mod) <| $(value)
-        if value.flags.isClass | value.flags.generated
+        if value.flags.isClass || value.flags.generated
             return
         document_structure(doc_file,mod,value)
 
@@ -533,14 +533,14 @@ def document_annotation(doc_file:file;mod:Module?;value)
 def document_annotations(doc_file:file;mod:Module?)
     var any = false
     module_for_each_annotation(mod) <| $(value)
-        if !value.isTypeAnnotation | value.isBasicStructureAnnotation
+        if !value.isTypeAnnotation || value.isBasicStructureAnnotation
             return
         any = true
     if !any
         return
     fwrite(doc_file,make_group("Handled types"))
     module_for_each_annotation(mod) <| $(value)
-        if !value.isTypeAnnotation | value.isBasicStructureAnnotation
+        if !value.isTypeAnnotation || value.isBasicStructureAnnotation
             return
         document_annotation(doc_file,mod,value)
 
@@ -562,7 +562,7 @@ def function_needs_documenting(func:FunctionPtr)
     if isBuiltin
         peek(func.name) <| $(name)
             let ch = character_at(name,0)
-            if !is_alpha(ch) & !is_number(ch) & ch!='_'
+            if !is_alpha(ch) && !is_number(ch) && ch!='_'
                 isOperator = true
     if isOperator
         return false
@@ -570,7 +570,7 @@ def function_needs_documenting(func:FunctionPtr)
     var isTypeConstructor = false
     if isBuiltin
         peek(func.name) <| $(name)
-            if func.result!=null & func.result.isCtorType
+            if func.result!=null && func.result.isCtorType
                 let tname = das_to_string(func.result.baseType)
                 if name == tname
                     isTypeConstructor = true
@@ -579,7 +579,7 @@ def function_needs_documenting(func:FunctionPtr)
     // skip ones starting with _builtin or __builtin
     var isBuiltinName = false
     peek(func.name) <| $(name)
-        if starts_with(name,"_builtin") | starts_with(name,"__builtin")
+        if starts_with(name,"_builtin") || starts_with(name,"__builtin")
             isBuiltinName = true
     if isBuiltinName
         return false
@@ -592,7 +592,7 @@ def document_warning(doc_file:file;issue:string)
 def function_name ( name : string )
     if !empty(name)
         let ch = character_at(name,0)
-        if ch!='_' & !is_alpha(ch)
+        if ch!='_' && !is_alpha(ch)
             return "operator {name}"
     return name
 
@@ -602,7 +602,7 @@ def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
     fwrite(doc_file,make_label(function_label_name(func)))
     document_function_declaration(doc_file,"das:function",function_name(string(func.name)),
         argNames,argTypes,func.result)
-    if func.result != null & !func.result.isVoid
+    if func.result != null && !func.result.isVoid
         fwrite(doc_file,"{func.name} returns {describe_type(func.result)}\n\n")
     if func.flags.unsafeOperation
         document_warning(doc_file,"This is unsafe operation.")
@@ -613,7 +613,7 @@ def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
     var tab : table<Function?;bool>
     for grp in groups
         if length(grp.func) != 0
-            if !show_hidden_groups & grp.hidden
+            if !show_hidden_groups && grp.hidden
                 for func in grp.func
                     tab[func] = true
             else
@@ -711,7 +711,7 @@ def generate_substitute_stub(mod:Module?;substname:string)
                     // classes and methods
                     generate_topic_stub(tab,stub_file,topic("class",mod,string(value.name)))
                     for fld in value.fields
-                        if is_class_method(value,fld._type) & !(fld.flags.generated) & !(fld.flags.parentType)
+                        if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
                             generate_topic_stub(tab,stub_file,topic("method",mod,"{value.name}.{fld.name}"))
                 elif !value.flags.generated
                     // structures

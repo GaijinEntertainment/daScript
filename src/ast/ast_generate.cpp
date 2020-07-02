@@ -1132,7 +1132,7 @@ namespace das {
             cbif->generated = true;
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, srcName));
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, pVarName));
-            auto lande = make_smart<ExprOp2>(expr->at,"&=",
+            auto lande = make_smart<ExprOp2>(expr->at,"&&=",
                                               make_smart<ExprVar>(expr->at,loopVar),cbif);
             blk->list.push_back(lande);
         }
@@ -1160,7 +1160,7 @@ namespace das {
             cbif->generated = true;
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, srcName));
             cbif->arguments.push_back(make_smart<ExprVar>(expr->at, pVarName));
-            auto lande = make_smart<ExprOp2>(expr->at,"&=",
+            auto lande = make_smart<ExprOp2>(expr->at,"&&=",
                                               make_smart<ExprVar>(expr->at,loopVar),cbif);
             blk->list.push_back(lande);
         }

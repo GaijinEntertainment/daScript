@@ -13,7 +13,7 @@ def module_default(req,from:string) : module_info
     let mod_name = rs[length(rs)-1]
     if length(fr)==0
         return [[auto mod_name, req + ".das", ""]]
-    elif length(fr)==1 & fr[0]=="daslib"
+    elif length(fr)==1 && fr[0]=="daslib"
         return [[auto mod_name, "{get_das_root()}/daslib/{req}.das", ""]]
     else
         pop(fr)

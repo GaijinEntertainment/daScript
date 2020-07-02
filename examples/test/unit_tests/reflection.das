@@ -44,14 +44,14 @@ def describeType(info)
         res = string(info.annotation.name)
     elif info.basicType==Type tStructure
         res = info.structType?.name ?? "structure"
-    elif info.basicType==Type tEnumeration | info.basicType==Type tEnumeration8 | info.basicType==Type tEnumeration16
+    elif info.basicType==Type tEnumeration || info.basicType==Type tEnumeration8 || info.basicType==Type tEnumeration16
         res = info.enumType?.name ?? "enumeration"
     elif info.basicType==Type tPointer
         res = info.firstType!=null ? "{describeType(*(info.firstType))}?" : "void?"
     elif info.basicType==Type tArray
         res = info.firstType!=null ? "array<{describeType(*(info.firstType))}>" : "array"
     elif info.basicType==Type tTable
-        if info.firstType!=null & info.secondType!=null
+        if info.firstType!=null && info.secondType!=null
             res = "table<{describeType(deref(info.firstType))};{describeType(deref(info.secondType))}>"
         else
             res = "table"
@@ -61,11 +61,11 @@ def describeType(info)
         else
             res += "tuple"
     elif info.basicType==Type tVariant
-        if info.argTypes!=null & info.argNames!=null
+        if info.argTypes!=null && info.argNames!=null
             res = "variant<" +  join([{for argname,argtype in arg_names(info),arg_types(info); "{argname}:{describeType(argtype)}"}],";") + ">"
         else
             res += "variant"
-    elif info.basicType==Type tFunction | info.basicType==Type tLambda | info.basicType==Type tBlock
+    elif info.basicType==Type tFunction || info.basicType==Type tLambda || info.basicType==Type tBlock
         res = "{get_das_type_name(info.basicType)}<"
         if info.argTypes!=null
             res += "(" + join([{for argtype in arg_types(info); describeType(argtype)}],";") + ")"

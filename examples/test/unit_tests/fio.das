@@ -20,6 +20,6 @@ def test:bool
             loaded = true
     assert(saved)
     assert(loaded)
-    assert(foo0.a==foo1.a & foo0.b==foo1.b)
+    assert(foo0.a==foo1.a && foo0.b==foo1.b)
     return true
 

@@ -57,17 +57,17 @@ def test
     // e0
     let e0 <- split("/","/")
     assert(length(e0)==2)
-    assert(e0[0]=="" & e0[1]=="")
+    assert(e0[0]=="" && e0[1]=="")
     // e1
     let e1 <- split("/1","/")
     assert(length(e1)==2)
-    assert(e1[0]=="" & e1[1]=="1")
+    assert(e1[0]=="" && e1[1]=="1")
     // e2
     let e2 <- split("1/","/")
     assert(length(e2)==2)
-    assert(e2[0]=="1" & e2[1]=="")
+    assert(e2[0]=="1" && e2[1]=="")
     // e3
     let e3 <- split("1/2/3","/")
     assert(length(e3)==3)
-    assert(e3[0]=="1" & e3[1]=="2" & e3[2]=="3")
+    assert(e3[0]=="1" && e3[1]=="2" && e3[2]=="3")
     return true

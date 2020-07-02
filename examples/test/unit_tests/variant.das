@@ -76,8 +76,8 @@ def test
 
     var t2 = [[U_F i_value=1u; f_value=2.0]]
     assert(length(t2)==2)
-    assert(t2[0] is i_value & t2[0] as i_value==1u)
-    assert(t2[1] is f_value & t2[1] as f_value==2.0)
+    assert(t2[0] is i_value && t2[0] as i_value==1u)
+    assert(t2[1] is f_value && t2[1] as f_value==2.0)
 
     var f : Foo
     var fp : Foo?

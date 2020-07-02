@@ -17,7 +17,7 @@ def is_json_ptr_value ( td : TypeDeclPtr )
     if td.firstType.baseType != Type tStructure
         return false
     let st = td.firstType.structType
-    if "{st.name}" != "JsonValue" & "{st._module.name}" != "json"
+    if "{st.name}" != "JsonValue" && "{st._module.name}" != "json"
         return false
     return true
 

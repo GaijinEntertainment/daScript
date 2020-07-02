@@ -1360,7 +1360,7 @@ namespace das {
         }
     // op2
         bool isSetBool ( ExprOp2 * that ) const {
-            return (that->op=="|=" || that->op=="&=") && that->right->type->isSimpleType(Type::tBool);
+            return (that->op=="||=" || that->op=="&&=") && that->right->type->isSimpleType(Type::tBool);
         }
         bool isOpPolicy ( ExprOp2 * that ) const {
             if ( isalpha(that->op[0]) ) return true;
@@ -1393,6 +1393,10 @@ namespace das {
                 || (that->op == "&=")
                 || (that->op == "|=")
                 || (that->op == "^=")
+                // bool
+                || (that->op == "&&=")
+                || (that->op == "||=")
+                || (that->op == "^^=")
                 // rotational
                 || (that->op == "<<=")
                 || (that->op == ">>=")
@@ -1426,8 +1430,8 @@ namespace das {
                     }
                 }
             } else if ( isSetBool(that) ) {
-                if ( that->op=="|=" ) ss << "DAS_SETBOOLOR((";
-                else if ( that->op=="&=" ) ss << "DAS_SETBOOLAND((";
+                if ( that->op=="||=" ) ss << "DAS_SETBOOLOR((";
+                else if ( that->op=="&&=" ) ss << "DAS_SETBOOLAND((";
             }
         }
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {

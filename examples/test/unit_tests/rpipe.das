@@ -1,5 +1,5 @@
 def addX(a,b)
-    assert(b==2 | b==3)
+    assert(b==2 || b==3)
     return a + b
 
 [export]

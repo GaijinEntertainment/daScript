@@ -130,7 +130,7 @@ def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
             var t = nb - discrSq
             if t<=tMin
                 t = nb + discrSq
-            if t>tMin & t<hitT
+            if t>tMin && t<hitT
                 id = i
                 hitT = t
         ++ i
@@ -166,7 +166,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         var hitID = 0
         ++inoutRayCount
         let ray = [[Ray orig=rec.pos, dir=l]]
-        if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) & hitID==LIGHT_SPHERE_ID
+        if hitWorld(ray,kMinT,kMaxT,lightHit,hitID) && hitID==LIGHT_SPHERE_ID
             let nl = dot(rec.normal,r_in.dir) < 0. ? rec.normal : -rec.normal
             outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( saturate(dot(l,nl))*mad(-2.,cosAMax,2.) )
         return true
@@ -209,7 +209,7 @@ def trace(r:Ray;depth:int;var inoutRayCount:int&;var doMaterialE:bool = true)
         var lightE : float3
         let mat : Material & = s_SphereMats[id]
         var matE = mat.emissive
-        if depth<kMaxDepth & scatter(mat,r,rec,attenuation,scattered,lightE,inoutRayCount)
+        if depth<kMaxDepth && scatter(mat,r,rec,attenuation,scattered,lightE,inoutRayCount)
             if !doMaterialE
                 matE = float3(0)
             doMaterialE = mat.mtype != Type Lambert

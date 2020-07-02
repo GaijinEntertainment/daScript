@@ -4,10 +4,10 @@ def test_vec2(a:auto(vec2) -const -&)
     var f2_x  = vec2(1,2)
     let x : auto(numT) = f2_x[0]
     assert("{f2_x}"=="1,2")
-    assert(f2_x[0]==numT(1) & f2_x[1]==numT(2))
+    assert(f2_x[0]==numT(1) && f2_x[1]==numT(2))
     f2_x[0] = numT(2)
     f2_x[1] = numT(3)
-    assert(f2_x[0]==numT(2) & f2_x[1]==numT(3))
+    assert(f2_x[0]==numT(2) && f2_x[1]==numT(3))
     var oor = false
     try
         f2_x[-1] = numT(5)
@@ -26,11 +26,11 @@ def test_vec3(a:auto(vec3) -const -&)
     var f3_x  = vec3(1,2,3)
     let x : auto(numT) = f3_x[0]
     assert("{f3_x}"=="1,2,3")
-    assert(f3_x[0]==numT(1) & f3_x[1]==numT(2) & f3_x[2]==numT(3))
+    assert(f3_x[0]==numT(1) && f3_x[1]==numT(2) && f3_x[2]==numT(3))
     f3_x[0] = numT(2)
     f3_x[1] = numT(3)
     f3_x[2] = numT(4)
-    assert(f3_x[0]==numT(2) & f3_x[1]==numT(3) & f3_x[2]==numT(4))
+    assert(f3_x[0]==numT(2) && f3_x[1]==numT(3) && f3_x[2]==numT(4))
     var oor = false
     try
         f3_x[-1] = numT(5)
@@ -48,12 +48,12 @@ def test_vec4(a:auto(vec4) -const -&)
     var f4_x  = vec4(1,2,3,4)
     let x : auto(numT) = f4_x[0]
     assert("{f4_x}"=="1,2,3,4")
-    assert(f4_x[0]==numT(1) & f4_x[1]==numT(2) & f4_x[2]==numT(3) & f4_x[3]==numT(4))
+    assert(f4_x[0]==numT(1) && f4_x[1]==numT(2) && f4_x[2]==numT(3) && f4_x[3]==numT(4))
     f4_x[0] = numT(2)
     f4_x[1] = numT(3)
     f4_x[2] = numT(4)
     f4_x[3] = numT(5)
-    assert(f4_x[0]==numT(2) & f4_x[1]==numT(3) & f4_x[2]==numT(4) & f4_x[3]==numT(5))
+    assert(f4_x[0]==numT(2) && f4_x[1]==numT(3) && f4_x[2]==numT(4) && f4_x[3]==numT(5))
     var oor = false
     try
         f4_x[-1] = numT(5)

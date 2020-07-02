@@ -304,7 +304,7 @@ Internal clone infrastructure
 .. warning:: 
   This group of functions is hidden. It will not be in the final documentation.
 
-  *  :ref:`clone (a:$::das_string -const;b:string const) : void <function-_at__builtin__c__c_clone__hh_handle_hh_das_string_string_hh_const>` 
+  *  :ref:`clone (arg0:$::das_string implicit;arg1:string const) : void <function-_at__builtin__c__c_clone__hh_handle_hh_das_string_hh_implicit_string_hh_const>` 
   *  :ref:`clone_string (arg0:string const;arg1: const) : string <function-_at__builtin__c__c_clone_string_string_hh_const__hh_const>` 
   *  :ref:`clone (a:array\<auto(TT)\> -const;b:array\<TT\> const) : auto <function-_at__builtin__c__c_clone__hh_array_hh__hh_auto__hh_array_hh__hh_alias_hh_TT_hh_const>` 
   *  :ref:`clone (a:array\<auto(TT)\> -const;b:array\<TT\> const#) : auto <function-_at__builtin__c__c_clone__hh_array_hh__hh_auto__hh_array_hh__hh_alias_hh_TT_hh_const_hh_temporary>` 
@@ -314,17 +314,17 @@ Internal clone infrastructure
   *  :ref:`clone_dim (a:auto -const;b:auto const#) : auto <function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const_hh_temporary>` 
   *  :ref:`clone_to_move (clone_src:auto(TT) const) : TT -const <function-_at__builtin__c__c_clone_to_move__hh_auto_hh_const>` 
 
-.. _function-_at__builtin__c__c_clone__hh_handle_hh_das_string_string_hh_const:
+.. _function-_at__builtin__c__c_clone__hh_handle_hh_das_string_hh_implicit_string_hh_const:
 
-.. das:function:: clone(a: das_string; b: string const)
+.. das:function:: clone(arg0: das_string implicit; arg1: string const)
 
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+a       + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+--------+--------------------------------------------------------+
-+b       +string const                                            +
-+--------+--------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++arg0    + :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
++--------+-----------------------------------------------------------------+
++arg1    +string const                                                     +
++--------+-----------------------------------------------------------------+
 
 
 |function-builtin-clone|
@@ -1447,7 +1447,6 @@ das::string manipulation
 ++++++++++++++++++++++++
 
   *  :ref:`peek (arg0:$::das_string const implicit;arg1:block\<(string const#):void\> const implicit;arg2: const) : void <function-_at__builtin__c__c_peek__hh_handle_hh_das_string_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`set (arg0:$::das_string implicit;arg1:string const) : void <function-_at__builtin__c__c_set__hh_handle_hh_das_string_hh_implicit_string_hh_const>` 
 
 .. _function-_at__builtin__c__c_peek__hh_handle_hh_das_string_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const:
 
@@ -1463,21 +1462,6 @@ das::string manipulation
 
 
 |function-builtin-peek|
-
-.. _function-_at__builtin__c__c_set__hh_handle_hh_das_string_hh_implicit_string_hh_const:
-
-.. das:function:: set(arg0: das_string implicit; arg1: string const)
-
-+--------+-----------------------------------------------------------------+
-+argument+argument type                                                    +
-+========+=================================================================+
-+arg0    + :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
-+--------+-----------------------------------------------------------------+
-+arg1    +string const                                                     +
-+--------+-----------------------------------------------------------------+
-
-
-|function-builtin-set|
 
 ++++++++++++++
 Heap reporting

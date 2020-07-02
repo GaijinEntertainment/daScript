@@ -267,6 +267,13 @@
 %token  ROTREQU             ">>>="
 %token  MAPTO               "=>"
 %token  COLCOL              "::"
+%token  ANDAND              "&&"
+%token  OROR                "||"
+%token  XORXOR              "^^"
+%token  ANDANDEQU           "&&="
+%token  OROREQU             "||="
+%token  XORXOREQU           "^^="
+
 
 %token  BRABRAB             "[["    /* [[ */
 %token  BRACBRB             "[{"    /* [{ */
@@ -406,8 +413,11 @@
 /* operation precedence*/
 %left       ','
 %nonassoc    MAPTO
-%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU ROTLEQU ROTREQU
+%right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU ROTLEQU ROTREQU ANDANDEQU XORXOREQU OROREQU
 %right      '?' ':'
+%left       OROR
+%left       XORXOR
+%left       ANDAND
 %left       '|'
 %left       '^'
 %left       '&'
@@ -881,6 +891,12 @@ function_name
     |   DAS_OPERATOR ANDEQU  { $$ = new string("&="); }
     |   DAS_OPERATOR OREQU   { $$ = new string("|="); }
     |   DAS_OPERATOR XOREQU  { $$ = new string("^="); }
+    |   DAS_OPERATOR ANDANDEQU  { $$ = new string("&&="); }
+    |   DAS_OPERATOR OROREQU    { $$ = new string("||="); }
+    |   DAS_OPERATOR XORXOREQU  { $$ = new string("^^="); }
+    |   DAS_OPERATOR ANDAND  { $$ = new string("&&"); }
+    |   DAS_OPERATOR OROR    { $$ = new string("||"); }
+    |   DAS_OPERATOR XORXOR  { $$ = new string("^^"); }
     |   DAS_OPERATOR '+'     { $$ = new string("+"); }
     |   DAS_OPERATOR '-'     { $$ = new string("-"); }
     |   DAS_OPERATOR '*'     { $$ = new string("*"); }
@@ -1382,6 +1398,9 @@ expr_assign
     |   expr[left] ANDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"&=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] OREQU[loc] expr[right]    { $$ = new ExprOp2(tokAt(@loc),"|=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] XOREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"^=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ANDANDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"&&=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] OROREQU[loc] expr[right]     { $$ = new ExprOp2(tokAt(@loc),"||=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] XORXOREQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"^^=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] ADDEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"+=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] SUBEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"-=", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] MULEQU[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"*=", ExpressionPtr($left), ExpressionPtr($right)); }
@@ -1493,6 +1512,9 @@ expr
     |   expr[left] '&'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),"&", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '|'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),"|", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] '^'[loc] expr[right]      { $$ = new ExprOp2(tokAt(@loc),"^", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ANDAND[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"&&", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] OROR[loc] expr[right]     { $$ = new ExprOp2(tokAt(@loc),"||", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] XORXOR[loc] expr[right]   { $$ = new ExprOp2(tokAt(@loc),"^^", ExpressionPtr($left), ExpressionPtr($right)); }
     |   ADDADD[loc] expr[subexpr] %prec PRE_INC  { $$ = new ExprOp1(tokAt(@loc),"++", ExpressionPtr($subexpr)); }
     |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(@loc),"--", ExpressionPtr($subexpr)); }
     |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(@loc),"+++", ExpressionPtr($subexpr)); }

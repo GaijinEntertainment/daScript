@@ -51,7 +51,7 @@ def test:bool
         twice({ a++; })
         assert(a==2)
         b = twice_good() <| { return a++; }
-        assert(a==4 & b==(2+3))
+        assert(a==4 && b==(2+3))
         b = twice_good() <|
             return a++
         assert(b==(4+5))
@@ -70,7 +70,7 @@ def test:bool
             func4() <|
                 x++
                 y += 4
-        assert(x==3 & y==9)
+        assert(x==3 && y==9)
     if true
         var v1 = 1
         var res = badd(1000,$(a1:int):int{ return v1++ + a1; })
@@ -88,6 +88,6 @@ def test:bool
         v1 = 3
         res = radd(v1) <| $(var a:int&):int
             return a++
-        assert(res==3 & v1==4)
+        assert(res==3 && v1==4)
     return true
 

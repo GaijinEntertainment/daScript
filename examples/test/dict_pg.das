@@ -1,4 +1,5 @@
 require fio
+require strings
 
 [export]
 def test

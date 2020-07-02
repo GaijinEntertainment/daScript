@@ -1,23 +1,13 @@
-struct Foo
-	dummy : int
+def r_true(a:int)
+	print("{a} - true\n")
+	return true
 
-var
-	g_counter = 0
+def r_false(a:int)
+	print("{a} - false\n")
+	return false
 
-def finalize ( f : Foo )
-	g_counter ++
 
 [export]
 def test
-	var pA = new Foo
-	var pB = new Foo
-	var C = [[Foo]]
-	var lam <- @ <| [[<-pB,:=pC]]
-		assert(pA.dummy==0)
-		assert(pB.dummy==0)
-		assert(C.dummy==0)
-	assert ( pB==null )
-	invoke(lam)
-	delete lam
-	assert(g_counter==2)	// b and c were deleted, a stayed do to copy, not move, not clone
+	let t = r_false(1) && r_true(2)
 	return true

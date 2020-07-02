@@ -24,17 +24,17 @@ def test_native
     assert(idummy==1)
     a = new TestObjectFooNative
     a?.fooData ?? idummy = 2
-    assert(a.fooData==2 & idummy==1)
+    assert(a.fooData==2 && idummy==1)
     b?.barData ?? fdummy = 1.0
     assert(fdummy==1.0)
     b = new TestObjectBarNative
     b?.barData ?? fdummy = 2.0
-    assert(b.barData==2.0 & fdummy==1.0)
+    assert(b.barData==2.0 && fdummy==1.0)
     b?.fooPtr?.fooData ?? idummy = 3
     assert(idummy==3)
     b.fooPtr = a
     b?.fooPtr?.fooData ?? idummy = 4
-    assert(b.fooPtr.fooData==4 & idummy==3)
+    assert(b.fooPtr.fooData==4 && idummy==3)
 
 [sideeffects]
 def test_handled
@@ -46,17 +46,17 @@ def test_handled
     assert(idummy==1)
     a = new TestObjectFoo
     a?.fooData ?? idummy = 2
-    assert(a.fooData==2 & idummy==1)
+    assert(a.fooData==2 && idummy==1)
     b?.barData ?? fdummy = 1.0
     assert(fdummy==1.0)
     b = new TestObjectBar
     b?.barData ?? fdummy = 2.0
-    assert(b.barData==2.0 & fdummy==1.0)
+    assert(b.barData==2.0 && fdummy==1.0)
     b?.fooPtr?.fooData ?? idummy = 3
     assert(idummy==3)
     b.fooPtr = a
     b?.fooPtr?.fooData ?? idummy = 4
-    assert(b.fooPtr.fooData==4 & idummy==3)
+    assert(b.fooPtr.fooData==4 && idummy==3)
     a.fooData = 7
     assert(a.propAdd13==20)
     assert(b.getFoo.fooData==7)

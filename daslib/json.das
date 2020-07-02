@@ -71,15 +71,15 @@ def _lexer ( var stext : string )
         var ahead : int = ' '
         var str : array<uint8>
         while !empty(tin)
-            while is_white_space(ahead) & next(tin,ahead)
+            while is_white_space(ahead) && next(tin,ahead)
                 pass
             if empty(tin)
                 return false
-            if ahead=='[' | ahead==']' | ahead=='{' | ahead=='}' | ahead==':' | ahead==','
+            if ahead=='[' || ahead==']' || ahead=='{' || ahead=='}' || ahead==':' || ahead==','
                 yield [[Token _symbol=ahead]]
                 next(tin, ahead)
             elif ahead=='"'
-                while next(tin,ahead) & ahead!='"'
+                while next(tin,ahead) && ahead!='"'
                     if ahead == '\\'
                         if next(tin,ahead)
                             if ahead=='b'
@@ -104,13 +104,13 @@ def _lexer ( var stext : string )
                 yield [[Token _string = string(str)]]
                 clear(str)
                 next(tin, ahead)
-            elif ahead=='+' | ahead=='-' | is_number(ahead)
+            elif ahead=='+' || ahead=='-' || is_number(ahead)
                 push(str,uint8(ahead))
-                while next(tin,ahead) & is_number(ahead)
+                while next(tin,ahead) && is_number(ahead)
                     push(str,uint8(ahead))
-                if !empty(tin) & ahead=='.'
+                if !empty(tin) && ahead=='.'
                     push(str,uint8(ahead))
-                    while next(tin,ahead) & is_number(ahead)
+                    while next(tin,ahead) && is_number(ahead)
                         push(str,uint8(ahead))
                 var num = string(str)
                 yield [[Token _number = double(num)]]
@@ -119,7 +119,7 @@ def _lexer ( var stext : string )
                     delete_string(num)
             elif is_alpha(ahead)
                 push(str,uint8(ahead))
-                while next(tin,ahead) & is_alpha(ahead)
+                while next(tin,ahead) && is_alpha(ahead)
                     push(str,uint8(ahead))
                 var name = string(str)
                 if name == "true"
@@ -181,7 +181,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
             while !empty(itv)
                 var value = parse_value(itv, error)
                 if value == null
-                    if error=="unexpected ]" & length(arr)==0
+                    if error=="unexpected ]" && length(arr)==0
                         error = ""
                         return JV(arr)
                     return null
@@ -202,7 +202,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
             var tab : table<string; JsonValue?>
             while !empty(itv)
                 if !expect_token(itv, ahead, Token_string, error)
-                    if (ahead is _symbol) & (ahead as _symbol)=='}' & length(tab)==0
+                    if (ahead is _symbol) && (ahead as _symbol)=='}' && length(tab)==0
                         error = ""
                         return JV(tab)
                     return null

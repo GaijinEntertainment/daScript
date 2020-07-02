@@ -5,9 +5,9 @@ def panic_time(msg)
 [export]
 def test
     var libertad = true
-    libertad = libertad | panic_time("do not panic")
-    libertad |= panic_time("now panic")
+    libertad = libertad || panic_time("do not panic")
+    libertad ||= panic_time("now panic")
     libertad = false
-    libertad = libertad & panic_time("do not panic")
-    libertad &= panic_time("now panic")
+    libertad = libertad && panic_time("do not panic")
+    libertad &&= panic_time("now panic")
     return true

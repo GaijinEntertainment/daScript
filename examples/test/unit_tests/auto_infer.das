@@ -106,7 +106,7 @@ def test
     let ZZT = [[auto "two"=>2]]
     assert(!typeinfo(is_dim ZZT))
     let ZZA = [[auto[] "two"=>2]]
-    assert(typeinfo(is_dim ZZA) & typeinfo(dim ZZA)==1)
+    assert(typeinfo(is_dim ZZA) && typeinfo(dim ZZA)==1)
     // infering block goo
     qq(1,$(XX,YY) => true,2.0)
     return true

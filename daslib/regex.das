@@ -222,7 +222,7 @@ def re_set_items(expr:string; offset:int) : MaybeReNode
             set_meta(cset,che)
             note("set - meta",iofs)
             iofs += 2
-        elif at(expr,iofs+1)=='-' & at(expr,iofs+2)!=']'
+        elif at(expr,iofs+1)=='-' && at(expr,iofs+2)!=']'
             let che = at(expr,iofs+2)
             if che==0
                 note("syntax error, expecting range", iofs+1)
@@ -330,14 +330,14 @@ def re_elementary(expr:string; offset:int) : MaybeReNode
 def mk_concat(var left,right:ReNode?)
     if left == null
         return right
-    elif left.op==ReOp Char & right.op==ReOp Char
+    elif left.op==ReOp Char && right.op==ReOp Char
         // mk_concat(char(x),char(y)) = char(xy)
         left.at.y = right.at.y
         left.text += right.text
         left.textLen += right.textLen
         delete right
         return left
-    elif left.op==ReOp Concat & left.right.op==ReOp Char & right.op==ReOp Char
+    elif left.op==ReOp Concat && left.right.op==ReOp Char && right.op==ReOp Char
         // mk_concat(concat(z,char(x)),char(y)) = concat(z,char(xy))
         var lor = left.right
         left.at.y = right.at.y
@@ -734,7 +734,7 @@ def re_early_out ( var cset:CharSet; node:ReNode? ) : bool
     elif node.op==ReOp Union
         var any = false
         for sub in node.all
-            any = re_early_out(cset,sub) | any
+            any = re_early_out(cset,sub) || any
         return any
     else
         panic("unsupported operation")
@@ -845,7 +845,7 @@ def regex_debug ( regex:Regex )
 def debug_set(cset:CharSet)
     for x in range(0,256)
         if (cset[x>>5] & uint(1<<(x & 31))) != 0u
-            if x>=32 & x<=127
+            if x>=32 && x<=127
                 print("{to_char(x)}")
             else
                 print("\\{x}")

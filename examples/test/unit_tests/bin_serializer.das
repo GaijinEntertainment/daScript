@@ -27,7 +27,7 @@ def test
         assert(f1.data_int==1)
         assert(f1.data_float==3.14)
         assert(f1.data_bar.t=="blah")
-        assert(f1.data_uint_3[0]==1u & f1.data_uint_3[1]==2u & f1.data_uint_3[2]==3u)
+        assert(f1.data_uint_3[0]==1u && f1.data_uint_3[1]==2u && f1.data_uint_3[2]==3u)
         for i in range(0,10)
             assert(f1.data_bar.ta[i]==float(i))
     return true

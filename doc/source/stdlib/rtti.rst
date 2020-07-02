@@ -885,74 +885,6 @@ Handled types
 Uncategorized
 +++++++++++++
 
-.. _function-_at_rtti_c__c_RttiValue_nothing:
-
-.. das:function:: RttiValue_nothing()
-
-RttiValue_nothing returns variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>
-
-|function-rtti-RttiValue_nothing|
-
-.. _function-_at_rtti_c__c_arg_names__hh_handle_hh_TypeInfo_hh_const:
-
-.. das:function:: arg_names(info: TypeInfo const)
-
-arg_names returns iterator<string>
-
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+--------+----------------------------------------------------+
-
-
-|function-rtti-arg_names|
-
-.. _function-_at_rtti_c__c_arg_names__hh_handle_hh_VarInfo_hh_const:
-
-.. das:function:: arg_names(info: VarInfo const)
-
-arg_names returns iterator<string>
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+--------+--------------------------------------------------+
-
-
-|function-rtti-arg_names|
-
-.. _function-_at_rtti_c__c_arg_types__hh_handle_hh_TypeInfo_hh_const:
-
-.. das:function:: arg_types(info: TypeInfo const)
-
-arg_types returns iterator< :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const&>
-
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+--------+----------------------------------------------------+
-
-
-|function-rtti-arg_types|
-
-.. _function-_at_rtti_c__c_arg_types__hh_handle_hh_VarInfo_hh_const:
-
-.. das:function:: arg_types(info: VarInfo const)
-
-arg_types returns iterator< :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const&>
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+--------+--------------------------------------------------+
-
-
-|function-rtti-arg_types|
-
 .. _function-_at_rtti_c__c_basic_struct_for_each_field__hh_handle_hh_BasicStructureAnnotation_hh_const_hh_implicit__hh_block_hh_string_hh_string_hh__hh_handle_hh_TypeInfo_hh_const_hh_uint_hh__c_void_hh_const_hh_implicit__hh_const:
 
 .. das:function:: basic_struct_for_each_field(arg0: BasicStructureAnnotation const implicit; arg1: block<(string;string;rtti::TypeInfo const;uint):void> const implicit)
@@ -1026,62 +958,6 @@ builtin_is_same_type returns bool
 
 
 |function-rtti-compile_file|
-
-.. _function-_at_rtti_c__c_context_for_each_function__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
-
-.. das:function:: context_for_each_function(blk: block<(info:rtti::FuncInfo const):void> const)
-
-+--------+-----------------------------------------------------------------------------+
-+argument+argument type                                                                +
-+========+=============================================================================+
-+blk     +block<(info: :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const+
-+--------+-----------------------------------------------------------------------------+
-
-
-|function-rtti-context_for_each_function|
-
-.. _function-_at_rtti_c__c_context_for_each_variable__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
-
-.. das:function:: context_for_each_variable(blk: block<(info:rtti::VarInfo const):void> const)
-
-+--------+---------------------------------------------------------------------------+
-+argument+argument type                                                              +
-+========+===========================================================================+
-+blk     +block<(info: :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const+
-+--------+---------------------------------------------------------------------------+
-
-
-|function-rtti-context_for_each_variable|
-
-.. _function-_at_rtti_c__c_each_dim__hh_handle_hh_TypeInfo_hh_const:
-
-.. das:function:: each_dim(info: TypeInfo const)
-
-each_dim returns iterator<int>
-
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+--------+----------------------------------------------------+
-
-
-|function-rtti-each_dim|
-
-.. _function-_at_rtti_c__c_each_dim__hh_handle_hh_VarInfo_hh_const:
-
-.. das:function:: each_dim(info: VarInfo const)
-
-each_dim returns iterator<int>
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+--------+--------------------------------------------------+
-
-
-|function-rtti-each_dim|
 
 .. _function-_at_rtti_c__c_get_annotation_argument_value__hh_handle_hh_AnnotationArgument_hh_const_hh_implicit__hh_const:
 
@@ -1246,23 +1122,6 @@ get_variable_value returns  :ref:`RttiValue <alias-RttiValue>`
 
 |function-rtti-get_variable_value|
 
-.. _function-_at_rtti_c__c_is_compatible_cast__hh_handle_hh_StructInfo_hh_const__hh_handle_hh_StructInfo_hh_const:
-
-.. das:function:: is_compatible_cast(a: StructInfo const; b: StructInfo const)
-
-is_compatible_cast returns bool
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+a       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
-+--------+--------------------------------------------------------+
-+b       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
-+--------+--------------------------------------------------------+
-
-
-|function-rtti-is_compatible_cast|
-
 .. _function-_at_rtti_c__c_is_compatible_cast__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit__hh_ptr_hh__hh_handle_hh_StructInfo_hh_const_hh_const_hh_implicit:
 
 .. das:function:: is_compatible_cast(arg0: rtti::StructInfo const? const implicit; arg1: rtti::StructInfo const? const implicit)
@@ -1279,31 +1138,6 @@ is_compatible_cast returns bool
 
 
 |function-rtti-is_compatible_cast|
-
-.. _function-_at_rtti_c__c_is_same_type__hh_handle_hh_TypeInfo_hh_const__hh_handle_hh_TypeInfo_hh_const__hh_enum_hh_rtti_c__c_RefMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_ConstMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_TemporaryMatters_hh_int_hh_const_bool_hh_const:
-
-.. das:function:: is_same_type(a: TypeInfo const; b: TypeInfo const; refMatters: RefMatters const; constMatters: ConstMatters const; temporaryMatters: TemporaryMatters const; topLevel: bool const)
-
-is_same_type returns bool
-
-+----------------+------------------------------------------------------------------+
-+argument        +argument type                                                     +
-+================+==================================================================+
-+a               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
-+----------------+------------------------------------------------------------------+
-+b               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
-+----------------+------------------------------------------------------------------+
-+refMatters      + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const            +
-+----------------+------------------------------------------------------------------+
-+constMatters    + :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const        +
-+----------------+------------------------------------------------------------------+
-+temporaryMatters+ :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const+
-+----------------+------------------------------------------------------------------+
-+topLevel        +bool const                                                        +
-+----------------+------------------------------------------------------------------+
-
-
-|function-rtti-is_same_type|
 
 .. _function-_at_rtti_c__c_make_file_access_string_hh_const__hh_const:
 
@@ -1472,20 +1306,73 @@ set_file_source returns bool
 
 |function-rtti-set_file_source|
 
-.. _function-_at_rtti_c__c_structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh__hh_handle_hh_AnnotationArguments_hh_const_hh__rq_ann_hh__rq_args_hh__c_void_hh_const:
+.. _function-_at_rtti_c__c_RttiValue_nothing:
 
-.. das:function:: structure_for_each_annotation(st: StructInfo const; subexpr: block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
+.. das:function:: RttiValue_nothing()
 
-+--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                                                                                   +
-+========+================================================================================================================================================================+
-+st      + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const                                                                                                        +
-+--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+subexpr +block<(ann: :ref:`rtti::Annotation <handle-rtti-Annotation>`  const;args: :ref:`rtti::AnnotationArguments <handle-rtti-AnnotationArguments>`  const):void> const+
-+--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+RttiValue_nothing returns auto
+
+|function-rtti-RttiValue_nothing|
+
+.. _function-_at_rtti_c__c_arg_names__hh_handle_hh_TypeInfo_hh_const:
+
+.. das:function:: arg_names(info: TypeInfo const)
+
+arg_names returns auto
+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
 
 
-|function-rtti-structure_for_each_annotation|
+|function-rtti-arg_names|
+
+.. _function-_at_rtti_c__c_arg_names__hh_handle_hh_VarInfo_hh_const:
+
+.. das:function:: arg_names(info: VarInfo const)
+
+arg_names returns auto
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
+
+
+|function-rtti-arg_names|
+
+.. _function-_at_rtti_c__c_arg_types__hh_handle_hh_TypeInfo_hh_const:
+
+.. das:function:: arg_types(info: TypeInfo const)
+
+arg_types returns auto
+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
+
+
+|function-rtti-arg_types|
+
+.. _function-_at_rtti_c__c_arg_types__hh_handle_hh_VarInfo_hh_const:
+
+.. das:function:: arg_types(info: VarInfo const)
+
+arg_types returns auto
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
+
+
+|function-rtti-arg_types|
 
 .. _function-_at_rtti_c__c_class_info__hh_auto_hh_const:
 
@@ -1501,5 +1388,124 @@ class_info returns  :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const?
 
 
 |function-rtti-class_info|
+
+.. _function-_at_rtti_c__c_context_for_each_function__hh_block_hh__hh_handle_hh_FuncInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
+
+.. das:function:: context_for_each_function(blk: block<(info:rtti::FuncInfo const):void> const)
+
+context_for_each_function returns auto
+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++blk     +block<(info: :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const+
++--------+-----------------------------------------------------------------------------+
+
+
+|function-rtti-context_for_each_function|
+
+.. _function-_at_rtti_c__c_context_for_each_variable__hh_block_hh__hh_handle_hh_VarInfo_hh_const_hh__rq_info_hh__c_void_hh_const:
+
+.. das:function:: context_for_each_variable(blk: block<(info:rtti::VarInfo const):void> const)
+
+context_for_each_variable returns auto
+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++blk     +block<(info: :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const+
++--------+---------------------------------------------------------------------------+
+
+
+|function-rtti-context_for_each_variable|
+
+.. _function-_at_rtti_c__c_each_dim__hh_handle_hh_TypeInfo_hh_const:
+
+.. das:function:: each_dim(info: TypeInfo const)
+
+each_dim returns auto
+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
+
+
+|function-rtti-each_dim|
+
+.. _function-_at_rtti_c__c_each_dim__hh_handle_hh_VarInfo_hh_const:
+
+.. das:function:: each_dim(info: VarInfo const)
+
+each_dim returns auto
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
+
+
+|function-rtti-each_dim|
+
+.. _function-_at_rtti_c__c_is_compatible_cast__hh_handle_hh_StructInfo_hh_const__hh_handle_hh_StructInfo_hh_const:
+
+.. das:function:: is_compatible_cast(a: StructInfo const; b: StructInfo const)
+
+is_compatible_cast returns auto
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++a       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
++--------+--------------------------------------------------------+
++b       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
++--------+--------------------------------------------------------+
+
+
+|function-rtti-is_compatible_cast|
+
+.. _function-_at_rtti_c__c_is_same_type__hh_handle_hh_TypeInfo_hh_const__hh_handle_hh_TypeInfo_hh_const__hh_enum_hh_rtti_c__c_RefMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_ConstMatters_hh_int_hh_const__hh_enum_hh_rtti_c__c_TemporaryMatters_hh_int_hh_const_bool_hh_const:
+
+.. das:function:: is_same_type(a: TypeInfo const; b: TypeInfo const; refMatters: RefMatters const; constMatters: ConstMatters const; temporaryMatters: TemporaryMatters const; topLevel: bool const)
+
+is_same_type returns auto
+
++----------------+------------------------------------------------------------------+
++argument        +argument type                                                     +
++================+==================================================================+
++a               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
++----------------+------------------------------------------------------------------+
++b               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
++----------------+------------------------------------------------------------------+
++refMatters      + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const            +
++----------------+------------------------------------------------------------------+
++constMatters    + :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const        +
++----------------+------------------------------------------------------------------+
++temporaryMatters+ :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const+
++----------------+------------------------------------------------------------------+
++topLevel        +bool const                                                        +
++----------------+------------------------------------------------------------------+
+
+
+|function-rtti-is_same_type|
+
+.. _function-_at_rtti_c__c_structure_for_each_annotation__hh_handle_hh_StructInfo_hh_const__hh_block_hh__hh_handle_hh_Annotation_hh_const_hh__hh_handle_hh_AnnotationArguments_hh_const_hh__rq_ann_hh__rq_args_hh__c_void_hh_const:
+
+.. das:function:: structure_for_each_annotation(st: StructInfo const; subexpr: block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
+
+structure_for_each_annotation returns auto
+
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                                                                                   +
++========+================================================================================================================================================================+
++st      + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const                                                                                                        +
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++subexpr +block<(ann: :ref:`rtti::Annotation <handle-rtti-Annotation>`  const;args: :ref:`rtti::AnnotationArguments <handle-rtti-AnnotationArguments>`  const):void> const+
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+|function-rtti-structure_for_each_annotation|
 
 

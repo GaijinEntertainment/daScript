@@ -24,7 +24,7 @@ def first(x)
     return x._0
 
 def operator != ( a,b : tuple<int;float> )
-    return a._0!=b._0 | a._1!=b._1
+    return a._0!=b._0 || a._1!=b._1
 
 def operator != ( a,b : array<int> )
     if length(a) != length(b)
@@ -42,7 +42,7 @@ def is_same(a,b)
 
 def verify_14 ( t )
     for x,y in range(1,4),t
-        assert(y[0]==x & y[1]==2)
+        assert(y[0]==x && y[1]==2)
 
 [export]
 def test

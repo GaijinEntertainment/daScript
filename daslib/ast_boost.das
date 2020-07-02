@@ -48,7 +48,7 @@ def isExpression(t:TypeDeclPtr; top:bool=true) : bool
             return starts_with("{t.annotation.name}","Expr")
         else
             return false
-    elif t.baseType==Type tPointer & top
+    elif t.baseType==Type tPointer && top
         return isExpression(t.firstType,false)
     else
         return false
@@ -177,7 +177,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
             panic("expecting func.ExprBlock")
         unsafe
             var blk = reinterpret<ExprBlock?> fn.body
-            if blk.list.length!=1 | blk.list[0].__rtti!="ExprIfThenElse"
+            if blk.list.length!=1 || blk.list[0].__rtti!="ExprIfThenElse"
                 panic("expecting is_compiling_macros")
             var ife = reinterpret<ExprIfThenElse?> blk.list[0]
             if ife.if_true.__rtti != "ExprBlock"
@@ -399,7 +399,7 @@ def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expressi
         unsafe
             if *reinterpret<uint8??>data == null
                 return new [[ExprConstPtr() at=at]]
-            elif info.firstType==null | info.firstType.isVoid
+            elif info.firstType==null || info.firstType.isVoid
                 return new [[ExprConstPtr() at=at]]
             else
                 return walk_and_convert_pointer(data,info,at)
@@ -411,7 +411,7 @@ def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expressi
 		return walk_and_convert_tuple(data,info,at)
 	elif info.baseType == Type tTable
 		return walk_and_convert_table(data,info,at)
-    elif info.baseType == Type tEnumeration8 | info.baseType == Type tEnumeration16 | info.baseType == Type tEnumeration
+    elif info.baseType == Type tEnumeration8 || info.baseType == Type tEnumeration16 || info.baseType == Type tEnumeration
         return walk_and_convert_enumeration(data,info,at)
     else
         return walk_and_convert_basic(data,info,at)

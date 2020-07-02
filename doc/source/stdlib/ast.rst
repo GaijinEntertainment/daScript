@@ -340,6 +340,8 @@ Type aliases
 +----------------+---+-----+
 +capturedRef     +4  +16   +
 +----------------+---+-----+
++doNotDelete     +5  +32   +
++----------------+---+-----+
 
 
 |typedef-ast-FieldDeclarationFlags|
@@ -633,6 +635,25 @@ Type aliases
 Enumerations
 ++++++++++++
 
+.. _enum-ast-CaptureMode:
+
+.. das:attribute:: CaptureMode
+
++--------------------+-+
++capture_any         +0+
++--------------------+-+
++capture_by_copy     +1+
++--------------------+-+
++capture_by_reference+2+
++--------------------+-+
++capture_by_clone    +3+
++--------------------+-+
++capture_by_move     +4+
++--------------------+-+
+
+
+|enumeration-ast-CaptureMode|
+
 .. _enum-ast-SideEffects:
 
 .. das:attribute:: SideEffects
@@ -682,6 +703,21 @@ CallMacro fields are
 
 
 |structure_annotation-ast-CallMacro|
+
+.. _handle-ast-CaptureEntry:
+
+.. das:attribute:: CaptureEntry
+
+CaptureEntry fields are
+
++----+--------------------------------------------------------+
++name+ :ref:`builtin::das_string <handle-builtin-das_string>` +
++----+--------------------------------------------------------+
++mode+ :ref:`ast::CaptureMode <enum-ast-CaptureMode>`         +
++----+--------------------------------------------------------+
+
+
+|structure_annotation-ast-CaptureEntry|
 
 .. _handle-ast-EnumEntry:
 
@@ -2387,8 +2423,6 @@ ExprLet fields are
 +----------+------------------------------------------------------------------------------------+
 +at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                       +
 +----------+------------------------------------------------------------------------------------+
-+inScope   +bool                                                                                +
-+----------+------------------------------------------------------------------------------------+
 +printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                       +
 +----------+------------------------------------------------------------------------------------+
 +genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                           +
@@ -2475,25 +2509,27 @@ ExprMakeArray fields are
 
 ExprMakeBlock fields are
 
-+----------+-----------------------------------------------------------+
-+mmFlags   + :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>`      +
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+stackTop  +uint                                                       +
-+----------+-----------------------------------------------------------+
-+block     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
++----------+------------------------------------------------------------------------+
++mmFlags   + :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>`                   +
++----------+------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                           +
++----------+------------------------------------------------------------------------+
++capture   + :ref:`ast::dasvector`CaptureEntry <handle-ast-dasvector`CaptureEntry>` +
++----------+------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                           +
++----------+------------------------------------------------------------------------+
++stackTop  +uint                                                                    +
++----------+------------------------------------------------------------------------+
++block     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >             +
++----------+------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                               +
++----------+------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                 +
++----------+------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                     +
++----------+------------------------------------------------------------------------+
++__rtti    +string const                                                            +
++----------+------------------------------------------------------------------------+
 
 
 |structure_annotation-ast-ExprMakeBlock|
@@ -2508,6 +2544,8 @@ ExprMakeGenerator fields are
 +arguments             + :ref:`ast::dasvector`smart_ptr`Expression <handle-ast-dasvector`smart_ptr`Expression>` +
 +----------------------+----------------------------------------------------------------------------------------+
 +at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                           +
++----------------------+----------------------------------------------------------------------------------------+
++capture               + :ref:`ast::dasvector`CaptureEntry <handle-ast-dasvector`CaptureEntry>`                 +
 +----------------------+----------------------------------------------------------------------------------------+
 +printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                           +
 +----------------------+----------------------------------------------------------------------------------------+
@@ -3800,6 +3838,12 @@ Handled types
 .. das:attribute:: MakeStruct
 
 |any_annotation-ast-MakeStruct|
+
+.. _handle-ast-dasvector`CaptureEntry:
+
+.. das:attribute:: dasvector`CaptureEntry
+
+|any_annotation-ast-dasvector`CaptureEntry|
 
 .. _handle-ast-dasvector`EnumEntry:
 

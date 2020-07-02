@@ -11,7 +11,7 @@ def test_if_finally
         finally
             t[9] = 13
             count ++
-    assert(count==1 & t[9]==13)
+    assert(count==1 && t[9]==13)
     return true
 
 [sideeffects]
@@ -26,7 +26,7 @@ def test_for_finally
     finally
         t[9] = 13
         count += uno
-    assert(count==1 & t[9]==13)
+    assert(count==1 && t[9]==13)
     return true
 
 var
@@ -52,7 +52,7 @@ def test_while_finally
     finally
         t[9] = 12 + uno
         count ++
-    assert(count==1 & t[9]==13)
+    assert(count==1 && t[9]==13)
     return true
 
 var
@@ -69,7 +69,7 @@ def test_func_finally()
     glob = 0
     glob_count = 0
     let t = func_finally()
-    assert(t==12 & glob==13 & glob_count==1)
+    assert(t==12 && glob==13 && glob_count==1)
 
 [sideeffects]
 def test_block_finally()

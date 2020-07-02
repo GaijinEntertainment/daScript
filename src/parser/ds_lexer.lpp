@@ -535,6 +535,12 @@ void YYNEWLINE() {
 <normal>"\/\="                              return DIVEQU;
 <normal>"\*\="                              return MULEQU;
 <normal>"\%\="                              return MODEQU;
+<normal>"\&\&\="                            return ANDANDEQU;
+<normal>"\|\|\="                            return OROREQU;
+<normal>"\^\^\="                            return XORXOREQU;
+<normal>"\&\&"                              return ANDAND;
+<normal>"\|\|"                              return OROR;
+<normal>"\^\^"                              return XORXOR;
 <normal>"\&\="                              return ANDEQU;
 <normal>"\|\="                              return OREQU;
 <normal>"\^\="                              return XOREQU;

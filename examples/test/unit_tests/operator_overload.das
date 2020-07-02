@@ -13,7 +13,7 @@ def operator + ( a,b:iVec2 ) : iVec2
     return [[iVec2 x=a.x+b.x,y=a.y+b.y]]
 
 def operator == ( a,b:iVec2 ) : bool
-    return (a.x==b.x) & (a.y==b.y)
+    return (a.x==b.x) && (a.y==b.y)
 
 [export]
 def test:bool

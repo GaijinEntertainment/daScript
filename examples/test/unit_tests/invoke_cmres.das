@@ -37,7 +37,7 @@ def hfuncAC ( t : int ) : Foo const
 
 [sideeffects]
 def check(t:Foo)
-    assert(t.a==1 & t.b==2)
+    assert(t.a==1 && t.b==2)
 
 [sideeffects]
 def checkInvoke(obj)

@@ -437,7 +437,7 @@ class AstVisitor
     def abstract visitExprCallMacro(expr:smart_ptr<ExprCallMacro>) : ExpressionPtr
 
 def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
-    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_function_annotation(name, someClassPtr, classInfo)
     else
@@ -445,7 +445,7 @@ def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotatio
         return [[FunctionAnnotationPtr]]
 
 def make_structure_annotation ( name : string; someClassPtr ) : StructureAnnotationPtr
-    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_structure_annotation(name, someClassPtr, classInfo)
     else
@@ -463,7 +463,7 @@ def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
         return [[smart_ptr<VisitorAdpater>]]
 
 def make_reader_macro ( name : string; someClassPtr ) : ReaderMacroPtr
-    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_reader_macro(name, someClassPtr, classInfo)
     else
@@ -471,7 +471,7 @@ def make_reader_macro ( name : string; someClassPtr ) : ReaderMacroPtr
         return [[ReaderMacroPtr]]
 
 def make_call_macro ( name : string; someClassPtr ) : CallMacroPtr
-    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_call_macro(name, someClassPtr, classInfo)
     else
@@ -479,7 +479,7 @@ def make_call_macro ( name : string; someClassPtr ) : CallMacroPtr
         return [[CallMacroPtr]]
 
 def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
-    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_pass_macro(name, someClassPtr, classInfo)
     else
@@ -487,7 +487,7 @@ def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
         return [[PassMacroPtr]]
 
 def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
-    static_if typeinfo(is_pointer someClassPtr) & typeinfo(is_class *someClassPtr)
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_variant_macro(name, someClassPtr, classInfo)
     else

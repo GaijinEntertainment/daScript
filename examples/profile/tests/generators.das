@@ -63,6 +63,6 @@ def test()
         s2 = testGen(TOTAL,MOD)
     profile(40,"testArr") <|
         s3 = testArr(TOTAL,MOD)
-    assert(s1==s2 & s1==s3 & s2==s3)
+    assert(s1==s2 && s1==s3 && s2==s3)
     return true
 

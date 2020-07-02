@@ -17,9 +17,9 @@ def test_delete_array
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 & w0==w2)
+    assert(w1>w0 && w0==w2)
     for t in range(0,5)
-        assert(length(a[t])==0 & capacity(a[t])==0)
+        assert(length(a[t])==0 && capacity(a[t])==0)
 
 def test_delete_table
     var a : table<int;int>
@@ -29,8 +29,8 @@ def test_delete_table
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 & w0==w2)
-    assert(length(a)==0 & capacity(a)==0)
+    assert(w1>w0 && w0==w2)
+    assert(length(a)==0 && capacity(a)==0)
 
 def test_delete_struct
     var a : SomethingSmall?
@@ -39,7 +39,7 @@ def test_delete_struct
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 & w0==w2)
+    assert(w1>w0 && w0==w2)
     assert(a==null)
 
 def test_delete_struct_array
@@ -48,7 +48,7 @@ def test_delete_struct_array
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 & w0==w2)
+    assert(w1>w0 && w0==w2)
     for pA in a
         assert(pA==null)
 

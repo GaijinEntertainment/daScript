@@ -33,7 +33,7 @@ def test
     var x = invoke(counter,13)
     CNT = 100500
     let y = invoke(counter,13)
-    assert(x==13 & y==14)
+    assert(x==13 && y==14)
     send(counter)
     let net_counter <- recv()
     let z = invoke(net_counter,13)

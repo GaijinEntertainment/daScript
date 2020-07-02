@@ -244,29 +244,35 @@ extern int das_yydebug;
     ROTREQU = 380,
     MAPTO = 381,
     COLCOL = 382,
-    BRABRAB = 383,
-    BRACBRB = 384,
-    CBRCBRB = 385,
-    INTEGER = 386,
-    LONG_INTEGER = 387,
-    UNSIGNED_INTEGER = 388,
-    UNSIGNED_LONG_INTEGER = 389,
-    FLOAT = 390,
-    DOUBLE = 391,
-    NAME = 392,
-    BEGIN_STRING = 393,
-    STRING_CHARACTER = 394,
-    END_STRING = 395,
-    BEGIN_STRING_EXPR = 396,
-    END_STRING_EXPR = 397,
-    END_OF_READ = 398,
-    UNARY_MINUS = 399,
-    UNARY_PLUS = 400,
-    PRE_INC = 401,
-    PRE_DEC = 402,
-    POST_INC = 403,
-    POST_DEC = 404,
-    DEREF = 405
+    ANDAND = 383,
+    OROR = 384,
+    XORXOR = 385,
+    ANDANDEQU = 386,
+    OROREQU = 387,
+    XORXOREQU = 388,
+    BRABRAB = 389,
+    BRACBRB = 390,
+    CBRCBRB = 391,
+    INTEGER = 392,
+    LONG_INTEGER = 393,
+    UNSIGNED_INTEGER = 394,
+    UNSIGNED_LONG_INTEGER = 395,
+    FLOAT = 396,
+    DOUBLE = 397,
+    NAME = 398,
+    BEGIN_STRING = 399,
+    STRING_CHARACTER = 400,
+    END_STRING = 401,
+    BEGIN_STRING_EXPR = 402,
+    END_STRING_EXPR = 403,
+    END_OF_READ = 404,
+    UNARY_MINUS = 405,
+    UNARY_PLUS = 406,
+    PRE_INC = 407,
+    PRE_DEC = 408,
+    POST_INC = 409,
+    POST_DEC = 410,
+    DEREF = 411
   };
 #endif
 
@@ -303,7 +309,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 307 "ds_parser.hpp"
+#line 313 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

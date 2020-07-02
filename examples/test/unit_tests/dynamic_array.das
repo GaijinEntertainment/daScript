@@ -56,5 +56,5 @@ def test
         push(a,1)
         push(a,2)
         let b <- a
-        assert(length(a)==0 & length(b)==2)
+        assert(length(a)==0 && length(b)==2)
     return true

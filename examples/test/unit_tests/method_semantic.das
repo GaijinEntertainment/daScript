@@ -17,5 +17,5 @@ def test
     let p  = Point(2.,3.)
     let t = p->magnitude()
     let d = p->dot(Point(1.,1.))
-    assert(t==13. & d==5.)
+    assert(t==13. && d==5.)
     return true

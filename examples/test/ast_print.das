@@ -98,7 +98,7 @@ class PrintVisitor : AstVisitor
     def override preVisitFunctionBody(fun:FunctionPtr)
         if fun.arguments.length != 0
             print(" ) ")
-        if fun.result != null & !fun.result.isVoid
+        if fun.result != null && !fun.result.isVoid
             print(" : {describe([decl=fun.result,extra=extraTypeInfo])}")
         print("\n")
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
@@ -121,7 +121,7 @@ class PrintVisitor : AstVisitor
 // block
     def override preVisitExprBlock(blk:smart_ptr<ExprBlock>)
         if blk.blockFlags.isClosure
-            if blk.returnType!=null | blk.arguments.length!=0
+            if blk.returnType!=null || blk.arguments.length!=0
                 print("$(")
                 for arg,argIndex in blk.arguments,range(0,blk.arguments.length)
                     if arg.annotation.length != 0
@@ -135,30 +135,30 @@ class PrintVisitor : AstVisitor
                 if blk.returnType!=null
                     print(":{describe([decl=blk.returnType,extra=extraTypeInfo])}")
                 print("\n")
-        if printCStyle | blk.blockFlags.isClosure
+        if printCStyle || blk.blockFlags.isClosure
             print("{repeat("\t",tab)}\{\n")
         tab ++
     def override visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
         tab --
-        if printCStyle | blk.blockFlags.isClosure
+        if printCStyle || blk.blockFlags.isClosure
             print("{repeat("\t",tab)}\}\n")
         return blk
     def override preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
         print("{repeat("\t",tab)}")
     def override visitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
-        if printCStyle | blk.blockFlags.isClosure
+        if printCStyle || blk.blockFlags.isClosure
             print(";")
         self->newLine()
         return expr
     def override visitExprBlockFinal(blk:smart_ptr<ExprBlock>)
-        if printCStyle | blk.blockFlags.isClosure
+        if printCStyle || blk.blockFlags.isClosure
             print("{repeat("\t",tab-1)}\} finally \{\n")
         else
             print("{repeat("\t",tab-1)}finally\n")
     def override preVisitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
         print("{repeat("\t",tab)}")
     def override visitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
-        if printCStyle | blk.blockFlags.isClosure
+        if printCStyle || blk.blockFlags.isClosure
             print(";")
         self->newLine()
         return expr
@@ -166,7 +166,7 @@ class PrintVisitor : AstVisitor
     def override preVisitExprLet(expr:smart_ptr<ExprLet>)
         var isLet = true
         for pv in expr.variables
-            if pv._type!=null & pv._type.flags.constant
+            if pv._type!=null && pv._type.flags.constant
                 isLet = false
                 break
         print("{isLet ? "let" : "var"} ")
@@ -491,7 +491,7 @@ class PrintVisitor : AstVisitor
         let f2name = [[string "x";"y";"z";"w"]]
         for fch in expr.fields
             let f = int(fch)
-            print("{f>=0 & f<=3 ? f2name[f] : "?"}")
+            print("{f>=0 && f<=3 ? f2name[f] : "?"}")
         return expr
 // is variant
     def override visitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
@@ -508,7 +508,7 @@ class PrintVisitor : AstVisitor
 // op1
     def override preVisitExprOp1(expr:smart_ptr<ExprOp1>) : void
         let op = "{expr.op}"
-        if op!="+++" & op!="---"
+        if op!="+++" && op!="---"
             print(op)
         if !noBracket(expr)
             print("(")
@@ -516,7 +516,7 @@ class PrintVisitor : AstVisitor
         let op = "{expr.op}"
         if !noBracket(expr)
             print(")")
-        if op=="+++" | op=="---"
+        if op=="+++" || op=="---"
             print("{slice(op,0,-1)}")
         return expr
 // return
@@ -619,13 +619,13 @@ class PrintVisitor : AstVisitor
 // const enumeraiton
     def override preVisitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : void
         let enumModule = expr.enumType._module
-        if enumModule!=null & !empty(enumModule.name)
+        if enumModule!=null && !empty(enumModule.name)
             print("{enumModule.name}::")
         print("{expr.enumType.name} {expr.value}")
 // const bitfield
     def override preVisitExprConstBitfield(expr:smart_ptr<ExprConstBitfield>) : void
         var name : string
-        if expr.bitfieldType!=null & !empty(expr.bitfieldType.alias)
+        if expr.bitfieldType!=null && !empty(expr.bitfieldType.alias)
             name = find_bitfield_name(expr.bitfieldType,expr.value)
         if !empty(name)
             print("{expr.bitfieldType.alias} {name}")
