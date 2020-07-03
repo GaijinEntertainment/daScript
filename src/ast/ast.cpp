@@ -996,6 +996,7 @@ namespace das {
         auto cexpr = clonePtr<ExprAscend>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
+        if ( ascType ) cexpr->ascType = make_smart<TypeDecl>(*ascType);
         cexpr->ascendFlags = ascendFlags;
         return cexpr;
     }
