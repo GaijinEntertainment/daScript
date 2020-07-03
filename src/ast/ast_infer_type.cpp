@@ -3498,18 +3498,18 @@ namespace das {
                         }
                     }
                 }
-            }
-            for ( auto & lv : local ) {
-                if ( lv->name==var->name ) {
-                    error("block argument " + var->name +" is shadowed by local variable "
-                          + lv->name + " : " + lv->type->describe() + " at line " + to_string(lv->at.line), "", "",
-                              var->at, CompilationError::variable_not_found);
-                    break;
+                for ( auto & lv : local ) {
+                    if ( lv->name==var->name ) {
+                        error("block argument " + var->name +" is shadowed by local variable "
+                            + lv->name + " : " + lv->type->describe() + " at line " + to_string(lv->at.line), "", "",
+                                var->at, CompilationError::variable_not_found);
+                        break;
+                    }
                 }
-            }
-            if ( auto eW = hasMatchingWith(var->name) ) {
-                error("block argument " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line), "", "",
-                      var->at, CompilationError::variable_not_found);
+                if ( auto eW = hasMatchingWith(var->name) ) {
+                    error("block argument " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line), "", "",
+                        var->at, CompilationError::variable_not_found);
+                }
             }
             if ( var->type->isAlias() ) {
                 auto aT = inferAlias(var->type);
