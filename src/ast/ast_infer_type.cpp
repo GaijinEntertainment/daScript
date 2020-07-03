@@ -2117,12 +2117,6 @@ namespace das {
                             at, CompilationError::invalid_capture);
                         return false;
                     }
-                } else if ( mode == CaptureMode::capture_by_copy ) {
-                    if ( !cV->type->canCopy() ) {
-                        error("can't copy captured variable " + cV->name,  "", "",
-                            at, CompilationError::invalid_capture);
-                        return false;
-                    }
                 } else if ( mode == CaptureMode::capture_by_move ) {
                     if ( !cV->type->canMove() ) {
                         error("can't move captured variable " + cV->name,  "", "",
