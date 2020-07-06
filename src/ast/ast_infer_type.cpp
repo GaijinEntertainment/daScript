@@ -21,9 +21,9 @@ namespace das {
                 }
             }
         }
-        safe_var_set    scope;
-        safe_var_set    capt;
-        bool            fail = false;
+        das_hash_set<VariablePtr>   scope;
+        safe_var_set                capt;
+        bool                        fail = false;
     };
 
 // type inference
@@ -3472,7 +3472,7 @@ namespace das {
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
-            if ( !var->can_shadow ) {
+            if ( !var->can_shadow && !program->policies.allow_block_variable_shadowing ) {
                 if ( func ) {
                     for ( auto & fna : func->arguments ) {
                         if ( fna->name==var->name ) {
