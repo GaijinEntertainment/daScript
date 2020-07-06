@@ -6236,6 +6236,9 @@ namespace das {
                 if ( !expr->subexpr->type->canCopy() && !expr->subexpr->type->canMove() ) {
                     error("comprehension element has to be copyable or moveable", "", "",
                         expr->at, CompilationError::invalid_type);
+                } else if ( expr->subexpr->type->isAutoOrAlias() ) {
+                    error("comprehension element type is not resolved", "", "",
+                        expr->at, CompilationError::invalid_type);
                 } else {
                     auto pAC = expr->generatorSyntax ?
                         generateComprehensionIterator(expr) : generateComprehension(expr);
