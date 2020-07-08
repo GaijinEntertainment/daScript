@@ -119,10 +119,8 @@ namespace das
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            DAS_ASSERTF(0, "we are calling makeLocalRefMove where expression on a right is not a referece."
-                        "we should not be here, script compiler should have caught this during compilation."
-                        "compiler later will likely report internal compilation error.");
-            return nullptr;
+            // this is typically lambda or handled non-copyable
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
 
