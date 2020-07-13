@@ -65,7 +65,7 @@ class ApplyMacro : AstCallMacro
             var callName = "apply`{expr.arguments[0]._type.structType.name}"
             generateApplyVisitStruct(expr.arguments[0]._type,callName,expr.at)
             // make a call
-            var call <- new [[ExprCall() name:=callName, at=expr.at]]
+            var call <- new [[ExprCall() name:="_::" + callName, at=expr.at]]
             push(call.arguments,clone_expression(expr.arguments[0]))
             let nfields = expr.arguments[0]._type.structType.fields.length
             for i in range(0,nfields)
