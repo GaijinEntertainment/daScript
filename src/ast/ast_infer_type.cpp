@@ -981,7 +981,7 @@ namespace das {
                 }
                 if ( missFn->privateFunction && canCallPrivate(missFn,inWhichModule,program->thisModule.get()) ) {
                     ss << "\t\tfunction is private";
-                    if ( !missFn->module->name.empty() ) {
+                    if ( missFn->module && !missFn->module->name.empty() ) {
                         ss << " to module " << missFn->module->name;
                     }
                     ss << "\n";
