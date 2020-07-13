@@ -643,7 +643,7 @@ namespace das
     bool is_compiling_macros_in_module ( char * name, Context * ctx ) {
         if ( !ctx->thisProgram ) return false;
         if ( !ctx->thisProgram->isCompilingMacros ) return false;
-        if ( ctx->thisProgram->thisModule->name != name ) return false;
+        if ( ctx->thisProgram->thisModule->name != to_rts(name) ) return false;
         return true;
     }
 
