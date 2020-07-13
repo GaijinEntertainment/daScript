@@ -8,7 +8,7 @@ namespace das {
     struct SimPrint : SimVisitor {
         Context * context = nullptr;
         bool displayHash = true;
-        SimPrint ( TextWriter & wr, Context * ctx ) : ss(wr), context(ctx) {
+        SimPrint ( TextWriter & wr, Context * ctx ) : context(ctx), ss(wr) {
         }
         // 64 bit FNV1a
         const uint64_t fnv_prime = 1099511628211ul;

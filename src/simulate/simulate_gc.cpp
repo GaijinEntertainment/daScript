@@ -32,7 +32,7 @@ namespace das
         virtual void afterHandle ( char *, TypeInfo * ) override {
             visited_handles.pop_back();
         }
-        virtual void String ( char * & st ) {
+        virtual void String ( char * & st ) override {
             DataWalker::String(st);
             if ( !st ) {
                 return;

@@ -313,7 +313,7 @@ namespace das {
                 ss << "]] ";
             }
         }
-        virtual void preVisit ( ExprMakeBlock * expr ) {
+        virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->isLambda ) ss << "@";
             else if ( expr->isLocalFunction ) ss << "@@";

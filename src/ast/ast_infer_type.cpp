@@ -1231,7 +1231,6 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             fieldOffset = 0;
-            auto tp = make_smart<TypeDecl>(that);
             cppLayout = that->cppLayout;
             cppLayoutPod = !that->cppLayoutNotPod;
             cppLayoutParent = nullptr;
