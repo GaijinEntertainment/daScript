@@ -424,6 +424,7 @@ namespace das {
             auto with = make_smart<ExprWith>(block->at);
             auto THISVAR = make_smart<ExprVar>(block->at, "__this");
             with->with = make_smart<ExprPtr2Ref>(block->at, THISVAR);
+            with->with->generated = true;
             auto bbl = make_smart<ExprBlock>();
             with->body = bbl;
             with->body->at = block->at;
@@ -494,6 +495,7 @@ namespace das {
         fb->at = block->at;
         auto with = make_smart<ExprWith>(block->at);
         with->with = make_smart<ExprVar>(block->at, "__this");
+        with->with->generated = true;
         with->body = block->clone();
         static_pointer_cast<ExprBlock>(with->body)->finalList.clear();
         if ( needYield ) {
