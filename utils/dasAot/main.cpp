@@ -198,7 +198,8 @@ bool compile ( const string & fn, const string & cppFn ) {
   #define MAIN_FUNC_NAME main
 #endif
 
-int MAIN_FUNC_NAME(int argc, const char * argv[]) {
+int MAIN_FUNC_NAME(int argc, char * argv[]) {
+    setCommandLineArguments(argc, argv);
     #ifdef _MSC_VER
     _CrtSetReportMode(_CRT_ASSERT, 0);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
@@ -208,6 +209,7 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
         return -1;
     }
     if ( argc>3  ) {
+        bool scriptArgs = false;
         for (int ai = 3; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
@@ -223,7 +225,9 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
                     tout << "-cursor requires X and Y\n";
                     return -1;
                 }
-            } else {
+            } else if ( strcmp(argv[ai],"--")==0 ) {
+                scriptArgs = true;
+            } else if ( !scriptArgs ) {
                 tout << "unsupported option " << argv[ai];
                 return -1;
             }
@@ -236,6 +240,7 @@ int MAIN_FUNC_NAME(int argc, const char * argv[]) {
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
+    NEED_MODULE(Module_UriParser);
     require_project_specific_modules();
     bool compiled = compile(argv[1], argv[2]);
     Module::Shutdown();

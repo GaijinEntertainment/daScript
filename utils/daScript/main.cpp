@@ -42,6 +42,7 @@ int main(int argc, char * argv[]) {
     setCommandLineArguments(argc,argv);
     vector<string> files;
     string mainName = "main";
+    bool scriptArgs = false;
     bool outputProgramCode = false;
     for ( int i=1; i < argc;  ) {
         if ( argv[i][0]=='-' ) {
@@ -61,7 +62,11 @@ int main(int argc, char * argv[]) {
                 print_help();
                 return -1;
             }
-        } else {
+        }
+        else if (strcmp(argv[i], "--") == 0) {
+            scriptArgs = true;
+        }
+        else if (!scriptArgs) {
             files.push_back(argv[i]);
             i ++;
         }
