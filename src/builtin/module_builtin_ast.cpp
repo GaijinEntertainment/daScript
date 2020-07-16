@@ -2255,6 +2255,10 @@ namespace das {
         program->visit(*adapter);
     }
 
+    void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter ) {
+        func->visit(*adapter);
+    }
+
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
         return context->stringHeap->allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
@@ -2589,6 +2593,8 @@ namespace das {
                 SideEffects::accessExternal, "forEachGenericFunction");
             addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisit");
+            addExtern<DAS_BIND_FUN(astVisitFunction)>(*this, lib,  "visit",
+                SideEffects::accessExternal, "astVisitFunction");
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",
@@ -2643,9 +2649,11 @@ namespace das {
             // type conversion functions
             addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
                 SideEffects::none, "das_to_string");
-            // expression
+            // clone
             addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
                 SideEffects::none, "clone_expression");
+            addExtern<DAS_BIND_FUN(clone_function)>(*this, lib,  "clone_function",
+                SideEffects::none, "clone_function");
             // type
             addExtern<DAS_BIND_FUN(isSameAstType)>(*this, lib,  "is_same_type",
                 SideEffects::none, "isSameAstType");

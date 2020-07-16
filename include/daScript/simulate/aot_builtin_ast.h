@@ -401,6 +401,7 @@ namespace das {
     Module * thisModule ( Context * context, LineInfoArg * lineinfo );
     smart_ptr_raw<Program> thisProgram ( Context * context );
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter );
+    void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter );
     PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context );
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * context );
@@ -420,6 +421,7 @@ namespace das {
     CallMacroPtr makeCallMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr ann, Context* context);
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
+    __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value->clone(); }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
 
     template <>

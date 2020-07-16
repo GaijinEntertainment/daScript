@@ -236,6 +236,9 @@ namespace das {
         }
         virtual bool canCopy() const override { return true; }
         virtual bool isLocal() const override { return true; }
+        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, sizeof(LineInfo));
+        }
     };
 
     TypeDeclPtr makeProgramFlags() {

@@ -141,7 +141,7 @@ def setup_tag_annotation(name,tag:string; classPtr)
     unsafe
         delete ann
 
-[private]
+[export]
 def find_unique_function ( mod : Module?; name : string )
     var res : FunctionPtr
     var count = 0
@@ -150,6 +150,17 @@ def find_unique_function ( mod : Module?; name : string )
         count ++
     if count > 1
         panic("more than one function encountered")
+    return res
+
+[export]
+def find_unique_generic ( mod : Module?; name : string )
+    var res : FunctionPtr
+    var count = 0
+    for_each_generic(mod, name) <| $ ( func )
+        res <- func
+        count ++
+    if count > 1
+        panic("more than one generic function encountered")
     return res
 
 [export]
