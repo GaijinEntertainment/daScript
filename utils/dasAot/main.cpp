@@ -4,7 +4,7 @@
 using namespace das;
 
 void require_project_specific_modules();//link time resolved dependencies
-das::FileAccessPtr get_file_access();//link time resolved dependencies
+das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
 
 #if !defined(DAS_GLOBAL_NEW) && defined(_MSC_VER) && !defined(_WIN64)
 
@@ -42,7 +42,7 @@ bool saveToFile ( const string & fname, const string & str ) {
 }
 
 bool compile ( const string & fn, const string & cppFn ) {
-    auto access = get_file_access();
+    auto access = get_file_access(nullptr);
     ModuleGroup dummyGroup;
     bool firstError = true;
     CodeOfPolicies policies;

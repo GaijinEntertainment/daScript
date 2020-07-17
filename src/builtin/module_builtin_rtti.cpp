@@ -164,6 +164,8 @@ DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
     ,   missing_node
     )
 
+das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
+
 namespace das {
     template <>
     struct typeFactory<RttiValue> {
@@ -237,7 +239,7 @@ namespace das {
         virtual bool canCopy() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, sizeof(LineInfo));
+            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(LineInfo)));
         }
     };
 
@@ -771,11 +773,7 @@ namespace das {
     }
 
     smart_ptr<FileAccess> makeFileAccess( char * pak, Context * ) {
-        if ( pak ) {
-            return  make_smart<FsFileAccess>(pak, make_smart<FsFileAccess>());
-        } else {
-            return make_smart<FsFileAccess>();
-        }
+        return get_file_access(pak);
     }
 
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context ) {
