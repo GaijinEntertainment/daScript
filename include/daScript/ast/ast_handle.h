@@ -251,6 +251,34 @@ namespace das
                 }
             }
         };
+        template <typename OOT>
+        struct SimNode_AtStdVectorR2V : SimNode_AtStdVector {
+            using TT = OOT;
+            SimNode_AtStdVectorR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
+                : SimNode_AtStdVector(at, rv, idx, ofs) {}
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP_TT(AtStdVectorR2V);
+                V_SUB(value);
+                V_SUB(index);
+                V_ARG(stride);
+                V_ARG(offset);
+                V_ARG(range);
+                V_END();
+            }
+            virtual vec4f eval ( Context & context ) override {
+                DAS_PROFILE_NODE
+                OOT * pR = (OOT *) SimNode_AtStdVector::compute(context);
+                return cast<OOT>::from(*pR);
+            }
+#define EVAL_NODE(TYPE,CTYPE)                                           \
+            virtual CTYPE eval##TYPE ( Context & context ) override {   \
+                DAS_PROFILE_NODE \
+                return *(CTYPE *) SimNode_AtStdVector::compute(context);    \
+            }
+            DAS_EVAL_NODE
+#undef EVAL_NODE
+        };
         struct VectorIterator : Iterator {
             VectorIterator  ( VectorType * ar ) : array(ar) {}
             virtual bool first ( Context &, char * _value ) override {
@@ -322,6 +350,23 @@ namespace das
                                                                idx->simulate(context),
                                                                ofs);
         }
+        virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type,
+                                            const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+            if ( type->isHandle() ) {
+                auto expr = context.code->makeNode<SimNode_AtStdVector>(at,
+                                                                rv->simulate(context),
+                                                                idx->simulate(context),
+                                                                ofs);
+                return ExprRef2Value::GetR2V(context, at, type, expr);
+            } else {
+                return context.code->makeValueNode<SimNode_AtStdVectorR2V>(type->baseType,
+                                                                at,
+                                                                rv->simulate(context),
+                                                                idx->simulate(context),
+                                                                ofs);
+            }
+        }
+
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
             auto rv = src->simulate(context);
             return context.code->makeNode<SimNode_AnyIterator<VectorType,VectorIterator>>(at, rv);
@@ -353,25 +398,9 @@ namespace das
         ManagedVectorAnnotation(const string & n, ModuleLibrary & lib) :
             ManagedVectorAnnotation<VectorType, false>(n, lib) {
         }
-        struct SimNode_AtStdVectorR2V : ManagedVectorAnnotation<VectorType,false>::SimNode_AtStdVector {
-            SimNode_AtStdVectorR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
-                : ManagedVectorAnnotation<VectorType,false>::SimNode_AtStdVector(at, rv, idx, ofs) {}
-            virtual vec4f eval ( Context & context ) override {
-                DAS_PROFILE_NODE
-                OT * pR = (OT *) ManagedVectorAnnotation<VectorType,false>::SimNode_AtStdVector::compute(context);
-                return cast<OT>::from(*pR);
-            }
-#define EVAL_NODE(TYPE,CTYPE)                                           \
-            virtual CTYPE eval##TYPE ( Context & context ) override {   \
-                DAS_PROFILE_NODE \
-                return *(CTYPE *)ManagedVectorAnnotation<VectorType,false>::SimNode_AtStdVector::compute(context);    \
-            }
-            DAS_EVAL_NODE
-#undef EVAL_NODE
-        };
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                             const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            return context.code->makeNode<SimNode_AtStdVectorR2V>(at,
+            return context.code->makeNode<SimNode_AtStdVectorR2V<OT>>(at,
                                                                   rv->simulate(context),
                                                                   idx->simulate(context),
                                                                   ofs);

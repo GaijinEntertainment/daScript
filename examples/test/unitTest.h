@@ -82,6 +82,10 @@ struct TestObjectFoo {
     }
 };
 
+typedef das::vector<TestObjectFoo> FooArray;
+
+void testFooArray(const das::TBlock<void, const FooArray> & blk, das::Context * context);
+
 struct TestObjectSmart : public das::ptr_ref_count {
      int fooData = 1234;
      das::smart_ptr<TestObjectSmart> first;

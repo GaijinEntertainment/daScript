@@ -493,6 +493,18 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
     context->invoke(blk, args, nullptr);
 }
 
+void testFooArray(const TBlock<void,const FooArray> & blk, Context * context) {
+    FooArray arr;
+    for (int32_t x = 0; x != 10; ++x) {
+        TestObjectFoo p;
+        p.fooData = x;
+        arr.push_back(p);
+    }
+    vec4f args[1];
+    args[0] = cast<FooArray *>::from(&arr);
+    context->invoke(blk, args, nullptr);
+}
+
 void tableMojo ( TTable<char *,int> & in, const TBlock<void,TTable<char *,int>> & block, Context * context ) {
     vec4f args[1];
     args[0] = cast<Table *>::from(&in);
@@ -528,6 +540,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<ManagedVectorAnnotation<Point3Array>>("Point3Array",lib));
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
+    // foo array
+    addExtern<DAS_BIND_FUN(testFooArray)>(*this, lib, "testFooArray",
+        SideEffects::modifyExternal, "testFooArray");
     // utf8 print
     addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw",
         SideEffects::modifyExternal, "builtin_printw");
