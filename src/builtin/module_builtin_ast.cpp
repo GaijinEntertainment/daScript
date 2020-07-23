@@ -994,6 +994,8 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(getBaseSizeOf)>("baseSizeOf","getBaseSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getCountOf)>("countOf","getCountOf");
             addProperty<DAS_BIND_MANAGED_PROP(getAlignOf)>("alignOf","getAlignOf");
+            addProperty<DAS_BIND_MANAGED_PROP(getVectorBaseType)>("vectorBaseType","getVectorBaseType");
+            addProperty<DAS_BIND_MANAGED_PROP(getVectorDim)>("vectorDim","getVectorDim");
         }
     };
 
