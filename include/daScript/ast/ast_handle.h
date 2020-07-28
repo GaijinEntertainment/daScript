@@ -395,15 +395,17 @@ namespace das
     template <typename VectorType>
     struct ManagedVectorAnnotation<VectorType,true> : ManagedVectorAnnotation<VectorType,false> {
         using OT = typename VectorType::value_type;
+        using BT = ManagedVectorAnnotation<VectorType, false>;
+        using BTT = typename BT::template SimNode_AtStdVectorR2V<OT>;
         ManagedVectorAnnotation(const string & n, ModuleLibrary & lib) :
             ManagedVectorAnnotation<VectorType, false>(n, lib) {
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                             const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            return context.code->makeNode<SimNode_AtStdVectorR2V<OT>>(at,
-                                                                  rv->simulate(context),
-                                                                  idx->simulate(context),
-                                                                  ofs);
+            return context.code->makeNode<BTT>(at,
+                                               rv->simulate(context),
+                                               idx->simulate(context),
+                                               ofs);
         }
     };
 
