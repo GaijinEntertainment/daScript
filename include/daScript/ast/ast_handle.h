@@ -232,11 +232,11 @@ namespace das
             virtual SimNode * visit ( SimVisitor & vis ) override {
                 V_BEGIN();
                 V_OP_TT(AtStdVector);
-                V_SUB(value);
-                V_SUB(index);
-                V_ARG(stride);
-                V_ARG(offset);
-                V_ARG(range);
+                V_SUB_THIS(value);
+                V_SUB_THIS(index);
+                V_ARG_THIS(stride);
+                V_ARG_THIS(offset);
+                V_ARG_THIS(range);
                 V_END();
             }
             __forceinline char * compute ( Context & context ) {
@@ -259,11 +259,11 @@ namespace das
             virtual SimNode * visit ( SimVisitor & vis ) override {
                 V_BEGIN();
                 V_OP_TT(AtStdVectorR2V);
-                V_SUB(value);
-                V_SUB(index);
-                V_ARG(stride);
-                V_ARG(offset);
-                V_ARG(range);
+                V_SUB_THIS(value);
+                V_SUB_THIS(index);
+                V_ARG_THIS(stride);
+                V_ARG_THIS(offset);
+                V_ARG_THIS(range);
                 V_END();
             }
             virtual vec4f eval ( Context & context ) override {

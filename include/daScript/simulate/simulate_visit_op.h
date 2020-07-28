@@ -9,6 +9,8 @@
 #define V_SP_EX(x)          vis.sp(x,#x);
 #define V_ARG(x)            vis.arg(x,#x);
 #define V_SUB(x)            x = vis.sub(x,#x);
+#define V_ARG_THIS(x)       vis.arg(this->x,#x);
+#define V_SUB_THIS(x)       this->x = vis.sub(this->x,#x);
 #define V_SUB_OPT(x)        x = x ? vis.sub(x,#x) : nullptr;
 #define V_CALL()            visitCall(vis);
 #define V_FINAL()           visitFinal(vis);
