@@ -1087,6 +1087,9 @@ namespace das {
             }
             ss << " " << collector.getVarName(arg);
         }
+        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override {
+            return false;
+        }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & arg, Expression * expr ) override {
             Visitor::preVisitArgumentInit(fn,arg,expr);
             ss << " = ";

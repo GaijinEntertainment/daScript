@@ -483,7 +483,7 @@ namespace das {
                 arg->type = arg->type->visit(vis);
                 arg->type = vis.visit(arg->type.get());
             }
-            if ( arg->init ) {
+            if ( arg->init && vis.canVisitArgumentInit(this,arg,arg->init.get()) ) {
                 vis.preVisitArgumentInit(this, arg, arg->init.get());
                 arg->init = arg->init->visit(vis);
                 if ( arg->init ) {

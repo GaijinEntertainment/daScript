@@ -29,6 +29,7 @@ namespace das {
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) { return true; }
         virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) { return true; }
+        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) { return true; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}

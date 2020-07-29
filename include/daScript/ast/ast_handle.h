@@ -269,6 +269,7 @@ namespace das
             virtual vec4f eval ( Context & context ) override {
                 DAS_PROFILE_NODE
                 OOT * pR = (OOT *) SimNode_AtStdVector::compute(context);
+                DAS_ASSERT(pR);
                 return cast<OOT>::from(*pR);
             }
 #define EVAL_NODE(TYPE,CTYPE)                                           \
