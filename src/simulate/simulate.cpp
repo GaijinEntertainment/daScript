@@ -793,6 +793,19 @@ namespace das
         return nullptr;
     }
 
+    SimFunction * Context::findFunction ( const char * name, bool & isUnique ) const {
+        int candidates = 0;
+        SimFunction * found = nullptr;
+        for ( int fni = 0; fni != totalFunctions; ++fni ) {
+            if ( strcmp(functions[fni].name, name)==0 ) {
+                found = functions + fni;
+                candidates++;
+            }
+        }
+        isUnique = candidates == 1;
+        return found;
+    }
+
     int Context::findVariable ( const char * name ) const {
         for ( int vni = 0; vni != totalVariables; ++vni ) {
             if ( strcmp(globalVariables[vni].name, name)==0 ) {

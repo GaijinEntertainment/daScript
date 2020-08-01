@@ -286,6 +286,7 @@ namespace das
         }
 
         SimFunction * findFunction ( const char * name ) const;
+        SimFunction * findFunction ( const char * name, bool & isUnique ) const;
         int findVariable ( const char * name ) const;
         void stackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables );
         string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope = false );
