@@ -9,6 +9,7 @@
    language/datatypes.rst
    language/statements.rst
    language/expressions.rst
+   language/unsafe.rst
    language/tables.rst
    language/arrays.rst
    language/functions.rst
