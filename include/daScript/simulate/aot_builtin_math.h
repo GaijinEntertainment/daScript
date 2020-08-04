@@ -55,6 +55,9 @@ namespace das {
 
     __forceinline vec4f cross3(vec4f a, vec4f b){vec4f v = v_cross3(a,b); return v;}
 
+    __forceinline double fisnan(float  a){return isnan(a);}
+
+    __forceinline double disnan(double a){return isnan(a);}
     __forceinline double dabs  (double a){return fabs(a);}
     __forceinline double dsqrt (double a){return sqrt(a);}
     __forceinline double dexp  (double a){return exp(a);}

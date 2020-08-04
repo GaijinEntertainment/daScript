@@ -516,7 +516,10 @@ namespace das {
             addExternEx<float(float3,float3),DAS_BIND_FUN(distanceSq3)>(*this, lib, "distance_sq", SideEffects::none, "distanceSq3")->args({"x","y"});
             addExternEx<float(float3,float3),DAS_BIND_FUN(invdistance3)>(*this, lib, "inv_distance", SideEffects::none, "invdistance3")->args({"x","y"});
             addExternEx<float(float3,float3),DAS_BIND_FUN(invdistanceSq3)>(*this, lib, "inv_distance_sq", SideEffects::none, "invdistanceSq3")->args({"x","y"});
+            // unique float functions
+            addExtern<DAS_BIND_FUN(fisnan)>(*this, lib, "is_nan",SideEffects::none, "fisnan")->arg("x");
             //double functions
+            addExtern<DAS_BIND_FUN(disnan)>(*this, lib, "is_nan",SideEffects::none, "disnan")->arg("x");
             addExtern<DAS_BIND_FUN(dabs)>(*this, lib, "abs",     SideEffects::none, "dabs")->arg("x");
             addExtern<DAS_BIND_FUN(dsqrt)>(*this, lib, "sqrt",   SideEffects::none, "dsqrt")->arg("x");
             addExtern<DAS_BIND_FUN(dexp)>(*this, lib, "exp",     SideEffects::none, "dexp")->arg("x");
