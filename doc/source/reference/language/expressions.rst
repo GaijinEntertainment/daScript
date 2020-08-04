@@ -27,6 +27,14 @@ daScript implements 3 kind of assignment: the copy assignment(=)::
 
     a = 10
 
+copy assignment is equivalent of C++ memcpy operation::
+
+    template <typename TT, typename QQ>
+    __forceinline void das_copy ( TT & a, const QQ b ) {
+        static_assert(sizeof(TT)<=sizeof(QQ),"can't copy from smaller type");
+        memcpy(&a, &b, sizeof(TT));
+    }
+
 "move" assignment ::
 
     var b = new Foo
@@ -37,7 +45,14 @@ move assignment nullifies source (b)
 It's main purpose is to correctly move ownership, and optimize copying if you don't need source for heavy types (such as arrays, tables).
 Some external handled types can be non assignable, but still moveable;
 
-    var
+move assignment is equvivalent of C++ memcpy + memset operations::
+
+    template <typename TT, typename QQ>
+    __forceinline void das_move ( TT & a, const QQ & b ) {
+        static_assert(sizeof(TT)<=sizeof(QQ),"can't move from smaller type");
+        memcpy(&a, &b, sizeof(TT));
+        memset((TT *)&b, 0, sizeof(TT));
+    }
 
 "clone" assignment ::
 
@@ -197,17 +212,17 @@ Logical
     exp := exp op exp
     exp := '!' exp
 
-Logical operators in daScript are : ``&, |, ^, !, &=, |=, ^=``
+Logical operators in daScript are : ``&&, |, ^^, !, &&=, ||=, ^^=``
 
-The operator ``&`` (logical and) returns false if its first argument is false, otherwise returns
+The operator ``&&`` (logical and) returns false if its first argument is false, otherwise returns
 its second argument.
-The operator ``|`` (logical or) returns its first argument if is different than false, otherwise
+The operator ``||`` (logical or) returns its first argument if is different than false, otherwise
 returns the second argument.
 
-The operator ``^`` (logical exclusive or) returns true if arguments are different, and false otherwise.
+The operator ``^^`` (logical exclusive or) returns true if arguments are different, and false otherwise.
 
-It is important to understand, that & and | would not necessarily 'evaluates' all arguments.
-Unlike C++ equivalents &= and |= would also cancel evaluation of the right side.
+It is important to understand, that && and || would not necessarily 'evaluates' all arguments.
+Unlike C++ equivalents &&= and ||= would also cancel evaluation of the right side.
 
 The '!' operator will return false if the given value to negate was true or false otherwise.
 
@@ -266,41 +281,85 @@ Operators precedence
 .. index::
     pair: Operators precedence; Operators
 
-+--------------------------------------------------------------+-----------+
-| ``post++  post--  .   ->  ?. ?[ *(deref)``                   | highest   |
-+--------------------------------------------------------------+-----------+
-| ``|>  <|``                                                   |           |
-+--------------------------------------------------------------+-----------+
-| ``is  as``                                                   |           |
-+--------------------------------------------------------------+-----------+
-| ``-  +  ~  !   ++  --``                                      |           |
-+--------------------------------------------------------------+-----------+
-| ``??``                                                       |           |
-+--------------------------------------------------------------+-----------+
-| ``/  *  %``                                                  |           |
-+--------------------------------------------------------------+-----------+
-| ``+  -``                                                     |           |
-+--------------------------------------------------------------+-----------+
-| ``<<  >> <<< >>>``                                           |           |
-+--------------------------------------------------------------+-----------+
-| ``<  <=  >  >=``                                             |           |
-+--------------------------------------------------------------+-----------+
-| ``==  !=``                                                   |           |
-+--------------------------------------------------------------+-----------+
-| ``&``                                                        |           |
-+--------------------------------------------------------------+-----------+
-| ``^``                                                        |           |
-+--------------------------------------------------------------+-----------+
-| ``|``                                                        |           |
-+--------------------------------------------------------------+-----------+
-| ``?  :``                                                     |           |
-+--------------------------------------------------------------+-----------+
-| ``+=  =  -=  /=  *=  %=  &=  |=  ^=  <<=  >>=  <- <<<= >>>=``| ...       |
-+--------------------------------------------------------------+-----------+
-| =>                                                           |           |
-+--------------------------------------------------------------+-----------+
-| ``',' comma``                                                | lowest    |
-+--------------------------------------------------------------+-----------+
++--------------------------------------------------------------------------+-----------+
+| ``post++  post--  .   ->  ?. ?[ *(deref)``                               | highest   |
++--------------------------------------------------------------------------+-----------+
+| ``|>  <|``                                                               |           |
++--------------------------------------------------------------------------+-----------+
+| ``is  as``                                                               |           |
++--------------------------------------------------------------------------+-----------+
+| ``-  +  ~  !   ++  --``                                                  |           |
++--------------------------------------------------------------------------+-----------+
+| ``??``                                                                   |           |
++--------------------------------------------------------------------------+-----------+
+| ``/  *  %``                                                              |           |
++--------------------------------------------------------------------------+-----------+
+| ``+  -``                                                                 |           |
++--------------------------------------------------------------------------+-----------+
+| ``<<  >> <<< >>>``                                                       |           |
++--------------------------------------------------------------------------+-----------+
+| ``<  <=  >  >=``                                                         |           |
++--------------------------------------------------------------------------+-----------+
+| ``==  !=``                                                               |           |
++--------------------------------------------------------------------------+-----------+
+| ``&``                                                                    |           |
++--------------------------------------------------------------------------+-----------+
+| ``^``                                                                    |           |
++--------------------------------------------------------------------------+-----------+
+| ``|``                                                                    |           |
++--------------------------------------------------------------------------+-----------+
+| ``&&``                                                                   |           |
++--------------------------------------------------------------------------+-----------+
+| ``^^``                                                                   |           |
++--------------------------------------------------------------------------+-----------+
+| ``||``                                                                   |           |
++--------------------------------------------------------------------------+-----------+
+| ``?  :``                                                                 |           |
++--------------------------------------------------------------------------+-----------+
+| ``+=  =  -=  /=  *=  %=  &=  |=  ^=  <<=  >>=  <- <<<= >>>= &&= ||= ^^=``| ...       |
++--------------------------------------------------------------------------+-----------+
+| ``=>``                                                                   |           |
++--------------------------------------------------------------------------+-----------+
+| ``',' comma``                                                            | lowest    |
++--------------------------------------------------------------------------+-----------+
+
+.. _array_contructor:
+
+-----------------
+Array Initializer
+-----------------
+
+.. index::
+    single: Array Initializer
+
+::
+
+    exp := '[['type[] [explist] ']]'
+
+Creates a new fixed size array::
+
+    let a = [[int[] 1; 2]]     // creates array of two elements
+    let a = [[int[2] 1, 2]]    // creates array of two elements
+    var a = [[auto 1; 2]]      // creates which fully infers its own type
+    let a = [[int[2] 1; 2; 3]] // error, too many initializers
+    var a = [[auto 1]]         // int
+    var a = [[auto[] 1]]       // int[1]
+
+Arrays can be also created with array comprehensions::
+
+    let q <- [[ for x in range(0, 10); x * x ]]
+
+Similar syntax can be used to initialize dynamic arrays::
+
+    let a <- [{int[3] 1;2;3 }]                      // creates and initializes array<int>
+    let q <- [{ for x in range(0, 10); x * x }]     // comprehension which initializes array<int>
+
+Only dynamic multi-dimensional arrays can be initialized (for now)::
+
+    var a <- [[auto [{int 1;2;3}]; [{int 4;5}]]]    // array<int>[2]
+    var a <- [{auto [{int 1;2;3}]; [{int 4;5}]}]    // array<array<int>>
+
+(see :ref:`Arrays <arrays>`).
 
 .. _struct_contructor:
 
@@ -317,30 +376,48 @@ Struct Initializer
       x: int = 1
       y: int = 2
 
-    let fExplicit = [[Foo x = 13, y = 11]] // x = 13, y = 11
-    let fPartial  = [[Foo x = 13]]         // x = 13, y = 0
+    let fExplicit = [[Foo x = 13, y = 11]]              // x = 13, y = 11
+    let fPartial  = [[Foo x = 13]]                      // x = 13, y = 0
+    let fComplete = [[Foo() x = 13]]                    // x = 13, y = 2 with 'construct' syntax
+    let aArray    = [[Foo() x=11,y=22; x=33; y=44]]     // array of Foo
+
+Handled (external) types can also be initialized using structure initialization syntax. Handled types always require construct syntax, i.e. ().
 
 (see :ref:`Structs <structs>`).
 
+.. _tuple_contructor:
+
 -----------------
-Array Initializer
+Tuple Initializer
 -----------------
 
 .. index::
-    single: Array Initializer
+    single: Tuple Initializer
 
-::
+Create new tuple::
 
-    exp := '[['type[] [explist] ']]'
+    let a = [[tuple<int;float;string> 1, 2.0, "3"]]     // creates typed tuple
+    let b = [[auto 1, 2.0, "3"]]                        // infers tuple type
+    let c = [[auto 1, 2.0, "3"; 2, 3.0, "4"]]           // creates array of tuples
 
-Creates a new fixed size array::
+(see :ref:`Tuples <tuples>`).
 
-    let a = [[int[] 1, 2]]     // creates array of two elements
-    let a = [[int[2] 1, 2]]    // creates array of two elements
-    let a = [[int[2] 1, 2, 3]] // error, too many initializers
+-------------------
+Variant Initializer
+-------------------
 
-Arrays can be also created with array comprehensions::
+.. index::
+    single: Variant Initializer
 
-    let q <- [[ for x in range(0, 10); x * x ]]
+Variants are created with a syntax, similar to that of a structure::
 
-(see :ref:`Arrays <arrays>`).
+    variant Foo
+        i : int
+        f : float
+
+    let x = [[Foo i = 3]]
+    let y = [[Foo f = 4.0]]
+    let a = [[Foo[2] i=3; f=4.0]]   // array of variants
+    let z = [[Foo i = 3, f = 4.0]]  // syntax error, only one initializer
+
+(see :ref:`Variants <variants>`).
