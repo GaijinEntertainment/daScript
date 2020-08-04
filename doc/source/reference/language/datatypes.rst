@@ -78,6 +78,10 @@ sequences (``\t``, ``\a``, ``\b``, ``\n``, ``\r``, ``\v``, ``\f``,
 ``\U<hhhhhhhh>``)::
 
     let a = "I'm a string\n"
+    let a = "I'm also
+        a multi-line
+             string\n"
+
 
 Strings type can be thought of as 'pointer to actual string' type, like 'const char \*' in C language.
 As such they will be passed to function argument by value (but this value is just reference to immutable string in memory).
