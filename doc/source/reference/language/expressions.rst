@@ -421,3 +421,17 @@ Variants are created with a syntax, similar to that of a structure::
     let z = [[Foo i = 3, f = 4.0]]  // syntax error, only one initializer
 
 (see :ref:`Variants <variants>`).
+
+-----------------
+Table Initializer
+-----------------
+
+.. index::
+    single: Table Initializer
+
+Tables are created via specifying key => value pairs separated by semicolon::
+
+    var a <- {{ 1=>"one"; 2=>"two" }}
+    var a <- {{ 1=>"one"; 2=>2 }}       // error, type mismatch
+
+(see :ref:`Tables <tables>`).
