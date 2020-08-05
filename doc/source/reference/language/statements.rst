@@ -116,7 +116,7 @@ Executes a loop body statement for every element/iterator in expression, in sequ
 
     for i in range(0, 10)
         print("{i}")       // will print numbers from 0 to 9
-    
+
     // or
 
     let arr: array<int>

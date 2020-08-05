@@ -124,6 +124,14 @@ All structs (as well as other non-POD types, except strings) are passed by refer
 (see :ref:`Structs <structs>`).
 
 --------
+Classes
+--------
+
+Structs are similar to structures, but additionally they allow built-in methods and rtti.
+
+(see :ref:`Classes <classes>`).
+
+--------
 Variant
 --------
 
@@ -140,6 +148,14 @@ Tuple are anonymous record of data of other types (including structs), similar t
 All tuples (as well as other non-POD types, except strings) will be passed by reference
 
 (see :ref:`Tuples <tuples>`).
+
+-----------
+Enumeration
+-----------
+
+An enumeration binds a specific integer value to a name, similar to C++ enum classes.
+
+(see :ref:`Enumerations <enumerations>`).
 
 --------
 Bitfield

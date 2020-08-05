@@ -43,6 +43,8 @@ Mutable global variables are defined as::
 
 and their usage can be switched on and off per-project basis via CodeOfPolicies.
 
+.. _enumerations:
+
 ---------------
 Enumerations
 ---------------

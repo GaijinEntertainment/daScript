@@ -21,8 +21,9 @@
    language/variants.rst
    language/classes.rst
    language/handles.rst
+   language/constants_and_enumerations.rst
+   language/bitfields.rst
    language/comprehensions.rst
    language/iterators.rst
-   language/constants_and_enumerations.rst
    language/string_builder.rst
    language/generic_programming.rst
