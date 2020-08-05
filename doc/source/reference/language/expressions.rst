@@ -359,16 +359,16 @@ Only dynamic multi-dimensional arrays can be initialized (for now)::
     var a <- [[auto [{int 1;2;3}]; [{int 4;5}]]]    // array<int>[2]
     var a <- [{auto [{int 1;2;3}]; [{int 4;5}]}]    // array<array<int>>
 
-(see :ref:`Arrays <arrays>`).
+(see :ref:`Arrays <arrays>`, :ref:`Comprehensions <comprehensions>`).
 
 .. _struct_contructor:
 
-------------------
-Struct Initializer
-------------------
+-------------------------------------------
+Struct, Class, and Handled type Initializer
+-------------------------------------------
 
 .. index::
-    single: Struct Initializer
+    single: Struct, Class, and Handled type Initializer
 
 ::
 
@@ -379,11 +379,15 @@ Struct Initializer
     let fExplicit = [[Foo x = 13, y = 11]]              // x = 13, y = 11
     let fPartial  = [[Foo x = 13]]                      // x = 13, y = 0
     let fComplete = [[Foo() x = 13]]                    // x = 13, y = 2 with 'construct' syntax
-    let aArray    = [[Foo() x=11,y=22; x=33; y=44]]     // array of Foo
+    let aArray    = [[Foo() x=11,y=22; x=33; y=44]]     // array of Foo with 'construct' syntax
 
-Handled (external) types can also be initialized using structure initialization syntax. Handled types always require construct syntax, i.e. ().
+Initialization also supports optional inline block::
 
-(see :ref:`Structs <structs>`).
+    var c = [[ Foo x=1, y=2 where $ ( var foo ) { print("{foo}"); } ]]
+
+Classes and handled (external) types can also be initialized using structure initialization syntax. Classes and handled types always require construct syntax, i.e. ().
+
+(see :ref:`Structs <structs>`, :ref:`Classes <classes>`, :ref:`Handles <handles>` ).
 
 .. _tuple_contructor:
 

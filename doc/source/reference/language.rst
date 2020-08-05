@@ -15,6 +15,10 @@
    language/functions.rst
    language/structs.rst
    language/tuples.rst
+   language/variants.rst
+   language/classes.rst
+   language/handles.rst
+   language/comprehensions.rst
    language/iterators.rst
    language/constants_and_enumerations.rst
    language/builtin_functions.rst
