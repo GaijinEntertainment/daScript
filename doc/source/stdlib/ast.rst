@@ -3722,33 +3722,37 @@ TypeDecl fields are
 
 TypeDecl properties are
 
-+---------------+----+
-+isCtorType     +bool+
-+---------------+----+
-+alignOf        +int +
-+---------------+----+
-+isVoid         +bool+
-+---------------+----+
-+isAuto         +bool+
-+---------------+----+
-+canMove        +bool+
-+---------------+----+
-+isExprType     +bool+
-+---------------+----+
-+sizeOf         +int +
-+---------------+----+
-+isAlias        +bool+
-+---------------+----+
-+baseSizeOf     +int +
-+---------------+----+
-+isString       +bool+
-+---------------+----+
-+canCopy        +bool+
-+---------------+----+
-+countOf        +int +
-+---------------+----+
-+isWorkhorseType+bool+
-+---------------+----+
++---------------+------------------------------------+
++isCtorType     +bool                                +
++---------------+------------------------------------+
++alignOf        +int                                 +
++---------------+------------------------------------+
++vectorBaseType + :ref:`rtti::Type <enum-rtti-Type>` +
++---------------+------------------------------------+
++vectorDim      +int                                 +
++---------------+------------------------------------+
++isVoid         +bool                                +
++---------------+------------------------------------+
++isAuto         +bool                                +
++---------------+------------------------------------+
++canMove        +bool                                +
++---------------+------------------------------------+
++isExprType     +bool                                +
++---------------+------------------------------------+
++sizeOf         +int                                 +
++---------------+------------------------------------+
++isAlias        +bool                                +
++---------------+------------------------------------+
++baseSizeOf     +int                                 +
++---------------+------------------------------------+
++isString       +bool                                +
++---------------+------------------------------------+
++canCopy        +bool                                +
++---------------+------------------------------------+
++countOf        +int                                 +
++---------------+------------------------------------+
++isWorkhorseType+bool                                +
++---------------+------------------------------------+
 
 
 |structure_annotation-ast-TypeDecl|
@@ -8426,6 +8430,21 @@ clone_expression returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression
 
 |function-ast-clone_expression|
 
+.. _function-_at_ast_c__c_clone_function__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit:
+
+.. das:function:: clone_function(arg0: smart_ptr<ast::Function> const implicit)
+
+clone_function returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++arg0    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-clone_function|
+
 .. _function-_at_ast_c__c_clone_type__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_hh_implicit:
 
 .. das:function:: clone_type(arg0: smart_ptr<ast::TypeDecl> const implicit)
@@ -8914,6 +8933,21 @@ this_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 this_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
 
 |function-ast-this_program|
+
+.. _function-_at_ast_c__c_visit__hh_smart_ptr_hh__hh_handle_hh_Function_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_VisitorAdapter_hh_const_hh_implicit:
+
+.. das:function:: visit(arg0: smart_ptr<ast::Function> const implicit; arg1: smart_ptr<ast::VisitorAdapter> const implicit)
+
++--------+----------------------------------------------------------------------------------+
++argument+argument type                                                                     +
++========+==================================================================================+
++arg0    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit            +
++--------+----------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
++--------+----------------------------------------------------------------------------------+
+
+
+|function-ast-visit|
 
 .. _function-_at_ast_c__c_visit__hh_smart_ptr_hh__hh_handle_hh_Program_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_VisitorAdapter_hh_const_hh_implicit:
 

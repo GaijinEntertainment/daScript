@@ -748,6 +748,40 @@ find_arg returns  :ref:`RttiValue <alias-RttiValue>`
 
 |function-ast_boost-find_arg|
 
+.. _function-_at_ast_boost_c__c_find_unique_function__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const:
+
+.. das:function:: find_unique_function(mod: rtti::Module? const; name: string const)
+
+find_unique_function returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++name    +string const                                     +
++--------+-------------------------------------------------+
+
+
+|function-ast_boost-find_unique_function|
+
+.. _function-_at_ast_boost_c__c_find_unique_generic__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const:
+
+.. das:function:: find_unique_generic(mod: rtti::Module? const; name: string const)
+
+find_unique_generic returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++name    +string const                                     +
++--------+-------------------------------------------------+
+
+
+|function-ast_boost-find_unique_generic|
+
 .. _function-_at_ast_boost_c__c_isExpression__hh_smart_ptr_hh__hh_handle_hh_TypeDecl_hh_const_bool_hh_const:
 
 .. das:function:: isExpression(t: TypeDeclPtr; top: bool const)

@@ -1,5 +1,5 @@
 
-.. _stdlib_$:
+.. _stdlib__builtin:
 
 ================
 Built-in runtime

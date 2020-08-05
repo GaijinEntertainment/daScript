@@ -757,7 +757,9 @@ def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGrou
     if doc_file == null
         panic("can't open {fname}")
     fwrite(doc_file,"\n")
-    let mod_name = string(mod.name)
+    var mod_name = string(mod.name)
+    if mod_name=="$"
+        mod_name = "_builtin"
     fwrite(doc_file,make_header(name,mod_name))
     if length(substname)!=0
         fwrite(doc_file,".. include:: {getDetailIncludePath(fname,substname)}\n\n")

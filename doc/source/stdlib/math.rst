@@ -3562,4 +3562,38 @@ transpose returns  :ref:`math::float4x4 <handle-math-float4x4>`
 
 |function-math-transpose|
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_math_c__c_is_nan_double_hh_const:
+
+.. das:function:: is_nan(x: double const)
+
+is_nan returns double
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
+
+
+|function-math-is_nan|
+
+.. _function-_at_math_c__c_is_nan_float_hh_const:
+
+.. das:function:: is_nan(x: float const)
+
+is_nan returns double
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-is_nan|
+
 
