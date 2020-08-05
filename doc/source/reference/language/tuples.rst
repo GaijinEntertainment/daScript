@@ -28,4 +28,4 @@ Named tuple elements can be accessed by name as well as via nameless field::
     b.f = 2.0       // same as _1
     b._1 = 2.0      // _1 is also available
 
-Tuples follow the same alignment rules as structures  (see :ref:`Structures <structs>`).
+Tuples follow the same alignment rules as structures (see :ref:`Structures <structs_alignment>`).
