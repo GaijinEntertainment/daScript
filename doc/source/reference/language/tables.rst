@@ -27,7 +27,7 @@ for safety, find doesn't return anything. Instead it works with block as last ar
             assert(deref(pValue) == 10)
 
 It is done so, because otherwise find would have to return pointer to value, which would continue to point 'somewhere', even if data is deleted.
-Consider this hypothetical find and the following example :: 
+Consider this hypothetical find and the following example ::
 
     var tab: table<string; int>
     tab["some"] = 10
@@ -59,6 +59,6 @@ Tables can be constructed inline ::
 Which is syntax sugar for ::
 
 	let tab : table<string;int> = to_table_move([[tuple<string;int>[2] "one"=>1; "two"=>2]])
-	
+
 
 

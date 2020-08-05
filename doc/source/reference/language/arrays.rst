@@ -27,7 +27,7 @@ There are static arrays (of fixed size, allocated on stack), and dynamic array (
   b |> push("some")             // same as above line, but using pipe operator
 
 Resizing, insertion, deletion of dynamic arrays and arrays elements is done through a set of
-standard functions (see :ref:`built-in functions <builtin_functions>`).
+standard functions (see :ref:`built-in functions <stdlib__builtin>`).
 
 List of relevant builtin functions: push, push_clone, emplace, reserve, resize, erase, length, clear, capacity.
 
