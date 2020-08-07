@@ -1738,13 +1738,13 @@ namespace das {
                         expr->funcType = aT;
                         reportAstChanged();
                     } else {
-                        error("udefined type " + expr->funcType->describe(),  "", "",
+                        error("undefined type " + expr->funcType->describe(),  "", "",
                             expr->at, CompilationError::type_not_found);
                         return Visitor::visit(expr);
                     }
                 }
                 if (expr->funcType->isAuto()) {
-                    error("function of udefined type " + expr->funcType->describe(),  "", "",
+                    error("function of undefined type " + expr->funcType->describe(),  "", "",
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -1975,13 +1975,13 @@ namespace das {
                     expr->iterType = aT;
                     reportAstChanged();
                 } else {
-                    error("udefined type " + expr->iterType->describe(),  "", "",
+                    error("undefined type " + expr->iterType->describe(),  "", "",
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
             }
             if ( expr->iterType->isAuto() ) {
-                error("generator of udefined type " + expr->iterType->describe(),  "", "",
+                error("generator of undefined type " + expr->iterType->describe(),  "", "",
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             } else if ( expr->iterType->isVoid() ) {
@@ -2426,7 +2426,7 @@ namespace das {
                     reportAstChanged();
                     return Visitor::visit(expr);
                 } else {
-                    error("udefined type " + expr->typeexpr->describe(), "", "",
+                    error("undefined type " + expr->typeexpr->describe(), "", "",
                           expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -2476,7 +2476,7 @@ namespace das {
                     reportAstChanged();
                     return Visitor::visit(expr);
                 } else {
-                    error("udefined type " + expr->typeexpr->describe(), "", "",
+                    error("undefined type " + expr->typeexpr->describe(), "", "",
                           expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -3062,13 +3062,13 @@ namespace das {
                     expr->castType->sanitize();
                     reportAstChanged();
                 } else {
-                    error("udefined type " + expr->castType->describe(),  "", "",
+                    error("undefined type " + expr->castType->describe(),  "", "",
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
             }
             if ( expr->castType->isAuto() ) {
-                error("casting to udefined type " + expr->castType->describe(),  "", "",
+                error("casting to undefined type " + expr->castType->describe(),  "", "",
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
@@ -3510,7 +3510,7 @@ namespace das {
                     var->type = aT;
                     reportAstChanged();
                 } else {
-                    error("udefined type " + var->type->describe(),  "", "",
+                    error("undefined type " + var->type->describe(),  "", "",
                         var->at, CompilationError::type_not_found);
                 }
             }
@@ -4944,7 +4944,7 @@ namespace das {
                     var->type->sanitize();
                     reportAstChanged();
                 } else {
-                    error("udefined type " + var->type->describe(), "", "",
+                    error("undefined type " + var->type->describe(), "", "",
                         var->at, CompilationError::type_not_found);
                 }
             }

@@ -47,7 +47,7 @@ def test
     //  and needs to be stand-alone in the file, or it does not get to infer at all
     // assert(int(inA one)==1)                      // 30308: enumeraiton not found inA
 
-    assert(typeinfo(sizeof type<structInA>)==4)      // 30301: udefined type structInA
-    assert(typeinfo(sizeof type<aliasInA>)==4)       // 30301: udefined type aliasInA
+    assert(typeinfo(sizeof type<structInA>)==4)      // 30301: undefined type structInA
+    assert(typeinfo(sizeof type<aliasInA>)==4)       // 30301: undefined type aliasInA
 
     return true
