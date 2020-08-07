@@ -1,7 +1,7 @@
 .. _lambdas:
 
-=================
-Lambdas
-=================
+======
+Lambda
+======
 
 todo: to be written

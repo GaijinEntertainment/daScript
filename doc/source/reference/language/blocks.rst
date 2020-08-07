@@ -1,7 +1,7 @@
 .. _blocks:
 
-=================
-Blocks
-=================
+=====
+Block
+=====
 
 todo: to be written

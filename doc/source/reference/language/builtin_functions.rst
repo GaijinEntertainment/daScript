@@ -13,9 +13,9 @@ Builtin functions are function-like expressions, which are available without any
 They implement inherit mechanisms of the language, in available in ast as separate expressions.
 They are different from standard functions (see :ref:`built-in functions <stdlib__builtin>`).
 
-^^^^^^^^^
-Functions
-^^^^^^^^^
+^^^^^^
+Invoke
+^^^^^^
 
 .. das:function:: invoke(block_or_function, arguments)
 

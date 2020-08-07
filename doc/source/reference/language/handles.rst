@@ -1,7 +1,7 @@
 .. _handles:
 
-=================
-Handles
-=================
+============
+Handled type
+============
 
 todo: to be written

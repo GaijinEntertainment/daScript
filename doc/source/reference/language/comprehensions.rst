@@ -1,8 +1,8 @@
 .. _comprehensions:
 
-==============
-Comprehensions
-==============
+=============
+Comprehension
+=============
 
 Comprehensions are concise notation constructs designed to allow sequences to be built with other sequences.
 

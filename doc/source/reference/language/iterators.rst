@@ -1,7 +1,7 @@
 .. _iterators:
 
-=================
-Iterators
-=================
+========
+Iterator
+========
 
 todo: to be written

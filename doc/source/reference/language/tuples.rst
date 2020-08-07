@@ -1,8 +1,8 @@
 .. _tuples:
 
-======
-Tuples
-======
+=====
+Tuple
+=====
 
 Tuple is concise syntax to create nameless data structure::
 

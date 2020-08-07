@@ -1,9 +1,9 @@
 .. _structs:
 
 
-=================
-Structs
-=================
+======
+Struct
+======
 
 .. index::
     single: Structs
@@ -79,7 +79,7 @@ Structure Function Members
 
 daScript doesn't have embedded structure member functions, virtual (that can be overridden in inherited structures) or non-virtual.
 Those features are implemented for classes.
-For ease of Objected Oriented Programming non-virtual member functions can be easily emulated with the pipe operator '|>'::
+For ease of Objected Oriented Programming non-virtual member functions can be easily emulated with the pipe operator ``|>``::
 
     struct Foo
         x, y: int = 0

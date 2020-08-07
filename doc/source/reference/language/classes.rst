@@ -1,7 +1,7 @@
 .. _classes:
 
-=================
-Classes
-=================
+=====
+Class
+=====
 
 todo: to be written

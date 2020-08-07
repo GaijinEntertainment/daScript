@@ -1,9 +1,9 @@
 .. _string_builder:
 
 
-=================
+==============
 String Builder
-=================
+==============
 
 .. index::
     single: String Builder

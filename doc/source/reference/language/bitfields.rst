@@ -1,8 +1,8 @@
 .. _bitfields:
 
-=========
-Bitfields
-=========
+========
+Bitfield
+========
 
 Bitfield is a nameless type which represents a collection of up to 32-bit flags in a single integer::
 

@@ -1,9 +1,9 @@
 .. _arrays:
 
 
-=================
-Arrays
-=================
+=====
+Array
+=====
 
 .. index::
     single: Arrays

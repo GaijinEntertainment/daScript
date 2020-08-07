@@ -1,9 +1,9 @@
 .. _tables:
 
 
-=================
-Tables
-=================
+=====
+Table
+=====
 
 .. index::
     single: Tables

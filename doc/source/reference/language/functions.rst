@@ -1,9 +1,9 @@
 .. _functions:
 
 
-=================
-Functions
-=================
+========
+Function
+========
 
 .. index::
     single: Functions
@@ -143,7 +143,7 @@ Such syntax can only be used with named arguments call ::
     test(2, 3)           // invalid call, a,b parameters are missing
     test([a = 2, b = 3]) // valid call
 
-And can still be combined with overloading :: 
+And can still be combined with overloading ::
 
     def test(c: int = 1; d: int = 1; a, b: int)
         return a + b + c + d
