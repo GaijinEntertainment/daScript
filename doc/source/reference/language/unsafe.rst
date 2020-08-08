@@ -95,5 +95,7 @@ Moving or copying classes is unsafe::
             var a : TestClass
             a <- b                              // potentially moving from derived class
 
+Local class variables are unsafe::
 
-
+    unsafe
+        var g = Goo()                           // potential lifetime issues
