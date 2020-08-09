@@ -31,10 +31,14 @@ Blocks can be called via ``invoke``::
     def radd(var ext:int&;b:block<(var arg:int&):int>):int
         return invoke(b,ext)
 
-Blocks are typically declared via pipe syntax::
+Typeless blocks are typically declared via pipe syntax::
 
     goo() <|                                // block without arguments
         print("inside goo")
+
+.. _blocks_declarations:
+
+Similarly typed blocks are typically declared via pipe syntax::
 
     var v1 = 1                              // block with arguments
     res = radd(v1) <| $(var a:int&):int

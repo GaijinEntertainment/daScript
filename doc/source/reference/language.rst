@@ -25,6 +25,7 @@
    language/bitfields.rst
    language/comprehensions.rst
    language/iterators.rst
+   language/generators.rst
    language/finalizers.rst
    language/string_builder.rst
    language/generic_programming.rst
