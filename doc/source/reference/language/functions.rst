@@ -1,6 +1,5 @@
 .. _functions:
 
-
 ========
 Function
 ========
@@ -24,10 +23,29 @@ Functions are similar to those in most other typed languages::
     def twice(a: int): int
         return a+a
 
+Completely empty function (without arguments) can be also declared::
+
+    def foo
+        print("foo")
+
+    //same as above
+    def foo()
+        print("foo")
+
+daScript can always infer function return type.
+Returning different types is a compilation error::
+
+    def foo(a:bool)
+        if a
+            return 1
+        else
+            return 2.0  // error, expecting int
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Function calls
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-You can call function by using it's name and passing all arguments (with a possible ommision of default arguments) ::
+
+You can call function by using it's name and passing all arguments (with the possible omission of the default arguments) ::
 
     def foo(a, b: int)
         return a + b
@@ -38,7 +56,8 @@ You can call function by using it's name and passing all arguments (with a possi
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Named Arguments Function call
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-You can also call function by using it's name and passing all arguments with explicit names (with a possible ommision of default arguments) ::
+
+You can also call function by using it's name and passing all arguments with explicit names (with the possible omission of the default arguments) ::
 
     def foo(a, b: int)
         return a + b
@@ -46,28 +65,61 @@ You can also call function by using it's name and passing all arguments with exp
     def bar
         foo([a = 1, b = 2])  // same as foo(1, 2)
 
-Named arguments should be still in same order, i.e., this is error ::
+Named arguments should be still in same order::
 
     def bar
-        foo([b = 1, a = 2])  // error
+        foo([b = 1, a = 2])  // error, out of order
 
-Named arguments call is to increase readibility of callee code and ensure correctness of refactor of existing functions. It also allows defaulting not just last arguments.
+Named arguments calls increase readability of callee code and ensure correctness of refactoring of the existing functions.
+They also allow default values for arguments other than last::
+
+    def foo(a:int=13; b: int)
+        return a + b
+
+    def bar
+        foo([b = 2])  // same as foo(13, 2)
 
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Function pointer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Function pointer to function can be obtained using @ and called using invoke builtin::
+Pointer to a function uses similar declaration as that of a block or lambda::
 
-    let fn = @twice
+    function_type ::= function { optional_function_type }
+    optional_function_type ::= < { optional_function_arguments } { : return_type } >
+    optional_function_arguments := ( function_argument_list )
+    function_argument_list := argument_name : type | function_argument_list ; argument_name : type
+
+    function < (arg1:int;arg2:float&):bool >
+
+Function pointer can be obtained using ``@@`` operator::
+
+    def twice(a:int)
+        return a + a
+
+    let fn = @@twice
+
+When multiple functions have the same name, pointer can be obtained by explicitly specifying signature::
+
+    def twice(a:int)
+        return a + a
+
+    def twice(a:float)  // when this one is required
+        return a + a
+
+    let fn = @@<(a:float):float> twice
+
+Function pointer can be called via ``invoke``::
+
     let t = invoke(fn, 1)  // t = 2
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Generic functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-However, there are generic (templated) functions, which will be 'instantiated' during compilation of call to them::
+Generic functions are similar to C++ templated functions.
+daScript will 'instance' them during the infer pass of the compilation::
 
     def twice(a)
         return a + a
@@ -75,15 +127,39 @@ However, there are generic (templated) functions, which will be 'instantiated' d
     let f = twice(1.0)  // 2.0 float
     let i = twice(1)    // 2 int
 
-Generic functions allows writing in daScript like it is dynamic-type language, similar to Python or Lua, but still enjoy the performances and robustness of Strong-static typing.
+Generic functions allow code similar to dynamic-type language like Python or Lua,
+while still enjoying the performances and robustness of Strong-static typing.
 
 Generic function address can not be obtained.
+
+Unspecified type can also be written via ``auto`` notation::
+
+    def twice(a:auto)   // same as 'twice' above
+        return a + a
+
+Generic function can specialize generic type alias, and use it as part of the declaration::
+
+    def twice(a:auto(TT)) : TT
+        return a + a
+
+In the example above alias ``TT`` is used to enforce return type contract.
+
+Type aliases can be used before the corresponding auto::
+
+    def summ(base : TT; a:auto(TT)[] )
+        var s = base
+        for x in a
+            s += x
+        return s
+
+In the example above TT is inferred from a type of the passed array ``a``, and expected as a first argument ``base``.
+Return type will be inferred from the type of ``s``, which would also be TT.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Function overloading
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Function names can be overloaded, if function argument types are different ::
+Function can be specialized if function argument types are different ::
 
     def twice(a: int)
         print("int")
@@ -95,32 +171,39 @@ Function names can be overloaded, if function argument types are different ::
     let i = twice(1)    // prints "int"
     let f = twice(1.0)  // prints "float"
 
-Declaring function with a same list of arguments is compile time error.
+Declaring function with a same exact argument list is compilation time error.
 
-Function arguments of same type can be delcared as follows ::
+Function can be partially specialized::
 
-    def foo(a, b: int)
-        return a + b
+    def twice(a:int)        // int
+        return a + a
+    def twice(a:float)      // float
+        return a + a
+    def twice(a:auto[])     // any array
+        return length(a)*2
+    def twice(a)            // any other case
+        return a + a
 
-    //same as above
-    def foo(a: int; b: int)
-        return a + b
+daScript uses the following rules for matching partially specialized functions
 
-Completely empty function (without arguments) can be also declared as ::
+    1. non auto is more specialized than auto
+    2. if both are non-auto, the one without cast is more specialized
+    3. the one with array is more specialized, than one without. if both have array, one with actual value is more specialized, than the one without
+    4. the one with base type of auto\alias is less specialized. if both are auto\alias - its assumed that its the same level of specialization
+    5. for pointer or array - subtypes are compared
+    6. for table, tuple and variant subtypes are compared, and all must compare same or equally specialized
+    7. for functions, blocks, or lambdas subtypes and return types are compared, and all must compare same or equally specialized
 
-    def foo
-        print("foo")
-
-    //same as above
-    def foo()
-        print("foo")
+When matching function daScript picks the ones which are most specialized, and sorts by substitute distance.
+Substitute distance is increased by 1 for each argument, if cast is required for the LSP (Liskov substitution principle).
+At the end function with the least distance is picked. If more than one function is left for picking, compilation error is reported.
 
 ^^^^^^^^^^^^^^^^^^
-Default Paramaters
+Default Parameters
 ^^^^^^^^^^^^^^^^^^
 
 .. index::
-    single: Function Default Paramaters
+    single: Function Default Parameters
 
 daScript's functions can have default parameters.
 
@@ -133,17 +216,17 @@ when the function *test* is invoked and the parameter c or d are not specified,
 the compiler will generate call with default value to the unspecified parameter. A default parameter can be
 any valid compile-time const daScript expression. The expression is evaluated at compile-time.
 
-it is valid to declare function with not only last arguments with default values ::
+it is valid to declare default values for arguments other than last::
 
     def test(c: int = 1; d: int = 1; a, b: int) // valid!
         return a + b + c + d
 
-Such syntax can only be used with named arguments call ::
+Calling such functions with default arguments requires named arguments call::
 
     test(2, 3)           // invalid call, a,b parameters are missing
     test([a = 2, b = 3]) // valid call
 
-And can still be combined with overloading ::
+Default arguments can be combined with overloading ::
 
     def test(c: int = 1; d: int = 1; a, b: int)
         return a + b + c + d
@@ -155,7 +238,7 @@ OOP-style calls
 ---------------
 
 There are no methods or function member of structs in daScript.
-However, code can be easily written "OOP style" by using rpipe operator '|>'::
+However, code can be easily written "OOP style" by using right pipe operator ``|>``::
 
     struct Foo
         x, y: int = 0
@@ -172,12 +255,6 @@ However, code can be easily written "OOP style" by using rpipe operator '|>'::
 (see :ref:`Structs <structs>`).
 
 ---------------------------------------------
-Lambda Functions
----------------------------------------------
-
-...to be written...
-
----------------------------------------------
 Tail Recursion
 ---------------------------------------------
 
@@ -189,3 +266,4 @@ iteration: it applies when the recursive calls in a function are the last execut
 statements in that function (just before the return).
 
 Currently daScript doesn't support tail recursion.
+It is implied that daScript function always returns.
