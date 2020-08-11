@@ -468,6 +468,8 @@ namespace das {
         pFunc->body = block->clone();
         auto wb = static_pointer_cast<ExprBlock>(pFunc->body);
         wb->blockFlags = 0;
+        wb->arguments.clear();
+        wb->returnType.reset();
         pFunc->result = make_smart<TypeDecl>(*block->type);
         for ( auto & arg : block->arguments ) {
             auto cA = arg->clone();

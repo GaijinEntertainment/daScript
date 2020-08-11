@@ -510,6 +510,17 @@ void YYNEWLINE() {
         return LBPIPE;
     }
 }
+<normal>\@\@[ \t]*\<\|               {
+    unput('@');
+    unput('@');
+    YYCOLUMN(das_yycolumn-=2, "UNPUT @@");
+    if ( das_nested_parentheses ) {
+        return LFPIPE;
+    } else {
+        das_need_oxford_comma = false;
+        return LFPIPE;
+    }
+}
 <normal>\@[ \t]*\<\|               {
     unput('@');
     YYCOLUMN(das_yycolumn--, "UNPUT @");

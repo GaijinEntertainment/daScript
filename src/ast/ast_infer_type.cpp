@@ -3475,7 +3475,7 @@ namespace das {
                 if ( func ) {
                     for ( auto & fna : func->arguments ) {
                         if ( fna->name==var->name ) {
-                            error("block argument " + var->name +" is shadowed by function argument argument "
+                            error("block argument " + var->name +" is shadowed by function argument "
                                 + fna->name + " : " + fna->type->describe() + " at line " + to_string(fna->at.line), "", "",
                                     var->at, CompilationError::variable_not_found);
                         }
@@ -5004,7 +5004,7 @@ namespace das {
                       var->at, CompilationError::invalid_variable_type);
             if ( var->type->hasClasses() && !safeExpression(expr) ) {
                 error("local class requires unsafe " + var->type->describe(), "", "",
-                      var->at, CompilationError::invalid_variable_type);
+                      var->at, CompilationError::unsafe);
             }
             if ( !var->type->isAutoOrAlias() ){
                 if ( var->init && var->init->rtti_isCast() ) {

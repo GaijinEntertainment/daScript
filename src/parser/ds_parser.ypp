@@ -259,6 +259,7 @@
 %token  LPIPE               "<|"
 %token  LBPIPE              " <|"
 %token  LAPIPE              "@ <|"
+%token  LFPIPE              "@@ <|"
 %token  RPIPE               "|>"
 %token  CLONEEQU            ":="
 %token  ROTL                "<<<"
@@ -1070,6 +1071,9 @@ expr_pipe
     |   LAPIPE expr_block[arg] {
         $$ = $arg;
     }
+    |   LFPIPE expr_block[arg] {
+        $$ = $arg;
+    }
     ;
 
 name_in_namespace
@@ -1414,7 +1418,9 @@ expr_assign
 
 expr_assign_pipe
     :   expr[left] '='[loc]    LAPIPE expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] '='[loc]    LFPIPE expr[right]   { $$ = new ExprCopy(tokAt(@loc),ExpressionPtr($left),ExpressionPtr($right)); }
     |   expr[left] LARROW[loc] LAPIPE expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] LFPIPE expr[right]   { $$ = new ExprMove(tokAt(@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
 expr_named_call

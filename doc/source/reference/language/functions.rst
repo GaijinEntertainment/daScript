@@ -115,6 +115,29 @@ Function pointer can be called via ``invoke``::
     let t = invoke(fn, 1)  // t = 2
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Nameless functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Pointer to nameless function can be created with syntax,
+similar to that of lambda or block (see :ref:`Blocks <blocks_declarations>`)::
+
+    let fn <- @@ <| ( a : int )
+        return a + a
+
+Nameless local functions do not capture variables at all::
+
+    var count = 1
+    let fn <- @@ <| ( a : int )
+        return a + count            // compilation error, can't locate variable count
+
+Internally regular function will be generated::
+
+    def _localfunction_thismodule_8_8_1`function ( a:int const ) : int
+            return a + a
+
+    let fn:function<(a:int const):int> const <- @@_localfunction_thismodule_8_8_1`function
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Generic functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
