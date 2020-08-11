@@ -10,11 +10,11 @@ Statements
 
 A daScript program is a simple sequence of statements::
 
-    stats := stat [';'|'\n'] stats
+    stats ::= stat [';'|'\n'] stats
 
 Statements in daScript are comparable to the C-Family languages (C/C++, Java, C#,
 etc.): assignment, function calls, program flow control structures etc. plus some
-custom statement like block, struct and array initializers (will be covered in detail
+custom statement like block, struct, and initializers (will be covered in detail
 later in this document).
 Statements can be separated with a new line or ';'.
 
@@ -27,8 +27,8 @@ Visibility Block
 
 ::
 
-    visibility_block := indent (stat)* unindent
-    visibility_block := '{' (stat)* '}'
+    visibility_block ::= indent (stat)* unindent
+    visibility_block ::= '{' (stat)* '}'
 
 A sequence of statements delimited by indenting or curly brackets ({ }) is called visibility_block.
 
@@ -63,7 +63,7 @@ if/elif/else statement
 
 ::
 
-    stat:= 'if' exp '\n' visibility_block (['elif' exp '\n' visibility_block])*  ['else' '\n' visibility_block]
+    stat ::= 'if' exp '\n' visibility_block (['elif' exp '\n' visibility_block])*  ['else' '\n' visibility_block]
 
 Conditionally execute a statement depending on the result of an expression::
 
@@ -83,16 +83,13 @@ while statement
 
 ::
 
-    stat:= 'while' exp '\n' indent stat
+    stat ::= 'while' exp '\n' indent stat
 
 Executes a statement while the condition is true::
 
-      while(true)
-      {
-          if (a<0)
+      while true
+          if a<0
               break
-          a--
-      }
 
 ------------
 Ranged Loops
@@ -110,7 +107,7 @@ for
 
 ::
 
-    stat := 'for' iterator 'in' [rangeexp] '\n' visibility_block
+    stat ::= 'for' iterator 'in' [rangeexp] '\n' visibility_block
 
 Executes a loop body statement for every element/iterator in expression, in sequenced order::
 
@@ -138,7 +135,7 @@ Executes a loop body statement for every element/iterator in expression, in sequ
     for k, v in keys(tab), values(tab)
         print("{k}:{v}")   // will print content of table, in form key:value
 
-You can implement your own iteratable types, by implementing iterator.
+Iterable types are implemented via iterators (see :ref:`Iterators <iterators>`).
 
 -------
 break
@@ -149,9 +146,9 @@ break
 
 ::
 
-    stat := 'break'
+    stat ::= 'break'
 
-The break statement terminates the execution of a loop (for or while);
+The break statement terminates the execution of a loop (``for`` or ``while``);
 
 ---------
 continue
@@ -162,7 +159,7 @@ continue
 
 ::
 
-    stat := 'continue'
+    stat ::= 'continue'
 
 The continue operator jumps to the next iteration of the loop skipping the execution of
 the following statements.
@@ -176,13 +173,15 @@ return
 
 ::
 
-    stat := return [exp]
-    stat := return <- exp
+    stat ::= return [exp]
+    stat ::= return <- exp
 
-The return statement terminates the execution of the current function and
+The return statement terminates the execution of the current function, block, or lambda and
 optionally returns the result of an expression. If the expression is omitted the function
-will return nothing, return types is assumed to be void.
-You can't return mismatching types from same function (i.e., all returns should return value of same type), and if function return type is explicit, return expression should return that same type.
+will return nothing; return types is assumed to be void.
+Return mismatching types from same function is an error (i.e., all returns should return value of same type).
+If function return type is explicit return expression should return that same type.
+
 Example::
 
     def foo(a: bool)
@@ -200,6 +199,9 @@ Example::
     def foobar(a)
         return a  // return type will be same as argument type
 
+In the generator blocks return must always return bool expression,
+where false indicates end of generation.
+
 'return <- exp' syntax is for move-on-return ::
 
     def make_array
@@ -208,6 +210,21 @@ Example::
         return <- a   // return will return
 
     let a <- make_array() //create array filled with make_array
+
+------
+yield
+------
+
+Yield serves similar purpose as ``return`` for generators (see :ref:`Generators <generators>`).
+
+It has similar to return syntax but can only be used inside the ``generator`` blocks.
+
+Yield must always produce a value, which matches that of the generator::
+
+    let gen <- generator<int>() <| $()
+        yield 0         // int 0
+        yield 1         // int 1
+        return false
 
 ------------------
 Finally statement
@@ -218,10 +235,11 @@ Finally statement
 
 ::
 
-    stat := finally visibility-block
+    stat ::= finally visibility-block
 
-Finally declares a block which will be executed once for any block (including control statements). Finally block can't contain break/continue/return statements.
-This is to require some expression to be run after 'all done'. Consider ::
+Finally declares a block which will be executed once for any block (including control statements).
+Finally block can't contain ``break``, ``continue``, ``return`` or ``yield`` statements.
+It is designed to ensure execution after 'all is done'. Consider ::
 
     def test(a: array<int>; b: int)
         for x in a
@@ -239,7 +257,7 @@ This is to require some expression to be run after 'all done'. Consider ::
         finally
              print("we print this anyway")
 
-Finally can be, for example used for resource de-allocation.
+Finally may be used for resource de-allocation.
 
 ---------------------------
 Local variables declaration
@@ -250,13 +268,17 @@ Local variables declaration
 
 ::
 
-    initz := id [:type] [= exp]
-    ro_stat := 'let' initz
-    rw_stat := 'var' initz
+    initz ::= id [:type] [= exp]
+    initz ::= id [:type] [<- exp]
+    initz ::= id [:type] [:= exp]
+    ro_stat ::= 'let' initz
+    rw_stat ::= 'var' initz
 
 Local variables can be declared at any point in the function; they exist between their
 declaration to the end of the visibility block where they have been declared.
 'let' declares read only variable, 'var' declares mutable (read-writer) variable.
+
+Copy ``=``, move ``->``, or clone ``:=`` semantic indicates how variable is to be initialized.
 
 --------------------
 Function declaration
@@ -267,10 +289,10 @@ Function declaration
 
 ::
 
-    stat := 'def' id ['(' args ')'] [':' type ] visibility_block
+    stat ::= 'def' id ['(' args ')'] [':' type ] visibility_block
 
     arg_decl = [var] id (',' id)* [':' type]
-    args := (arg_decl)*
+    args ::= (arg_decl)*
 
 declares a new function. Examples::
 
@@ -299,14 +321,14 @@ try/recover
 
 ::
 
-    stat := 'try' stat 'recover' visibility-block
+    stat ::= 'try' stat 'recover' visibility-block
 
 The try statement encloses a block of code in which an exceptional condition can occur,
-such as a runtime error or a panoc statement. The catch clause provides the exception-handling
+such as a runtime error or a panic function. The catch clause provides the exception-handling
 code.
 
-It is important to understand, that try/recover is not a correct error handling code.
-Much like in GO lang, this is really invalid situation which should not happen in production environemnt normally.
+It is important to understand that try/recover is not a correct error handling code.
+Much like in GO lang, this is really invalid situation which should not normally happen in the production environment.
 Examples of potential exceptions are: dereferencing null pointer, indexing array out of bounds, etc.
 
 -----------
@@ -318,9 +340,9 @@ panic
 
 ::
 
-    stat := 'panic' '(' [string-exp] ')'
+    stat ::= 'panic' '(' [string-exp] ')'
 
-Panics in runtime. String expression will be output to log.
+Calling ``panic`` causes runtime exception with string-exp available in the log.
 
 ----------------
 global variables
@@ -331,9 +353,14 @@ global variables
 
 ::
 
-    stat := 'let' '\n' indent id '=' expression
+    stat ::= 'let' { shared } '\n' indent id '=' expression
+    stat ::= 'let' { shared } '\n' indent id '<-' expression
+    stat ::= 'let' { shared }  '\n' indent id ':=' expression
 
-Declares a constant global variable. This variable will be inited once during initialization of script (or each time when script init is manually called).
+Declares a constant global variable.
+This variable will be initialized once during initialization of script (or each time when script init is manually called).
+``shared`` indicates that the constant is to be initialized once,
+and its memory is shared between multiple instances of daScript context.
 
 --------------
 enum
@@ -344,8 +371,8 @@ enum
 
 ::
 
-    enumerations := ( 'id' ) '\n'
-    stat := 'enum' id indent enumerations unindent
+    enumerations ::= ( 'id' ) '\n'
+    stat ::= 'enum' id indent enumerations unindent
 
 Declares an enumeration (see :ref:`Constants & Enumerations <constants_and_enumerations>`).
 
@@ -358,7 +385,7 @@ Expression statement
 
 ::
 
-    stat := exp
+    stat ::= exp
 
 In daScript every expression is also allowed as statement, if so, the result of the
 expression is thrown away.
