@@ -72,13 +72,15 @@ Lambda can be deleted, which will cause finalizers on all captured data  (see :r
 
     delete lam
 
+.. _lambdas_iterator:
+
 ---------
 Iterators
 ---------
 
 Lambda is the main building block for implementing custom iterators (see :ref:`Iterators <iterators>`).
 
-Lambda can be converted to iterator via ``each`` function::
+Lambda can be converted to iterator via ``each`` or ``each_ref`` function::
 
     var count = 0
     let lam <- @ <| (var a:int &) : bool
