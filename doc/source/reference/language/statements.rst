@@ -355,7 +355,7 @@ global variables
 
     stat ::= 'let' { shared } '\n' indent id '=' expression
     stat ::= 'let' { shared } '\n' indent id '<-' expression
-    stat ::= 'let' { shared }  '\n' indent id ':=' expression
+    stat ::= 'let' { shared } '\n' indent id ':=' expression
 
 Declares a constant global variable.
 This variable will be initialized once during initialization of script (or each time when script init is manually called).
