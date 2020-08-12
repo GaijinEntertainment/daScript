@@ -238,7 +238,7 @@ Finally statement
     stat ::= finally visibility-block
 
 Finally declares a block which will be executed once for any block (including control statements).
-Finally block can't contain ``break``, ``continue``, ``return`` or ``yield`` statements.
+Finally block can't contain ``break``, ``continue``, or ``return`` statements.
 It is designed to ensure execution after 'all is done'. Consider ::
 
     def test(a: array<int>; b: int)
