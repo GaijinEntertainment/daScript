@@ -27,6 +27,8 @@ Class can have multiple initializer with different arguments::
         def Foo(X,Y:int)                    // custom initializer
             Foo`set(self,X,Y)
 
+.. _classes_finalizer:
+
 Finalizer can be defined explicitly as a void function named ``finalize``::
 
     class Foo

@@ -68,6 +68,8 @@ By default capture by copy will be generated. If copy is not available, unsafe w
 			push(a3,1)
 		invoke(lam)
 
+.. _lambdas_finalizer:
+
 Lambda can be deleted, which will cause finalizers on all captured data  (see :ref:`Finalizers <finalizers>`)::
 
     delete lam

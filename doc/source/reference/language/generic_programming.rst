@@ -38,7 +38,7 @@ typeinfo
 
 Most of type reflection mechanisms are achieved with typeinfo operator. There are:
 
-    * typeinfo(typename object) // returns typename of object 
+    * typeinfo(typename object) // returns typename of object
     * typeinfo(fulltypename object) // returns full typename of object, with contracts (like !const, or !&)
     * typeinfo(sizeof object) // returns sizeof
     * typeinfo(is_pod object) // returns true if object is POD type
@@ -50,7 +50,7 @@ Most of type reflection mechanisms are achieved with typeinfo operator. There ar
     * typeinfo(is_const object) // returns true if object is of const type (i.e., can't be modified)
     * typeinfo(is_pointer object) // returns true if object is of pointer type, i.e., int?
 
-All typeinfo can wotk with types not objects, with type keyword, i.e. :: 
+All typeinfo can wotk with types not objects, with type keyword, i.e. ::
 
     * typeinfo(typename type int) // returns "int"
 
@@ -73,7 +73,7 @@ same as ::
     def fn(a)
         return a
 
-this is very helpful, if function accept numerous arguments, and some of them has to be of the same type :: 
+this is very helpful, if function accept numerous arguments, and some of them has to be of the same type ::
 
     def fn(a, b) // a and b can be of different types
         return a + b
@@ -97,12 +97,12 @@ Usage of named auto with typeinfo ::
 
     def fn(a: auto(some))
         print(typeinfo(typename type some))
-    
+
     fn(1) // print "const int"
 
 you can also modify type with delete syntax::
 
     def fn(a: auto(some))
         print(typeinfo(typename type some delete const))
-    
+
     fn(1) // print "int"
