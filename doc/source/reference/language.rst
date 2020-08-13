@@ -9,7 +9,9 @@
    language/datatypes.rst
    language/statements.rst
    language/expressions.rst
+   language/temporary.rst
    language/builtin_functions.rst
+   language/clone.rst
    language/unsafe.rst
    language/tables.rst
    language/arrays.rst

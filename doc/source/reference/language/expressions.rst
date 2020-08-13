@@ -45,7 +45,7 @@ move assignment nullifies source (b)
 It's main purpose is to correctly move ownership, and optimize copying if you don't need source for heavy types (such as arrays, tables).
 Some external handled types can be non assignable, but still moveable;
 
-move assignment is equvivalent of C++ memcpy + memset operations::
+move assignment is equivalent of C++ memcpy + memset operations::
 
     template <typename TT, typename QQ>
     __forceinline void das_move ( TT & a, const QQ & b ) {
@@ -61,7 +61,7 @@ move assignment is equvivalent of C++ memcpy + memset operations::
 Clone assignment is syntactic sugar for calling clone(var a: auto&; b: auto&) if it exists or basic assignment for POD types.
 It is also implemented for das_string, array and table types, and creates 'deep' copy.
 
-Some external handled types can be non assignable, but still cloneable;
+Some external handled types can be non assignable, but still cloneable (see :ref:`Clone <clone>`).
 
 ----------------
 Operators

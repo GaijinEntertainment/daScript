@@ -1,4 +1,4 @@
-.. variants:
+.. _variants:
 
 =======
 Variant
