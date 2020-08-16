@@ -1,269 +1,272 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><head>
-    <meta content="en-us" http-equiv="Content-Language">
-    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
-    <meta content="en" name="language">
-    <meta content="daScript is high-performance strong statically typed scripting language designed to be data oriented in C++ environment." name="description">
-    <meta content="game development, programming language, programming, scripting, development, open source" name="keywords">
-    <meta content="width=device-width, initial-scale=1.0, shrink-to-fit=no" name="viewport">
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="en-us" http-equiv="Content-Language" />
+    <meta content="en" name="language" />
+    <meta
+        content="daScript is high-performance strong statically typed scripting language designed to be data oriented in C++ environment."
+        name="description" />
+    <meta content="game development, programming language, programming, scripting, development, open source"
+        name="keywords" />
+    <meta content="width=device-width, initial-scale=1.0, shrink-to-fit=no" name="viewport" />
     <title>daScript - The High Performance Scripting Language</title>
-    <link href="doc/_static/daScript.ico" rel="icon" type="image/x-icon">
-    <link href="http://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700,400italic,700italic|Source+Code+Pro:400|Lato:400|Sanchez:400italic,400" rel="stylesheet" type="text/css">
-    <link href="files/style.css" rel="stylesheet" type="text/css">
-<script charset="utf-8" src="files/button.js"></script></head>
-<body class="body">
-    <header><div id="menu" style="padding: 2px; width: inherit; display:flex;">
-        <table style="width: 100%">
-        <tbody><tr>
-        <td></td>
-        <td>
-        <!-- <img class="daScript" height="34" src="images/daScript.gif" width="56" />&nbsp;&nbsp;&nbsp; -->
-        </td><td>
-        <a href="#overview">Overview</a>&nbsp;&nbsp;&nbsp;
-        <a href="#look">What does it look like?</a>&nbsp;&nbsp;&nbsp;
-        <a href="#download">Download</a>&nbsp;&nbsp;&nbsp;
-        <a href="#devstate">Development State</a>&nbsp;&nbsp;&nbsp;
-        <a href="#performance">Performance</a>&nbsp;&nbsp;&nbsp;
-        <a href="#work">Work in Progress</a>&nbsp;&nbsp;&nbsp;
-        <a href="#documentation">Documentation</a>&nbsp;&nbsp;&nbsp;
-        <a href="https://github.com/GaijinEntertainment/daScript/wiki">Wiki</a>
-		</td>
-        </tr>
-        
-        </tbody></table>
-    </div></header>
-    <br>
-    <div style="height: 60px">
-    </div>
-    <br>
-    <table style="width: 90%;" cellspacing="0" cellpadding="0">
-        <tbody><tr>
-            <td style="width: 400px;" align=middle>
-                <img src="doc/_static/daScript.png" style="height: 193px;" width="192" height="192" left="150">
-            </td>
-            <td valign="top">
-                <span class="labels">
-                    
-                    News</span><br>
-                <span class="newsupdate">28 October 2019: Benchmarks has been updated. All lang compilers were built in LLVM8.0, architecture AVX .</span></br>
-                <span class="newsupdate">15 August 2019: <b>daScript site</b> has been released, check it out.</span>
-            </td>
-        </tr>
-    </tbody></table>
-    <div style="height: 20px">
-    </div>
-    <br>
-    <table style="width: 90%">
-        <tbody><tr>
-            <td valign="top">
-                <img src="files/spacer.gif" width="131" height="60">
-            </td>
-            <td>
-                <span class="bigwords">daScript is high-level,
-                <strong>statically strong typed</strong> scripting language,
-                designed to be <strong>fast</strong> as embeddable
-                ‘scripting’ language for C++ performance critical applications like <strong>games</strong>.</span>
-            </td>
-        </tr>
-        <tr>
-            <td>
-                <img src="files/spacer.gif" width="131" height="100">
-            </td>
-            <td>
-            </td>
-        </tr>
-        <tr>
-            <td>
-                &nbsp;
-            </td>
-            <!--------------------------------------------------------------------------------------------------- -->
-            <!--------------------------------------------------------------------------------------------------- -->
-            <!--------------------------------------------------------------------------------------------------- -->
-            <td>
-                <span id="#overview" class="labels">Overview</span><br>
-                <p>
-                    daScript is high-performance statically strong typed scripting language, designed to be data-oriented embeddable ‘scripting’ language for performance critical applications (like games or back-end/servers).
-                </p>
-                <p>daScript is:
-                </p>
-                <ul>
-                  <li>
-                    <b>Extremely blazingly fast</b>. daScript can be compared with compiled or JIT language even in interpreter mode, always faster than dynamic interpreted scripting languages like Lua.
-                    In AOT it is often faster than naively written C++ (due to SSE-friendly POD-types) and beats best JIT VMs (V8 or LuaJIT). You will never need to rewrite daScript code to C++ to optimize your application!
-                  </li>
-                  <li>
-                    <b>Safe</b>. It is static typed languages with all it's benefits (most of Lua/JS errors that will break application in runtime won't even compile), but due to generics and type inference it is easy and fluid. Safety is the next key pillar of daScript design, so in many cases it is safier than languages like C++ or Java.
-                  </li>
+    <link href="doc/_static/daScript.ico" rel="icon" type="image/x-icon" />
+    <link
+        href="http://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700,400italic,700italic|Source+Code+Pro:400|Lato:400|Sanchez:400italic,400"
+        rel="stylesheet" type="text/css" />
+    <link href="files/style.css" rel="stylesheet" type="text/css" />
+    <script charset="utf-8" src="files/button.js"></script>
+</head>
 
-                  <li>
-                    <b>Real embedded scripting language</b>. It has no dependencies (you only need C++14 compiler), super easy-to-use and safe interop (all embedded scripting languages supposed to call native code).
-                  </li>
+<body>
+    <header>
+        <nav id="menu">
+            <a href="#overview">Overview</a>
+            <a href="#look">What does it look like?</a>
+            <a href="#download">Download</a>
+            <a href="#devstate">Development State</a>
+            <a href="#performance">Performance</a>
+            <a href="#work">Work in Progress</a>
+            <a href="#documentation">Documentation</a>
+            <a href="https://github.com/GaijinEntertainment/daScript/wiki">Wiki</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="intro">
+            <h1>
+                <img src="doc/_static/daScript.png" alt="daScript" width="192" height="192" />
+            </h1>
+
+            <div class="news">
+                <h2>News</h2>
+                <p>
+                    28 October 2019: Benchmarks has been updated. All lang compilers
+                    were built in LLVM8.0, architecture AVX.
+                </p>
+                <p>
+                    15 August 2019: <b>daScript site</b> has been released, check it
+                    out.
+                </p>
+            </div>
+        </div>
+
+        <p>
+            daScript is high-level,
+            <b>statically strong typed</b> scripting language, designed to be
+            <b>fast</b> as embeddable ‘scripting’ language for C++ performance
+            critical applications like <b>games</b>.
+        </p>
+
+        <h2 id="overview">Overview</h2>
+        <p>
+            daScript is high-performance statically strong typed scripting language,
+            designed to be data-oriented embeddable ‘scripting’ language for
+            performance critical applications (like games or back-end/servers).
+        </p>
+        <p>daScript is:</p>
+        <ul>
+            <li>
+                <b>Extremely blazingly fast</b>. daScript can be compared with
+                compiled or JIT language even in interpreter mode, always faster than
+                dynamic interpreted scripting languages like Lua. In AOT it is often
+                faster than naively written C++ (due to SSE-friendly POD-types) and
+                beats best JIT VMs (V8 or LuaJIT). You will never need to rewrite
+                daScript code to C++ to optimize your application!
+            </li>
+            <li>
+                <b>Safe</b>. It is static typed languages with all it's benefits (most
+                of Lua/JS errors that will break application in runtime won't even
+                compile), but due to generics and type inference it is easy and fluid.
+                Safety is the next key pillar of daScript design, so in many cases it
+                is safier than languages like C++ or Java.
+            </li>
+
+            <li>
+                <b>Real embedded scripting language</b>. It has no dependencies (you
+                only need C++14 compiler), super easy-to-use and safe interop (all
+                embedded scripting languages supposed to call native code).
+            </li>
+        </ul>
+        <p>
+            daScript offers a wide range of features like:
+        </p>
+        <ul>
+            <li>amazing performance</li>
+            <li>strong static typing</li>
+            <li>instant hot reload</li>
+            <li>Ruby-like blocks</li>
+            <li>semantic indenting</li>
+            <li>lexical scoping</li>
+            <li>high performance interpretation</li>
+            <li>Ahead-of-Time compilation (optimization for release build)</li>
+            <li>generators</li>
+            <li>generics and type inference</li>
+            <li>optional types (i.e. pointers)</li>
+            <li>native HW friendly POD types</li>
+            <li>C++ friendly and fast interop</li>
+            <li>semi-manual memory management</li>
+            <li>
+                fast and easy-to-reset execution context, allowing automatic burst
+                free memory management for stored procedures
+                <br />
+                No memory leaks with no GC/reference counting cost.
+            </li>
+            <li>extendable type and function system</li>
+            <li>
+                cheap multi-threading support - explicit separation of execution
+                context and code context.
+            </li>
+            <li>
+                Open Source
+                <a href="https://opensource.org/licenses/BSD-3-Clause">BSD licence</a>
+            </li>
+            <li>
+                powerful embedding API
+                <ul>
+                    <li>e.g. functions can be defined by scripts or in C++</li>
+                    <li>
+                        e.g. objects can fully exist in the Context or be bound to native
+                        code
+                    </li>
+                    <li>and more</li>
                 </ul>
-                <p>
-                    daScript offers a wide range of features like:
-                </p>
-                <ul>
-                    <li>amazing performance
-                     </li><li>strong static typing
-                     </li><li>instant hot reload
-                     </li><li>Ruby-like blocks
-                     </li><li>semantic indenting
-                     </li><li>lexical scoping
-                     </li><li>high performance interpretation
-                     </li><li>Ahead-of-Time compilation (optimization for release build)
-                     </li><li>generators
-                     </li><li>generics and type inference
-                     </li><li>optional types (i.e. pointers)
-                     </li><li>native HW friendly POD types
-                     </li><li>C++ friendly and fast interop
-                     </li><li>semi-manual memory management
-                     </li><li>fast and easy-to-reset execution context, allowing automatic burst free memory management for stored procedures
-                             <br>
-                             No memory leaks with no GC/reference counting cost.
-                     </li><li>extendable type and function system
-                     </li><li>cheap multi-threading support - explicit separation of execution context and code context.
-                     </li><li>Open Source <a href="https://opensource.org/licenses/BSD-3-Clause">BSD licence</a>
-					 <li>powerful embedding API <ul>
-						<li>e.g. functions can be defined by scripts or in C++</li>
-						<li>e.g. objects can fully exist in the Context or be bound to native code</li>
-						<li>and more</li>
-        				</ul>
-					
-				</ul>
-                <p>
-                    daScript is inspired by languages like Python in terms of it's explictness and readability; while it is designed to be extremely fast.</p>
-                <p>
-                    <br>
-                    <!--------------------------------------------------------------------------------------------------- -->
-                    <!--------------------------------------------------------------------------------------------------- -->
-                    <!--------------------------------------------------------------------------------------------------- -->
-                   <span id="look" class="labels">What Does it look like?</span><br>
-                    daScript's syntax is similar to (Typed) Python,
-but the language has a static strong typed nature like ML or Zig, and it's POD types are close to hardware/machine types. The following Fibonacci code snippet also relies on type inference.
-                    <br>
-                    <br>
-<div class="snippets"><div class="snippets"><pre><span></span><span class="k">def</span> <span class="nf">fibR</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
-   <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">)</span>
-       <span class="k">return</span> <span class="n">n</span>
-   <span class="k">else</span>
-       <span class="k">return</span> <span class="n">fibR</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">fibR</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+            </li>
+        </ul>
 
-<span class="k">def</span> <span class="nf">fibI</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
-   <span class="n">var</span> <span class="n">last</span> <span class="o">=</span> <span class="mi">0</span>
-   <span class="n">var</span> <span class="n">cur</span> <span class="o">=</span> <span class="mi">1</span>
-   <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-       <span class="n">let</span> <span class="n">tmp</span> <span class="o">=</span> <span class="n">cur</span>
-       <span class="n">cur</span> <span class="o">+=</span> <span class="n">last</span>
-       <span class="n">last</span> <span class="o">=</span> <span class="n">tmp</span>
-   <span class="k">return</span> <span class="n">cur</span>
-</pre></div>
-</div>
-</div>
-    <br>
-    <!--------------------------------------------------------------------------------------------------- -->
-    <!--------------------------------------------------------------------------------------------------- -->
-    <!--------------------------------------------------------------------------------------------------- -->
-    <span id="devstate" class="labels">Development state</span><br>
-    <ul>
-        The current release is initial 0.1. The language is used in Gaijin Entertainment projects in production.
-        <br>
-        The project has been compiled and run on Windows(x86 &amp; x64),
-        Linux(x64), macOS, Xbox One, PlayStation 4, Nintendo Switch, iOS and Android.<br>
-        Has been tested with the following compilers with C++14 support:
-        <blockquote dir="ltr" style="margin-right: 0px">
+        <p>
+            daScript is inspired by languages like Python in terms of it's
+            explictness and readability; while it is designed to be extremely fast.
+        </p>
+
+        <h2 id="look">What Does it look like?</h2>
+        <p>
+            daScript's syntax is similar to (Typed) Python, but the language has a
+            static strong typed nature like ML or Zig, and it's POD types are close
+            to hardware/machine types. The following Fibonacci code snippet also
+            relies on type inference.
+        </p>
+
+        <div class="snippets">
+            <pre><code>def fibR(n)
+    if (n < 2)
+        return n
+    else
+        return fibR(n - 1) + fibR(n - 2)
+    
+def fibI(n)
+    var last = 0
+    var cur = 1
+    for i in range(0, n-1)
+        let tmp = cur
+        cur += last
+        last = tmp
+    return cur</code></pre>
+        </div>
+
+        <h2 id="devstate">Development state</h2>
+        <p>
+            The current release is initial 0.1. The language is used in Gaijin
+            Entertainment projects in production.
+        </p>
+        <p>
+            The project has been compiled and run on Windows(x86 &amp; x64),
+            Linux(x64), macOS, Xbox One, PlayStation 4, Nintendo Switch, iOS and
+            Android.
+        </p>
+        <p>
+            Has been tested with the following compilers with C++14 support:
+        </p>
+        <blockquote>
             <p>
-                MS Visual C++ 15.0 and 17.0(x86 &amp; x64)<br>
-				Linux GCC<br>
-				LLVM 7, 8, 9<br>
+                MS Visual C++ 15.0 and 17.0(x86 &amp; x64)<br />
+                Linux GCC<br />
+                LLVM 7, 8, 9<br />
             </p>
         </blockquote>
-        <br>
-        <p>
-            The documentation has to be improved.<br>
-        </p>
+        <p>The documentation has to be improved.</p>
         <p>
             In order to compile, it requires C++14 support.
         </p>
-    </ul>
 
-    <br>
-    <!--------------------------------------------------------------------------------------------------- -->
-    <!--------------------------------------------------------------------------------------------------- -->
-    <!--------------------------------------------------------------------------------------------------- -->
-    <span id="performance" class="labels">Performance</span><br>
-    <ul>
-        <br>
-          As interpreted language it typically beats everything, including blazing fast <b>LuaJIT</b>.
-        <br>
-          Especially it shines in interop with C++ functions, which allows easy and nice experience to integrate new functions and types.
-        <br>
-          The total overhead over C++ of data oriented processing in interpretation is close to C++ in Debug mode (see Particles sample).
-        <br>
-        <br>
-<iframe frameborder="0" scrolling="no" width="1100" height="250" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=1640974160&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false"></iframe>
-        <br>
-          As compiled Ahead-of-Time language it is also much faster then both LuaJIT and Chrome JS (both having extremely fast Just-in-Time).
-        <br>
-          It is almost on par with naive C++ (clang-cl llvm 8.0.1 with all optimizations), usually within 10% of difference, and sometimes can even beat it!
-        <br>
-          It is worth noting that unlike Just-in-Time, Ahead-of-Time compilation can be used on any platform, including those with signed binaries executables (such as iOS or consoles).
-        <br>
-        <br>
-<iframe frameborder="0" scrolling="no" width="1100" height="250" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=59293637&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false&amp;"></iframe>
-        <br>
-          All times are in <b>milliseconds</b>, all results are measured as best-out-of-20 runs on Intel Core i5.
-        <br>
-          All samples for all languages in comparison are available in <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/profile/tests">GitHub</a>
-    </ul>
+        <h2 id="performance">Performance</h2>
+        <p>
+            As interpreted language it typically beats everything, including blazing
+            fast <b>LuaJIT</b>.
+        </p>
 
-    <br>
-    <!--------------------------------------------------------------------------------------------------- -->
-    <!--------------------------------------------------------------------------------------------------- -->
-    <!--------------------------------------------------------------------------------------------------- -->
-    <span id="work" class="labels">Work in Progress</span><br>
-    <p></p><ul>
-            <li>Interpetation optimizations
-            </li><li>AOT optimizations
-            </li><li>Additional and embedding documentation</li>
+        <p>
+            Especially it shines in interop with C++ functions, which allows easy
+            and nice experience to integrate new functions and types.
+        </p>
+        <p>
+            The total overhead over C++ of data oriented processing in
+            interpretation is close to C++ in Debug mode (see Particles sample).
+        </p>
+
+        <iframe frameborder="0" scrolling="no" width="1100" height="250"
+            src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=1640974160&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false"></iframe>
+        <p>
+            As compiled Ahead-of-Time language it is also much faster then both
+            LuaJIT and Chrome JS (both having extremely fast Just-in-Time).
+        </p>
+        <p>
+            It is almost on par with naive C++ (clang-cl llvm 8.0.1 with all
+            optimizations), usually within 10% of difference, and sometimes can even
+            beat it!
+        </p>
+        <p>
+            It is worth noting that unlike Just-in-Time, Ahead-of-Time compilation
+            can be used on any platform, including those with signed binaries
+            executables (such as iOS or consoles).
+        </p>
+        <iframe frameborder="0" scrolling="no" width="1100" height="250"
+            src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQxwlQklQkAgZKQLyhV6fY-Peknok6Xafitg3AuP7IARmnFGmPxCXFcNa5no5Mhp-eNGpYdZWKtfToY/pubhtml?gid=59293637&amp;single=true&amp;widget=false&amp;headers=false&amp;chrome=false&amp;"></iframe>
+        <p> All times are in <b>milliseconds</b>, all results are measured as best-out-of-20 runs on Intel Core i5.
+        </p>
+        <p>All samples for all languages in comparison are available in
+            <a href="https://github.com/GaijinEntertainment/daScript/tree/master/examples/profile/tests">GitHub</a>
+        </p>
+
+        <h2 id="work">Work in Progress</h2>
+        <p></p>
+        <ul>
+            <li>Interpetation optimizations</li>
+            <li>AOT optimizations</li>
+            <li>Additional and embedding documentation</li>
             <li>Generators/coroutines</li>
             <li>Pattern matching/variants</li>
         </ul>
+
+        <h2 id="documentation">Documentation</h2>
+
+        <h3>daScript 0.1</h3>
         <p>
-        </p>
-        <br>
-        <!--------------------------------------------------------------------------------------------------- -->
-        <!--------------------------------------------------------------------------------------------------- -->
-        <!--------------------------------------------------------------------------------------------------- -->
-        <span id="documentation" class="labels">Documentation</span><br>
-        <h4>daScript 0.1</h4>
-        <p>
-            Online <a href="doc/index.html">daScript 0.1 reference manual and Standard Libraries manual</a>
+            Online
+            <a href="doc/index.html">daScript 0.1 reference manual and Standard Libraries manual</a>
         </p>
         <p>
-            Offline Reference Manual (<a href="doc/dascript.pdf">PDF</a>)<br>
+            Offline Reference Manual (<a href="doc/dascript.pdf">PDF</a>)<br />
             Offline Standard Libraries Manual (<a href="doc/dascriptstdlib.pdf">PDF</a>)
         </p>
-        <br>
-        <br>
 
-        <!--------------------------------------------------------------------------------------------------- -->
-        <!--------------------------------------------------------------------------------------------------- -->
-        <!--------------------------------------------------------------------------------------------------- -->
-        <span id="download" class="labels">Download</span><br>
-        
-        <h4>GitHub Repository</h4>
+        <h2 id="download">Download</h2>
+
+        <h3>GitHub Repository</h3>
         <p>
-           daScript's GitHub repository is <a href="https://github.com/GaijinEntertainment/daScript">here</a>
+            daScript's GitHub repository is
+            <a href="https://github.com/GaijinEntertainment/daScript">here</a>
         </p>
- 
-        <br>
-        </li></ul></td> </tr> </tbody></table>
-        <div id="line">
-        </div>
-        <br>
-        <p class="copyright">
-            Copyright ©2019 <a href="https://gaijin.net">Gaijin Entertainment</a>| All Rights Reserved.</p>
-		<p>
+    </main>
 
+    <footer>
+        <p>
+            Copyright ©2019 <a href="https://gaijin.net">Gaijin Entertainment</a>| All
+            Rights Reserved.
+        </p>
+    </footer>
+</body>
 
-</body></html>
+</html>
