@@ -49,11 +49,11 @@ def test_re ( var regex:Regex; matches:array<string>; nonmatches:array<string> )
     for m in matches
         let ma = regex_match(regex, m)
         print("matching `{m}` -> {ma} {ma==-1 ? "failed" : "ok"}\n")
-        failed |= ma==-1
+        failed ||= ma==-1
     for m in nonmatches
         let ma = regex_match(regex, m)
         print("^matching `{m}` -> {ma} {ma!=-1 ? "failed" : "ok"}\n")
-        failed |= ma!=-1
+        failed ||= ma!=-1
     print("{failed ? "failed" : "ok"}\n\n")
     assert(!failed)
     delete regex

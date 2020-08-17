@@ -63,7 +63,7 @@ def lexer ( text : array<uint8> )
     return <- _lexer(stext)
 
 [private]
-def _lexer ( var stext : string )
+def _lexer ( var stext : string implicit )
     return <- generator<Token>() <| $()
         var tin : iterator<int>
         unsafe
@@ -244,7 +244,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
         return null
 
 [export]
-def read_json ( text : string; var error : string& ) : JsonValue?
+def read_json ( text : string implicit; var error : string& ) : JsonValue?
     var lex <- lexer(text)
     let res = parse_value(lex,error)
     delete lex

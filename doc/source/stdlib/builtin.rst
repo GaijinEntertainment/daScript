@@ -304,42 +304,41 @@ Internal clone infrastructure
 .. warning:: 
   This group of functions is hidden. It will not be in the final documentation.
 
-  *  :ref:`clone (arg0:$::das_string implicit;arg1:string const) : void <function-_at__builtin__c__c_clone__hh_handle_hh_das_string_hh_implicit_string_hh_const>` 
-  *  :ref:`clone_string (arg0:string const;arg1: const) : string <function-_at__builtin__c__c_clone_string_string_hh_const__hh_const>` 
+  *  :ref:`clone (arg0:$::das_string implicit;arg1:string const implicit) : void <function-_at__builtin__c__c_clone__hh_handle_hh_das_string_hh_implicit_string_hh_const_hh_implicit>` 
+  *  :ref:`clone_string (arg0:string const implicit;arg1: const) : string <function-_at__builtin__c__c_clone_string_string_hh_const_hh_implicit__hh_const>` 
   *  :ref:`clone (a:array\<auto(TT)\> -const;b:array\<TT\> const) : auto <function-_at__builtin__c__c_clone__hh_array_hh__hh_auto__hh_array_hh__hh_alias_hh_TT_hh_const>` 
   *  :ref:`clone (a:array\<auto(TT)\> -const;b:array\<TT\> const#) : auto <function-_at__builtin__c__c_clone__hh_array_hh__hh_auto__hh_array_hh__hh_alias_hh_TT_hh_const_hh_temporary>` 
   *  :ref:`clone (a:table\<auto(KT);auto(VT)\> -const;b:table\<KT;VT\> const) : auto <function-_at__builtin__c__c_clone__hh_table_hh__hh_auto_hh__hh_auto__hh_table_hh__hh_alias_hh_KT_hh__hh_alias_hh_VT_hh_const>` 
   *  :ref:`clone (a:table\<auto(KT);auto(VT)\> -const;b:table\<KT;VT\> const#) : auto <function-_at__builtin__c__c_clone__hh_table_hh__hh_auto_hh__hh_auto__hh_table_hh__hh_alias_hh_KT_hh__hh_alias_hh_VT_hh_const_hh_temporary>` 
-  *  :ref:`clone_dim (a:auto -const;b:auto const) : auto <function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const>` 
-  *  :ref:`clone_dim (a:auto -const;b:auto const#) : auto <function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const_hh_temporary>` 
-  *  :ref:`clone_to_move (clone_src:auto(TT) const) : TT -const <function-_at__builtin__c__c_clone_to_move__hh_auto_hh_const>` 
+  *  :ref:`clone_dim (a:auto -const;b:auto const implicit) : auto <function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const_hh_implicit>` 
+  *  :ref:`clone_to_move (clone_src:auto(TT) const implicit) : TT -const -# <function-_at__builtin__c__c_clone_to_move__hh_auto_hh_const_hh_implicit>` 
 
-.. _function-_at__builtin__c__c_clone__hh_handle_hh_das_string_hh_implicit_string_hh_const:
+.. _function-_at__builtin__c__c_clone__hh_handle_hh_das_string_hh_implicit_string_hh_const_hh_implicit:
 
-.. das:function:: clone(arg0: das_string implicit; arg1: string const)
+.. das:function:: clone(arg0: das_string implicit; arg1: string const implicit)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
 +========+=================================================================+
 +arg0    + :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
 +--------+-----------------------------------------------------------------+
-+arg1    +string const                                                     +
++arg1    +string const implicit                                            +
 +--------+-----------------------------------------------------------------+
 
 
 |function-builtin-clone|
 
-.. _function-_at__builtin__c__c_clone_string_string_hh_const__hh_const:
+.. _function-_at__builtin__c__c_clone_string_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: clone_string(arg0: string const)
+.. das:function:: clone_string(arg0: string const implicit)
 
 clone_string returns string
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-builtin-clone_string|
@@ -412,51 +411,34 @@ clone returns auto
 
 |function-builtin-clone|
 
-.. _function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const:
+.. _function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const_hh_implicit:
 
-.. das:function:: clone_dim(a: auto; b: auto const)
+.. das:function:: clone_dim(a: auto; b: auto const implicit)
 
 clone_dim returns auto
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto         +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
++--------+-------------------+
++argument+argument type      +
++========+===================+
++a       +auto               +
++--------+-------------------+
++b       +auto const implicit+
++--------+-------------------+
 
 
 |function-builtin-clone_dim|
 
-.. _function-_at__builtin__c__c_clone_dim__hh_auto__hh_auto_hh_const_hh_temporary:
+.. _function-_at__builtin__c__c_clone_to_move__hh_auto_hh_const_hh_implicit:
 
-.. das:function:: clone_dim(a: auto; b: auto const#)
-
-clone_dim returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto         +
-+--------+-------------+
-+b       +auto const#  +
-+--------+-------------+
-
-
-|function-builtin-clone_dim|
-
-.. _function-_at__builtin__c__c_clone_to_move__hh_auto_hh_const:
-
-.. das:function:: clone_to_move(clone_src: auto(TT) const)
+.. das:function:: clone_to_move(clone_src: auto(TT) const implicit)
 
 clone_to_move returns TT
 
-+---------+--------------+
-+argument +argument type +
-+=========+==============+
-+clone_src+auto(TT) const+
-+---------+--------------+
++---------+-----------------------+
++argument +argument type          +
++=========+=======================+
++clone_src+auto(TT) const implicit+
++---------+-----------------------+
 
 
 |function-builtin-clone_to_move|
@@ -1533,10 +1515,10 @@ GC0 infrastructure
 ++++++++++++++++++
 
   *  :ref:`gc0_reset () : void <function-_at__builtin__c__c_gc0_reset>` 
-  *  :ref:`gc0_restore_ptr (arg0:string const;arg1: const) : void? <function-_at__builtin__c__c_gc0_restore_ptr_string_hh_const__hh_const>` 
-  *  :ref:`gc0_restore_smart_ptr (arg0:string const;arg1: const) : smart_ptr\<void\> <function-_at__builtin__c__c_gc0_restore_smart_ptr_string_hh_const__hh_const>` 
-  *  :ref:`gc0_save_ptr (arg0:string const;arg1:void? const implicit;arg2: const;arg3: const) : void <function-_at__builtin__c__c_gc0_save_ptr_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_const__hh_const>` 
-  *  :ref:`gc0_save_smart_ptr (arg0:string const;arg1:smart_ptr\<void\> const implicit;arg2: const;arg3: const) : void <function-_at__builtin__c__c_gc0_save_smart_ptr_string_hh_const__hh_smart_ptr_hh_void_hh_const_hh_implicit__hh_const__hh_const>` 
+  *  :ref:`gc0_restore_ptr (arg0:string const implicit;arg1: const) : void? <function-_at__builtin__c__c_gc0_restore_ptr_string_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`gc0_restore_smart_ptr (arg0:string const implicit;arg1: const) : smart_ptr\<void\> <function-_at__builtin__c__c_gc0_restore_smart_ptr_string_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`gc0_save_ptr (arg0:string const implicit;arg1:void? const implicit;arg2: const;arg3: const) : void <function-_at__builtin__c__c_gc0_save_ptr_string_hh_const_hh_implicit__hh_ptr_hh_const_hh_implicit__hh_const__hh_const>` 
+  *  :ref:`gc0_save_smart_ptr (arg0:string const implicit;arg1:smart_ptr\<void\> const implicit;arg2: const;arg3: const) : void <function-_at__builtin__c__c_gc0_save_smart_ptr_string_hh_const_hh_implicit__hh_smart_ptr_hh_void_hh_const_hh_implicit__hh_const__hh_const>` 
 
 .. _function-_at__builtin__c__c_gc0_reset:
 
@@ -1544,59 +1526,59 @@ GC0 infrastructure
 
 |function-builtin-gc0_reset|
 
-.. _function-_at__builtin__c__c_gc0_restore_ptr_string_hh_const__hh_const:
+.. _function-_at__builtin__c__c_gc0_restore_ptr_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: gc0_restore_ptr(arg0: string const)
+.. das:function:: gc0_restore_ptr(arg0: string const implicit)
 
 gc0_restore_ptr returns void?
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-builtin-gc0_restore_ptr|
 
-.. _function-_at__builtin__c__c_gc0_restore_smart_ptr_string_hh_const__hh_const:
+.. _function-_at__builtin__c__c_gc0_restore_smart_ptr_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: gc0_restore_smart_ptr(arg0: string const)
+.. das:function:: gc0_restore_smart_ptr(arg0: string const implicit)
 
 gc0_restore_smart_ptr returns smart_ptr<void>
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-builtin-gc0_restore_smart_ptr|
 
-.. _function-_at__builtin__c__c_gc0_save_ptr_string_hh_const__hh_ptr_hh_const_hh_implicit__hh_const__hh_const:
+.. _function-_at__builtin__c__c_gc0_save_ptr_string_hh_const_hh_implicit__hh_ptr_hh_const_hh_implicit__hh_const__hh_const:
 
-.. das:function:: gc0_save_ptr(arg0: string const; arg1: void? const implicit)
+.. das:function:: gc0_save_ptr(arg0: string const implicit; arg1: void? const implicit)
 
-+--------+--------------------+
-+argument+argument type       +
-+========+====================+
-+arg0    +string const        +
-+--------+--------------------+
-+arg1    +void? const implicit+
-+--------+--------------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
++arg1    +void? const implicit +
++--------+---------------------+
 
 
 |function-builtin-gc0_save_ptr|
 
-.. _function-_at__builtin__c__c_gc0_save_smart_ptr_string_hh_const__hh_smart_ptr_hh_void_hh_const_hh_implicit__hh_const__hh_const:
+.. _function-_at__builtin__c__c_gc0_save_smart_ptr_string_hh_const_hh_implicit__hh_smart_ptr_hh_void_hh_const_hh_implicit__hh_const__hh_const:
 
-.. das:function:: gc0_save_smart_ptr(arg0: string const; arg1: smart_ptr<void> const implicit)
+.. das:function:: gc0_save_smart_ptr(arg0: string const implicit; arg1: smart_ptr<void> const implicit)
 
 +--------+------------------------------+
 +argument+argument type                 +
 +========+==============================+
-+arg0    +string const                  +
++arg0    +string const implicit         +
 +--------+------------------------------+
 +arg1    +smart_ptr<void> const implicit+
 +--------+------------------------------+
@@ -1679,7 +1661,7 @@ Macro infrastructure
 
   *  :ref:`is_compiling (arg0: const) : bool <function-_at__builtin__c__c_is_compiling__hh_const>` 
   *  :ref:`is_compiling_macros (arg0: const) : bool <function-_at__builtin__c__c_is_compiling_macros__hh_const>` 
-  *  :ref:`is_compiling_macros_in_module (arg0:string const;arg1: const) : bool <function-_at__builtin__c__c_is_compiling_macros_in_module_string_hh_const__hh_const>` 
+  *  :ref:`is_compiling_macros_in_module (arg0:string const implicit;arg1: const) : bool <function-_at__builtin__c__c_is_compiling_macros_in_module_string_hh_const_hh_implicit__hh_const>` 
 
 .. _function-_at__builtin__c__c_is_compiling__hh_const:
 
@@ -1697,17 +1679,17 @@ is_compiling_macros returns bool
 
 |function-builtin-is_compiling_macros|
 
-.. _function-_at__builtin__c__c_is_compiling_macros_in_module_string_hh_const__hh_const:
+.. _function-_at__builtin__c__c_is_compiling_macros_in_module_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: is_compiling_macros_in_module(arg0: string const)
+.. das:function:: is_compiling_macros_in_module(arg0: string const implicit)
 
 is_compiling_macros_in_module returns bool
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-builtin-is_compiling_macros_in_module|
@@ -1718,7 +1700,7 @@ Profiler
 
   *  :ref:`collect_profile_info (arg0: const) : string <function-_at__builtin__c__c_collect_profile_info__hh_const>` 
   *  :ref:`dump_profile_info (arg0: const) : void <function-_at__builtin__c__c_dump_profile_info__hh_const>` 
-  *  :ref:`profile (arg0:int const;arg1:string const;arg2:block\<\> const implicit;arg3: const) : float <function-_at__builtin__c__c_profile_int_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`profile (arg0:int const;arg1:string const implicit;arg2:block\<\> const implicit;arg3: const) : float <function-_at__builtin__c__c_profile_int_hh_const_string_hh_const_hh_implicit__hh_block_hh_const_hh_implicit__hh_const>` 
   *  :ref:`reset_profiler (arg0: const) : void <function-_at__builtin__c__c_reset_profiler__hh_const>` 
 
 .. _function-_at__builtin__c__c_collect_profile_info__hh_const:
@@ -1735,9 +1717,9 @@ collect_profile_info returns string
 
 |function-builtin-dump_profile_info|
 
-.. _function-_at__builtin__c__c_profile_int_hh_const_string_hh_const__hh_block_hh_const_hh_implicit__hh_const:
+.. _function-_at__builtin__c__c_profile_int_hh_const_string_hh_const_hh_implicit__hh_block_hh_const_hh_implicit__hh_const:
 
-.. das:function:: profile(arg0: int const; arg1: string const; arg2: block<> const implicit)
+.. das:function:: profile(arg0: int const; arg1: string const implicit; arg2: block<> const implicit)
 
 profile returns float
 
@@ -1746,7 +1728,7 @@ profile returns float
 +========+======================+
 +arg0    +int const             +
 +--------+----------------------+
-+arg1    +string const          +
++arg1    +string const implicit +
 +--------+----------------------+
 +arg2    +block<> const implicit+
 +--------+----------------------+
@@ -1767,8 +1749,8 @@ System infastructure
   *  :ref:`breakpoint () : void <function-_at__builtin__c__c_breakpoint>` 
   *  :ref:`get_clock () : $::clock <function-_at__builtin__c__c_get_clock>` 
   *  :ref:`get_das_root (arg0: const) : string <function-_at__builtin__c__c_get_das_root__hh_const>` 
-  *  :ref:`panic (arg0:string const;arg1: const) : void <function-_at__builtin__c__c_panic_string_hh_const__hh_const>` 
-  *  :ref:`print (arg0:string const;arg1: const) : void <function-_at__builtin__c__c_print_string_hh_const__hh_const>` 
+  *  :ref:`panic (arg0:string const implicit;arg1: const) : void <function-_at__builtin__c__c_panic_string_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`print (arg0:string const implicit;arg1: const) : void <function-_at__builtin__c__c_print_string_hh_const_hh_implicit__hh_const>` 
   *  :ref:`sprint (arg0:any;arg1:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable\>) : string <function-_at__builtin__c__c_sprint_any__hh_bitfield_hh__rq_escapeString_hh__rq_namesAndDimensions_hh__rq_typeQualifiers_hh__rq_refAddresses_hh__rq_humanReadable>` 
   *  :ref:`stackwalk (arg0: const;arg1: const) : void <function-_at__builtin__c__c_stackwalk__hh_const__hh_const>` 
   *  :ref:`terminate (arg0: const) : void <function-_at__builtin__c__c_terminate__hh_const>` 
@@ -1795,28 +1777,28 @@ get_das_root returns string
 
 |function-builtin-get_das_root|
 
-.. _function-_at__builtin__c__c_panic_string_hh_const__hh_const:
+.. _function-_at__builtin__c__c_panic_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: panic(arg0: string const)
+.. das:function:: panic(arg0: string const implicit)
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-builtin-panic|
 
-.. _function-_at__builtin__c__c_print_string_hh_const__hh_const:
+.. _function-_at__builtin__c__c_print_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: print(arg0: string const)
+.. das:function:: print(arg0: string const implicit)
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-builtin-print|

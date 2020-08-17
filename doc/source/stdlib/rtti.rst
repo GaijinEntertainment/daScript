@@ -925,16 +925,16 @@ builtin_is_same_type returns bool
 
 |function-rtti-builtin_is_same_type|
 
-.. _function-_at_rtti_c__c_compile_string_hh_const_string_hh_const__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_compile_string_hh_const_hh_implicit_string_hh_const_hh_implicit__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
-.. das:function:: compile(arg0: string const; arg1: string const; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
+.. das:function:: compile(arg0: string const implicit; arg1: string const implicit; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                                                                           +
 +========+========================================================================================================================================================+
-+arg0    +string const                                                                                                                                            +
++arg0    +string const implicit                                                                                                                                   +
 +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
-+arg1    +string const                                                                                                                                            +
++arg1    +string const implicit                                                                                                                                   +
 +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 +arg2    +block<(bool;smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >; :ref:`builtin::das_string <handle-builtin-das_string>`  const):void> const implicit+
 +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -942,14 +942,14 @@ builtin_is_same_type returns bool
 
 |function-rtti-compile|
 
-.. _function-_at_rtti_c__c_compile_file_string_hh_const__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
+.. _function-_at_rtti_c__c_compile_file_string_hh_const_hh_implicit__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit__hh_block_hh_bool_hh__hh_smart_ptr_hh__hh_handle_hh_Program_hh__hh_handle_hh_das_string_hh_const_hh__c_void_hh_const_hh_implicit__hh_const:
 
-.. das:function:: compile_file(arg0: string const; arg1: smart_ptr<rtti::FileAccess> const implicit; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
+.. das:function:: compile_file(arg0: string const implicit; arg1: smart_ptr<rtti::FileAccess> const implicit; arg2: block<(bool;smart_ptr<rtti::Program>;das_string const):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                                                                           +
 +========+========================================================================================================================================================+
-+arg0    +string const                                                                                                                                            +
++arg0    +string const implicit                                                                                                                                   +
 +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
 +arg1    +smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` > const implicit                                                                            +
 +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -1046,17 +1046,17 @@ get_line_info returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>`
 
 |function-rtti-get_line_info|
 
-.. _function-_at_rtti_c__c_get_module_string_hh_const:
+.. _function-_at_rtti_c__c_get_module_string_hh_const_hh_implicit:
 
-.. das:function:: get_module(arg0: string const)
+.. das:function:: get_module(arg0: string const implicit)
 
 get_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-rtti-get_module|
@@ -1139,17 +1139,17 @@ is_compatible_cast returns bool
 
 |function-rtti-is_compatible_cast|
 
-.. _function-_at_rtti_c__c_make_file_access_string_hh_const__hh_const:
+.. _function-_at_rtti_c__c_make_file_access_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: make_file_access(arg0: string const)
+.. das:function:: make_file_access(arg0: string const implicit)
 
 make_file_access returns smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` >
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++arg0    +string const implicit+
++--------+---------------------+
 
 
 |function-rtti-make_file_access|
@@ -1287,9 +1287,9 @@ make_file_access returns smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAcce
 
 |function-rtti-rtti_builtin_structure_for_each_annotation|
 
-.. _function-_at_rtti_c__c_set_file_source__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit_string_hh_const_string_hh_const__hh_const:
+.. _function-_at_rtti_c__c_set_file_source__hh_smart_ptr_hh__hh_handle_hh_FileAccess_hh_const_hh_implicit_string_hh_const_hh_implicit_string_hh_const_hh_implicit__hh_const:
 
-.. das:function:: set_file_source(arg0: smart_ptr<rtti::FileAccess> const implicit; arg1: string const; arg2: string const)
+.. das:function:: set_file_source(arg0: smart_ptr<rtti::FileAccess> const implicit; arg1: string const implicit; arg2: string const implicit)
 
 set_file_source returns bool
 
@@ -1298,9 +1298,9 @@ set_file_source returns bool
 +========+============================================================================+
 +arg0    +smart_ptr< :ref:`rtti::FileAccess <handle-rtti-FileAccess>` > const implicit+
 +--------+----------------------------------------------------------------------------+
-+arg1    +string const                                                                +
++arg1    +string const implicit                                                       +
 +--------+----------------------------------------------------------------------------+
-+arg2    +string const                                                                +
++arg2    +string const implicit                                                       +
 +--------+----------------------------------------------------------------------------+
 
 

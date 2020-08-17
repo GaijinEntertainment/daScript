@@ -8,7 +8,7 @@ def test
         s2 := "test_das_string"
         assert("{s}"=="test_das_string")
         assert(string(s)=="test_das_string")
-        peek(s) <| $(st:string)
+        peek(s) <| $(st)
             assert(st=="test_das_string")
         s := "out_of_it"
         assert("{s}"=="out_of_it")

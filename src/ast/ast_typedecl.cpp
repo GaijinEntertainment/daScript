@@ -1582,7 +1582,7 @@ namespace das
     }
 
     bool TypeDecl::isTempType(bool refMatters) const {
-        return (ref && refMatters) || isRefType() || isPointer() || baseType==Type::tIterator;
+        return (ref && refMatters) || isRefType() || isPointer() || isString() || baseType==Type::tIterator;
     }
 
     bool TypeDecl::isTemp( bool topLevel, bool refMatters ) const {

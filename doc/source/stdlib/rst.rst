@@ -70,7 +70,7 @@ Document writers
   *  :ref:`document_class_method (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const;fld:auto const) : auto <function-_at_rst_c__c_document_class_method__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_auto_hh_const__hh_auto_hh_const>` 
   *  :ref:`document_enumeration (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const) : auto <function-_at_rst_c__c_document_enumeration__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_auto_hh_const>` 
   *  :ref:`document_structure_annotation (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const) : auto <function-_at_rst_c__c_document_structure_annotation__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const__hh_auto_hh_const>` 
-  *  :ref:`document_typedef (doc_file:fio::FILE const? const;mod:rtti::Module? const;name:string const;value:auto const) : auto <function-_at_rst_c__c_document_typedef__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const__hh_auto_hh_const>` 
+  *  :ref:`document_typedef (doc_file:fio::FILE const? const;mod:rtti::Module? const;name:string const implicit;value:auto const) : auto <function-_at_rst_c__c_document_typedef__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const_hh_implicit__hh_auto_hh_const>` 
 
 .. _function-_at_rst_c__c_document_string_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const_string_hh_const__hh_array_hh_DocGroup_hh_const:
 
@@ -444,9 +444,9 @@ document_structure_annotation returns auto
 
 |function-rst-document_structure_annotation|
 
-.. _function-_at_rst_c__c_document_typedef__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const__hh_auto_hh_const:
+.. _function-_at_rst_c__c_document_typedef__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const_hh_implicit__hh_auto_hh_const:
 
-.. das:function:: document_typedef(doc_file: file; mod: rtti::Module? const; name: string const; value: auto const)
+.. das:function:: document_typedef(doc_file: file; mod: rtti::Module? const; name: string const implicit; value: auto const)
 
 document_typedef returns auto
 
@@ -457,7 +457,7 @@ document_typedef returns auto
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
 +--------+-------------------------------------------------+
-+name    +string const                                     +
++name    +string const implicit                            +
 +--------+-------------------------------------------------+
 +value   +auto const                                       +
 +--------+-------------------------------------------------+
@@ -909,7 +909,7 @@ Naming helpers
 ++++++++++++++
 
   *  :ref:`topic (mod:rtti::Module? const) : string <function-_at_rst_c__c_topic__hh_ptr_hh__hh_handle_hh_Module_hh_const>` 
-  *  :ref:`topic (category:string const;mod:rtti::Module? const;name:string const) : string <function-_at_rst_c__c_topic_string_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const>` 
+  *  :ref:`topic (category:string const;mod:rtti::Module? const;name:string const implicit) : string <function-_at_rst_c__c_topic_string_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const_hh_implicit>` 
   *  :ref:`module_name (mod:auto const) : auto <function-_at_rst_c__c_module_name__hh_auto_hh_const>` 
 
 .. _function-_at_rst_c__c_topic__hh_ptr_hh__hh_handle_hh_Module_hh_const:
@@ -927,9 +927,9 @@ topic returns string
 
 |function-rst-topic|
 
-.. _function-_at_rst_c__c_topic_string_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const:
+.. _function-_at_rst_c__c_topic_string_hh_const__hh_ptr_hh__hh_handle_hh_Module_hh_const_string_hh_const_hh_implicit:
 
-.. das:function:: topic(category: string const; mod: rtti::Module? const; name: string const)
+.. das:function:: topic(category: string const; mod: rtti::Module? const; name: string const implicit)
 
 topic returns string
 
@@ -940,7 +940,7 @@ topic returns string
 +--------+-------------------------------------------------+
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
 +--------+-------------------------------------------------+
-+name    +string const                                     +
++name    +string const implicit                            +
 +--------+-------------------------------------------------+
 
 

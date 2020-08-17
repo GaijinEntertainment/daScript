@@ -251,7 +251,7 @@ def make_table(tab:array<array<string>>;withHeader:bool=false)
         write_table_separator(writer,wid)
         write(writer,"\n\n")
 
-def topic(category:string;mod:Module?;name:string)
+def topic(category:string;mod:Module?;name:string implicit)
     return "|{category}-{module_name(mod)}-{name}|"
 
 def topic(mod:Module?)
@@ -291,7 +291,7 @@ def document_variant(doc_file:file; value:TypeDeclPtr)
         emplace(tab,line)
     fwrite(doc_file,make_table(tab))
 
-def document_typedef(doc_file:file;mod:Module?;name:string;value)
+def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
     fwrite(doc_file,make_label(alias_label_name(value)))
     fwrite(doc_file,make_domain("das:attribute"))
     fwrite(doc_file,name)
@@ -686,7 +686,7 @@ def hide_group(var group:DocGroup)
     return <- group
 
 [private]
-def generate_topic_stub(var tab:table<string;bool>;doc_file:file;topic:string)
+def generate_topic_stub(var tab:table<string;bool>;doc_file:file;topic:string implicit)
     if !tab[topic]
         tab[topic] = true
         fwrite(doc_file,".. {topic} replace:: to be documented\n\n" )
