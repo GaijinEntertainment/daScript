@@ -16,13 +16,13 @@
    language/tables.rst
    language/arrays.rst
    language/functions.rst
+   language/modules.rst
    language/blocks.rst
    language/lambdas.rst
    language/structs.rst
    language/tuples.rst
    language/variants.rst
    language/classes.rst
-   language/handles.rst
    language/constants_and_enumerations.rst
    language/bitfields.rst
    language/comprehensions.rst
@@ -32,4 +32,7 @@
    language/string_builder.rst
    language/generic_programming.rst
    language/macros.rst
+   language/cast.rst
+   language/handles.rst
+   language/aot.rst
 
