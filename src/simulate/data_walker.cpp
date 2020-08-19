@@ -113,7 +113,7 @@ namespace das {
         DAS_ASSERT(copyInfo.dimSize);
         copyInfo.dimSize --;
         uint32_t stride = getTypeBaseSize(ti);
-        uint32_t count = getDimSize(ti);
+        uint32_t count = ti->dim[ti->dimSize-1];
         walk_array(pa, stride, count, &copyInfo);
         if ( cancel ) return;
         afterDim(pa, ti);
