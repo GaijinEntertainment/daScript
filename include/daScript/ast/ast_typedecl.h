@@ -116,6 +116,7 @@ namespace das {
         bool isFoldable() const;
         bool isAlias() const;
         void collectAliasList(vector<string> & aliases) const;
+        bool isAutoArrayResolved() const;
         bool isAuto() const;
         bool isAutoOrAlias() const;
         bool isVectorType() const;

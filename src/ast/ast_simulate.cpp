@@ -1308,7 +1308,7 @@ namespace das
                 return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range);
             }
         } else {
-            uint32_t range = subexpr->type->dim.back();
+            uint32_t range = subexpr->type->dim[0];
             uint32_t stride = subexpr->type->getStride();
             if ( index->rtti_isConstant() ) {
                 // if its constant index, like a[3]..., we try to let node bellow simulate
@@ -1398,7 +1398,7 @@ namespace das
                 uint32_t valueTypeSize = seT->secondType->getSizeOf();
                 return context.code->makeValueNode<SimNode_SafeTableIndex>(seT->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
             } else if ( seT->dim.size() ) {
-                uint32_t range = seT->dim.back();
+                uint32_t range = seT->dim[0];
                 uint32_t stride = seT->getStride();
                 auto prv = subexpr->simulate(context);
                 auto pidx = index->simulate(context);
@@ -1425,7 +1425,7 @@ namespace das
                 uint32_t valueTypeSize = seT->secondType->getSizeOf();
                 return context.code->makeValueNode<SimNode_SafeTableIndex>(seT->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
             } else if ( seT->dim.size() ) {
-                uint32_t range = seT->dim.back();
+                uint32_t range = seT->dim[0];
                 uint32_t stride = seT->getStride();
                 auto prv = subexpr->simulate(context);
                 auto pidx = index->simulate(context);
@@ -2141,7 +2141,7 @@ namespace das
         for ( auto & src : sources ) {
             if ( !src->type ) continue;
             if ( src->type->isArray() ) {
-                fixedSize = das::min(fixedSize, src->type->dim.back());
+                fixedSize = das::min(fixedSize, src->type->dim[0]);
                 fixedArrays = true;
             } else if ( src->type->isGoodArrayType() ) {
                 dynamicArrays = true;
@@ -2196,7 +2196,7 @@ namespace das
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context),
-                        sources[t]->type->dim.back(),
+                        sources[t]->type->dim[0],
                         sources[t]->type->getStride());
                 } else {
                     DAS_ASSERTF(0, "we should not be here. we are doing iterator for on an unsupported type.");

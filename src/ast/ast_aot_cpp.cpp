@@ -256,8 +256,8 @@ namespace das {
             stream << das_to_cppString(baseType);
         }
         if ( type->dim.size() ) {
-            for ( auto d : type->dim ) {
-                stream << "," << d << ">";
+            for ( auto itd = type->dim.rbegin(); itd!=type->dim.rend(); ++itd ) {
+                stream << "," << *itd << ">";
             }
         }
         if ( skipConst==CpptSkipConst::no ) {
@@ -2266,7 +2266,7 @@ namespace das {
                 if ( enew->type->firstType->isHandle() ) {
                     ss << "das_new_dim_handle<"
                        << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
-                       << "," << enew->type->dim.back()
+                       << "," << enew->type->dim[0]
                        << "," << (enew->type->smartPtr ? "true" : "false");
                     if ( enew->initializer ) {
                         DAS_ASSERT(0 && "internal error. initializer for enew is not supported");
@@ -2276,7 +2276,7 @@ namespace das {
                 } else {
                     ss << "das_new_dim<"
                        << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
-                       << "," << enew->type->dim.back();
+                       << "," << enew->type->dim[0];
                     if ( enew->initializer ) {
                         ss  << ">::make_and_init(__context__,[&]()"
                             // << " -> " << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)

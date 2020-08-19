@@ -56,7 +56,7 @@ namespace das
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
         TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
         TT->temporary = (TT->temporary | autoT->temporary) && !autoT->removeTemporary && !TT->removeTemporary;
-        if ( (autoT->removeDim || TT->removeDim) && TT->dim.size() ) TT->dim.pop_back();
+        if ( (autoT->removeDim || TT->removeDim) && TT->dim.size() ) TT->dim.erase(TT->dim.begin());
         TT->removeConstant = false;
         TT->removeDim = false;
         TT->removeRef = false;
@@ -1252,6 +1252,15 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isAutoArrayResolved() const {
+        for ( auto di : dim ) {
+            if ( di==TypeDecl::dimAuto ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?
         // also dim[] is aito
@@ -1842,7 +1851,7 @@ namespace das
     int TypeDecl::getStride() const {
         int size = 1;
         if ( dim.size() > 1 ) {
-            for ( size_t i=0; i!=dim.size()-1; ++i )
+            for ( size_t i=1; i!=dim.size(); ++i )
                 size *= dim[i];
         }
         return getBaseSizeOf() * size;

@@ -112,8 +112,17 @@ namespace das {
         TypeInfo copyInfo = *ti;
         DAS_ASSERT(copyInfo.dimSize);
         copyInfo.dimSize --;
-        uint32_t stride = getTypeBaseSize(ti);
-        uint32_t count = ti->dim[ti->dimSize-1];
+        vector<uint32_t> udim;
+        if ( copyInfo.dimSize ) {
+            for ( uint32_t i=0; i!=copyInfo.dimSize; ++i) {
+                udim.push_back(ti->dim[i+1]);
+            }
+            copyInfo.dim = udim.data();
+        } else {
+            copyInfo.dim = nullptr;
+        }
+        uint32_t stride = getTypeSize(&copyInfo);
+        uint32_t count = ti->dim[0];
         walk_array(pa, stride, count, &copyInfo);
         if ( cancel ) return;
         afterDim(pa, ti);

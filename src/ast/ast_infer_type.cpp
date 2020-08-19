@@ -346,10 +346,6 @@ namespace das {
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
                     resT->temporary = (resT->temporary | decl->temporary) & !decl->removeTemporary;
                     resT->dim = decl->dim;
-                    // resT->dim.clear();
-                    // resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
-                    // if ( decl->removeDim && resT->dim.size() ) resT->dim.pop_back();
-                    // resT->alias = decl->alias;
                     resT->alias.clear();
                     return resT;
                 } else {
@@ -427,10 +423,6 @@ namespace das {
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
                     resT->temporary = (resT->temporary | decl->temporary) & !decl->removeTemporary;
                     resT->dim = decl->dim;
-                    // resT->dim.clear();
-                    // resT->dim.insert(resT->dim.end(), decl->dim.begin(), decl->dim.end());
-                    // if ( decl->removeDim && resT->dim.size() ) resT->dim.pop_back();
-                    // resT->alias = decl->alias;
                     resT->alias.clear();
                     return resT;
                 } else {
@@ -2507,7 +2499,7 @@ namespace das {
                 } else if ( expr->trait=="dim" ) {
                     if ( expr->typeexpr->dim.size() ) {
                         reportAstChanged();
-                        return make_smart<ExprConstInt>(expr->at, expr->typeexpr->dim.back());
+                        return make_smart<ExprConstInt>(expr->at, expr->typeexpr->dim[0]);
                     } else {
                         error("typeinfo(dim non_array) is prohibited, " + expr->typeexpr->describe(), "", "",
                               expr->at,CompilationError::typeinfo_dim);
@@ -3300,10 +3292,17 @@ namespace das {
                     error("type can't be indexed " + seT->describe(),  "", "",
                         expr->subexpr->at, CompilationError::cant_index);
                     return Visitor::visit(expr);
+                } else if ( !seT->isAutoArrayResolved() ) {
+                    error("type dimensions are not resolved yet " + seT->describe(),  "", "",
+                        expr->subexpr->at, CompilationError::cant_index);
+                    return Visitor::visit(expr);
                 } else {
                     expr->type = make_smart<TypeDecl>(*seT);
                     expr->type->ref = true;
-                    expr->type->dim.pop_back();
+                    expr->type->dim.erase(expr->type->dim.begin());
+                    if ( !expr->type->dimExpr.empty() ) {
+                        expr->type->dimExpr.erase(expr->type->dimExpr.begin());
+                    }
                     expr->type->constant |= seT->constant;
                 }
             }
@@ -3373,10 +3372,19 @@ namespace das {
                         expr->type->firstType = make_smart<TypeDecl>(*seT->firstType);
                         expr->type->firstType->constant |= seT->constant;
                     } else if ( seT->dim.size() ) {
-                        expr->type = make_smart<TypeDecl>(Type::tPointer);
-                        expr->type->firstType = make_smart<TypeDecl>(*seT);
-                        expr->type->firstType->dim.pop_back();
-                        expr->type->firstType->constant |= seT->constant;
+                        if ( !seT->isAutoArrayResolved() ) {
+                            error("type dimensions are not resolved yet " + seT->describe(), "", "",
+                                expr->subexpr->at, CompilationError::cant_index);
+                            return Visitor::visit(expr);
+                        } else {
+                            expr->type = make_smart<TypeDecl>(Type::tPointer);
+                            expr->type->firstType = make_smart<TypeDecl>(*seT);
+                            expr->type->firstType->dim.erase(expr->type->firstType->dim.begin());
+                            if ( !expr->type->firstType->dimExpr.empty() ) {
+                                expr->type->firstType->dimExpr.erase(expr->type->firstType->dimExpr.begin());
+                            }
+                            expr->type->firstType->constant |= seT->constant;
+                        }
                     } else if ( seT->isVectorType() ) {
                         expr->type = make_smart<TypeDecl>(Type::tPointer);
                         expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
@@ -3417,9 +3425,16 @@ namespace das {
                         expr->at, CompilationError::unsafe);
                 }
                 const auto & seT = expr->subexpr->type;
+                if ( !seT->isAutoArrayResolved() ) {
+                    error("type dimensions are not resolved yet " + seT->describe(), "", "",
+                        expr->subexpr->at, CompilationError::cant_index);
+                }
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_smart<TypeDecl>(*seT);
-                expr->type->firstType->dim.pop_back();
+                expr->type->firstType->dim.erase(expr->type->firstType->dim.begin());
+                if ( !expr->type->firstType->dimExpr.empty() ) {
+                    expr->type->firstType->dimExpr.erase(expr->type->firstType->dimExpr.begin());
+                }
                 expr->type->firstType->constant |= seT->constant;
             } else if ( expr->subexpr->type->isVectorType() && expr->subexpr->type->isRef() ) {
                 const auto & seT = expr->subexpr->type;
@@ -4858,7 +4873,10 @@ namespace das {
                 if ( src->type->dim.size() ) {
                     pVar->type = make_smart<TypeDecl>(*src->type);
                     pVar->type->ref = true;
-                    pVar->type->dim.pop_back();
+                    pVar->type->dim.erase(pVar->type->dim.begin());
+                    if ( !pVar->type->dimExpr.empty() ) {
+                        pVar->type->dimExpr.erase(pVar->type->dimExpr.begin());
+                    }
                 } else if ( src->type->isGoodIteratorType() ) {
                     pVar->type = make_smart<TypeDecl>(*src->type->firstType);
                 } else if ( src->type->isGoodArrayType() ) {
@@ -5305,8 +5323,8 @@ namespace das {
     // at this point we are dealing with 2 auto types
         // 3. one with dim is more specialized, than one without
         //      if both have dim, one with actual value is more specialized, than the other one
-            int d1 = t1->dim.size() ? t1->dim.back() : 0;
-            int d2 = t2->dim.size() ? t2->dim.back() : 0;
+            int d1 = t1->dim.size() ? t1->dim[0] : 0;
+            int d2 = t2->dim.size() ? t2->dim[0] : 0;
             if ( d1!=d2 ) {
                 if ( d1 && d2 ) {
                     return d1==-1 ? -1 : 1;
