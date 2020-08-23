@@ -1,8 +1,8 @@
 .. _modules:
 
-======
-Module
-======
+========================
+Modules and C++ bindings
+========================
 
 Modules provide infrastructure for the code reuse,
 as well as mechanism to expose C++ functionality to daScript.

@@ -1,8 +1,8 @@
 .. _handles:
 
-============
-Handled type
-============
+==========================
+Exposing C++ handled types
+==========================
 
 Handled types represent the machinery designed to expose C++ types to the daScript.
 
