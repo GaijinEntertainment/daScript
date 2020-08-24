@@ -1,8 +1,8 @@
 .. _aot:
 
-=========================
-Ahead of time compilation
-=========================
+====================================================
+Ahead of time compilation and C++ operation bindings
+====================================================
 
 For optimal performance and seamless integration daScript is capable of ahead of time compilation,
 i.e. producing C++ files, which are semantically equivalent to simulated daScript nodes.
