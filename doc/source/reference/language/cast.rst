@@ -1,7 +1,7 @@
 .. _cast:
 
 =======================================
-С++ ABI and type factory infrastructure
+C++ ABI and type factory infrastructure
 =======================================
 
 ----
