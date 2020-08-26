@@ -7,7 +7,12 @@ Boost package for the AST
 
 .. include:: detail/ast_boost.rst
 
-|module-ast_boost|
+The AST boost module implements collection of helper macros and functions to accompany :ref:`AST <stdlib_ast>`.
+
+All functions and symbols are in "ast" module, use require to get access to it. ::
+
+    require daslib/ast_boost
+
 
 +++++++
 Classes

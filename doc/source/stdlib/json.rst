@@ -7,7 +7,12 @@ JSON manipulation library
 
 .. include:: detail/json.rst
 
-|module-json|
+The JSON module implements JSON parser and serialization routines.
+
+All functions and symbols are in "json" module, use require to get access to it. ::
+
+    require daslib/json
+
 
 ++++++++++++
 Type aliases
@@ -197,19 +202,19 @@ read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 |function-json-read_json|
 
-.. _function-_at_json_c__c_read_json_string_hh_const_string_hh_ref:
+.. _function-_at_json_c__c_read_json_string_hh_const_hh_implicit_string_hh_ref:
 
-.. das:function:: read_json(text: string const; error: string&)
+.. das:function:: read_json(text: string const implicit; error: string&)
 
 read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+text    +string const +
-+--------+-------------+
-+error   +string&      +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++text    +string const implicit+
++--------+---------------------+
++error   +string&              +
++--------+---------------------+
 
 
 |function-json-read_json|

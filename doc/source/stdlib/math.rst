@@ -3570,7 +3570,7 @@ Uncategorized
 
 .. das:function:: is_nan(x: double const)
 
-is_nan returns double
+is_nan returns bool
 
 +--------+-------------+
 +argument+argument type+
@@ -3585,7 +3585,7 @@ is_nan returns double
 
 .. das:function:: is_nan(x: float const)
 
-is_nan returns double
+is_nan returns bool
 
 +--------+-------------+
 +argument+argument type+
