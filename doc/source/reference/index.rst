@@ -23,3 +23,4 @@ THE SOFTWARE.
 
    introduction.rst
    language.rst
+   embedding.rst

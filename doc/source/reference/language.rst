@@ -32,7 +32,5 @@
    language/string_builder.rst
    language/generic_programming.rst
    language/macros.rst
-   language/cast.rst
-   language/handles.rst
-   language/aot.rst
+
 

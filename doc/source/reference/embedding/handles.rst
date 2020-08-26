@@ -190,6 +190,15 @@ Dummy type annotation constructor takes daScript type name, C++ type name, its s
 
     DummyTypeAnnotation(const string & name, const string & cppName, size_t sz, size_t al)
 
+Since TypeAnnotation is a strong daScript type,
+DummyTypeAnnotation allows 'glueing' code in daScript without exposing details of the C++ types.
+Consider the following example:
+
+        send_unit_to(get_unit("Ally"), get_unit_pos(get_unit("Enemy")))
+
+Result of the ``get_unit`` is passed directly to ``send_unit_to``,
+without daScript knowing anything about unit type (other than that it exists).
+
 -----------------------
 ManagedVectorAnnotation
 -----------------------
