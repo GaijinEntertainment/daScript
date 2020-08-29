@@ -186,7 +186,7 @@ namespace das
     public:
         string                          name;
         vector<FieldDeclaration>        fields;
-        das_hash_map<string,int32_t>    filedLookup;
+        das_hash_map<string,int32_t>    fieldLookup;
         LineInfo                        at;
         Module *                        module = nullptr;
         Structure *                     parent = nullptr;

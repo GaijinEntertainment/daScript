@@ -1564,7 +1564,7 @@ namespace das {
     }
 
     FunctionPtr makeClassFinalize ( Structure * baseClass ) {
-        // add __finalize filed
+        // add __finalize field
         auto fname = baseClass->name + "'__finalize";
         ExpressionPtr finit = make_smart<ExprAddr>(baseClass->at, "_::" + fname);
         if ( baseClass->parent ) {
