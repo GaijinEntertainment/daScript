@@ -326,6 +326,7 @@ namespace das
         virtual bool needDelete() const { return canDelete(); }
         virtual bool canDeletePtr() const { return false; }
         virtual bool isIndexable ( const TypeDeclPtr & ) const { return false; }
+        virtual bool isIndexMutable ( const TypeDeclPtr & ) const { return false; }
         virtual bool isIterable ( ) const { return false; }
         virtual bool isShareable ( ) const { return true; }
         virtual bool isSmart() const { return false; }
