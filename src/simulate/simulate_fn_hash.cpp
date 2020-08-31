@@ -43,7 +43,7 @@ namespace das {
             return (offset_basis <= 1) ? fnv_prime : offset_basis;
         }
         // semantic walker
-        virtual void op ( const char * name, size_t sz, const string & TT ) override {
+        virtual void op ( const char * name, uint32_t sz, const string & TT ) override {
             write(name);
             if ( sz ) write(&sz, sizeof(sz));
             if ( !TT.empty() ) write(TT.c_str());

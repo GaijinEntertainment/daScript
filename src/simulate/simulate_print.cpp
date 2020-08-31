@@ -59,7 +59,7 @@ namespace das {
         virtual void cr () override {
             CR = true;
         }
-        virtual void op ( const char * name, size_t sz, const string & TT ) override {
+        virtual void op ( const char * name, uint32_t sz, const string & TT ) override {
             SimVisitor::op(name);
             // hash
             write(name);
