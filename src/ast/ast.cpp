@@ -285,9 +285,9 @@ namespace das {
     }
 
     const Structure::FieldDeclaration * Structure::findField ( const string & na ) const {
-        if ( filedLookup.size()==fields.size() ) {
-            auto it = filedLookup.find(na);
-            if ( it == filedLookup.end() ) return nullptr;
+        if ( fieldLookup.size()==fields.size() ) {
+            auto it = fieldLookup.find(na);
+            if ( it == fieldLookup.end() ) return nullptr;
             return &fields[it->second];
         } else {
             for ( const auto & fd : fields ) {
