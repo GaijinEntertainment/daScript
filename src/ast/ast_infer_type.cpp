@@ -1067,7 +1067,7 @@ namespace das {
                         pSt = eWT->firstType->structType;
                     }
                     if ( pSt ) {
-                        if ( pSt->filedLookup.find(fieldName) != pSt->filedLookup.end() ) {
+                        if ( pSt->fieldLookup.find(fieldName) != pSt->fieldLookup.end() ) {
                             return eW;
                         }
                     }
@@ -1226,12 +1226,12 @@ namespace das {
             cppLayout = that->cppLayout;
             cppLayoutPod = !that->cppLayoutNotPod;
             cppLayoutParent = nullptr;
-            that->filedLookup.clear();
+            that->fieldLookup.clear();
             fieldIndex = 0;
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
-            that->filedLookup[decl.name] = fieldIndex++;
+            that->fieldLookup[decl.name] = fieldIndex++;
             if ( decl.type->isAuto() && !decl.init) {
                 error("structure field type can't be infered, it needs an initializer", "", "",
                       decl.at, CompilationError::cant_infer_missing_initializer );
