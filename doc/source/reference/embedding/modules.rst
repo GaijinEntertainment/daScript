@@ -65,6 +65,28 @@ and do not collide with keywords via ``verifyBuiltinNames`` function::
         verifyAotReady();
     }
 
+-------------
+ModuleAotType
+-------------
+
+Module can specify 3 different AOT options.
+
+``ModuleAotType::no_aot`` means that no ahead of time compilation will occur for the module, as well as any other module which requires it.
+
+``ModuleAotType::hybrid`` means that no ahead of time compilation will occur for the module itself.
+Other modules which require this one will will have AOT, but not without performance penalties.
+
+``ModuleAotType::cpp`` means that full blown AOT will occur.
+It also means that module is required to fill in ``cppName`` for every function, field, or property.
+The best way to verify it is to call ``verifyAotReady`` at the end of the module constructor.
+
+Additionally module needs to write out full list of required C++ includes::
+
+    virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+        tw << "#include \"daScript/simulate/aot_builtin_fio.h\"\n"; // like this
+        return ModuleAotType::cpp;
+    }
+
 ------------------------
 Builtin module constants
 ------------------------

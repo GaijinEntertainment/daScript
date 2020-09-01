@@ -101,6 +101,20 @@ To achieve this, function registration in the module needs to be modified::
     addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
         SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
 
+-------------------------------------
+AOT settings for individual functions
+-------------------------------------
+
+There are several function annotations, which control how function AOT is generated.
+
+``[hybrid]`` annotation indicates, that function is always called via full daScript interop ABI (slower),
+as oppose to direct function call via C++ language construct (faster).
+Doing this removes dependency between the two functions in the semantic hash,
+which in turn allows replacing only one of the function with the simulated version.
+
+``[no_aot]`` annotation indicates, that AOT version of the function will not be generated.
+This is useful for working around AOT code-generation issues, as well as during builtin module development.
+
 ---------------------
 AOT prefix and suffix
 ---------------------
