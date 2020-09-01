@@ -208,6 +208,7 @@ htmlhelp_basename = 'daScript_doc'
 # -- Options for LaTeX output ---------------------------------------------
 
 latex_elements = {
+'extrapackages': r'\usepackage{textgreek}'
 # The paper size ('letterpaper' or 'a4paper').
 #'papersize': 'letterpaper',
 
