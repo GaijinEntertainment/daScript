@@ -140,7 +140,7 @@ namespace das {
             SimVisitor::preVisit(node);
             thisNode = node;
         }
-        virtual void op ( const char * name, size_t typeSize, const string & typeName ) override {
+        virtual void op ( const char * name, uint32_t typeSize, const string & typeName ) override {
             SimNodeInfo ni;
             ni.name = name;
             ni.typeName = typeName;
