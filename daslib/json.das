@@ -139,7 +139,8 @@ def _lexer ( var stext : string implicit )
                 return false
         return false
     finally
-        delete_string(stext)
+        unsafe
+            delete_string(stext)
 
 [private]
 def expect_token ( var itv : iterator<Token>; var ahead : Token; vindex : int; var error : string & ) : bool

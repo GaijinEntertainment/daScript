@@ -382,6 +382,7 @@ namespace das {
         auto fb = make_smart<ExprBlock>();
         fb->at = ls->at;
         // now finalize
+        bool needUnsafe = false;
         for ( const auto & fl : ls->fields ) {
             if ( fl.type->needDelete() ) {
                 if ( !fl.doNotDelete && !fl.capturedRef ) {
@@ -390,6 +391,9 @@ namespace das {
                     fld->ignoreCaptureConst = true;
                     auto delf = make_smart<ExprDelete>(fl.at, fld);
                     fb->list.emplace_back(delf);
+                    if ( fl.type->isPointer() ) {
+                        needUnsafe = true;
+                    }
                 }
             }
         }
@@ -405,7 +409,9 @@ namespace das {
         cTHIS->type = make_smart<TypeDecl>(ls);
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
-        wrapInUnsafe(pFunc);
+        if ( needUnsafe ) {
+            wrapInUnsafe(pFunc);
+        }
         verifyGenerated(pFunc->body);
         return pFunc;
     }
@@ -454,7 +460,7 @@ namespace das {
         cTHIS->type->firstType = make_smart<TypeDecl>(ls);
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
-        wrapInUnsafe(pFunc);
+        // wrapInUnsafe(pFunc);
         verifyGenerated(pFunc->body);
         return pFunc;
     }
@@ -1246,6 +1252,7 @@ namespace das {
         fn->arguments.push_back(arg0);
         auto block = make_smart<ExprBlock>();
         block->at = at;
+        bool needUnsafe = false;
         for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
             if (tupleType->argTypes[argi]->needDelete()) {
                 string argn = "_" + to_string(argi);
@@ -1253,6 +1260,9 @@ namespace das {
                 auto lf = make_smart<ExprField>(at, lv, argn);
                 auto cl = make_smart<ExprDelete>(at, lf);
                 block->list.push_back(cl);
+                if ( tupleType->argTypes[argi]->isPointer() ) {
+                    needUnsafe = true;
+                }
             }
         }
         auto mz = make_smart<ExprMemZero>(at, "memzero");
@@ -1260,6 +1270,9 @@ namespace das {
         mz->arguments.push_back(lvar);
         block->list.push_back(mz);
         fn->body = block;
+        if ( needUnsafe ) {
+            wrapInUnsafe(fn);
+        }
         verifyGenerated(fn->body);
         return fn;
     }
@@ -1342,6 +1355,7 @@ namespace das {
         auto block = make_smart<ExprBlock>();
         block->at = at;
         smart_ptr<ExprIfThenElse> topIf, lastIf;
+        bool needUnsafe = false;
         for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
             if (variantType->argTypes[argi]->needDelete()) {
                 const string & argn = variantType->argNames[argi];
@@ -1362,6 +1376,9 @@ namespace das {
                 } else {
                     topIf = lastIf = thisIf;
                 }
+                if ( variantType->argTypes[argi]->isPointer() ) {
+                    needUnsafe = true;
+                }
             }
         }
         if (topIf) block->list.push_back(topIf);
@@ -1370,7 +1387,9 @@ namespace das {
         mz->arguments.push_back(lvar);
         block->list.push_back(mz);
         fn->body = block;
-        wrapInUnsafe(fn);
+        if ( needUnsafe ) {
+            wrapInUnsafe(fn);
+        }
         verifyGenerated(fn->body);
         return fn;
     }
