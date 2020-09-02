@@ -168,9 +168,12 @@ if "%1" == "latex" (
 
 if "%1" == "latexpdf" (
     %SPHINXBUILD% -b latex %ALLSPHINXOPTS% %BUILDDIR%/latex
+	if errorlevel 1 exit /b 1
     cd %BUILDDIR%/latex
     pdflatex dascript.tex
+	if errorlevel 1 exit /b 1
     pdflatex dascriptstdlib.tex
+	if errorlevel 1 exit /b 1
     cd %~dp0
     echo.
     echo.Build finished; the PDF files are in %BUILDDIR%/latex.
