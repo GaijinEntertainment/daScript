@@ -956,6 +956,7 @@ namespace das
         bool no_unused_function_arguments = false;
         bool smart_pointer_by_value_unsafe = false;     // is passing smart_ptr by value unsafe?
         bool allow_block_variable_shadowing = false;
+        bool allow_shared_lambda = false;
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

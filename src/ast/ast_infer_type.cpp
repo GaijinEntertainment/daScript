@@ -1445,9 +1445,12 @@ namespace das {
             if ( var->global_shared && !var->init )
                 error("shared global variable must be initialized", "", "",
                       var->at, CompilationError::invalid_variable_type);
-            if ( var->global_shared && !var->type->isShareable() )
-                error("this variable type can't be shared, " + var->type->describe(), "", "",
-                      var->at, CompilationError::invalid_variable_type);
+            if ( var->global_shared && !var->type->isShareable() ) {
+                if ( !(var->type->isSimpleType(Type::tLambda) && program->policies.allow_shared_lambda) ) {
+                    error("this variable type can't be shared, " + var->type->describe(), "", "",
+                        var->at, CompilationError::invalid_variable_type);
+                }
+            }
             verifyType(var->type);
             return Visitor::visitGlobalLet(var);
         }
