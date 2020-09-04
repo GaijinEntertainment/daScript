@@ -12,6 +12,10 @@
 // this is here for the default implementation of to_out and to_err
 #include <setjmp.h>
 
+#ifdef _WIN32
+#include <conio.h>
+#endif
+
 namespace das
 {
     bool PointerDimIterator::first ( Context &, char * _value ) {
@@ -321,6 +325,7 @@ namespace das
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
             (*body)->eval(context);
             if ( context.stopFlags ) break;
         }
@@ -332,6 +337,7 @@ namespace das
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
             (*body)->eval(context);
             if ( context.stopFlags ) break;
         }
@@ -401,6 +407,7 @@ namespace das
             SimNode ** __restrict body = list;
         loopbegin:;
             for (; body!=tail; ++body) {
+                DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                 (*body)->eval(context);
                 DAS_PROCESS_LOOP_FLAGS(break);
             }
@@ -820,7 +827,7 @@ namespace das
         to_out(str.c_str());
     }
 
-    string Context::getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope ) {
+    string Context::getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope, bool stackTopOnly ) {
         FPE_DISABLE;
         TextWriter ssw;
     #if DAS_ENABLE_STACK_WALK
@@ -910,6 +917,7 @@ namespace das
             }
             lineAt = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
+            if ( stackTopOnly ) break;
         }
         ssw << "\n";
     #else
@@ -918,8 +926,9 @@ namespace das
         return ssw.str();
     }
 
-    void Context::breakPoint(const LineInfo &) const {
-        os_debug_break();
+    void Context::breakPoint(const LineInfo & at) {
+        // os_debug_break();
+        bpcallback(at);
     }
 
     void Context::to_out ( const char * message ) {
@@ -1195,6 +1204,64 @@ namespace das
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
+    string getLinesAroundCode ( const char* st, int ROW, int TAB ) {
+        TextWriter text;
+        int col=0, row=1;
+        auto it = st;
+        while ( *it ) {
+            auto CH = *it++;
+            if ( CH=='\t' ) {
+                int tcol = (col + TAB) & ~(TAB-1);
+                while ( col < tcol ) {
+                    if ( row>=ROW-3 && row<=ROW+3 ) text << " ";
+                    col ++;
+                }
+                continue;
+            } else if ( CH=='\n' ) {
+                row++;
+                col=0;
+                if ( row>=ROW-3 && row<=ROW+3 ) {
+                    text << ((row==ROW) ? "\n->  " : "\n    ");
+                }
+            } else {
+                if ( row>=ROW-3 && row<=ROW+3 ) text << CH;
+            }
+            col ++;
+        }
+        return text.str();
+    }
+
+    void Context::bpcallback( const LineInfo & at ) {
+        TextPrinter tp;
+        if ( at.fileInfo ) {
+            tp << at.fileInfo->name << ":" << at.line << ":" << at.column << "\n";
+            auto textAroundBreak = getLinesAroundCode(
+                at.fileInfo->getSource(),
+                at.line,
+                at.fileInfo->tabSize);
+            tp << textAroundBreak;
+        }
+        tp << getStackWalk(&at, true, true, false, true);
+        for ( ;; ) {
+            tp << "C - Continue, SPACE - Step\n";
+            int ch = _getch();
+            switch ( ch ) {
+                case ' ':
+                    singleStepMode = true;
+                    singleStepAt = &at;
+                    goto done;
+                case 'c':
+                case 'C':
+                    singleStepMode = false;
+                    singleStepAt = nullptr;
+                    goto done;
+                default:    /* beep */ ;
+            }
+        }
+        done:;
+    }
+
 }
 
 //workaround compiler bug in MSVC 32 bit

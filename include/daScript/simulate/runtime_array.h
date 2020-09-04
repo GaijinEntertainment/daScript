@@ -139,6 +139,7 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -193,6 +194,7 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -232,6 +234,7 @@ namespace das
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
+                DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
             }
@@ -282,6 +285,7 @@ namespace das
             for (int i = 0; i!=szz && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
+                DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
             }
@@ -319,6 +323,7 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -364,6 +369,7 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -398,6 +404,7 @@ namespace das
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
+                DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
             }
@@ -439,6 +446,7 @@ namespace das
             for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
+                DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
             }

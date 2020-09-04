@@ -289,12 +289,12 @@ namespace das
         SimFunction * findFunction ( const char * name, bool & isUnique ) const;
         int findVariable ( const char * name ) const;
         void stackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables );
-        string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope = false );
+        string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope = false, bool stackTopOnly = false );
         void runInitScript ();
 
         virtual void to_out ( const char * message );           // output to stdout or equivalent
         virtual void to_err ( const char * message );           // output to stderr or equivalent
-        virtual void breakPoint(const LineInfo & info) const;    // what to do in case of breakpoint
+        virtual void breakPoint(const LineInfo & info);         // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {
             return abiArg;
@@ -523,6 +523,20 @@ namespace das
 
         char * intern ( const char * str );
 
+        void bpcallback ( const LineInfo & at );
+
+#define DAS_SINGLE_STEP(context,at,forceStep) \
+    context.singleStep(at,forceStep);
+
+        __forceinline void singleStep ( const LineInfo & at, bool forceStep ) {
+            if ( singleStepMode ) {
+                if ( forceStep || singleStepAt==nullptr || (singleStepAt->fileInfo!=at.fileInfo || singleStepAt->line!=at.line) ) {
+                    singleStepAt = &at;
+                    bpcallback(at);
+                }
+            }
+        }
+
     public:
         uint64_t *                      annotationData = nullptr;
         smart_ptr<StringHeapAllocator>  stringHeap;
@@ -556,6 +570,9 @@ namespace das
         int totalVariables = 0;
         int totalFunctions = 0;
         SimNode * aotInitScript = nullptr;
+    protected:
+        bool        singleStepMode = false;
+        const LineInfo * singleStepAt = nullptr;
     public:
         uint32_t *  tabMnLookup = nullptr;
         uint32_t    tabMnMask = 0;

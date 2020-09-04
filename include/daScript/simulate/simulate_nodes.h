@@ -647,6 +647,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
+            DAS_SINGLE_STEP(context,fnPtr->code->debugInfo,true);
             return context.call(fnPtr, argValues, &debugInfo);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
@@ -654,6 +655,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 DAS_PROFILE_NODE \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
+                DAS_SINGLE_STEP(context,fnPtr->code->debugInfo,true);                           \
                 return cast<CTYPE>::to(context.call(fnPtr, argValues, &debugInfo));             \
         }
         DAS_EVAL_NODE
@@ -671,6 +673,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 auto cmres = cmresEval->evalPtr(context);
                 vec4f argValues[argCount ? argCount : 1];
                 EvalBlock<argCount>::eval(context, arguments, argValues);
+                DAS_SINGLE_STEP(context,fnPtr->code->debugInfo,true);
                 return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo));
         }
     };
@@ -686,6 +689,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             Block * block = cast<Block *>::to(argValues[0]);
+            DAS_SINGLE_STEP(context,block->body->debugInfo,true);
             if ( argCount>1 ) {
                 return context.invoke(*block, argValues + 1, nullptr, &debugInfo);
             } else {
@@ -698,6 +702,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount];                                                          \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             Block * block = cast<Block *>::to(argValues[0]);                                    \
+            DAS_SINGLE_STEP(context,block->body->debugInfo,true);                               \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.invoke(*block, argValues + 1, nullptr, &debugInfo));         \
             } else {                                                                            \
@@ -720,6 +725,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             Block * block = cast<Block *>::to(argValues[0]);
+            DAS_SINGLE_STEP(context,block->body->debugInfo,true);
             if ( argCount>1 ) {
                 return context.invoke(*block, argValues + 1, cmres, &debugInfo);
             } else {
@@ -733,6 +739,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[argCount];                                                          \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             Block * block = cast<Block *>::to(argValues[0]);                                    \
+            DAS_SINGLE_STEP(context,block->body->debugInfo,true);                               \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.invoke(*block, argValues + 1, cmres, &debugInfo));           \
             } else {                                                                            \
@@ -754,6 +761,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             EvalBlock<argCount>::eval(context, arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);
             if ( argCount>1 ) {
                 return context.call(simFunc, argValues + 1, &debugInfo);
             } else {
@@ -767,6 +775,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);  \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);                             \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.call(simFunc, argValues + 1, &debugInfo));       \
             } else {                                                                            \
@@ -790,6 +799,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");
             SimFunction * simFunc = context.getFunction(*funIndex-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);
             return context.call(simFunc, argValues, &debugInfo);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
@@ -801,6 +811,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
             SimFunction * simFunc = context.getFunction(*funIndex-1);                           \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);                             \
             return cast<CTYPE>::to(context.call(simFunc, argValues, &debugInfo));               \
         }
         DAS_EVAL_NODE
@@ -820,6 +831,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             EvalBlock<argCount>::eval(context, arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);
             if ( argCount>1 ) {
                 return context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, &debugInfo);
             } else {
@@ -834,6 +846,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             EvalBlock<argCount>::eval(context, arguments, argValues);                               \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);      \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");                 \
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);                                 \
             if ( argCount>1 ) {                                                                     \
                 return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, &debugInfo)); \
             } else {                                                                                \
@@ -859,6 +872,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");
             SimFunction * simFunc = context.getFunction(*funIndex-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);
             return context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
@@ -871,6 +885,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
             SimFunction * simFunc = context.getFunction(*funIndex-1);                           \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
+            DAS_SINGLE_STEP(context,simFunc->code->debugInfo,true);                             \
             return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo));    \
         }
         DAS_EVAL_NODE
@@ -2026,20 +2041,26 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            DAS_SINGLE_STEP(context,cond->debugInfo,false);
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
+                DAS_SINGLE_STEP(context,if_true->debugInfo,false);
                 return if_true->eval(context);
             } else {
+                DAS_SINGLE_STEP(context,if_false->debugInfo,false);
                 return if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 DAS_PROFILE_NODE \
+                DAS_SINGLE_STEP(context,cond->debugInfo,false);     \
                 bool cmp = cond->evalBool(context);                 \
                 if ( cmp ) {                                        \
+                    DAS_SINGLE_STEP(context,if_true->debugInfo,false);  \
                     return if_true->eval##TYPE(context);            \
                 } else {                                            \
+                    DAS_SINGLE_STEP(context,if_false->debugInfo,false); \
                     return if_false->eval##TYPE(context);           \
                 }                                                   \
             }
@@ -2054,20 +2075,26 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            DAS_SINGLE_STEP(context,cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res == 0 ) {
+                DAS_SINGLE_STEP(context,if_true->debugInfo,false);
                 return if_true->eval(context);
             } else {
+                DAS_SINGLE_STEP(context,if_false->debugInfo,false);
                 return if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 DAS_PROFILE_NODE \
+                DAS_SINGLE_STEP(context,cond->debugInfo,false);     \
                 auto res = EvalTT<TT>::eval(context,cond);          \
                 if ( res==0 ) {                                     \
+                    DAS_SINGLE_STEP(context,if_true->debugInfo,false);  \
                     return if_true->eval##TYPE(context);            \
                 } else {                                            \
+                    DAS_SINGLE_STEP(context,if_false->debugInfo,false); \
                     return if_false->eval##TYPE(context);           \
                 }                                                   \
             }
@@ -2082,20 +2109,26 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            DAS_SINGLE_STEP(context,cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
+                DAS_SINGLE_STEP(context,if_true->debugInfo,false);
                 return if_true->eval(context);
             } else {
+                DAS_SINGLE_STEP(context,if_false->debugInfo,false);
                 return if_false->eval(context);
             }
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
                 DAS_PROFILE_NODE \
+                DAS_SINGLE_STEP(context,cond->debugInfo,false);     \
                 auto res = EvalTT<TT>::eval(context,cond);          \
                 if ( res!=0 ) {                                     \
+                    DAS_SINGLE_STEP(context,if_true->debugInfo,false);  \
                     return if_true->eval##TYPE(context);            \
                 } else {                                            \
+                    DAS_SINGLE_STEP(context,if_false->debugInfo,false); \
                     return if_false->eval##TYPE(context);           \
                 }                                                   \
             }
@@ -2110,8 +2143,10 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            DAS_SINGLE_STEP(context,cond->debugInfo,false);
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
+                DAS_SINGLE_STEP(context,if_true->debugInfo,false);
                 return if_true->eval(context);
             } else {
                 return v_zero();
@@ -2126,8 +2161,10 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            DAS_SINGLE_STEP(context,cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res==0 ) {
+                DAS_SINGLE_STEP(context,if_true->debugInfo,false);
                 return if_true->eval(context);
             } else {
                 return v_zero();
@@ -2142,8 +2179,10 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            DAS_SINGLE_STEP(context,cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
+                DAS_SINGLE_STEP(context,if_true->debugInfo,false);
                 return if_true->eval(context);
             } else {
                 return v_zero();
@@ -2319,6 +2358,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -2376,6 +2416,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }

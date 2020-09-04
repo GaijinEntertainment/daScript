@@ -45,6 +45,7 @@ namespace das
             SimNode ** __restrict body = list;
         loopbegin:;
             for (; body!=tail; ++body) {
+                DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                 (*body)->eval(context);
                 DAS_PROCESS_LOOP_FLAGS(break);
             }
@@ -65,6 +66,7 @@ namespace das
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
             for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                 (*body)->eval(context);
             }
         }
@@ -82,6 +84,7 @@ namespace das
         SimNode * __restrict pbody = list[0];
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
+            DAS_SINGLE_STEP(context,pbody->debugInfo,true);
             pbody->eval(context);
             DAS_PROCESS_LOOP1_FLAGS(continue);
         }
@@ -100,6 +103,7 @@ namespace das
         SimNode * __restrict pbody = list[0];
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
+            DAS_SINGLE_STEP(context,pbody->debugInfo,true);
             pbody->eval(context);
         }
         evalFinal(context);

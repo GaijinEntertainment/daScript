@@ -1,13 +1,12 @@
-def r_true(a:int)
-	print("{a} - true\n")
-	return true
-
-def r_false(a:int)
-	print("{a} - false\n")
-	return false
-
+options debugger = true
 
 [export]
 def test
-	let t = r_false(1) && r_true(2)
+	var x = 5
+	breakpoint()
+	x = 6
+	for t in range(0,10)
+		print("x={x} t={t}\n")
+		x ++
+		x += 3
 	return true
