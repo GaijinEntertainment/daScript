@@ -5,6 +5,7 @@
 *******************************
 
 .. toctree::
+   embedding/vm.rst
    embedding/modules.rst
    embedding/cast.rst
    embedding/handles.rst
