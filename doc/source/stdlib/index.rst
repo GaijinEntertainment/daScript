@@ -1,10 +1,11 @@
 .. _stdlib:
 
 #################################
-  daScript Standard Library 0.1
+  daScript Standard Library 0.2
 #################################
 
-Copyright (c) 2018-2020 Anton Yudintsev
+Copyright (c) 2018-2020 Gaijin Entertainment
+Authors: Anton Yudintsev, Boris Batkin
 
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
