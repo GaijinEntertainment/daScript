@@ -1009,8 +1009,11 @@ namespace das
     }
 
     void Context::breakPoint(const LineInfo & at) {
-        // os_debug_break();
-        bpcallback(at);
+        if ( debugger ) {
+            bpcallback(at);
+        } else {
+            os_debug_break();
+        }
     }
 
     void Context::to_out ( const char * message ) {

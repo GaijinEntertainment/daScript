@@ -571,6 +571,7 @@ namespace das
         int totalFunctions = 0;
         SimNode * aotInitScript = nullptr;
     protected:
+        bool        debugger = false;
         bool        singleStepMode = false;
         const LineInfo * singleStepAt = nullptr;
     public:

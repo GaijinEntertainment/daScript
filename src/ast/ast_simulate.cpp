@@ -2776,6 +2776,7 @@ namespace das
         if ( !options.getBoolOption("rtti",policies.rtti) ) {
             context.thisProgram = nullptr;
         }
+        context.debugger = getDebugger();
         isSimulating = false;
         return errors.size() == 0;
     }
