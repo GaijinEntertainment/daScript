@@ -767,14 +767,29 @@ __forceinline void profileNode ( SimNode * node ) {
         uint32_t    totalLabels = 0;
     };
 
+    struct SimNodeDebug_Block : SimNode_Block {
+        SimNodeDebug_Block ( const LineInfo & at ) : SimNode_Block(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
     struct SimNode_BlockNF : SimNode_Block {
         SimNode_BlockNF ( const LineInfo & at ) : SimNode_Block(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNodeDebug_BlockNF : SimNode_BlockNF {
+        SimNodeDebug_BlockNF ( const LineInfo & at ) : SimNode_BlockNF(at) {}
         virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_BlockWithLabels : SimNode_Block {
         SimNode_BlockWithLabels ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNodeDebug_BlockWithLabels : SimNode_BlockWithLabels {
+        SimNodeDebug_BlockWithLabels ( const LineInfo & at ) : SimNode_BlockWithLabels(at) {}
         virtual vec4f eval ( Context & context ) override;
     };
 
@@ -811,6 +826,12 @@ __forceinline void profileNode ( SimNode * node ) {
                 bool code0 : 1;
             };
         };
+    };
+
+    struct SimNodeDebug_ClosureBlock : SimNode_ClosureBlock {
+        SimNodeDebug_ClosureBlock ( const LineInfo & at, bool nr, bool c0, uint64_t ad )
+            : SimNode_ClosureBlock(at,nr,c0,ad) { }
+        virtual vec4f eval ( Context & context ) override;
     };
 
 #ifdef _MSC_VER

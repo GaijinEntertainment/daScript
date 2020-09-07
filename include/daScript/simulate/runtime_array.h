@@ -109,6 +109,18 @@ namespace das
         uint32_t    stride;
     };
 
+    struct SimNode_DeleteArray : SimNode_Delete {
+        SimNode_DeleteArray ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t st )
+            : SimNode_Delete(a,s,t), stride(st) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+        uint32_t stride;
+    };
+
+    /////////////////
+    // FOR GOOD ARRAY
+    /////////////////
+
     template <int totalCount>
     struct SimNode_ForGoodArray : public SimNode_ForBase {
         SimNode_ForGoodArray ( const LineInfo & at ) : SimNode_ForBase(at) {}
@@ -139,7 +151,6 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
-                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -194,7 +205,6 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
-                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -234,7 +244,6 @@ namespace das
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
             }
@@ -285,6 +294,163 @@ namespace das
             for (int i = 0; i!=szz && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
+                body->eval(context);
+                DAS_PROCESS_LOOP1_FLAGS(continue);
+            }
+        loopend:;
+            evalFinal(context);
+            array_unlock(context, *pha);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    ///////////////////////
+    // FOR GOOD ARRAY DEBUG
+    ///////////////////////
+
+    template <int totalCount>
+    struct SimNodeDebug_ForGoodArray : public SimNode_ForGoodArray<totalCount> {
+        SimNodeDebug_ForGoodArray ( const LineInfo & at ) : SimNode_ForGoodArray<totalCount>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            Array * __restrict pha[totalCount];
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                pha[t] = cast<Array *>::to(sources[t]->eval(context));
+                array_lock(context, *pha[t]);
+                ph[t]  = pha[t]->data;
+            }
+            char ** __restrict pi[totalCount];
+            int szz = INT_MAX;
+            for ( int t=0; t!=totalCount; ++t ) {
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
+                szz = das::min(szz, int(pha[t]->size));
+            }
+            SimNode ** __restrict tail = list + total;
+            for (int i = 0; i!=szz; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS(break);
+                }
+            }
+        loopend:;
+            for ( int t=0; t!=totalCount; ++t ) {
+                array_unlock(context, *pha[t]);
+            }
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNodeDebug_ForGoodArray<0> : public SimNode_ForGoodArray<0> {
+        SimNodeDebug_ForGoodArray ( const LineInfo & at ) : SimNode_ForGoodArray<0>(at) {}
+    };
+
+    template <>
+    struct SimNodeDebug_ForGoodArray<1> : public SimNode_ForGoodArray<1> {
+        SimNodeDebug_ForGoodArray ( const LineInfo & at ) : SimNode_ForGoodArray<1>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            Array * __restrict pha;
+            char * __restrict ph;
+            pha = cast<Array *>::to(sources[0]->eval(context));
+            array_lock(context, *pha);
+            ph = pha->data;
+            char ** __restrict pi;
+            int szz = int(pha->size);
+            pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            SimNode ** __restrict tail = list + total;
+            for (int i = 0; i!=szz; ++i) {
+                *pi = ph;
+                ph += stride;
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS(break);
+                }
+            }
+        loopend:;
+            evalFinal(context);
+            array_unlock(context, *pha);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    template <int totalCount>
+    struct SimNodeDebug_ForGoodArray1 : public SimNode_ForGoodArray1<totalCount> {
+        SimNodeDebug_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForGoodArray1<totalCount>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            Array * __restrict pha[totalCount];
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                pha[t] = cast<Array *>::to(sources[t]->eval(context));
+                array_lock(context, *pha[t]);
+                ph[t]  = pha[t]->data;
+            }
+            char ** __restrict pi[totalCount];
+            int szz = INT_MAX;
+            for ( int t=0; t!=totalCount; ++t ) {
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
+                szz = das::min(szz, int(pha[t]->size));
+            }
+            SimNode * __restrict body = list[0];
+            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                DAS_SINGLE_STEP(context,body->debugInfo,true);
+                body->eval(context);
+                DAS_PROCESS_LOOP1_FLAGS(continue);
+            }
+        loopend:;
+            evalFinal(context);
+            for ( int t=0; t!=totalCount; ++t ) {
+                array_unlock(context, *pha[t]);
+            }
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNodeDebug_ForGoodArray1<0> : public SimNode_ForGoodArray1<0> {
+        SimNodeDebug_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForGoodArray1<0>(at) {}
+    };
+
+    template <>
+    struct SimNodeDebug_ForGoodArray1<1> : public SimNode_ForGoodArray1<1> {
+        SimNodeDebug_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForGoodArray1<1>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            Array * __restrict pha;
+            char * __restrict ph;
+            pha = cast<Array *>::to(sources[0]->eval(context));
+            array_lock(context, *pha);
+            ph = pha->data;
+            char ** __restrict pi;
+            int szz = int(pha->size);
+            pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            SimNode * __restrict body = list[0];
+            for (int i = 0; i!=szz && !context.stopFlags; ++i) {
+                *pi = ph;
+                ph += stride;
                 DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
@@ -296,6 +462,10 @@ namespace das
             return v_zero();
         }
     };
+
+    //////////////////
+    // FOR FIXED ARRAY
+    //////////////////
 
     // FOR
     template <int totalCount>
@@ -323,7 +493,6 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
-                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -369,7 +538,6 @@ namespace das
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
-                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
                 }
@@ -404,7 +572,6 @@ namespace das
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
                 }
-                DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
             }
@@ -446,6 +613,107 @@ namespace das
             for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
+                body->eval(context);
+                DAS_PROCESS_LOOP1_FLAGS(continue);
+            }
+        loopend:;
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    ////////////////////////
+    // FOR FIXED ARRAY DEBUG
+    ////////////////////////
+
+    // FOR
+    template <int totalCount>
+    struct SimNodeDebug_ForFixedArray : SimNode_ForFixedArray<totalCount> {
+        SimNodeDebug_ForFixedArray ( const LineInfo & at ) : SimNode_ForFixedArray<totalCount>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                ph[t] = cast<char *>::to(sources[t]->eval(context));
+            }
+            char ** __restrict pi[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
+            }
+            SimNode ** __restrict tail = list + total;
+            for (uint32_t i = 0; i != size; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS(break);
+                }
+            }
+        loopend:;
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNodeDebug_ForFixedArray<0> : SimNode_ForFixedArray<0> {
+        SimNodeDebug_ForFixedArray ( const LineInfo & at ) : SimNode_ForFixedArray<0>(at) {}
+    };
+
+    template <>
+    struct SimNodeDebug_ForFixedArray<1> : SimNode_ForFixedArray<1> {
+        SimNodeDebug_ForFixedArray ( const LineInfo & at ) : SimNode_ForFixedArray<1>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
+            char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            SimNode ** __restrict tail = list + total;
+            for (uint32_t i = 0; i != size; ++i) {
+                *pi = ph;
+                ph += stride;
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS(break);
+                }
+            }
+        loopend:;
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
+    };
+
+    // FOR
+    template <int totalCount>
+    struct SimNodeDebug_ForFixedArray1 : SimNode_ForFixedArray1<totalCount> {
+        SimNodeDebug_ForFixedArray1 ( const LineInfo & at ) : SimNode_ForFixedArray1<totalCount>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            char * __restrict ph[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                ph[t] = cast<char *>::to(sources[t]->eval(context));
+            }
+            char ** __restrict pi[totalCount];
+            for ( int t=0; t!=totalCount; ++t ) {
+                pi[t] = (char **)(context.stack.sp() + stackTop[t]);
+            }
+            SimNode * __restrict body = list[0];
+            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+                for (int t = 0; t != totalCount; ++t) {
+                    *pi[t] = ph[t];
+                    ph[t] += strides[t];
+                }
                 DAS_SINGLE_STEP(context,body->debugInfo,true);
                 body->eval(context);
                 DAS_PROCESS_LOOP1_FLAGS(continue);
@@ -457,12 +725,32 @@ namespace das
         }
     };
 
-    struct SimNode_DeleteArray : SimNode_Delete {
-        SimNode_DeleteArray ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t st )
-            : SimNode_Delete(a,s,t), stride(st) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
-        uint32_t stride;
+    template <>
+    struct SimNodeDebug_ForFixedArray1<0> : SimNode_ForFixedArray1<0> {
+        SimNodeDebug_ForFixedArray1 ( const LineInfo & at ) : SimNode_ForFixedArray1<0>(at) {}
+    };
+
+    template <>
+    struct SimNodeDebug_ForFixedArray1<1> : SimNode_ForFixedArray1<1> {
+        SimNodeDebug_ForFixedArray1 ( const LineInfo & at ) : SimNode_ForFixedArray1<1>(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
+            char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
+            auto stride = strides[0];
+            SimNode * __restrict body = list[0];
+            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+                *pi = ph;
+                ph += stride;
+                DAS_SINGLE_STEP(context,body->debugInfo,true);
+                body->eval(context);
+                DAS_PROCESS_LOOP1_FLAGS(continue);
+            }
+        loopend:;
+            evalFinal(context);
+            context.stopFlags &= ~EvalFlags::stopForBreak;
+            return v_zero();
+        }
     };
 }
 

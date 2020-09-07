@@ -33,7 +33,89 @@ namespace das
         return cast<char *>::from(iter);
     }
 
+    ////////////
+    // FOR RANGE
+    ////////////
+
     vec4f SimNode_ForRange::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        vec4f ll = sources[0]->eval(context);
+        range r = cast<range>::to(ll);
+        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t r_to = r.to;
+        SimNode ** __restrict tail = list + total;
+        for (int32_t i = r.from; i != r_to; ++i) {
+            *pi = i;
+            SimNode ** __restrict body = list;
+        loopbegin:;
+            for (; body!=tail; ++body) {
+                (*body)->eval(context);
+                DAS_PROCESS_LOOP_FLAGS(break);
+            }
+        }
+    loopend:;
+        evalFinal(context);
+        context.stopFlags &= ~EvalFlags::stopForBreak;
+        return v_zero();
+    }
+
+    vec4f SimNode_ForRangeNF::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        vec4f ll = sources[0]->eval(context);
+        range r = cast<range>::to(ll);
+        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t r_to = r.to;
+        SimNode ** __restrict tail = list + total;
+        for (int32_t i = r.from; i != r_to; ++i) {
+            *pi = i;
+            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                (*body)->eval(context);
+            }
+        }
+        evalFinal(context);
+        context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+        return v_zero();
+    }
+
+    vec4f SimNode_ForRange1::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        vec4f ll = sources[0]->eval(context);
+        range r = cast<range>::to(ll);
+        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t r_to = r.to;
+        SimNode * __restrict pbody = list[0];
+        for (int32_t i = r.from; i != r_to; ++i) {
+            *pi = i;
+            pbody->eval(context);
+            DAS_PROCESS_LOOP1_FLAGS(continue);
+        }
+    loopend:;
+        evalFinal(context);
+        context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+        return v_zero();
+    }
+
+    vec4f SimNode_ForRangeNF1::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        vec4f ll = sources[0]->eval(context);
+        range r = cast<range>::to(ll);
+        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t r_to = r.to;
+        SimNode * __restrict pbody = list[0];
+        for (int32_t i = r.from; i != r_to; ++i) {
+            *pi = i;
+            pbody->eval(context);
+        }
+        evalFinal(context);
+        context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+        return v_zero();
+    }
+
+    //////////////////
+    // FOR RANGE DEBUG
+    //////////////////
+
+    vec4f SimNodeDebug_ForRange::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
@@ -56,7 +138,7 @@ namespace das
         return v_zero();
     }
 
-    vec4f SimNode_ForRangeNF::eval ( Context & context ) {
+    vec4f SimNodeDebug_ForRangeNF::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
@@ -75,7 +157,7 @@ namespace das
         return v_zero();
     }
 
-    vec4f SimNode_ForRange1::eval ( Context & context ) {
+    vec4f SimNodeDebug_ForRange1::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
@@ -94,7 +176,7 @@ namespace das
         return v_zero();
     }
 
-    vec4f SimNode_ForRangeNF1::eval ( Context & context ) {
+    vec4f SimNodeDebug_ForRangeNF1::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
@@ -110,4 +192,5 @@ namespace das
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
+
 }

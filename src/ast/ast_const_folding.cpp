@@ -264,6 +264,7 @@ namespace das {
 
     vec4f FoldingVisitor::eval ( Expression * expr, bool & failed ) {
         ctx.restart();
+        ctx.thisProgram = program;
         auto node = expr->simulate(ctx);
         ctx.restart();
         vec4f result = ctx.evalWithCatch(node);

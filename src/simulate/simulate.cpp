@@ -325,6 +325,17 @@ namespace das
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            (*body)->eval(context);
+            if ( context.stopFlags ) break;
+        }
+        evalFinal(context);
+        return v_zero();
+    }
+
+    vec4f SimNodeDebug_Block::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        SimNode ** __restrict tail = list + total;
+        for (SimNode ** __restrict body = list; body!=tail; ++body) {
             DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
             (*body)->eval(context);
             if ( context.stopFlags ) break;
@@ -334,6 +345,16 @@ namespace das
     }
 
     vec4f SimNode_BlockNF::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        SimNode ** __restrict tail = list + total;
+        for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            (*body)->eval(context);
+            if ( context.stopFlags ) break;
+        }
+        return v_zero();
+    }
+
+    vec4f SimNodeDebug_BlockNF::eval ( Context & context ) {
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
@@ -348,6 +369,24 @@ namespace das
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            (*body)->eval(context);
+            if ( context.stopFlags ) break;
+        }
+        evalFinal(context);
+        if ( context.stopFlags & EvalFlags::stopForReturn ) {
+            context.stopFlags &= ~EvalFlags::stopForReturn;
+            return context.abiResult();
+        } else {
+            if ( needResult ) context.throw_error_at(debugInfo,"end of block without return");
+            return v_zero();
+        }
+    }
+
+    vec4f SimNodeDebug_ClosureBlock::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        SimNode ** __restrict tail = list + total;
+        for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
             (*body)->eval(context);
             if ( context.stopFlags ) break;
         }
@@ -388,6 +427,32 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNodeDebug_BlockWithLabels::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        SimNode ** __restrict tail = list + total;
+        SimNode ** __restrict body = list;
+    loopbegin:;
+        for (; body!=tail; ++body) {
+            DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
+            (*body)->eval(context);
+            { if ( context.stopFlags ) {
+                if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<totalLabels) {
+                    body=list+labels[context.gotoLabel];
+                    if ( body>=list && body<tail ) {
+                        context.stopFlags &= ~EvalFlags::jumpToLabel;
+                        goto loopbegin;
+                    } else {
+                        context.throw_error_at(debugInfo, "jump to label %i failed", context.gotoLabel);
+                    }
+                }
+                goto loopend;
+            } }
+        }
+    loopend:;
+        evalFinal(context);
+        return v_zero();
+    }
+
     // SimNode_Let
 
     vec4f SimNode_Let::eval ( Context & context ) {
@@ -401,6 +466,23 @@ namespace das
     // SimNode_While
 
     vec4f SimNode_While::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        SimNode ** __restrict tail = list + total;
+        while ( cond->evalBool(context) && !context.stopFlags ) {
+            SimNode ** __restrict body = list;
+        loopbegin:;
+            for (; body!=tail; ++body) {
+                (*body)->eval(context);
+                DAS_PROCESS_LOOP_FLAGS(break);
+            }
+        }
+    loopend:;
+        evalFinal(context);
+        context.stopFlags &= ~EvalFlags::stopForBreak;
+        return v_zero();
+    }
+
+    vec4f SimNodeDebug_While::eval ( Context & context ) {
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         while ( cond->evalBool(context) && !context.stopFlags ) {
