@@ -2,6 +2,9 @@ def charg(var t:int):int
     t++
     return t
 
+def checkInc(var val : int&)
+  	val++
+
 [export]
 def test:bool
     let x = 1
@@ -18,5 +21,9 @@ def test:bool
     assert(c==1)
     false ? (c--) : (c++)     // only one side
     assert(c==2)
+    // inc ref
+ 	var idx = 1
+  	checkInc(idx)
+	assert(idx==2)
     return true
 
