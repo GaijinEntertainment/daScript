@@ -177,6 +177,21 @@ namespace das
     void printSimFunction ( TextWriter & ss, Context * context, Function * fun, SimNode * node, bool debugHash=false );
     uint64_t getSemanticHash ( SimNode * node, Context * context );
 
+    class DebugAgent : public ptr_ref_count {
+    public:
+        virtual void onInstall ( DebugAgent * ) {}
+        virtual void onUninstall ( DebugAgent * ) {}
+        virtual void onCreateContext ( Context * ) {}
+        virtual void onDestroyContext ( Context * ) {}
+        virtual void onSingleStep ( Context *, const LineInfo & ) {}
+        virtual void onBreakpoint ( Context *, const LineInfo & ) {}
+        virtual void onTick () {}
+    };
+    typedef smart_ptr<DebugAgent> DebugAgentPtr;
+
+    void installDebugAgent ( DebugAgentPtr );
+    void tickDebugAgent ( );
+
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;

@@ -14,6 +14,9 @@ namespace das {
     // make sure generated code contains line information etc
     void verifyGenerated ( const ExpressionPtr & expr );
 
+    // make sure fake context and fake line info are pre-assigned
+    void assignDefaultArguments ( Function * func );
+
     // puts all expression's subexpressions at new location
     ExpressionPtr forceAt ( const ExpressionPtr & expr, const LineInfo & at );
 

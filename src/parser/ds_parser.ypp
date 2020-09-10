@@ -231,6 +231,7 @@
 %token  DAS_TVARIANT        "variant"
 %token  DAS_GENERATOR       "generator"
 %token  DAS_YIELD           "yield"
+%token  DAS_TCONTEXT        "__context"
 
 /* operators */
 %token  ADDEQU              "+="
@@ -929,6 +930,7 @@ function_name
 global_function_declaration
     :   optional_annotation_list[annL] DAS_DEF[from] function_declaration[func] {
         $func->atDecl = tokRangeAt(@from,@func);
+        assignDefaultArguments($func);
         runFunctionAnnotations($func, $annL, tokAt(@annL));
         if ( $func->isGeneric() ) {
             if ( !g_Program->addGeneric($func) ) {
@@ -1781,6 +1783,7 @@ struct_variable_declaration_list
                     modifyToClassMember($func, g_thisStructure, true);
                 }
             }
+            assignDefaultArguments($func);
             runFunctionAnnotations($func, $annL, tokAt(@annL));
             if ( !g_Program->addFunction($func) ) {
                 das_yyerror("function is already defined " + $func->getMangledName(),
@@ -2293,6 +2296,7 @@ type_declaration
     |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
     |   bitfield_type_declaration[typeDecl]                 { $$ = $typeDecl; }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
+    |   DAS_TCONTEXT[typeDecl]                              { $$ = new TypeDecl(Type::fakeContext); $$->at = tokAt(@typeDecl); }
     |   type_declaration[typeDecl] '[' expr[dimExpr] ']' {
         int32_t dI = TypeDecl::dimConst;
         if ( $dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array

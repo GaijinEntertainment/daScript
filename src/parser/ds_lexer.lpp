@@ -370,6 +370,7 @@ void YYNEWLINE() {
 <normal>"float2"                                        return DAS_TFLOAT2;
 <normal>"float3"                                        return DAS_TFLOAT3;
 <normal>"float4"                                        return DAS_TFLOAT4;
+<normal>"__context"                                     return DAS_TCONTEXT;
 <normal>[_[:alpha:]][_[:alnum:]\`]*                     das_yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
 <normal>\"                                  {
         BEGIN(strb);

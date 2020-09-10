@@ -196,6 +196,9 @@ namespace das {
         virtual void URange ( urange & data ) override {
             serialize(data);
         }
+        virtual void FakeContext ( Context * ) override {
+            DAS_ASSERT(0 && "can't serialize context");
+        }
         virtual void WalkEnumeration ( int32_t & data, EnumInfo * ei ) override {
             verify(ei->hash);
             serialize(data);

@@ -12,9 +12,7 @@
 // this is here for the default implementation of to_out and to_err
 #include <setjmp.h>
 
-#ifdef _WIN32
-#include <conio.h>
-#endif
+#include <mutex>
 
 namespace das
 {
@@ -647,12 +645,18 @@ namespace das
 
     // Context
 
+    static mutex g_DebugAgentMutex;
+    static DebugAgentPtr g_DebugAgent;
+
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_smart<NodeAllocator>();
         constStringHeap = make_smart<ConstStringAllocator>();
         debugInfo = make_smart<DebugInfoAllocator>();
         ownStack = (stackSize != 0);
         persistent = ph;
+        // register
+        lock_guard<mutex> guard(g_DebugAgentMutex);
+        if ( g_DebugAgent ) g_DebugAgent->onCreateContext(this);
     }
 
     Context::Context(const Context & ctx): stack(ctx.stack.size()) {
@@ -698,6 +702,9 @@ namespace das
         tabAdLookup = ctx.tabAdLookup;
         tabAdMask = ctx.tabAdMask;
         tabAdRot = ctx.tabAdRot;
+        // register
+        lock_guard<mutex> guard(g_DebugAgentMutex);
+        if ( g_DebugAgent ) g_DebugAgent->onCreateContext(this);
         // now, make it good to go
         restart();
         runInitScript();
@@ -705,6 +712,12 @@ namespace das
     }
 
     Context::~Context() {
+        // unregister
+        {
+            lock_guard<mutex> guard(g_DebugAgentMutex);
+            if ( g_DebugAgent ) g_DebugAgent->onDestroyContext(this);
+        }
+        // and free memory
         if ( globals ) {
             das_aligned_free16(globals);
         }
@@ -1008,12 +1021,27 @@ namespace das
         return ssw.str();
     }
 
+    void tickDebugAgent ( ) {
+        lock_guard<mutex> guard(g_DebugAgentMutex);
+        if ( g_DebugAgent ) g_DebugAgent->onTick();
+    }
+
+    void installDebugAgent ( DebugAgentPtr newAgent ) {
+        lock_guard<mutex> guard(g_DebugAgentMutex);
+        if ( g_DebugAgent ) g_DebugAgent->onUninstall(g_DebugAgent.get());
+        g_DebugAgent = newAgent;
+        if ( g_DebugAgent ) g_DebugAgent->onInstall(g_DebugAgent.get());
+    }
+
     void Context::breakPoint(const LineInfo & at) {
         if ( debugger ) {
-            bpcallback(at);
-        } else {
-            os_debug_break();
+            lock_guard<mutex> guard(g_DebugAgentMutex);
+            if ( g_DebugAgent ) {
+                g_DebugAgent->onSingleStep(this, at);
+                return;
+            }
         }
+        os_debug_break();
     }
 
     void Context::to_out ( const char * message ) {
@@ -1318,33 +1346,8 @@ namespace das
     }
 
     void Context::bpcallback( const LineInfo & at ) {
-        TextPrinter tp;
-        if ( at.fileInfo ) {
-            tp << at.fileInfo->name << ":" << at.line << ":" << at.column << "\n";
-            auto textAroundBreak = getLinesAroundCode(
-                at.fileInfo->getSource(),
-                at.line,
-                at.fileInfo->tabSize);
-            tp << textAroundBreak;
-        }
-        tp << getStackWalk(&at, true, true, false, true);
-        for ( ;; ) {
-            tp << "C - Continue, SPACE - Step\n";
-            int ch = _getch();
-            switch ( ch ) {
-                case ' ':
-                    singleStepMode = true;
-                    singleStepAt = &at;
-                    goto done;
-                case 'c':
-                case 'C':
-                    singleStepMode = false;
-                    singleStepAt = nullptr;
-                    goto done;
-                default:    /* beep */ ;
-            }
-        }
-        done:;
+        lock_guard<mutex> guard(g_DebugAgentMutex);
+        if ( g_DebugAgent ) g_DebugAgent->onSingleStep(this, at);
     }
 
 }

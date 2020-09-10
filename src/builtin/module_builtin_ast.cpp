@@ -33,6 +33,7 @@ MAKE_TYPE_FACTORY(ReaderMacro,ReaderMacro)
 MAKE_TYPE_FACTORY(CallMacro,CallMacro)
 MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
+MAKE_TYPE_FACTORY(DebugAgent,DebugAgent)
 
 MAKE_TYPE_FACTORY(ExprBlock,ExprBlock)
 MAKE_TYPE_FACTORY(ExprLet,ExprLet)
@@ -1843,6 +1844,72 @@ namespace das {
     IMPL_BIND_EXPR(ExprCallMacro);
     IMPL_BIND_EXPR(ExprUnsafe);
 
+    struct DebugAgentAdapter : DebugAgent {
+        DebugAgentAdapter ( char * pClass, const StructInfo * info, Context * ctx )
+            : classPtr(pClass), context(ctx) {
+            fnOnInstall = adapt("onInstall",pClass,info);
+            fnOnUninstall = adapt("onUninstall",pClass,info);
+            fnOnCreateContext = adapt("onCreateContext",pClass,info);
+            fnOnDestroyContext = adapt("onDestroyContext",pClass,info);
+            fnOnSingleStep = adapt("onSingleStep",pClass,info);
+            fnOnBreakpoint = adapt("onBreakpoint",pClass,info);
+            fnOnTick = adapt("onTick",pClass,info);
+        }
+
+        virtual void onInstall ( DebugAgent * agent ) override {
+            if ( fnOnInstall ) {
+                das_invoke_function<void>::invoke<void *,DebugAgentPtr>(context,fnOnInstall,classPtr,agent);
+            }
+        }
+        virtual void onUninstall ( DebugAgent * agent ) override {
+            if ( fnOnInstall ) {
+                das_invoke_function<void>::invoke<void *,DebugAgentPtr>(context,fnOnUninstall,classPtr,agent);
+            }
+        }
+        virtual void onCreateContext ( Context * ctx ) override {
+            if ( fnOnCreateContext ) {
+                das_invoke_function<void>::invoke<void *,Context *>(context,fnOnCreateContext,classPtr,ctx);
+            }
+        }
+        virtual void onDestroyContext ( Context * ctx ) override {
+            if ( fnOnDestroyContext ) {
+                das_invoke_function<void>::invoke<void *,Context *>(context,fnOnDestroyContext,classPtr,ctx);
+            }
+        }
+        virtual void onSingleStep ( Context * ctx, const LineInfo & at ) override {
+            if ( fnOnSingleStep ) {
+                das_invoke_function<void>::invoke<void *,Context *,const LineInfo &>(context,fnOnSingleStep,classPtr,ctx,at);
+            }
+        }
+        virtual void onBreakpoint ( Context * ctx, const LineInfo & at ) override {
+            if ( fnOnBreakpoint ) {
+                das_invoke_function<void>::invoke<void *,Context *,const LineInfo &>(context,fnOnBreakpoint,classPtr,ctx,at);
+            }
+        }
+        virtual void onTick () override {
+            if ( fnOnTick ) {
+                das_invoke_function<void>::invoke<void *>(context,fnOnTick,classPtr);
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    protected:
+        Func    fnOnInstall;
+        Func    fnOnUninstall;
+        Func    fnOnCreateContext;
+        Func    fnOnDestroyContext;
+        Func    fnOnSingleStep;
+        Func    fnOnBreakpoint;
+        Func    fnOnTick;
+    };
+
+    struct AstDebugAgentAnnotation : ManagedStructureAnnotation<DebugAgent,false,true> {
+        AstDebugAgentAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("DebugAgent", ml) {
+        }
+    };
+
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VisitorAdapter", ml) {
@@ -2093,6 +2160,10 @@ namespace das {
     };
 
     #include "ast.das.inc"
+
+    DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<DebugAgentAdapter>((char *)pClass,info,context);
+    }
 
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<ReaderMacroAdapter>(name,(char *)pClass,info,context);
@@ -2469,6 +2540,8 @@ namespace das {
             addAnnotation(make_smart<AstReaderMacroAnnotation>(lib));
             // call macro
             addAnnotation(make_smart<AstCallMacroAnnotation>(lib));
+            // debug agent
+            addAnnotation(make_smart<AstDebugAgentAnnotation>(lib));
             // expressions (in order of inheritance)
             addExpressionAnnotation(make_smart<AstExprBlockAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprLetAnnotation>(lib))->from("Expression");
@@ -2689,6 +2762,9 @@ namespace das {
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");
+            // debug agent
+            addExtern<DAS_BIND_FUN(makeDebugAgent)>(*this, lib,  "make_debug_agent",
+                SideEffects::modifyExternal, "makeDebugAgent");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready

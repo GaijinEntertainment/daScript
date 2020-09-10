@@ -1678,5 +1678,15 @@ namespace das {
         verifyGenerated(mkb);
         return mkb;
     }
+
+    void assignDefaultArguments ( Function * func ) {
+        for ( auto & arg : func->arguments ) {
+            if ( arg->type->baseType==Type::fakeContext ) {
+                arg->init = make_smart<ExprFakeContext>(arg->at);
+            } else if ( arg->type->baseType==Type::fakeLineInfo ) {
+                arg->init = make_smart<ExprFakeLineInfo>(arg->at);
+            }
+        }
+    }
 }
 
