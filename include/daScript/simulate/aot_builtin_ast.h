@@ -398,6 +398,7 @@ namespace das {
     Module * compileModule ( Context * context );
     smart_ptr_raw<Program> compileProgram ( Context * context );
 
+    DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context );
     Module * thisModule ( Context * context, LineInfoArg * lineinfo );
     smart_ptr_raw<Program> thisProgram ( Context * context );
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter );

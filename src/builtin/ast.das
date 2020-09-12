@@ -436,6 +436,15 @@ class AstVisitor
     def abstract preVisitExprCallMacro(expr:smart_ptr<ExprCallMacro>) : void
     def abstract visitExprCallMacro(expr:smart_ptr<ExprCallMacro>) : ExpressionPtr
 
+class DapiDebugAgent
+    def abstract onInstall ( agent:DebugAgent? ) : void
+    def abstract onUninstall ( agent:DebugAgent? ) : void
+    def abstract onCreateContext ( ctx:__context ) : void
+    def abstract onDestroyContext ( ctx:__context ) : void
+    def abstract onSingleStepContext ( ctx:__context; at:LineInfo ) : void
+    def abstract onBreakpoint ( ctx:__context; at:LineInfo ) : void
+    def abstract onTick : void
+
 def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
@@ -531,3 +540,4 @@ def find_module(name:string) : Module?
             rm = mod
     verify(rm!=null,"module not found")
     return rm
+

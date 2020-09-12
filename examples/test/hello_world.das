@@ -5,13 +5,15 @@ require ast
 options log = true
 
 [export]
-def foo ( ctx : __context )
+def debug_agent ( ctx : __context )
 	print("ctx = {ctx}\n")
 
 
 [export]
 def test
-	foo()
+
+    fork_debug_agent_context(@@debug_agent)
+
 	var x = 5
 	// breakpoint()
 	x = 6

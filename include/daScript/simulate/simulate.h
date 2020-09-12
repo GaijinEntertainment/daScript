@@ -608,6 +608,11 @@ namespace das
         vec4f result;
     };
 
+    void tickDebugAgent ( );
+    void installDebugAgent ( DebugAgentPtr newAgent );
+    void shutdownDebugAgent();
+    void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
+
     class SharedStackGuard {
     public:
         static StackAllocator *lastContextStack;

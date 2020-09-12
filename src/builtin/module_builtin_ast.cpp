@@ -2765,6 +2765,12 @@ namespace das {
             // debug agent
             addExtern<DAS_BIND_FUN(makeDebugAgent)>(*this, lib,  "make_debug_agent",
                 SideEffects::modifyExternal, "makeDebugAgent");
+            addExtern<DAS_BIND_FUN(tickDebugAgent)>(*this, lib,  "tick_debug_agent",
+                SideEffects::modifyExternal, "tickDebugAgent");
+            addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
+                SideEffects::modifyExternal, "installDebugAgent");
+            addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
+                SideEffects::modifyExternal, "forkDebugAgentContext");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready
