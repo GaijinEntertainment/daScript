@@ -173,6 +173,26 @@ def fibI(n)
         cur += last
         last = tmp
     return cur</code></pre>
+            Also, for those who for some reason prefer curly brackets over Python-style indenting, it is also possible to write:
+            <pre><code>
+def fibR(n) {
+    if (n < 2) {
+        return n;
+    } else {
+        return fibR(n - 1) + fibR(n - 2);
+    }
+}   
+def fibI(n) {
+    var last = 0;
+    var cur = 1;
+    for i in range(0, n-1); {
+        let tmp = cur;
+        cur += last;
+        last = tmp;
+    }
+    return cur;
+}</code></pre>
+        (Note that within curly brackets semicolons (;) are required to separate statements).
         </div>
 
         <h2 id="devstate">Development state</h2>
