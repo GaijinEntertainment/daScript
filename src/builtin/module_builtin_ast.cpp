@@ -2771,6 +2771,10 @@ namespace das {
                 SideEffects::modifyExternal, "installDebugAgent");
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
                 SideEffects::modifyExternal, "forkDebugAgentContext");
+            addExtern<DAS_BIND_FUN(setContextSingleStep)>(*this, lib,  "set_single_step",
+                SideEffects::modifyExternal, "setContextSingleStep");
+            addExtern<DAS_BIND_FUN(builtin_stackwalk_ctx)>(*this, lib, "stackwalk",
+                SideEffects::modifyExternal, "builtin_stackwalk_ctx");
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready

@@ -295,6 +295,19 @@ namespace das {
         FuncInfo *      info;
     };
 
+    // fake context
+
+    // FIELD .
+    struct SimNode_FakeContext : SimNode {
+        DAS_PTR_NODE;
+        SimNode_FakeContext ( const LineInfo & at ) : SimNode(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute ( Context & context ) {
+            DAS_PROFILE_NODE
+            return (char *) &context;
+        }
+    };
+
     // ASSERT
     struct SimNode_Assert : SimNode {
         SimNode_Assert ( const LineInfo & at, SimNode * s, const char * m )

@@ -1022,6 +1022,10 @@ namespace das
         return ssw.str();
     }
 
+    void setContextSingleStep ( bool step, Context * context ) {
+        context->setSingleStep(step);
+    }
+
     void tickDebugAgent ( ) {
         lock_guard<mutex> guard(g_DebugAgentMutex);
         if ( g_DebugAgent ) g_DebugAgent->onTick();
@@ -1052,7 +1056,7 @@ namespace das
         if ( debugger ) {
             lock_guard<mutex> guard(g_DebugAgentMutex);
             if ( g_DebugAgent ) {
-                g_DebugAgent->onSingleStep(this, at);
+                g_DebugAgent->onBreakpoint(this, at);
                 return;
             }
         }

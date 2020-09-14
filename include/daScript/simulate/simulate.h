@@ -552,6 +552,8 @@ namespace das
             }
         }
 
+        __forceinline void setSingleStep ( bool step ) { singleStepMode = step; }
+
     public:
         uint64_t *                      annotationData = nullptr;
         smart_ptr<StringHeapAllocator>  stringHeap;
@@ -612,6 +614,7 @@ namespace das
     void installDebugAgent ( DebugAgentPtr newAgent );
     void shutdownDebugAgent();
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
+    void setContextSingleStep ( bool step, Context * context );
 
     class SharedStackGuard {
     public:

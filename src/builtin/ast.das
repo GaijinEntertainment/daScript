@@ -441,7 +441,7 @@ class DapiDebugAgent
     def abstract onUninstall ( agent:DebugAgent? ) : void
     def abstract onCreateContext ( ctx:__context ) : void
     def abstract onDestroyContext ( ctx:__context ) : void
-    def abstract onSingleStepContext ( ctx:__context; at:LineInfo ) : void
+    def abstract onSingleStep ( ctx:__context; at:LineInfo ) : void
     def abstract onBreakpoint ( ctx:__context; at:LineInfo ) : void
     def abstract onTick : void
 
