@@ -405,7 +405,7 @@ int main( int argc, char * argv[] ) {
     getchar();
     return 0;
 #endif
-#if 1 // Debug this one test
+#if 0 // Debug this one test
     // #define TEST_NAME   "/doc/reflections/das2rst.das"
     // #define TEST_NAME   "/examples/test/dict_pg.das"
     // #define TEST_NAME   "/examples/test/hello_world.das"

@@ -512,7 +512,7 @@ SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 add_custom_target(daScriptTestAot)
 SET(TEST_GENERATED_SRC)
-#DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
+DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
 #DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC daScriptTestAot)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 

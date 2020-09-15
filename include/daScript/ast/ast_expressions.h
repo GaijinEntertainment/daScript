@@ -521,7 +521,6 @@ namespace das
         ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
         ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
         virtual bool rtti_isFakeContext() const override { return true; }
-        virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprFakeLineInfo : ExprConstT<void *, ExprFakeLineInfo> {

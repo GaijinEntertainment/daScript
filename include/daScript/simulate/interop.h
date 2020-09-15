@@ -15,8 +15,8 @@ namespace das
 
     template <>
     struct cast_arg<Context *> {
-        static __forceinline Context * to ( Context & ctx, SimNode * x ) {
-            return EvalTT<Context *>::eval(ctx,x);
+        static __forceinline Context * to ( Context & ctx, SimNode * ) {
+            return &ctx;
         }
     };
 

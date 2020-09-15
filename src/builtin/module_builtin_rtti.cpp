@@ -32,6 +32,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Program,Program)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Error,Error)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(Context,Context)
 
 DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
         unspecified
@@ -225,6 +226,11 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(getSource)>("source");
             addField<DAS_BIND_MANAGED_FIELD(sourceLength)>("sourceLength");
             addField<DAS_BIND_MANAGED_FIELD(tabSize)>("tabSize");
+        }
+    };
+
+    struct ContextAnnotation : ManagedStructureAnnotation<Context,false> {
+        ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
         }
     };
 
@@ -859,6 +865,7 @@ namespace das {
             // type annotations
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
+            addAnnotation(make_smart<ContextAnnotation>(lib));
             addAnnotation(make_smart<ErrorAnnotation>(lib));
             addAnnotation(make_smart<FileAccessAnnotation>(lib));
             addAnnotation(make_smart<ModuleAnnotation>(lib));

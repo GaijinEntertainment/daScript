@@ -1386,8 +1386,8 @@ namespace das {
 
     template <>
     struct cast_aot_arg<Context *> {
-        static __forceinline Context * to ( Context &, vec4f x ) {
-            return cast<Context *>::to(x);
+        static __forceinline Context * to ( Context & ctx, vec4f ) {
+            return &ctx;
         }
     };
 

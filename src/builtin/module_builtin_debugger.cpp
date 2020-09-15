@@ -86,12 +86,12 @@ namespace das
         return make_smart<DebugAgentAdapter>((char *)pClass,info,context);
     }
 
-    void debuggerSetContextSingleStep ( Context * context, bool step ) {
-        context->setSingleStep(step);
+    void debuggerSetContextSingleStep ( Context & context, bool step ) {
+        context.setSingleStep(step);
     }
 
-    void debuggerStackWalk ( Context * context, const LineInfo & lineInfo ) {
-        context->stackWalk(&lineInfo, true, true);
+    void debuggerStackWalk ( Context & context, const LineInfo & lineInfo ) {
+        context.stackWalk(&lineInfo, true, true);
     }
 
     class Module_Debugger : public Module {
