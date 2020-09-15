@@ -114,12 +114,6 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_FakeContext::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(FakeContext);
-        V_END();
-    }
-
     SimNode * SimNode_Assert::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(Assert);
