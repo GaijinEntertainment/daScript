@@ -360,6 +360,9 @@ namespace das {
         virtual void URange ( urange & ra ) override {
             ss << ra;
         }
+        virtual void FakeContext ( Context * ctx ) override {
+            ss << "context 0x" << HEX << intptr_t(ctx) << DEC;
+        }
         virtual void beforeIterator ( Sequence *, TypeInfo * ) override {
             ss << "iterator [[";
         }

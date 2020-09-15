@@ -107,6 +107,7 @@ src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_network.cpp
+src/builtin/module_builtin_debugger.cpp
 src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
@@ -118,6 +119,8 @@ src/builtin/ast.das.inc
 src/builtin/ast.das
 src/builtin/network.das.inc
 src/builtin/network.das
+src/builtin/debugger.das.inc
+src/builtin/debugger.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -126,6 +129,7 @@ XXD(src/builtin/fio.das)
 XXD(src/builtin/rtti.das)
 XXD(src/builtin/ast.das)
 XXD(src/builtin/network.das)
+XXD(src/builtin/debugger.das)
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
@@ -249,6 +253,7 @@ include/daScript/simulate/aot_builtin_string.h
 include/daScript/simulate/aot_builtin_fio.h
 include/daScript/simulate/aot_builtin_rtti.h
 include/daScript/simulate/aot_builtin_ast.h
+include/daScript/simulate/aot_builtin_debugger.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
 )

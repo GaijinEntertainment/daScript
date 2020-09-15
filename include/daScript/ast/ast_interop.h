@@ -76,7 +76,7 @@ namespace das
                 arg->name = "arg" + to_string(argi);
                 arg->type = args[argi];
                 if ( arg->type->baseType==Type::fakeContext ) {
-                    arg->init = make_smart<ExprConstPtr>(at);
+                    arg->init = make_smart<ExprFakeContext>(at); // arg->init = make_smart<ExprConstPtr>(at);
                 } else if ( arg->type->baseType==Type::fakeLineInfo ) {
                     arg->init = make_smart<ExprFakeLineInfo>(at);
                 }

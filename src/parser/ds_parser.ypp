@@ -929,6 +929,7 @@ function_name
 global_function_declaration
     :   optional_annotation_list[annL] DAS_DEF[from] function_declaration[func] {
         $func->atDecl = tokRangeAt(@from,@func);
+        assignDefaultArguments($func);
         runFunctionAnnotations($func, $annL, tokAt(@annL));
         if ( $func->isGeneric() ) {
             if ( !g_Program->addGeneric($func) ) {
@@ -1781,6 +1782,7 @@ struct_variable_declaration_list
                     modifyToClassMember($func, g_thisStructure, true);
                 }
             }
+            assignDefaultArguments($func);
             runFunctionAnnotations($func, $annL, tokAt(@annL));
             if ( !g_Program->addFunction($func) ) {
                 das_yyerror("function is already defined " + $func->getMangledName(),

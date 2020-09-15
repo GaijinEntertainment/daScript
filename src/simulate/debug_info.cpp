@@ -51,6 +51,7 @@ namespace das
         {   Type::tLambda,      "lambda"},
         {   Type::tTuple,       "tuple"},
         {   Type::tVariant,     "variant"},
+        {   Type::fakeContext,  "__context"},
     };
 
     TypeAnnotation * TypeInfo::getAnnotation() const {

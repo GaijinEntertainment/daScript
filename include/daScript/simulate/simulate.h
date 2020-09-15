@@ -177,6 +177,21 @@ namespace das
     void printSimFunction ( TextWriter & ss, Context * context, Function * fun, SimNode * node, bool debugHash=false );
     uint64_t getSemanticHash ( SimNode * node, Context * context );
 
+    class DebugAgent : public ptr_ref_count {
+    public:
+        virtual void onInstall ( DebugAgent * ) {}
+        virtual void onUninstall ( DebugAgent * ) {}
+        virtual void onCreateContext ( Context * ) {}
+        virtual void onDestroyContext ( Context * ) {}
+        virtual void onSingleStep ( Context *, const LineInfo & ) {}
+        virtual void onBreakpoint ( Context *, const LineInfo & ) {}
+        virtual void onTick () {}
+    };
+    typedef smart_ptr<DebugAgent> DebugAgentPtr;
+
+    void installDebugAgent ( DebugAgentPtr );
+    void tickDebugAgent ( );
+
     class Context {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
@@ -289,12 +304,12 @@ namespace das
         SimFunction * findFunction ( const char * name, bool & isUnique ) const;
         int findVariable ( const char * name ) const;
         void stackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables );
-        string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope = false );
+        string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope = false, bool stackTopOnly = false );
         void runInitScript ();
 
         virtual void to_out ( const char * message );           // output to stdout or equivalent
         virtual void to_err ( const char * message );           // output to stderr or equivalent
-        virtual void breakPoint(const LineInfo & info) const;    // what to do in case of breakpoint
+        virtual void breakPoint(const LineInfo & info);         // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {
             return abiArg;
@@ -523,6 +538,22 @@ namespace das
 
         char * intern ( const char * str );
 
+        void bpcallback ( const LineInfo & at );
+
+#define DAS_SINGLE_STEP(context,at,forceStep) \
+    context.singleStep(at,forceStep);
+
+        __forceinline void singleStep ( const LineInfo & at, bool forceStep ) {
+            if ( singleStepMode ) {
+                if ( forceStep || singleStepAt==nullptr || (singleStepAt->fileInfo!=at.fileInfo || singleStepAt->line!=at.line) ) {
+                    singleStepAt = &at;
+                    bpcallback(at);
+                }
+            }
+        }
+
+        __forceinline void setSingleStep ( bool step ) { singleStepMode = step; }
+
     public:
         uint64_t *                      annotationData = nullptr;
         smart_ptr<StringHeapAllocator>  stringHeap;
@@ -556,6 +587,10 @@ namespace das
         int totalVariables = 0;
         int totalFunctions = 0;
         SimNode * aotInitScript = nullptr;
+    protected:
+        bool        debugger = false;
+        bool        singleStepMode = false;
+        const LineInfo * singleStepAt = nullptr;
     public:
         uint32_t *  tabMnLookup = nullptr;
         uint32_t    tabMnMask = 0;
@@ -574,6 +609,11 @@ namespace das
         uint32_t gotoLabel = 0;
         vec4f result;
     };
+
+    void tickDebugAgent ( );
+    void installDebugAgent ( DebugAgentPtr newAgent );
+    void shutdownDebugAgent();
+    void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
 
     class SharedStackGuard {
     public:
@@ -750,14 +790,29 @@ __forceinline void profileNode ( SimNode * node ) {
         uint32_t    totalLabels = 0;
     };
 
+    struct SimNodeDebug_Block : SimNode_Block {
+        SimNodeDebug_Block ( const LineInfo & at ) : SimNode_Block(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
     struct SimNode_BlockNF : SimNode_Block {
         SimNode_BlockNF ( const LineInfo & at ) : SimNode_Block(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNodeDebug_BlockNF : SimNode_BlockNF {
+        SimNodeDebug_BlockNF ( const LineInfo & at ) : SimNode_BlockNF(at) {}
         virtual vec4f eval ( Context & context ) override;
     };
 
     struct SimNode_BlockWithLabels : SimNode_Block {
         SimNode_BlockWithLabels ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNodeDebug_BlockWithLabels : SimNode_BlockWithLabels {
+        SimNodeDebug_BlockWithLabels ( const LineInfo & at ) : SimNode_BlockWithLabels(at) {}
         virtual vec4f eval ( Context & context ) override;
     };
 
@@ -794,6 +849,12 @@ __forceinline void profileNode ( SimNode * node ) {
                 bool code0 : 1;
             };
         };
+    };
+
+    struct SimNodeDebug_ClosureBlock : SimNode_ClosureBlock {
+        SimNodeDebug_ClosureBlock ( const LineInfo & at, bool nr, bool c0, uint64_t ad )
+            : SimNode_ClosureBlock(at,nr,c0,ad) { }
+        virtual vec4f eval ( Context & context ) override;
     };
 
 #ifdef _MSC_VER

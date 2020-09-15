@@ -238,6 +238,7 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
     NEED_MODULE(Module_Strings);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
+    NEED_MODULE(Module_Debugger);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);

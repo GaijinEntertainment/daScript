@@ -21,6 +21,10 @@ namespace das
         SimNode * subexpr;
     };
 
+    ////////////
+    // FOR RANGE
+    ////////////
+
     struct SimNode_ForRange : SimNode_ForBase  {
         SimNode_ForRange ( const LineInfo & at )
             : SimNode_ForBase(at) {}
@@ -48,5 +52,34 @@ namespace das
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
     };
+
+    //////////////////
+    // FOR RANGE DEBUG
+    //////////////////
+
+    struct SimNodeDebug_ForRange : SimNode_ForRange  {
+        SimNodeDebug_ForRange ( const LineInfo & at )
+            : SimNode_ForRange(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNodeDebug_ForRangeNF : SimNode_ForRangeNF  {
+        SimNodeDebug_ForRangeNF ( const LineInfo & at )
+            : SimNode_ForRangeNF(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNodeDebug_ForRange1 : SimNode_ForRange1  {
+        SimNodeDebug_ForRange1 ( const LineInfo & at )
+            : SimNode_ForRange1(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+    struct SimNodeDebug_ForRangeNF1 : SimNode_ForRangeNF1  {
+        SimNodeDebug_ForRangeNF1 ( const LineInfo & at )
+            : SimNode_ForRangeNF1(at) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
 }
 

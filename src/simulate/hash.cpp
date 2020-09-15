@@ -36,27 +36,28 @@ namespace das
             context = &ctx;
         }
     // data types
-        virtual void Bool ( bool & t )          { update(t); }
-        virtual void Int64 ( int64_t & t )      { update(t); }
-        virtual void UInt64 ( uint64_t & t )    { update(t); }
-        virtual void Float ( float & t )        { update(t); }
-        virtual void Int ( int32_t & t )        { update(t); }
-        virtual void UInt ( uint32_t & t )      { update(t); }
-        virtual void Int2 ( int2 & t )          { update(t); }
-        virtual void Int3 ( int3 & t )          { update(t); }
-        virtual void Int4 ( int4 & t )          { update(t); }
-        virtual void UInt2 ( uint2 & t )        { update(t); }
-        virtual void UInt3 ( uint3 & t )        { update(t); }
-        virtual void UInt4 ( uint4 & t )        { update(t); }
-        virtual void Float2 ( float2 & t )      { update(t); }
-        virtual void Float3 ( float3 & t )      { update(t); }
-        virtual void Float4 ( float4 & t )      { update(t); }
-        virtual void Range ( range & t )        { update(t); }
-        virtual void URange ( urange & t )      { update(t); }
-        virtual void String ( char * & t )      { updateString(t); }
+        virtual void Bool ( bool & t ) override         { update(t); }
+        virtual void Int64 ( int64_t & t ) override     { update(t); }
+        virtual void UInt64 ( uint64_t & t ) override   { update(t); }
+        virtual void Float ( float & t ) override       { update(t); }
+        virtual void Int ( int32_t & t ) override       { update(t); }
+        virtual void UInt ( uint32_t & t ) override     { update(t); }
+        virtual void Int2 ( int2 & t ) override         { update(t); }
+        virtual void Int3 ( int3 & t ) override         { update(t); }
+        virtual void Int4 ( int4 & t ) override         { update(t); }
+        virtual void UInt2 ( uint2 & t ) override       { update(t); }
+        virtual void UInt3 ( uint3 & t ) override       { update(t); }
+        virtual void UInt4 ( uint4 & t ) override       { update(t); }
+        virtual void Float2 ( float2 & t ) override     { update(t); }
+        virtual void Float3 ( float3 & t ) override     { update(t); }
+        virtual void Float4 ( float4 & t ) override     { update(t); }
+        virtual void Range ( range & t ) override       { update(t); }
+        virtual void URange ( urange & t ) override     { update(t); }
+        virtual void String ( char * & t ) override     { updateString(t); }
     // unsupported
-        virtual void beforeIterator ( Sequence *, TypeInfo * ) { error("HASH, not expecting iterator"); }
-        virtual void WalkBlock ( Block * )              { error("HASH, not expecting block"); }
+        virtual void beforeIterator ( Sequence *, TypeInfo * ) override { error("HASH, not expecting iterator"); }
+        virtual void WalkBlock ( Block * ) override                     { error("HASH, not expecting block"); }
+        virtual void FakeContext ( Context * ) override                 { error("HASH, not expecting context"); }
     };
 
     uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info ) {
