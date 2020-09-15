@@ -13,11 +13,7 @@ class SampleDebugAgent : DapiDebugAgent
 
 [export]
 def debug_agent ( ctx : Context )
-    print("debug agent {ctx}\n")
-    var agentPtr = new SampleDebugAgent()
-    let agentInfo = class_info(*agentPtr)
-    var agentAdapter <- make_debug_agent(agentPtr,agentInfo)
-    install_debug_agent(agentAdapter)
+    install_new_debug_agent(new SampleDebugAgent())
 
 [export]
 def test
