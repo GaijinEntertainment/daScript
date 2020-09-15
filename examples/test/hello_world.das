@@ -1,12 +1,12 @@
 options debugger = true
 
 require rtti
-require ast
+require debugapi
 
 class SampleDebugAgent : DapiDebugAgent
     def override onBreakpoint ( ctx:__context; at:LineInfo ) : void
         print("{ctx} breakpoint at line {int(at.line)}\n")
-        set_single_step(true,ctx)
+        set_single_step(ctx,true)
     def override onSingleStep ( ctx:__context; at:LineInfo ) : void
         print("{ctx} step at {int(at.line)}\n")
         stackwalk(ctx,at)

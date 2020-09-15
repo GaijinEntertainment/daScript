@@ -10,7 +10,6 @@ namespace das {
     vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
     void builtin_stackwalk ( Context * context, LineInfoArg * lineInfo );
-    void builtin_stackwalk_ctx ( Context * context, const LineInfo & lineInfo );
     void builtin_terminate ( Context * context );
     int builtin_table_size ( const Table & arr );
     int builtin_table_capacity ( const Table & arr );

@@ -394,6 +394,7 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_UnitTest);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
+    NEED_MODULE(Module_Debugger);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
@@ -404,7 +405,7 @@ int main( int argc, char * argv[] ) {
     getchar();
     return 0;
 #endif
-#if 0 // Debug this one test
+#if 1 // Debug this one test
     // #define TEST_NAME   "/doc/reflections/das2rst.das"
     // #define TEST_NAME   "/examples/test/dict_pg.das"
     // #define TEST_NAME   "/examples/test/hello_world.das"

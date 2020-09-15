@@ -614,7 +614,6 @@ namespace das
     void installDebugAgent ( DebugAgentPtr newAgent );
     void shutdownDebugAgent();
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
-    void setContextSingleStep ( bool step, Context * context );
 
     class SharedStackGuard {
     public:

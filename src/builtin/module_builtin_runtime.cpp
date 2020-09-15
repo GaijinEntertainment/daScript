@@ -296,10 +296,6 @@ namespace das
         context->stackWalk(lineInfo, true, true);
     }
 
-    void builtin_stackwalk_ctx ( Context * context, const LineInfo & lineInfo ) {
-        context->stackWalk(&lineInfo, true, true);
-    }
-
     void builtin_terminate ( Context * context ) {
         context->throw_error("terminate");
     }
