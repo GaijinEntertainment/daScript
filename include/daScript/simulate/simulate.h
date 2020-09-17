@@ -127,8 +127,8 @@ namespace das
         if (context.stopFlags & EvalFlags::stopForContinue) { \
             context.stopFlags &= ~EvalFlags::stopForContinue; \
             howtocontinue; \
-        } else if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<totalLabels) { \
-            if ((body=list+labels[context.gotoLabel])>=list) { \
+        } else if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<this->totalLabels) { \
+            if ((body=this->list+this->labels[context.gotoLabel])>=this->list) { \
                 context.stopFlags &= ~EvalFlags::jumpToLabel; \
                 goto loopbegin; \
             } \
