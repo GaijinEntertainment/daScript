@@ -21,7 +21,7 @@ namespace das {
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #endif
 
-    struct DataWalker {
+    struct DataWalker : ptr_ref_count {
     // we doing what?
         class Context * context = nullptr;
         bool reading = false;
@@ -108,6 +108,8 @@ namespace das {
         virtual void walk_dim ( char * pa, TypeInfo * ti );
         virtual void walk_table ( Table * tab, TypeInfo * info );
     };
+
+    typedef smart_ptr<DataWalker> DataWalkerPtr;
 
 #if defined(_MSC_VER)
 #pragma warning(pop)

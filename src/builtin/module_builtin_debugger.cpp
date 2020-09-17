@@ -11,6 +11,7 @@
 using namespace das;
 
 MAKE_TYPE_FACTORY(DebugAgent,DebugAgent)
+MAKE_TYPE_FACTORY(DataWalker,DataWalker)
 
 namespace das
 {
@@ -71,6 +72,12 @@ namespace das
         Func    fnOnSingleStep;
         Func    fnOnBreakpoint;
         Func    fnOnTick;
+    };
+
+    struct AstDebugAgentAnnotation : ManagedStructureAnnotation<DebugAgent,false,true> {
+        AstDebugAgentAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("DebugAgent", ml) {
+        }
     };
 
     struct DataWalkerAdapter : DataWalker {
@@ -636,9 +643,9 @@ namespace das
         Func fn_FakeContext;
     };
 
-    struct AstDebugAgentAnnotation : ManagedStructureAnnotation<DebugAgent,false,true> {
-        AstDebugAgentAnnotation(ModuleLibrary & ml)
-            : ManagedStructureAnnotation ("DebugAgent", ml) {
+    struct AstDataWalkerAnnotation : ManagedStructureAnnotation<DataWalker,false,true> {
+        AstDataWalkerAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("DataWalker", ml) {
         }
     };
 
@@ -656,6 +663,18 @@ namespace das
         context.stackWalk(&lineInfo, true, true);
     }
 
+    DataWalkerPtr makeDataWalker ( const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<DataWalkerAdapter>((char *)pClass,info,context);
+    }
+
+    void dapiWalkData ( DataWalkerPtr walker, void * data, const TypeInfo & info ) {
+        walker->walk((char *)data,(TypeInfo*)&info);
+    }
+
+    void dapiWalkDataV ( DataWalkerPtr walker, float4 data, const TypeInfo & info ) {
+        walker->walk((vec4f)data,(TypeInfo*)&info);
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -666,7 +685,8 @@ namespace das
             lib.addModule(Module::require("rtti"));
             // annotations
             addAnnotation(make_smart<AstDebugAgentAnnotation>(lib));
-            // functions
+            addAnnotation(make_smart<AstDataWalkerAnnotation>(lib));
+            // debug agent
             addExtern<DAS_BIND_FUN(makeDebugAgent)>(*this, lib,  "make_debug_agent",
                 SideEffects::modifyExternal, "makeDebugAgent");
             addExtern<DAS_BIND_FUN(tickDebugAgent)>(*this, lib,  "tick_debug_agent",
@@ -679,6 +699,13 @@ namespace das
                 SideEffects::modifyExternal, "debuggerSetContextSingleStep");
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
                 SideEffects::modifyExternal, "debuggerStackWalk");
+            // data walker
+            addExtern<DAS_BIND_FUN(makeDataWalker)>(*this, lib,  "make_data_walker",
+                SideEffects::modifyExternal, "makeDataWalker");
+            addExtern<DAS_BIND_FUN(dapiWalkData)>(*this, lib,  "walk_data",
+                SideEffects::modifyExternal, "dapiWalkData");
+            addExtern<DAS_BIND_FUN(dapiWalkDataV)>(*this, lib,  "walk_data",
+                SideEffects::modifyExternal, "dapiWalkDataV");
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready
