@@ -189,6 +189,17 @@ namespace das
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
 
+    class StackWalker : public ptr_ref_count {
+    public:
+        virtual void onCallAOT ( Prologue *, const char * ) { }
+        virtual void onCallAt ( Prologue *, FuncInfo *, LineInfo * ) { }
+        virtual void onCall ( Prologue *, FuncInfo * ) { }
+        virtual void onArgument ( FuncInfo *, int, VarInfo *, vec4f ) { }
+        virtual void onVariable ( FuncInfo *, LocalVariableInfo *, void * ) { }
+        virtual void onAfterCall ( Prologue * ) { }
+    };
+    typedef smart_ptr<StackWalker> StackWalkerPtr;
+
     void installDebugAgent ( DebugAgentPtr );
     void tickDebugAgent ( );
 

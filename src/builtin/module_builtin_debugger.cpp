@@ -675,6 +675,64 @@ namespace das
         walker->walk((vec4f)data,(TypeInfo*)&info);
     }
 
+    void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at ) {
+    #if DAS_ENABLE_STACK_WALK
+        char * sp = context.stack.ap();
+        const LineInfo * lineAt = &at;
+        while (  sp < context.stack.top() ) {
+            Prologue * pp = (Prologue *) sp;
+            Block * block = nullptr;
+            FuncInfo * info = nullptr;
+            char * SP = sp;
+            if ( pp->info ) {
+                intptr_t iblock = intptr_t(pp->block);
+                if ( iblock & 1 ) {
+                    block = (Block *) (iblock & ~1);
+                    info = block->info;
+                    SP = context.stack.bottom() + block->stackOffset;
+                } else {
+                    info = pp->info;
+                }
+            }
+            if ( !info ) {
+                walker->onCallAOT(pp,pp->fileName);
+            } else if ( pp->line ) {
+                walker->onCallAt(pp,info,pp->line);
+            } else {
+                walker->onCall(pp,info);
+            }
+            if ( info ) {
+                for ( uint32_t i = 0; i != info->count; ++i ) {
+                    walker->onArgument(info, i, info->fields[i], pp->arguments[i]);
+                }
+            }
+            if ( info && info->locals ) {
+                for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                    auto lv = info->locals[i];
+                    bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
+                    if ( !inScope ) continue;
+                    char * addr = nullptr;
+                    if ( !inScope ) {
+                        addr = nullptr;
+                    } else if ( lv->cmres ) {
+                        addr = (char *)pp->cmres;
+                    } else if ( lv->isRefValue( ) ) {
+                        addr = SP + lv->stackTop;
+                    } else {
+                        addr = SP + lv->stackTop;
+                    }
+                    walker->onVariable(info, lv, addr);
+                }
+            }
+            lineAt = info ? pp->line : nullptr;
+            sp += info ? info->stackSize : pp->stackSize;
+            walker->onAfterCall(pp);
+        }
+    #else
+        context.throw_error("stack walking disabled");
+    #endif
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
