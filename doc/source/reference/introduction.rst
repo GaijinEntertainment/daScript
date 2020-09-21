@@ -42,9 +42,9 @@ Fast call C++ from daScript allows to write performant scripts which are process
 
 It also allows Ahead-of-Time compilation, which is not only possible on all platforms (unlike JIT), but also always faster/not-slower (JIT is known to sometimes slow down scripts).
 
-daScript already has implemented AoT (C++ transpiler) which produces code more or less similar with C++11 performance.
+daScript already has implemented AoT (C++ transpiler) which produces code more or less similar with C++11 performance of same program.
 
-`Table with performance comparisons on a syntetic samples
+`Table with performance comparisons on a syntetic samples/benchmarks
 <https://docs.google.com/spreadsheets/d/1y1G4exD4J9o3kPYw6Y-eaVoffbJ5h_mWVG121wp2k9s/htmlview>`_.
 
 +++++++++++++
@@ -67,6 +67,28 @@ Mandatory fibonacci samples ::
            cur += last
            last = tmp
        return cur
+
+The same samples with curly brackets, for those who prefer this type of syntax ::
+
+    def fibR(n) {
+        if (n < 2) {
+            return n;
+        } else {
+            return fibR(n - 1) + fibR(n - 2);
+        }
+    }   
+    def fibI(n) {
+        var last = 0;
+        var cur = 1;
+        for i in range(0, n-1); {
+            let tmp = cur;
+            cur += last;
+            last = tmp;
+        }
+        return cur;
+    }
+
+Please note, that semicolons(';') became mandatory within curly brackets. You can actually mix both ways in your codes, but for clarity in documentation we will use pythonic way only.
 
 ++++++++++++++++++++++++++++++++++++
 Generic programming and type system
