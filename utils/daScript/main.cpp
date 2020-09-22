@@ -44,9 +44,12 @@ int main(int argc, char * argv[]) {
     string mainName = "main";
     bool scriptArgs = false;
     bool outputProgramCode = false;
-    for ( int i=1; i < argc;  ) {
+    for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
             string cmd(argv[i]+1);
+            if ( cmd=="-" ) {
+                scriptArgs = true;
+            }
             if ( cmd=="main" ) {
                 if (i+1 > argc)
                 {
@@ -54,21 +57,16 @@ int main(int argc, char * argv[]) {
                     return -1;
                 }
                 mainName = argv[i+1];
-                i += 2;
+                i += 1;
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
-                i ++;
-            } else {
+            } else if ( !scriptArgs) {
                 print_help();
                 return -1;
             }
         }
-        else if (strcmp(argv[i], "--") == 0) {
-            scriptArgs = true;
-        }
         else if (!scriptArgs) {
             files.push_back(argv[i]);
-            i ++;
         }
     }
     if (files.empty())
@@ -84,6 +82,7 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Debugger);
+    NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
     require_project_specific_modules();
     // compile and run
