@@ -645,7 +645,7 @@ namespace das
 
     // Context
 
-    static mutex g_DebugAgentMutex;
+    static std::mutex g_DebugAgentMutex;
     static DebugAgentPtr g_DebugAgent;
     static unique_ptr<Context>   g_DebugAgentContext;
 
@@ -656,7 +656,7 @@ namespace das
         ownStack = (stackSize != 0);
         persistent = ph;
         // register
-        lock_guard<mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
         if ( g_DebugAgent ) g_DebugAgent->onCreateContext(this);
     }
 
@@ -704,7 +704,7 @@ namespace das
         tabAdMask = ctx.tabAdMask;
         tabAdRot = ctx.tabAdRot;
         // register
-        lock_guard<mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
         if ( g_DebugAgent ) g_DebugAgent->onCreateContext(this);
         // now, make it good to go
         restart();
@@ -715,7 +715,7 @@ namespace das
     Context::~Context() {
         // unregister
         {
-            lock_guard<mutex> guard(g_DebugAgentMutex);
+            std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
             if ( g_DebugAgent ) g_DebugAgent->onDestroyContext(this);
         }
         // and free memory
@@ -1023,12 +1023,12 @@ namespace das
     }
 
     void tickDebugAgent ( ) {
-        lock_guard<mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
         if ( g_DebugAgent ) g_DebugAgent->onTick();
     }
 
     void installDebugAgent ( DebugAgentPtr newAgent ) {
-        lock_guard<mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
         if ( g_DebugAgent ) g_DebugAgent->onUninstall(g_DebugAgent.get());
         g_DebugAgent = newAgent;
         if ( g_DebugAgent ) g_DebugAgent->onInstall(g_DebugAgent.get());
@@ -1050,7 +1050,7 @@ namespace das
 
     void Context::breakPoint(const LineInfo & at) {
         if ( debugger ) {
-            lock_guard<mutex> guard(g_DebugAgentMutex);
+            std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
             if ( g_DebugAgent ) {
                 g_DebugAgent->onBreakpoint(this, at);
                 return;
@@ -1361,7 +1361,7 @@ namespace das
     }
 
     void Context::bpcallback( const LineInfo & at ) {
-        lock_guard<mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
         if ( g_DebugAgent ) g_DebugAgent->onSingleStep(this, at);
     }
 
