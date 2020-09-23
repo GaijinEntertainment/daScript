@@ -301,7 +301,7 @@ add_executable(dasAot ${DASAOT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
 ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
 SETUP_CPP11(dasAot)
-set_property(TARGET dasAot PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+SETUP_LTO(dasAot)
 
 MACRO(DAS_AOT input genList mainTarget)
     get_filename_component(input_src ${input} ABSOLUTE)
@@ -399,7 +399,7 @@ TARGET_LINK_LIBRARIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest
 ADD_DEPENDENCIES(dasContDev libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
 SETUP_CPP11(dasContDev)
 add_dependencies(dasContDev dasAotStub)
-set_property(TARGET dasContDev PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+SETUP_LTO(dasContDev)
 
 # PathTracer helper
 
@@ -448,7 +448,7 @@ TARGET_LINK_LIBRARIES(daScript libDaScript libPathTracerHelper libDaScriptTest l
 ADD_DEPENDENCIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
 SETUP_CPP11(daScript)
 add_dependencies(daScript dasAotStub)
-set_property(TARGET daScript PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+SETUP_LTO(daScript)
 
 # Test module
 
@@ -526,7 +526,7 @@ ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile lib
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)
-set_property(TARGET daScriptTest PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+SETUP_LTO(daScriptTest)
 
 # Profile module
 

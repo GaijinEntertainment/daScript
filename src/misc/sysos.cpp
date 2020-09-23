@@ -31,7 +31,7 @@
                 char real[PATH_MAX];
                 if (realpath(pathName, real) != NULL) {
                     pathNameSize = strlen(real);
-                    strncpy(pathName, real, pathNameSize);
+                    memcpy(pathName, real, pathNameSize+1);
                 }
                 return pathNameSize;
             }
