@@ -50,9 +50,9 @@ Structure fields are also initialized as zero by default, regardless of 'initial
 
 Structure field types are inferred, where possible::
 
-	stryct Foo
+	struct Foo
 		x = 1	// inferred as int
-		y = 2	// inferred as float
+		y = 2.0	// inferred as float
 
 Explicit structure initialization during creation will leave all uninitialized members zeroed::
 
@@ -84,8 +84,8 @@ For ease of Objected Oriented Programming non-virtual member functions can be ea
     struct Foo
         x, y: int = 0
 
-    def setXY(var this: Foo; X, Y: int)
-        with this
+    def setXY(var thisFoo: Foo; X, Y: int)
+        with thisFoo
             x = X
             y = Y
 
@@ -97,10 +97,10 @@ Since function pointer is a thing, one can emulate 'virtual' functions by storin
 
     struct Foo
         x, y: int = 0
-        set = @setXY
+        set = @@setXY
 
-    def setXY(var this: Foo; X, Y: int)
-        with this
+    def setXY(var thisFoo: Foo; X, Y: int)
+        with thisFoo
             x = X
             y = Y
     ...
@@ -166,7 +166,7 @@ Here an example: ::
 
     struct Foo
         x, y: int = 0
-        set = @Foo_setXY
+        set = @@Foo_setXY
 
     def Foo_setXY(var this: Foo; x, y: int)
         this.x = x
@@ -174,12 +174,12 @@ Here an example: ::
 
     struct Foo3D: Foo
         z: int = 3
-        override set = cast<auto> @Foo3D_setXY
+        override set = cast<auto> @@Foo3D_setXY
 
-    def Foo3D_setXY(var this: Foo3D; x, y: int)
-        this.x = x
-        this.y = y
-        this.z = -1
+    def Foo3D_setXY(var thisFoo: Foo3D; x, y: int)
+        thisFoo.x = x
+        thisFoo.y = y
+        thisFoo.z = -1
 
 It is safe to use 'cast' keyword to cast derived structure instance to reference to it's parent type::
 

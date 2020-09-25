@@ -173,7 +173,7 @@ Arithmetic
 
 daScript supports the standard arithmetic operators ``+, -, *, / and %``.
 Other than that is also supports compact operators (``+=, -=, *=, /=, %=``) and
-increment and decrement operators(++ and --);::
+increment and decrement operators(``++ and --``)::
 
     a += 2
     // is the same as writing
@@ -212,7 +212,7 @@ Logical
     exp := exp op exp
     exp := '!' exp
 
-Logical operators in daScript are : ``&&, |, ^^, !, &&=, ||=, ^^=``
+Logical operators in daScript are : ``&&, ||, ^^, !, &&=, ||=, ^^=``
 
 The operator ``&&`` (logical and) returns false if its first argument is false, otherwise returns
 its second argument.
@@ -271,7 +271,7 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
         return a + 1
 
     def test
-        let t =  addOne <| 2
+        let t =  addOne() <| 2
         assert(t == 3)
 
 ^^^^^^^^^^^^^^^^^^^^^
@@ -339,7 +339,7 @@ Array Initializer
 Creates a new fixed size array::
 
     let a = [[int[] 1; 2]]     // creates array of two elements
-    let a = [[int[2] 1, 2]]    // creates array of two elements
+    let a = [[int[2] 1; 2]]    // creates array of two elements
     var a = [[auto 1; 2]]      // creates which fully infers its own type
     let a = [[int[2] 1; 2; 3]] // error, too many initializers
     var a = [[auto 1]]         // int

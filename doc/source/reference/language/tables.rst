@@ -22,7 +22,7 @@ for safety, find doesn't return anything. Instead it works with block as last ar
 
     var tab: table<string; int>
     tab["some"] = 10
-    find(tab,"some") <| $(var pValue: int?)
+    find(tab,"some") <| $(var pValue: int? const)
         if pValue != null
             assert(deref(pValue) == 10)
 
@@ -54,11 +54,11 @@ Table key can be not only string, but any other 'workhorse' type as well.
 
 Tables can be constructed inline ::
 
-	let tab = {{ "one"=>1; "two"=>2 }}
+	let tab <- {{ "one"=>1; "two"=>2 }}
 
 Which is syntax sugar for ::
 
-	let tab : table<string;int> = to_table_move([[tuple<string;int>[2] "one"=>1; "two"=>2]])
+	let tab : table<string;int> <- to_table_move([[tuple<string;int>[2] "one"=>1; "two"=>2]])
 
 
 
