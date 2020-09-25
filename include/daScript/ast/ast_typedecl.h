@@ -84,6 +84,7 @@ namespace das {
         bool isHandle() const;
         bool isStructure() const;
         bool isClass() const;
+        bool isFunction() const;
         bool isTuple() const;
         bool isVariant() const;
         int getSizeOf() const;

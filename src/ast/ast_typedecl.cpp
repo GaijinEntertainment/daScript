@@ -1390,6 +1390,10 @@ namespace das
         return (baseType==Type::tTuple) && (dim.size()==0);
     }
 
+    bool TypeDecl::isFunction() const {
+        return (baseType==Type::tFunction) && (dim.size()==0);
+    }
+
     bool TypeDecl::isVariant() const {
         return (baseType==Type::tVariant) && (dim.size()==0);
     }

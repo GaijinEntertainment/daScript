@@ -1101,6 +1101,7 @@ namespace das
     string getModuleFileName ( const string & nameWithDots );
 
     // access function from class adapter
+    int adapt_field_offset ( const char * fName, const StructInfo * info );
     char * adapt_field ( const char * fName, char * pClass, const StructInfo * info );
     Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
 

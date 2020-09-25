@@ -990,6 +990,9 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isWorkhorseType)>("isWorkhorseType","isWorkhorseType");
             addProperty<DAS_BIND_MANAGED_PROP(isCtorType)>("isCtorType","isCtorType");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
+            addProperty<DAS_BIND_MANAGED_PROP(isClass)>("isClass","isClass");
+            addProperty<DAS_BIND_MANAGED_PROP(isFunction)>("isFunction","isFunction");
+            addProperty<DAS_BIND_MANAGED_PROP(isRefType)>("isRefType","isRefType");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf","getSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getBaseSizeOf)>("baseSizeOf","getBaseSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getCountOf)>("countOf","getCountOf");
@@ -1268,14 +1271,18 @@ namespace das {
         }
     };
 
-    char * adapt_field ( const char * fName, char * pClass, const StructInfo * info ) {
+    int adapt_field_offset ( const char * fName, const StructInfo * info ) {
         for ( uint32_t i=0; i!=info->count; ++i ) {
             if ( strcmp(info->fields[i]->name,fName)==0 ) {
-                return pClass + info->fields[i]->offset;
+                return info->fields[i]->offset;
             }
         }
-        DAS_ASSERTF(0,"mapping %s not found. not fully implemented dervied class %s", fName, info->name);
+        DAS_VERIFYF(0,"mapping %s not found. not fully implemented dervied class %s", fName, info->name);
         return 0;
+    }
+
+    char * adapt_field ( const char * fName, char * pClass, const StructInfo * info ) {
+        return pClass + adapt_field_offset(fName,info);
     }
 
     Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
@@ -2268,6 +2275,14 @@ namespace das {
             d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no));
     }
 
+    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context ) {
+        return context->stringHeap->allocateString(describeCppType(t,
+            d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
+            d_skipRef ? CpptSkipRef::yes : CpptSkipRef::no,
+            d_skipConst ? CpptSkipConst::yes : CpptSkipConst::no,
+            d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no));
+    }
+
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context ) {
         TextWriter ss;
         ss << *t;
@@ -2640,6 +2655,8 @@ namespace das {
             // helper functions
             addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
                 SideEffects::none, "describe_typedecl");
+            addExtern<DAS_BIND_FUN(ast_describe_typedecl_cpp)>(*this, lib,  "describe_typedecl_cpp",
+                SideEffects::none, "describe_typedecl_cpp");
             addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
                 SideEffects::none, "describe_expression");
             addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",

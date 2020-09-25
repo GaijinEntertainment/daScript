@@ -25,6 +25,10 @@ def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = tr
     return describe_typedecl(decl,extra,contracts,modules)
 
 [generic]
+def describe_cpp ( decl : smart_ptr<TypeDecl>; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true )
+    return describe_typedecl_cpp(decl,substitureRef,skipRef,skipConst,redundantConst)
+
+[generic]
 def describe ( expr : smart_ptr<Expression> )
     return describe_expression(expr)
 

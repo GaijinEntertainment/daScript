@@ -29,6 +29,7 @@ namespace das {
         MarkSymbolUse ( bool bid ) : builtInDependencies(bid) {
         }
         void propageteVarUse(const VariablePtr & var) {
+            assert(var);
             if (var->used) return;
             var->used = true;
             for (const auto & gv : var->useGlobalVariables) {
@@ -39,6 +40,7 @@ namespace das {
             }
         }
         void propagateFunctionUse(const FunctionPtr & fn) {
+            assert(fn);
             if (fn->used) return;
             if (fn->builtIn) return;
             fn->used = true;
@@ -141,6 +143,7 @@ namespace das {
         virtual void preVisit(ExprAddr * addr) override {
             Visitor::preVisit(addr);
             if (builtInDependencies || !addr->func->builtIn) {
+                assert(addr->func);
                 if (func) {
                     func->useFunctions.insert(addr->func);
                 } else if (gVar) {
@@ -152,6 +155,7 @@ namespace das {
         virtual void preVisit(ExprCall * call) override {
             Visitor::preVisit(call);
             if (builtInDependencies || !call->func->builtIn) {
+                assert(call->func);
                 if (func) {
                     func->useFunctions.insert(call->func);
                 } else if (gVar) {
@@ -164,6 +168,7 @@ namespace das {
             Visitor::preVisit(call);
             if ( call->initializer ) {
                 if (builtInDependencies || !call->func->builtIn) {
+                    assert(call->func);
                     if (func) {
                         func->useFunctions.insert(call->func);
                     } else if (gVar) {
@@ -176,6 +181,7 @@ namespace das {
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);
             if (builtInDependencies || !expr->func->builtIn) {
+                assert(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {
@@ -187,6 +193,7 @@ namespace das {
         virtual void preVisit(ExprOp2 * expr) override {
             Visitor::preVisit(expr);
             if (builtInDependencies || !expr->func->builtIn) {
+                assert(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {
@@ -198,6 +205,7 @@ namespace das {
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
             if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) {
+                assert(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {
