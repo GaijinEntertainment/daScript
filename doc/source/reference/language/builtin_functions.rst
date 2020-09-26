@@ -36,7 +36,7 @@ Misc
 .. das:function:: verify(x, str)
 
     verify will cause application defined assert if `x` argument is false.
-    verify check can be removed from release builds, but execution of `x` argument staus.
+    verify check can be removed from release builds, but execution of `x` argument stays.
     That's why verify, unlike assert can have side effects in evaluating `x`
 
 .. das:function:: static_assert(x, str)

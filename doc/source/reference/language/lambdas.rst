@@ -37,7 +37,7 @@ Lambda is typically declared via pipe syntax::
     let t = invoke(counter,13)
 
 There are a lot of similarities between lambda and block declarations.
-Main difference is that bocks are specified with ``$`` symbol, where lambda is specified with ``@`` symbol.
+Main difference is that blocks are specified with ``$`` symbol, where lambda is specified with ``@`` symbol.
 Lambda can also be declared via inline syntax.
 There is similar simplified syntax for the lambdas containing return expression only.
 If lambda is sufficiently specified in the generic or function,
