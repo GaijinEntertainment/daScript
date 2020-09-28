@@ -52,7 +52,7 @@ Which infers to ::
 
 Dynamic arrays can also be constructed inline::
 
-	let arr = [{auto "one"; "two"; "three"}]
+	let arr <- [{auto "one"; "two"; "three"}]
 
 Which is syntactic equivalent to::
 

@@ -129,10 +129,10 @@ expands to::
         if src is i
             set_variant_index(dest,0)
             dest.i = src.i
-        else if src is a
+        elif src is a
             set_variant_index(dest,1)
             dest.a := src.a
-        else if src is s
+        elif src is s
             set_variant_index(dest,2)
             dest.s = src.s
 

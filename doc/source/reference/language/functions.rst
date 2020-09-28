@@ -266,9 +266,9 @@ However, code can be easily written "OOP style" by using right pipe operator ``|
     struct Foo
         x, y: int = 0
 
-    def setXY(var this: Foo; x, y: int)
-        this.x = x
-        this.y = y
+    def setXY(var thisFoo: Foo; x, y: int)
+        thisFoo.x = x
+        thisFoo.y = y
     ...
     var foo:Foo
     foo |> setXY(10, 11)   // this is syntactic sugar for setXY(foo, 10, 11)
