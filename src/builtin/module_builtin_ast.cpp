@@ -1850,26 +1850,23 @@ namespace das {
     IMPL_BIND_EXPR(ExprCallMacro);
     IMPL_BIND_EXPR(ExprUnsafe);
 
+#include "ast_gen.inc"
+
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VisitorAdapter", ml) {
         }
     };
 
-    class FunctionAnnotationAdapter : public FunctionAnnotation {
+    class FunctionAnnotationAdapter : public FunctionAnnotation, public AstFunctionAnnotation_Adapter {
     public:
         FunctionAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
-        : FunctionAnnotation(n), classPtr(pClass), context(ctx) {
-            fnTransformCall = adapt("transform",pClass,info);
-            fnApply = adapt("apply",pClass,info);
-            fnFinish = adapt("finish",pClass,info);
+        : FunctionAnnotation(n), AstFunctionAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) {
-            if ( fnApply ) {
-                return das_invoke_function<bool>::invoke<void *,FunctionPtr,
-                    ModuleGroup &,const AnnotationArgumentList &,string &>
-                        (context,fnApply,classPtr,func,group,args,errors);
+            if ( auto __func = get_apply(classPtr) ) {
+                return invoke_apply(context,__func,classPtr,func,group,args,errors);
             } else {
                 return true;
             }
@@ -1877,10 +1874,8 @@ namespace das {
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) {
-            if ( fnFinish ) {
-                return das_invoke_function<bool>::invoke<void *,FunctionPtr,
-                    ModuleGroup &,const AnnotationArgumentList &,const AnnotationArgumentList &,string &>
-                        (context,fnFinish,classPtr,func,group,args,progArgs,errors);
+            if ( auto __func = get_finish(classPtr) ) {
+                return invoke_finish(context,__func,classPtr,func,group,args,progArgs,errors);
             } else {
                 return true;
             }
@@ -1897,10 +1892,8 @@ namespace das {
             return false;
         }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) {
-            if ( fnTransformCall ) {
-                auto res = das_invoke_function<ExpressionPtr>::invoke<void *,ExprCallFunc *,string &>
-                    (context,fnTransformCall,classPtr,call,err);
-                return res;
+            if ( auto __func = get_transform(classPtr) ) {
+                return invoke_transform(context,__func,classPtr,call,err);
             } else {
                 return nullptr;
             }
@@ -1908,10 +1901,6 @@ namespace das {
     protected:
         void *      classPtr;
         Context *   context;
-    protected:
-        Func    fnTransformCall;
-        Func    fnApply;
-        Func    fnFinish;
     };
 
     struct AstFunctionAnnotationAnnotation : ManagedStructureAnnotation<FunctionAnnotation,false,true> {

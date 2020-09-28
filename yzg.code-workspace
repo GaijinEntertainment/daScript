@@ -50,7 +50,8 @@
 			"xlocbuf": "cpp",
 			"algorithm": "cpp",
 			"cmath": "cpp",
-			"string": "cpp"
+			"string": "cpp",
+			"*.inc": "cpp"
 		}
 	}
 }

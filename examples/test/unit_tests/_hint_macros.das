@@ -20,7 +20,7 @@ def get_hint ( lookup : HintLookup; id, defv : string )
 
 [tag_function_macro(tag="get_hint_tag")]
 class GetHintFnMacro : AstFunctionAnnotation
-    def override transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
+    def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if call.arguments[1] is ExprConstString
             unsafe
                 let arg2 = reinterpret<ExprConstString?>(call.arguments[1])

@@ -1711,6 +1711,10 @@ namespace das {
         BlockFn blockFunction;
     };
 
+    __forceinline Func getDasClassMethod ( void * self, int offset ) {
+        return *(Func *)(((char *)self) + offset);
+    }
+
     template <typename ResType>
     struct das_invoke {
         // vector cast
