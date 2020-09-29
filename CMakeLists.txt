@@ -105,6 +105,7 @@ src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
+src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp

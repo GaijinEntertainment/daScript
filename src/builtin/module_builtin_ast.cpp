@@ -1858,15 +1858,15 @@ namespace das {
         }
     };
 
-    class FunctionAnnotationAdapter : public FunctionAnnotation, public AstFunctionAnnotation_Adapter {
+    class FunctionAnnotationAdapter : public FunctionAnnotation, AstFunctionAnnotation_Adapter {
     public:
         FunctionAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
         : FunctionAnnotation(n), AstFunctionAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) {
-            if ( auto __func = get_apply(classPtr) ) {
-                return invoke_apply(context,__func,classPtr,func,group,args,errors);
+            if ( auto fnApply = get_apply(classPtr) ) {
+                return invoke_apply(context,fnApply,classPtr,func,group,args,errors);
             } else {
                 return true;
             }
@@ -1874,8 +1874,8 @@ namespace das {
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) {
-            if ( auto __func = get_finish(classPtr) ) {
-                return invoke_finish(context,__func,classPtr,func,group,args,progArgs,errors);
+            if ( auto fnFinish = get_finish(classPtr) ) {
+                return invoke_finish(context,fnFinish,classPtr,func,group,args,progArgs,errors);
             } else {
                 return true;
             }
@@ -1892,8 +1892,8 @@ namespace das {
             return false;
         }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) {
-            if ( auto __func = get_transform(classPtr) ) {
-                return invoke_transform(context,__func,classPtr,call,err);
+            if ( auto fnTransform = get_transform(classPtr) ) {
+                return invoke_transform(context,fnTransform,classPtr,call,err);
             } else {
                 return nullptr;
             }
@@ -1909,28 +1909,22 @@ namespace das {
         }
     };
 
-    struct StructureAnnotationAdapter : StructureAnnotation {
+    struct StructureAnnotationAdapter : StructureAnnotation, AstStructureAnnotation_Adapter {
         StructureAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
-            : StructureAnnotation(n), classPtr(pClass), context(ctx) {
-            fnApply = adapt("apply",pClass,info);
-            fnFinish = adapt("finish",pClass,info);
+            : StructureAnnotation(n), AstStructureAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool touch ( const StructurePtr & st, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) {
-            if ( fnApply ) {
-                return das_invoke_function<bool>::invoke<void *,StructurePtr,
-                    ModuleGroup &,const AnnotationArgumentList &,string &>
-                        (context,fnApply,classPtr,st,group,args,errors);
+            if ( auto fnApply = get_apply(classPtr) ) {
+                return invoke_apply(context,fnApply,classPtr,st,group,args,errors);
             } else {
                 return true;
             }
         }
         virtual bool look (const StructurePtr & st, ModuleGroup & group,
             const AnnotationArgumentList & args, string & errors ) {
-            if ( fnFinish ) {
-                return das_invoke_function<bool>::invoke<void *,StructurePtr,
-                    ModuleGroup &,const AnnotationArgumentList &,string &>
-                        (context,fnFinish,classPtr,st,group,args,errors);
+            if ( auto fnFinish = get_finish(classPtr) ) {
+                return invoke_finish(context,fnFinish,classPtr,st,group,args,errors);
             } else {
                 return true;
             }
@@ -1938,9 +1932,6 @@ namespace das {
     protected:
         void *      classPtr;
         Context *   context;
-    protected:
-        Func    fnApply;
-        Func    fnFinish;
     };
 
     struct AstStructureAnnotationAnnotation : ManagedStructureAnnotation<StructureAnnotation,false,true> {
@@ -1948,15 +1939,13 @@ namespace das {
             : ManagedStructureAnnotation ("StructureAnnotation", ml) {
         }
     };
-    struct PassMacroAdapter : PassMacro {
+    struct PassMacroAdapter : PassMacro, AstPassMacro_Adapter {
         PassMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
-            : PassMacro(n), classPtr(pClass), context(ctx) {
-            fnApply = adapt("apply",pClass,info);
+            : PassMacro(n), AstPassMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool apply ( Program * prog, Module * mod ) override {
-            if ( fnApply ) {
-                return das_invoke_function<bool>::invoke<void *,ProgramPtr,Module *>
-                        (context,fnApply,classPtr,prog,mod);
+            if ( auto fnApply = get_apply(classPtr) ) {
+                return invoke_apply(context,fnApply,classPtr,prog,mod);
             } else {
                 return false;
             }
@@ -1964,8 +1953,6 @@ namespace das {
     protected:
         void *      classPtr;
         Context *   context;
-    protected:
-        Func    fnApply;
     };
 
     struct AstPassMacroAnnotation : ManagedStructureAnnotation<PassMacro,false,true> {
@@ -1975,33 +1962,27 @@ namespace das {
         }
     };
 
-    struct VariantMacroAdapter : VariantMacro {
+    struct VariantMacroAdapter : VariantMacro, AstVarianMacro_Adapter {
         VariantMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
-            : VariantMacro(n), classPtr(pClass), context(ctx) {
-            fnVisitIs = adapt("visitExprIsVariant",pClass,info);
-            fnVisitAs = adapt("visitExprAsVariant",pClass,info);
-            fnVisitSafeAs = adapt("visitExprSafeAsVariant",pClass,info);
+            : VariantMacro(n), AstVarianMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual ExpressionPtr visitIs ( Program * prog, Module * mod, ExprIsVariant * expr ) override {
-            if ( fnVisitIs ) {
-                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprIsVariant>>
-                        (context,fnVisitIs,classPtr,prog,mod,expr);
+            if ( auto fnVisitIs = get_visitExprIsVariant(classPtr) ) {
+                return invoke_visitExprIsVariant(context,fnVisitIs,classPtr,prog,mod,expr);
             } else {
                 return nullptr;
             }
         }
         virtual ExpressionPtr visitAs ( Program * prog, Module * mod, ExprAsVariant * expr ) override {
-            if ( fnVisitAs ) {
-                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprAsVariant>>
-                        (context,fnVisitAs,classPtr,prog,mod,expr);
+            if ( auto fnVisitAs = get_visitExprAsVariant(classPtr) ) {
+                return invoke_visitExprAsVariant(context,fnVisitAs,classPtr,prog,mod,expr);
             } else {
                 return nullptr;
             }
         }
         virtual ExpressionPtr visitSafeAs ( Program * prog, Module * mod, ExprSafeAsVariant * expr ) override {
-            if ( fnVisitIs ) {
-                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprSafeAsVariant>>
-                        (context,fnVisitSafeAs,classPtr,prog,mod,expr);
+            if ( auto fnVisitSafeAs = get_visitExprSafeAsVariant(classPtr) ) {
+                return invoke_visitExprSafeAsVariant(context,fnVisitSafeAs,classPtr,prog,mod,expr);
             } else {
                 return nullptr;
             }
@@ -2009,10 +1990,6 @@ namespace das {
     protected:
         void *      classPtr;
         Context *   context;
-    protected:
-        Func        fnVisitIs;
-        Func        fnVisitAs;
-        Func        fnVisitSafeAs;
     };
 
     struct AstVariantMacroAnnotation : ManagedStructureAnnotation<VariantMacro,false,true> {
@@ -2022,24 +1999,20 @@ namespace das {
         }
     };
 
-    struct ReaderMacroAdapter : ReaderMacro {
+    struct ReaderMacroAdapter : ReaderMacro, AstReaderMacro_Adapter {
         ReaderMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
-            : ReaderMacro(n), classPtr(pClass), context(ctx) {
-            fnAccept = adapt("accept",pClass,info);
-            fnVisit = adapt("visit",pClass,info);
+            : ReaderMacro(n), AstReaderMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool accept ( Program * prog, Module * mod, ExprReader * expr, int Ch, const LineInfo & info ) override {
-            if ( fnAccept ) {
-                return das_invoke_function<bool>::invoke<void *,ProgramPtr,Module *,ExprReader *,int32_t,const LineInfo&>
-                        (context,fnAccept,classPtr,prog,mod,expr,Ch,info);
+            if ( auto fnAccept = get_accept(classPtr) ) {
+                return invoke_accept(context,fnAccept,classPtr,prog,mod,expr,Ch,info);
             } else {
                 return false;
             }
         }
         virtual ExpressionPtr visit (  Program * prog, Module * mod, ExprReader * expr ) override {
-            if ( fnVisit ) {
-                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprReader>>
-                        (context,fnVisit,classPtr,prog,mod,expr);
+            if ( auto fnVisit = get_visit(classPtr) ) {
+                return invoke_visit(context,fnVisit,classPtr,prog,mod,expr);
             } else {
                 return nullptr;
             }
@@ -2047,9 +2020,6 @@ namespace das {
     protected:
         void *      classPtr;
         Context *   context;
-    protected:
-        Func    fnAccept;
-        Func    fnVisit;
     };
 
     struct AstReaderMacroAnnotation : ManagedStructureAnnotation<ReaderMacro,false,true> {
@@ -2060,15 +2030,13 @@ namespace das {
         }
     };
 
-    struct CallMacroAdapter : CallMacro {
+    struct CallMacroAdapter : CallMacro, AstCallMacro_Adapter {
         CallMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
-            : CallMacro(n), classPtr(pClass), context(ctx) {
-            fnVisit = adapt("visit",pClass,info);
+            : CallMacro(n), AstCallMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual ExpressionPtr visit (  Program * prog, Module * mod, ExprCallMacro * expr ) override {
-            if ( fnVisit ) {
-                return das_invoke_function<smart_ptr_raw<Expression>>::invoke<void *,ProgramPtr,Module *,smart_ptr<ExprCallMacro>>
-                        (context,fnVisit,classPtr,prog,mod,expr);
+            if ( auto fnVisit = get_visit(classPtr) ) {
+                return invoke_visit(context,fnVisit,classPtr,prog,mod,expr);
             } else {
                 return nullptr;
             }
@@ -2076,8 +2044,6 @@ namespace das {
     protected:
         void *      classPtr;
         Context *   context;
-    protected:
-        Func    fnVisit;
     };
 
     struct AstCallMacroAnnotation : ManagedStructureAnnotation<CallMacro,false,true> {
