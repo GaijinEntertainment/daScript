@@ -127,7 +127,6 @@ class DapiDataWalker
     def abstract WalkEnumeration16 ( var value:int16 &; ei:EnumInfo ) : void
     def abstract FakeContext ( var value:Context ) : void
 
-
 def make_data_walker ( classPtr ) : smart_ptr<DataWalker>
     static_if typeinfo(is_class *classPtr)
         let classInfo = class_info(*classPtr)
@@ -136,5 +135,24 @@ def make_data_walker ( classPtr ) : smart_ptr<DataWalker>
         concept_assert(false,"can't make data walker of non-class")
         return [[smart_ptr<DataWalker>]]
 
+class DapiStackWalker
+    def abstract canWalkArguments : bool
+    def abstract canWalkVariables : bool
+    def abstract canWalkOutOfScopeVariables : bool
+    def abstract onBeforeCall ( pp:Prologue; sp:void? ) : void
+    def abstract onCallAOT ( pp:Prologue; fileName:string# ) : void
+    def abstract onCallAt ( pp:Prologue; info:FuncInfo; at:LineInfo ) : void
+    def abstract onCall ( pp:Prologue; info:FuncInfo ) : void
+    def abstract onAfterPrologue ( pp:Prologue; sp:void? ) : void
+    def abstract onArgument ( info:FuncInfo; index:int; vinfo:VarInfo; arg:float4 ) : void
+    def abstract onBeforeVariables : void
+    def abstract onVariable ( inf:FuncInfo; vinfo:LocalVariableInfo; arg:void?; inScope:bool ) : void
+    def abstract onAfterCall ( pp:Prologue ) : bool
 
-
+def make_stack_walker ( classPtr ) : smart_ptr<StackWalker>
+    static_if typeinfo(is_class *classPtr)
+        let classInfo = class_info(*classPtr)
+        return make_stack_walker(classPtr, classInfo)
+    else
+        concept_assert(false,"can't make stack walker of non-class")
+        return [[smart_ptr<StackWalker>]]

@@ -12,9 +12,22 @@ using namespace das;
 
 MAKE_TYPE_FACTORY(DebugAgent,DebugAgent)
 MAKE_TYPE_FACTORY(DataWalker,DataWalker)
+MAKE_TYPE_FACTORY(StackWalker,StackWalker)
+MAKE_TYPE_FACTORY(Prologue,Prologue)
 
 namespace das
 {
+    struct PrologueAnnotation : ManagedStructureAnnotation<Prologue,false> {
+        PrologueAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Prologue", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(info)>("info");
+            addField<DAS_BIND_MANAGED_FIELD(block)>("block");
+            addField<DAS_BIND_MANAGED_FIELD(fileName)>("fileName");
+            addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
+            addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+            addField<DAS_BIND_MANAGED_FIELD(cmres)>("cmres");
+            addField<DAS_BIND_MANAGED_FIELD(line)>("line");
+        }
+    };
 
 // we declare Dapi version of each structure in debugger.das
 // to fake the API we need C++ version, which we now make locally
@@ -440,7 +453,96 @@ namespace debugapi {
         }
     };
 
+    class StackWalkerAdapter : public StackWalker, DapiStackWalker_Adapter {
+    public:
+        StackWalkerAdapter ( char * pClass, const StructInfo * info, Context * ctx )
+            : DapiStackWalker_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual bool canWalkArguments () override {
+            if ( auto fnCanWalkArguments = get_canWalkArguments(classPtr) ) {
+                return invoke_canWalkArguments(context,fnCanWalkArguments,classPtr);
+            } else {
+                return true;
+            }
+        }
+        virtual bool canWalkVariables () override {
+            if ( auto fnCanWalkVariables = get_canWalkVariables(classPtr) ) {
+                return invoke_canWalkArguments(context,fnCanWalkVariables,classPtr);
+            } else {
+                return true;
+            }
+        }
+        virtual bool canWalkOutOfScopeVariables() override {
+            if ( auto fnCanWalkOutOfScopeVariables = get_canWalkOutOfScopeVariables(classPtr) ) {
+                return invoke_canWalkOutOfScopeVariables(context,fnCanWalkOutOfScopeVariables,classPtr);
+            } else {
+                return true;
+            }
+        }
+        virtual void onBeforeCall ( Prologue * pp, char * sp ) override {
+            if ( auto fnOnBeforeCall = get_onBeforeCall(classPtr) ) {
+                invoke_onBeforeCall(context, fnOnBeforeCall, classPtr, *pp, sp);
+            }
+        }
+        virtual void onCallAOT ( Prologue * pp, const char * fileName ) override {
+            if ( auto fnOnCallAOT = get_onCallAOT(classPtr) ) {
+                invoke_onCallAOT(context, fnOnCallAOT, classPtr, *pp, (char *)fileName);
+            }
+        }
+        virtual void onCallAt ( Prologue * pp, FuncInfo * info, LineInfo * at ) override {
+            if ( auto fnOnCallAt = get_onCallAt(classPtr) ) {
+                invoke_onCallAt(context, fnOnCallAt, classPtr, *pp, *info, *at);
+            }
+        }
+        virtual void onCall ( Prologue * pp, FuncInfo * info ) override {
+            if ( auto fnOnCall = get_onCall(classPtr) ) {
+                invoke_onCall(context, fnOnCall, classPtr, *pp, *info);
+            }
+        }
+        virtual void onAfterPrologue ( Prologue * pp, char * sp ) override {
+            if ( auto fnOnAfterPrologue = get_onAfterPrologue(classPtr) ) {
+                invoke_onAfterPrologue(context, fnOnAfterPrologue, classPtr, *pp, sp);
+            }
+        }
+        virtual void onArgument ( FuncInfo * info, int index, VarInfo * vinfo, vec4f arg ) override {
+            if ( auto fnOnArgument = get_onArgument(classPtr) ) {
+                invoke_onArgument(context, fnOnArgument, classPtr, *info, index, *vinfo, arg);
+            }
+        }
+        virtual void onBeforeVariables ( ) override {
+            if ( auto fnOnBeforeVariables = get_onBeforeVariables(classPtr) ) {
+                invoke_onBeforeVariables(context, fnOnBeforeVariables, classPtr);
+            }
+        }
+        virtual void onVariable ( FuncInfo * info, LocalVariableInfo * vinfo, void * addr, bool inScope ) override {
+            if ( auto fnOnVariable = get_onVariable(classPtr) ) {
+                invoke_onVariable(context, fnOnVariable, classPtr, *info, *vinfo, addr, inScope);
+            }
+        }
+        virtual bool onAfterCall ( Prologue * pp ) override {
+            if ( auto fnOnAfterCall = get_onAfterCall(classPtr) ) {
+                return invoke_onAfterCall(context,fnOnAfterCall,classPtr,*pp);
+            } else {
+                return true;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
+    struct AstStackWalkerAnnotation : ManagedStructureAnnotation<StackWalker,false,true> {
+        AstStackWalkerAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("StackWalker", ml) {
+        }
+    };
+
+
     #include "debugger.das.inc"
+
+    StackWalkerPtr makeStackWalker ( const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<StackWalkerAdapter>((char *)pClass,info,context);
+    }
 
     DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<DebugAgentAdapter>((char *)pClass,info,context);
@@ -542,8 +644,10 @@ namespace debugapi {
             lib.addBuiltInModule();
             lib.addModule(Module::require("rtti"));
             // annotations
+            addAnnotation(make_smart<PrologueAnnotation>(lib));
             addAnnotation(make_smart<AstDebugAgentAnnotation>(lib));
             addAnnotation(make_smart<AstDataWalkerAnnotation>(lib));
+            addAnnotation(make_smart<AstStackWalkerAnnotation>(lib));
             // debug agent
             addExtern<DAS_BIND_FUN(makeDebugAgent)>(*this, lib,  "make_debug_agent",
                 SideEffects::modifyExternal, "makeDebugAgent");
@@ -564,6 +668,11 @@ namespace debugapi {
                 SideEffects::modifyExternal, "dapiWalkData");
             addExtern<DAS_BIND_FUN(dapiWalkDataV)>(*this, lib,  "walk_data",
                 SideEffects::modifyExternal, "dapiWalkDataV");
+            // stack walker
+            addExtern<DAS_BIND_FUN(makeStackWalker)>(*this, lib,  "make_stack_walker",
+                SideEffects::modifyExternal, "makeStackWalker");
+            addExtern<DAS_BIND_FUN(dapiStackWalk)>(*this, lib,  "walk_stack",
+                SideEffects::modifyExternal, "dapiStackWalk");
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready

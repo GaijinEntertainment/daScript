@@ -851,3 +851,149 @@ public:
 };
 int DapiDebugAgent_Adapter::_das_class_method_offset[7];
 
+class DapiStackWalker_Adapter {
+protected:
+  enum {
+    __fn_canWalkArguments = 0,
+    __fn_canWalkVariables = 1,
+    __fn_canWalkOutOfScopeVariables = 2,
+    __fn_onBeforeCall = 3,
+    __fn_onCallAOT = 4,
+    __fn_onCallAt = 5,
+    __fn_onCall = 6,
+    __fn_onAfterPrologue = 7,
+    __fn_onArgument = 8,
+    __fn_onBeforeVariables = 9,
+    __fn_onVariable = 10,
+    __fn_onAfterCall = 11,
+  };
+protected:
+  static int _das_class_method_offset[12];
+public:
+  DapiStackWalker_Adapter ( const StructInfo * info ) {
+    if ( _das_class_method_offset[0]==0 ) {
+      _das_class_method_offset[__fn_canWalkArguments] = adapt_field_offset("canWalkArguments",info);
+      _das_class_method_offset[__fn_canWalkVariables] = adapt_field_offset("canWalkVariables",info);
+      _das_class_method_offset[__fn_canWalkOutOfScopeVariables] = adapt_field_offset("canWalkOutOfScopeVariables",info);
+      _das_class_method_offset[__fn_onBeforeCall] = adapt_field_offset("onBeforeCall",info);
+      _das_class_method_offset[__fn_onCallAOT] = adapt_field_offset("onCallAOT",info);
+      _das_class_method_offset[__fn_onCallAt] = adapt_field_offset("onCallAt",info);
+      _das_class_method_offset[__fn_onCall] = adapt_field_offset("onCall",info);
+      _das_class_method_offset[__fn_onAfterPrologue] = adapt_field_offset("onAfterPrologue",info);
+      _das_class_method_offset[__fn_onArgument] = adapt_field_offset("onArgument",info);
+      _das_class_method_offset[__fn_onBeforeVariables] = adapt_field_offset("onBeforeVariables",info);
+      _das_class_method_offset[__fn_onVariable] = adapt_field_offset("onVariable",info);
+      _das_class_method_offset[__fn_onAfterCall] = adapt_field_offset("onAfterCall",info);
+    }
+  }
+  static __forceinline Func get_canWalkArguments ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canWalkArguments]);
+  }
+  static __forceinline bool invoke_canWalkArguments ( Context * __context__, Func __func__, void * self ) {
+    return das_invoke_function<bool>::invoke
+      <void *>
+        (__context__,__func__,
+          self);
+  }
+  static __forceinline Func get_canWalkVariables ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canWalkVariables]);
+  }
+  static __forceinline bool invoke_canWalkVariables ( Context * __context__, Func __func__, void * self ) {
+    return das_invoke_function<bool>::invoke
+      <void *>
+        (__context__,__func__,
+          self);
+  }
+  static __forceinline Func get_canWalkOutOfScopeVariables ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canWalkOutOfScopeVariables]);
+  }
+  static __forceinline bool invoke_canWalkOutOfScopeVariables ( Context * __context__, Func __func__, void * self ) {
+    return das_invoke_function<bool>::invoke
+      <void *>
+        (__context__,__func__,
+          self);
+  }
+  static __forceinline Func get_onBeforeCall ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onBeforeCall]);
+  }
+  static __forceinline void invoke_onBeforeCall ( Context * __context__, Func __func__, void * self, Prologue const  & pp, void * const  sp ) {
+    das_invoke_function<void>::invoke
+      <void *,Prologue const  &,void * const >
+        (__context__,__func__,
+          self,pp,sp);
+  }
+  static __forceinline Func get_onCallAOT ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onCallAOT]);
+  }
+  static __forceinline void invoke_onCallAOT ( Context * __context__, Func __func__, void * self, Prologue const  & pp, char * const  fileName ) {
+    das_invoke_function<void>::invoke
+      <void *,Prologue const  &,char * const >
+        (__context__,__func__,
+          self,pp,fileName);
+  }
+  static __forceinline Func get_onCallAt ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onCallAt]);
+  }
+  static __forceinline void invoke_onCallAt ( Context * __context__, Func __func__, void * self, Prologue const  & pp, FuncInfo const  & info, LineInfo const  & at ) {
+    das_invoke_function<void>::invoke
+      <void *,Prologue const  &,FuncInfo const  &,LineInfo const  &>
+        (__context__,__func__,
+          self,pp,info,at);
+  }
+  static __forceinline Func get_onCall ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onCall]);
+  }
+  static __forceinline void invoke_onCall ( Context * __context__, Func __func__, void * self, Prologue const  & pp, FuncInfo const  & info ) {
+    das_invoke_function<void>::invoke
+      <void *,Prologue const  &,FuncInfo const  &>
+        (__context__,__func__,
+          self,pp,info);
+  }
+  static __forceinline Func get_onAfterPrologue ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onAfterPrologue]);
+  }
+  static __forceinline void invoke_onAfterPrologue ( Context * __context__, Func __func__, void * self, Prologue const  & pp, void * const  sp ) {
+    das_invoke_function<void>::invoke
+      <void *,Prologue const  &,void * const >
+        (__context__,__func__,
+          self,pp,sp);
+  }
+  static __forceinline Func get_onArgument ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onArgument]);
+  }
+  static __forceinline void invoke_onArgument ( Context * __context__, Func __func__, void * self, FuncInfo const  & info, int32_t index, VarInfo const  & vinfo, float4 arg ) {
+    das_invoke_function<void>::invoke
+      <void *,FuncInfo const  &,int32_t,VarInfo const  &,float4>
+        (__context__,__func__,
+          self,info,index,vinfo,arg);
+  }
+  static __forceinline Func get_onBeforeVariables ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onBeforeVariables]);
+  }
+  static __forceinline void invoke_onBeforeVariables ( Context * __context__, Func __func__, void * self ) {
+    das_invoke_function<void>::invoke
+      <void *>
+        (__context__,__func__,
+          self);
+  }
+  static __forceinline Func get_onVariable ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onVariable]);
+  }
+  static __forceinline void invoke_onVariable ( Context * __context__, Func __func__, void * self, FuncInfo const  & inf, LocalVariableInfo const  & vinfo, void * const  arg, bool inScope ) {
+    das_invoke_function<void>::invoke
+      <void *,FuncInfo const  &,LocalVariableInfo const  &,void * const ,bool>
+        (__context__,__func__,
+          self,inf,vinfo,arg,inScope);
+  }
+  static __forceinline Func get_onAfterCall ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onAfterCall]);
+  }
+  static __forceinline bool invoke_onAfterCall ( Context * __context__, Func __func__, void * self, Prologue const  & pp ) {
+    return das_invoke_function<bool>::invoke
+      <void *,Prologue const  &>
+        (__context__,__func__,
+          self,pp);
+  }
+};
+int DapiStackWalker_Adapter::_das_class_method_offset[12];
+

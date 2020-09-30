@@ -22,5 +22,6 @@ def test
     fopen(root + "debugapi_gen.inc","wb") <| $ ( cpp_file )
         log_cpp_class_adapter(cpp_file, "DapiDataWalker_Adapter", typeinfo(ast_typedecl type<DapiDataWalker>))
         log_cpp_class_adapter(cpp_file, "DapiDebugAgent_Adapter", typeinfo(ast_typedecl type<DapiDebugAgent>))
+        log_cpp_class_adapter(cpp_file, "DapiStackWalker_Adapter", typeinfo(ast_typedecl type<DapiStackWalker>))
     return true
 

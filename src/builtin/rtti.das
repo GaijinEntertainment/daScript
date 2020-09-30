@@ -100,6 +100,11 @@ def class_info ( cl ) : StructInfo const?
         return null
 
 [generic]
+def type_info ( vinfo:LocalVariableInfo ) : TypeInfo const?
+    unsafe
+        return reinterpret<TypeInfo const?>(addr(vinfo))
+
+[generic]
 def RttiValue_nothing
     var t : RttiValue
     unsafe

@@ -22,6 +22,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(EnumInfo,EnumInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(EnumValueInfo,EnumValueInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(TypeInfo,TypeInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(VarInfo,VarInfo)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(LocalVariableInfo,LocalVariableInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FuncInfo,FuncInfo)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArgument,AnnotationArgument)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(AnnotationArguments,AnnotationArguments)
@@ -462,12 +463,31 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeLocalVariableInfoFlagsFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "LocalVariableInfoFlags";
+        ft->argNames = { "cmres" };
+        return ft;
+    }
+
+
+    struct LocalVariableInfoAnnotation : ManagedTypeInfoAnnotation<LocalVariableInfo> {
+        LocalVariableInfoAnnotation(ModuleLibrary & ml) : ManagedTypeInfoAnnotation ("LocalVariableInfo", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            addField<DAS_BIND_MANAGED_FIELD(visibility)>("visibility");
+            addFieldEx ( "localFlags", "localFlags", offsetof(LocalVariableInfo, localFlags), makeLocalVariableInfoFlagsFlags());
+        }
+    };
+
     struct FuncInfoAnnotation : DebugInfoAnnotation<VarInfo,FuncInfo> {
         FuncInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("FuncInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
             addField<DAS_BIND_MANAGED_FIELD(result)>("result");
+            addField<DAS_BIND_MANAGED_FIELD(locals)>("locals");
+            addField<DAS_BIND_MANAGED_FIELD(localCount)>("localCount");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
             fieldType = makeType<VarInfo>(*mlib);
@@ -888,6 +908,7 @@ namespace das {
             addAnnotation(sia);
             addRecAnnotation<TypeInfoAnnotation>(lib);
             addRecAnnotation<VarInfoAnnotation>(lib);
+            addRecAnnotation<LocalVariableInfoAnnotation>(lib);
             initRecAnnotation(sia, lib);
             addAnnotation(make_smart<FuncInfoAnnotation>(lib));
             // RttiValue
