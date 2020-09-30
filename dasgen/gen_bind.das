@@ -4,6 +4,7 @@
 require fio
 require rtti
 require ast
+require debugapi
 require daslib/ast_boost
 require daslib/cpp_bind
 
@@ -18,5 +19,8 @@ def test
         log_cpp_class_adapter(cpp_file, "AstVarianMacro_Adapter", typeinfo(ast_typedecl type<AstVariantMacro>))
         log_cpp_class_adapter(cpp_file, "AstReaderMacro_Adapter", typeinfo(ast_typedecl type<AstReaderMacro>))
         log_cpp_class_adapter(cpp_file, "AstCallMacro_Adapter", typeinfo(ast_typedecl type<AstCallMacro>))
+    fopen(root + "debugapi_gen.inc","wb") <| $ ( cpp_file )
+        log_cpp_class_adapter(cpp_file, "DapiDataWalker_Adapter", typeinfo(ast_typedecl type<DapiDataWalker>))
+        log_cpp_class_adapter(cpp_file, "DapiDebugAgent_Adapter", typeinfo(ast_typedecl type<DapiDebugAgent>))
     return true
 
