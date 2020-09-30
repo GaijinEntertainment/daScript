@@ -485,6 +485,7 @@ namespace debugapi {
                     info = pp->info;
                 }
             }
+            walker->onBeforeCall(pp,SP);
             if ( !info ) {
                 walker->onCallAOT(pp,pp->fileName);
             } else if ( pp->line ) {
@@ -493,31 +494,39 @@ namespace debugapi {
                 walker->onCall(pp,info);
             }
             if ( info ) {
-                for ( uint32_t i = 0; i != info->count; ++i ) {
-                    walker->onArgument(info, i, info->fields[i], pp->arguments[i]);
+                if ( walker->canWalkArguments() ) {
+                    for ( uint32_t i = 0; i != info->count; ++i ) {
+                        walker->onArgument(info, i, info->fields[i], pp->arguments[i]);
+                    }
                 }
             }
+            walker->onAfterPrologue(pp,SP);
             if ( info && info->locals ) {
-                for ( uint32_t i = 0; i != info->localCount; ++i ) {
-                    auto lv = info->locals[i];
-                    bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
-                    if ( !inScope ) continue;
-                    char * addr = nullptr;
-                    if ( !inScope ) {
-                        addr = nullptr;
-                    } else if ( lv->cmres ) {
-                        addr = (char *)pp->cmres;
-                    } else if ( lv->isRefValue( ) ) {
-                        addr = SP + lv->stackTop;
-                    } else {
-                        addr = SP + lv->stackTop;
+                if ( walker->canWalkVariables() ) {
+                    walker->onBeforeVariables();
+                    for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                        auto lv = info->locals[i];
+                        bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
+                        if ( !walker->canWalkOutOfScopeVariables() && !inScope ) {
+                            continue;
+                        }
+                        char * addr = nullptr;
+                        if ( !inScope ) {
+                            addr = nullptr;
+                        } else if ( lv->cmres ) {
+                            addr = (char *)pp->cmres;
+                        } else if ( lv->isRefValue( ) ) {
+                            addr = SP + lv->stackTop;
+                        } else {
+                            addr = SP + lv->stackTop;
+                        }
+                        walker->onVariable(info, lv, addr, inScope);
                     }
-                    walker->onVariable(info, lv, addr);
                 }
             }
             lineAt = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
-            walker->onAfterCall(pp);
+            if ( !walker->onAfterCall(pp) ) break;
         }
     #else
         context.throw_error("stack walking disabled");

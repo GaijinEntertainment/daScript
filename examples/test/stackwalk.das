@@ -5,6 +5,12 @@ require debugapi
 
 // sample of debug agent
 
+class SampleDataWalker : DapiDataWalker
+    def override Float ( var value:float & ) : void
+        print("[float] {value}\n")
+    def override Int ( var value:int & ) : void
+        print("[int] {value}\n")
+
 class SampleDebugAgent : DapiDebugAgent
     def override onBreakpoint ( var ctx:Context; at:LineInfo ) : void
         print("{ctx} breakpoint at line {int(at.line)}\n")
@@ -22,12 +28,6 @@ def debug_agent ( ctx : Context )
 struct Foo
     a : int
     b : float
-
-class SampleDataWalker : DapiDataWalker
-    def override Float ( var value:float & ) : void
-        print("[float] {value}\n")
-    def override Int ( var value:int & ) : void
-        print("[int] {value}\n")
 
 def example_walk
     var pf = new [[Foo a=1,b=3.14f]]

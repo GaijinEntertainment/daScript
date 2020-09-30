@@ -109,6 +109,7 @@ src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp
+src/builtin/debugapi_gen.inc
 src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das

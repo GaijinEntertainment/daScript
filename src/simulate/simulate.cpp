@@ -923,6 +923,81 @@ namespace das
         to_out(str.c_str());
     }
 
+    class StackWalkerTextWriter : public StackWalker {
+    public:
+        StackWalkerTextWriter ( TextWriter & tw, Context * ctx ) : ssw(tw), context(ctx) {}
+        virtual bool canWalkArguments () override {
+            return showArguments;
+        }
+        virtual bool canWalkVariables () override {
+            return showLocalVariables;
+        }
+        virtual bool canWalkOutOfScopeVariables() override {
+            return showOutOfScope;
+        }
+        virtual void onCallAOT ( Prologue *, const char * fileName ) override {
+            ssw << fileName << ", AOT";
+        }
+        virtual void onCallAt ( Prologue *, FuncInfo * info, LineInfo * at ) override {
+            ssw << info->name << " from " << at->describe();
+        }
+        virtual void onCall ( Prologue *, FuncInfo * info ) override {
+            ssw << info->name;
+        }
+        virtual void onAfterPrologue ( Prologue * pp, char * SP ) override {
+            ssw << "(sp=" << (context->stack.top() - SP)
+                << ",sptr=0x" << HEX  << intptr_t(SP) << DEC;
+            if ( pp->cmres ) {
+                ssw << ",cmres=0x" << HEX << intptr_t(pp->cmres) << DEC;
+            }
+            ssw << ")\n";
+        }
+        virtual void onArgument ( FuncInfo * info, int i, VarInfo * field, vec4f arg ) override {
+            ssw << "\t" << info->fields[i]->name
+                << " : " << debug_type(field)
+                << " = \t" << debug_value(arg, field, PrintFlags::stackwalker) << "\n";
+        }
+        virtual void onBeforeVariables ( ) override {
+            ssw << "--> local variables\n";
+        }
+        virtual void onVariable ( FuncInfo *, LocalVariableInfo * lv, void * addr, bool inScope ) override {
+            ssw << "\t" << lv->name
+                << " : " << debug_type(lv);
+            string location;
+            if ( !inScope ) {
+            } else if ( lv->cmres ) {
+                location = "CMRES";
+            } else if ( lv->isRefValue( ) ) {
+                location = "ref *(sp + " + to_string(lv->stackTop) + ")";
+            } else {
+                location = "sp + " + to_string(lv->stackTop);
+            }
+            if ( addr ) {
+                ssw << " = \t" << debug_value(addr, lv, PrintFlags::stackwalker)
+                    << " at " << location
+                    << " 0x" << HEX << intptr_t(addr) << DEC
+                    << "\n";
+            } else {
+                if ( !inScope ) {
+                    ssw << "\t// variable out of scope\n";
+                } else {
+                    ssw << "\t// variable was optimized out\n";
+                }
+            }
+        }
+        virtual bool onAfterCall ( Prologue * ) override {
+            return !stackTopOnly;
+         }
+    public:
+        bool showArguments = true;
+        bool showLocalVariables = true;
+        bool showOutOfScope = true;
+        bool stackTopOnly = false;
+    protected:
+        TextWriter & ssw;
+        Context * context;
+    };
+
     string Context::getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope, bool stackTopOnly ) {
         FPE_DISABLE;
         TextWriter ssw;
@@ -934,87 +1009,12 @@ namespace das
         char * sp = stack.ap();
         ssw << "CALL STACK (sp=" << (stack.top() - stack.ap())
             << ",sptr=0x" << HEX  << intptr_t(sp) << DEC << "):\n";
-        const LineInfo * lineAt = at;
-        while (  sp < stack.top() ) {
-            Prologue * pp = (Prologue *) sp;
-            // ssw << HEX << "pp at " << intptr_t(pp) << DEC << "\n";
-            Block * block = nullptr;
-            FuncInfo * info = nullptr;
-            char * SP = sp;
-            if ( pp->info ) {
-                intptr_t iblock = intptr_t(pp->block);
-                if ( iblock & 1 ) {
-                    block = (Block *) (iblock & ~1);
-                    info = block->info;
-                    SP = stack.bottom() + block->stackOffset;
-                } else {
-                    info = pp->info;
-                }
-            }
-            if ( !info ) {
-                ssw << pp->fileName << ", AOT";
-            } else if ( pp->line ) {
-                ssw << info->name << " from " << pp->line->describe();
-            } else {
-                ssw << info->name;
-            }
-            ssw << "(sp=" << (stack.top() - SP)
-                << ",sptr=0x" << HEX  << intptr_t(SP) << DEC;
-            if ( pp->cmres ) {
-                ssw << ",cmres=0x" << HEX << intptr_t(pp->cmres) << DEC;
-            }
-            ssw << ")\n";
-            if ( showArguments && info ) {
-                for ( uint32_t i = 0; i != info->count; ++i ) {
-                    ssw << "\t" << info->fields[i]->name
-                        << " : " << debug_type(info->fields[i])
-                        << " = \t" << debug_value(pp->arguments[i], info->fields[i], PrintFlags::stackwalker) << "\n";
-                }
-            }
-            if ( showLocalVariables && info && info->locals ) {
-                bool first = true;
-                for ( uint32_t i = 0; i != info->localCount; ++i ) {
-                    auto lv = info->locals[i];
-                    bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
-                    if ( !showOutOfScope && !inScope ) continue;
-                    if ( first ) {
-                        ssw << "--> local variables\n";
-                        first = false;
-                    }
-                    ssw << "\t" << lv->name
-                        << " : " << debug_type(lv);
-                    char * addr = nullptr;
-                    string location;
-                    if ( !inScope ) {
-                        addr = nullptr;
-                    } else if ( lv->cmres ) {
-                        location = "CMRES";
-                        addr = (char *)pp->cmres;
-                    } else if ( lv->isRefValue( ) ) {
-                        location = "ref *(sp + " + to_string(lv->stackTop) + ")";
-                        addr = SP + lv->stackTop;
-                    } else {
-                        location = "sp + " + to_string(lv->stackTop);
-                        addr = SP + lv->stackTop;
-                    }
-                    if ( addr ) {
-                        ssw << " = \t" << debug_value(addr, lv, PrintFlags::stackwalker)
-                            << " at " << location
-                            << " 0x" << HEX << intptr_t(addr) << DEC
-                            << "\n";
-                    } else {
-                        if ( !inScope ) {
-                            ssw << "\t// variable out of scope\n";
-                        } else {
-                            ssw << "\t// variable was optimized out\n";
-                        }
-                    }
-                }
-            }
-            lineAt = info ? pp->line : nullptr;
-            sp += info ? info->stackSize : pp->stackSize;
-            if ( stackTopOnly ) break;
-        }
+        auto walker = make_smart<StackWalkerTextWriter> ( ssw, this );
+        walker->showArguments = showArguments;
+        walker->showLocalVariables =  showLocalVariables;
+        walker->showOutOfScope = showOutOfScope;
+        walker->stackTopOnly = stackTopOnly;
+        dapiStackWalk ( walker, *this, *at );
         ssw << "\n";
     #else
         ssw << "\nCALL STACK TRACKING DISABLED:\n\n";

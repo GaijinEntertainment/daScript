@@ -191,14 +191,22 @@ namespace das
 
     class StackWalker : public ptr_ref_count {
     public:
+        virtual bool canWalkArguments () { return true; }
+        virtual bool canWalkVariables () { return true; }
+        virtual bool canWalkOutOfScopeVariables() { return true; }
+        virtual void onBeforeCall ( Prologue *, char * ) { }
         virtual void onCallAOT ( Prologue *, const char * ) { }
         virtual void onCallAt ( Prologue *, FuncInfo *, LineInfo * ) { }
         virtual void onCall ( Prologue *, FuncInfo * ) { }
+        virtual void onAfterPrologue ( Prologue *, char * ) { }
         virtual void onArgument ( FuncInfo *, int, VarInfo *, vec4f ) { }
-        virtual void onVariable ( FuncInfo *, LocalVariableInfo *, void * ) { }
-        virtual void onAfterCall ( Prologue * ) { }
+        virtual void onBeforeVariables ( ) { }
+        virtual void onVariable ( FuncInfo *, LocalVariableInfo *, void *, bool ) { }
+        virtual bool onAfterCall ( Prologue * ) { return true; }
     };
     typedef smart_ptr<StackWalker> StackWalkerPtr;
+
+    void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at );
 
     void installDebugAgent ( DebugAgentPtr );
     void tickDebugAgent ( );
