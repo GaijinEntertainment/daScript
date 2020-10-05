@@ -58,5 +58,5 @@ using das_safe_set = std::set<K,C>;
 #define DAS_STD_HAS_BIND 1
 
 #ifndef DAS_FUSION
-  #define DAS_FUSION  1
+  #define DAS_FUSION  0
 #endif

@@ -4,7 +4,7 @@
 #include "daScript/simulate/simulate_nodes.h"
 
 #ifndef DAS_FUSION
-    #define DAS_FUSION  1
+    #define DAS_FUSION  0
 #endif
 
 namespace das {
