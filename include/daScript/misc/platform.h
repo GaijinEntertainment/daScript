@@ -152,7 +152,7 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 
 #ifndef DAS_VERIFYF
     #ifdef NDEBUG
-        #define DAS_VERIFY(a, msg, ...)   (a)
+        #define DAS_VERIFYF(a, msg, ...)   (a)
     #else
         #define DAS_VERIFYF(a, msg, ...)   assert((a) && (msg))
     #endif
