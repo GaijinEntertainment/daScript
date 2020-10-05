@@ -10,7 +10,7 @@ require daslib/ast_boost
 [export]
 def log_cpp_class_method ( cpp_file:file; name:string; fntype:TypeDeclPtr )
     let rettd = describe_cpp(fntype.firstType)
-    fwrite(cpp_file, "{rettd} {name} ( Context * __context__, Func __func__")
+    fwrite(cpp_file, "{rettd} {name} ( Context * __context__, Func __funcCall__")
     for argN,argT,argI in fntype.argNames,fntype.argTypes,range(0,100500)
         fwrite(cpp_file, ", ")
         if argI==0
@@ -37,7 +37,7 @@ def log_cpp_class_method_call ( cpp_file:file; name:string; fntype:TypeDeclPtr )
             fwrite(cpp_file, "{argtd}")
             if argT.isRefType
                 fwrite(cpp_file, " &")
-    fwrite(cpp_file, ">\n        (__context__,__func__,\n          ")
+    fwrite(cpp_file, ">\n        (__context__,__funcCall__,\n          ")
     for argN,argI in fntype.argNames,range(0,100500)
         if argI!=0
             fwrite(cpp_file, ",")
