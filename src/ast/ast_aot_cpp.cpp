@@ -1225,7 +1225,7 @@ namespace das {
                 ss << "&(";
             }
             if ( needPtrCast(var->type, expr->type) ) {
-                ss << "((" << describeCppType(var->type) << ") ";
+                ss << "static_cast<" << describeCppType(var->type) << ">(";
             }
             if ( expr->type->isString() ) {
                 ss << "(char *)(";
@@ -1515,7 +1515,7 @@ namespace das {
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
             }
-            ss << "(";
+            ss << "static_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">(";
         }
         virtual void preVisitRight ( ExprOp3 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
@@ -1524,7 +1524,7 @@ namespace das {
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
             }
-            ss << "(";
+            ss << "static_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">(";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
             ss << ")";
@@ -1536,6 +1536,13 @@ namespace das {
             Visitor::preVisit(expr);
             ss << "return ";
             if ( expr->moveSemantics ) ss << "/* <- */ ";
+            auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
+            if ( !retT->isVoid() ) ss << "static_cast<" << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">(";
+        }
+        virtual ExpressionPtr visit(ExprReturn* expr) override {
+            auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
+            if (!retT->isVoid()) ss << ")";
+            return Visitor::visit(expr);
         }
     // break
         virtual void preVisit ( ExprBreak * that ) override {
@@ -2863,7 +2870,7 @@ namespace das {
                 ss << "das_alias<" << funArgType->alias << ">::to(";
             }
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) {
-                ss << "((" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ") ";
+                ss << "static_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">(";
             }
             if ( needSubstitute(funArgType,arg->type) ) {
                 ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::pass(";
