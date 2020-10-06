@@ -218,6 +218,10 @@ def each ( rng : range ) : iterator<int>
     _builtin_make_range_iterator(it,rng)
     return <- it
 
+def iter_range ( foo )
+    concept_assert(typeinfo(is_iterable foo),"requires iterable")
+    return range(length(foo)) // assuming length(foo) exists
+
 [generic,unsafe_operation]
 def each ( str : string ) : iterator<int>
     var it : iterator<int>
