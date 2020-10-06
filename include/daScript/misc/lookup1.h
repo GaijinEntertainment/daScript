@@ -4,6 +4,7 @@ namespace das {
     template <typename TT>
     vector<TT> buildLookup ( const das_hash_map<uint32_t,TT> & a2b, uint32_t & tab_mask, uint32_t & tab_rot ) {
         vector<TT> tab;
+        TT neg1 = 0; neg1 --;
         // now, lets build this table
         for ( size_t ts = 1; ; ts *= 2 ) {
             if ( ts<a2b.size() ) {
@@ -12,13 +13,14 @@ namespace das {
             tab_mask = uint32_t(ts - 1);
             tab.resize(ts);
             for ( tab_rot=0; tab_rot!=32; ++tab_rot ) {
-                fill(tab.begin(), tab.end(), 0);
+                fill(tab.begin(), tab.end(), neg1);
                 bool failed = false;
                 for ( auto val = a2b.begin(); val!=a2b.end(); ++val ) {
                     uint32_t mnh = val->first;
                     TT       fni = val->second;
+                    DAS_ASSERT(fni!=neg1);
                     uint32_t idx = rotl_c(mnh,tab_rot) & tab_mask;
-                    if ( tab[idx]==0 ) {
+                    if ( tab[idx]==neg1 ) {
                         tab[idx] = fni;
                     } else {
                         failed = true;

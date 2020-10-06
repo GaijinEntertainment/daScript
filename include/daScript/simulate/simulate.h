@@ -47,6 +47,7 @@ namespace das
         SimNode *       init;
         uint32_t        size;
         uint32_t        offset;
+        uint32_t        mangledNameHash;
         union {
             struct {
                 bool    shared : 1;
@@ -300,6 +301,10 @@ namespace das
             return totalVariables;
         }
 
+        __forceinline uint32_t globalOffsetByMangledName ( uint32_t mnh ) const {
+            uint32_t idx = rotl_c(mnh, tabGMnRot) & tabGMnMask;
+            return tabGMnLookup[idx];
+        }
         __forceinline uint64_t adBySid ( uint32_t sid ) const {
             uint32_t idx = rotl_c(sid, tabAdRot) & tabAdMask;
             return tabAdLookup[idx];
@@ -615,6 +620,11 @@ namespace das
         uint32_t    tabMnMask = 0;
         uint32_t    tabMnRot = 0;
         uint32_t    tabMnSize = 0;
+    public:
+        uint32_t *  tabGMnLookup = nullptr;
+        uint32_t    tabGMnMask = 0;
+        uint32_t    tabGMnRot = 0;
+        uint32_t    tabGMnSize = 0;
     public:
         uint64_t *  tabAdLookup = nullptr;
         uint32_t    tabAdMask = 0;

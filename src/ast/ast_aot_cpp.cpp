@@ -1040,7 +1040,7 @@ namespace das {
                 ss << (var->init ? "das_global" : "das_global_zero");
             }
             ss << "<" << describeCppType(var->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
-                << "," << int32_t(var->stackTop) << ">(__context__)";
+                << ",0x" << HEX << var->getMangledNameHash() << DEC << ">(__context__)";
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
             ss << ";";
@@ -1562,7 +1562,7 @@ namespace das {
             } else {
                 ss << (var->variable->global_shared ? "das_shared" : "das_global");
                 ss << "<" << describeCppType(var->variable->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
-                    << "," << int32_t(var->variable->stackTop) << ">(__context__) /*" << var->name << "*/";
+                    << ",0x" << HEX << var->variable->getMangledNameHash() << DEC << ">(__context__) /*" << var->name << "*/";
             }
             if ( var->type->aotAlias ) {
                 ss << ")";

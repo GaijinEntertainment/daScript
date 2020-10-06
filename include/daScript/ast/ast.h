@@ -208,6 +208,7 @@ namespace das
     struct Variable : ptr_ref_count {
         VariablePtr clone() const;
         string getMangledName() const;
+        uint32_t getMangledNameHash() const;
         bool isAccessUnused() const;
         string          name;
         TypeDeclPtr     type;
@@ -961,7 +962,6 @@ namespace das
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
-        bool export_all_functions = false;              // will export all functions (good for module aot)
     // debugger
         //  when enabled
         //      1. disables [fastcall]
@@ -1023,6 +1023,7 @@ namespace das
         void aotCpp ( Context & context, TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
         void buildMNLookup ( Context & context, TextWriter & logs );
+        void buildGMNLookup ( Context & context, TextWriter & logs );
         void buildADLookup ( Context & context, TextWriter & logs );
         bool getOptimize() const;
         bool getDebugger() const;

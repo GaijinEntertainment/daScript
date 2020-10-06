@@ -699,10 +699,17 @@ namespace das
         tabMnLookup = ctx.tabMnLookup;
         tabMnMask = ctx.tabMnMask;
         tabMnRot = ctx.tabMnRot;
+        tabMnSize = ctx.tabMnSize;
+        // global mangled name table
+        tabGMnLookup = ctx.tabGMnLookup;
+        tabGMnMask = ctx.tabGMnMask;
+        tabGMnRot = ctx.tabGMnRot;
+        tabGMnSize = ctx.tabGMnSize;
         // annotation data table
         tabAdLookup = ctx.tabAdLookup;
         tabAdMask = ctx.tabAdMask;
         tabAdRot = ctx.tabAdRot;
+        tabAdSize = ctx.tabAdSize;
         // register
         std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
         if ( g_DebugAgent ) g_DebugAgent->onCreateContext(this);
@@ -795,6 +802,12 @@ namespace das
             uint32_t * newMnLookup = (uint32_t *) rel.newCode->allocate(tabMnSize * sizeof(uint32_t));
             memcpy ( newMnLookup, tabMnLookup, tabMnSize * sizeof(uint32_t));
             tabMnLookup = newMnLookup;
+        }
+        // relocate global mangle-name lookup
+        if ( tabGMnLookup ) {
+            uint32_t * newGMnLookup = (uint32_t *) rel.newCode->allocate(tabGMnSize * sizeof(uint32_t));
+            memcpy ( newGMnLookup, tabGMnLookup, tabGMnSize * sizeof(uint32_t));
+            tabGMnLookup = newGMnLookup;
         }
         // relocate annotation data lookup
         if ( tabAdLookup ) {

@@ -1915,17 +1915,18 @@ namespace das
             }
         } else {
             assert(variable->index >= 0 && "using variable which is not used. how?");
+            uint32_t mnh = variable->getMangledNameHash();
             if ( variable->global_shared ) {
                 if ( r2v ) {
-                    return context.code->makeValueNode<SimNode_GetSharedR2V>(type->baseType, at, variable->stackTop);
+                    return context.code->makeValueNode<SimNode_GetSharedR2V>(type->baseType, at, variable->stackTop, mnh);
                 } else {
-                    return context.code->makeNode<SimNode_GetShared>(at, variable->stackTop);
+                    return context.code->makeNode<SimNode_GetShared>(at, variable->stackTop, mnh);
                 }
             } else {
                 if ( r2v ) {
-                    return context.code->makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->stackTop);
+                    return context.code->makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->stackTop, mnh);
                 } else {
-                    return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop);
+                    return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop, mnh);
                 }
             }
         }
@@ -2428,9 +2429,9 @@ namespace das
                 return var->init->simulate(context);
             } else {
                 if ( var->global_shared ) {
-                    get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index);
+                    get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index, var->getMangledNameHash());
                 } else {
-                    get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index);
+                    get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index, var->getMangledNameHash());
                 }
             }
         }
@@ -2523,6 +2524,39 @@ namespace das
     SimNode * ExprNamedCall::simulate (Context &) const {
         DAS_ASSERTF(false, "we should not be here. named call should be promoted to regular call");
         return nullptr;
+    }
+
+    void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
+        das_hash_map<uint32_t, uint32_t> htab;
+        for ( int i=0; i!=context.totalVariables; ++i ) {
+            auto mnh = context.globalVariables[i].mangledNameHash;
+            if ( htab[mnh] ) {
+                error("internal compiler error. mangled name hash collision "
+                      + string(context.globalVariables[i].name), "", "", LineInfo());
+                return;
+            }
+            htab[mnh] = context.globalVariables[i].offset;
+        }
+        auto tab = buildLookup(htab, context.tabGMnMask, context.tabGMnRot);
+        context.tabGMnSize = uint32_t(tab.size());
+        context.tabGMnLookup = (uint32_t *) context.code->allocate(context.tabGMnSize * sizeof(uint32_t));
+        memcpy ( context.tabGMnLookup, tab.data(), context.tabGMnSize * sizeof(uint32_t));
+        if ( options.getBoolOption("log_gmn_hash",false) ) {
+            logs
+                << "totalGlobals: " << context.totalVariables << "\n"
+                << "tabGMnLookup:" << context.tabGMnSize << "\n"
+                << "tabGMnMask:" << context.tabGMnMask << "\n"
+                << "tabGMnRot:" << context.tabGMnRot << "\n";
+        }
+        for ( int i=0; i!=context.totalVariables; ++i ) {
+            auto & gvar = context.globalVariables[i];
+            uint32_t voffset = context.globalOffsetByMangledName(gvar.mangledNameHash);
+            if ( voffset != gvar.offset ) {
+                error("internal compiler error. global variable mangled name hash collision "
+                        + string(context.functions[i].mangledName), "", "", LineInfo());
+                return;
+            }
+        }
     }
 
     void Program::buildMNLookup ( Context & context, TextWriter & logs ) {
@@ -2619,6 +2653,7 @@ namespace das
                         gvar.offset = pvar->stackTop = context.globalsSize;
                         context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
                     }
+                    gvar.mangledNameHash = pvar->getMangledNameHash();
                 }
             }
         }
@@ -2660,13 +2695,13 @@ namespace das
                     if ( pvar->init ) {
                         if ( pvar->init->rtti_isMakeLocal() ) {
                             if ( pvar->global_shared ) {
-                                auto sl = context.code->makeNode<SimNode_GetShared>(pvar->init->at, pvar->stackTop);
+                                auto sl = context.code->makeNode<SimNode_GetShared>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());
                                 auto sr = ExprLet::simulateInit(context, pvar, false);
                                 auto gvari = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
                                 auto cndb = context.code->makeNode<SimNode_GetArgument>(pvar->init->at, 1); // arg 1 of init script is "init_globals"
                                 gvar.init = context.code->makeNode<SimNode_IfThen>(pvar->init->at, cndb, gvari);
                             } else {
-                                auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop);
+                                auto sl = context.code->makeNode<SimNode_GetGlobal>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());
                                 auto sr = ExprLet::simulateInit(context, pvar, false);
                                 gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));
                             }
@@ -2682,6 +2717,7 @@ namespace das
         //
         context.globalInitStackSize = globalInitStackSize;
         buildMNLookup(context, logs);
+        buildGMNLookup(context, logs);
         buildADLookup(context, logs);
         context.simEnd();
         // if RTTI is enabled

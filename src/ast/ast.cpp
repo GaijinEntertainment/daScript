@@ -374,6 +374,11 @@ namespace das {
         return mn + " " + type->getMangledName();
     }
 
+    uint32_t Variable::getMangledNameHash() const {
+        auto mangledName = getMangledName();
+        return hash_blockz32((uint8_t *)mangledName.c_str());
+    }
+
     bool Variable::isAccessUnused() const {
         return !(access_get || access_init || access_pass || access_ref);
     }

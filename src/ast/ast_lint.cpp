@@ -359,6 +359,7 @@ namespace das {
         "log_compile_time",             Type::tBool,
         "log_generics",                 Type::tBool,
         "log_mn_hash",                  Type::tBool,
+        "log_gmn_hash",                 Type::tBool,
         "log_ad_hash",                  Type::tBool,
         "print_ref",                    Type::tBool,
         "print_var_access",             Type::tBool,

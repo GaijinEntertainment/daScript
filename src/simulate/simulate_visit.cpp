@@ -26,10 +26,10 @@ namespace das {
             V_ARG(offset);
             break;
         case SimSourceType::sGlobal:
-            V_ARG(offset);
+            V_ARG(mangledNameHash);
             break;
         case SimSourceType::sShared:
-            V_ARG(offset);
+            V_ARG(mangledNameHash);
             break;
         case SimSourceType::sBlockCMResOff:
             V_SP(argStackTop);

@@ -43,6 +43,7 @@ namespace das {
                 union {
                     uint32_t    stackTop;
                     uint32_t    argStackTop;
+                    uint32_t    mangledNameHash;
                 };
                 uint32_t    offset;
             };
@@ -74,12 +75,14 @@ namespace das {
             type = SimSourceType::sCMResOff;
             offset = ofs;
         }
-        __forceinline void setGlobal(uint32_t ofs) {
+        __forceinline void setGlobal(uint32_t ofs, uint32_t mnh) {
             type = SimSourceType::sGlobal;
+            mangledNameHash = mnh;
             offset = ofs;
         }
-        __forceinline void setShared(uint32_t ofs) {
+        __forceinline void setShared(uint32_t ofs, uint32_t mnh) {
             type = SimSourceType::sShared;
+            mangledNameHash = mnh;
             offset = ofs;
         }
         __forceinline void setBlockCMResOfs(uint32_t asp, uint32_t ofs) {
@@ -1615,9 +1618,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetGlobal ( const LineInfo & at, uint32_t o )
+        SimNode_GetGlobal ( const LineInfo & at, uint32_t o, uint32_t mnh )
             : SimNode_SourceBase(at) {
-            subexpr.setGlobal(o);
+            subexpr.setGlobal(o,mnh);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
@@ -1628,8 +1631,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
-        SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o )
-            : SimNode_GetGlobal(at,o) {}
+        SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+            : SimNode_GetGlobal(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
@@ -1646,9 +1649,9 @@ SIM_NODE_AT_VECTOR(Float, float)
     // SHARER VARIABLE "GET"
     struct SimNode_GetShared : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetShared ( const LineInfo & at, uint32_t o )
+        SimNode_GetShared ( const LineInfo & at, uint32_t o, uint32_t mnh )
             : SimNode_SourceBase(at) {
-            subexpr.setShared(o);
+            subexpr.setShared(o,mnh);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
@@ -1659,8 +1662,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetSharedR2V : SimNode_GetShared {
-        SimNode_GetSharedR2V ( const LineInfo & at, uint32_t o )
-            : SimNode_GetShared(at,o) {}
+        SimNode_GetSharedR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+            : SimNode_GetShared(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
