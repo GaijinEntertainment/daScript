@@ -154,7 +154,7 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_TestProfile);
     NEED_MODULE(Module_Random);
 #if 0
-    auto TEST_NAME = getDasRoot() +  "/examples/profile/tests/annotation.das";
+    auto TEST_NAME = getDasRoot() +  "/examples/profile/tests/nbodies.das";
     tout << "\nINTERPRETED:\n";
     unit_test(TEST_NAME,false);
     tout << "\nAOT:\n";
