@@ -5,7 +5,7 @@ require testProfile
 [sideeffects]
 def perks_disabler_unset_es(var game_effect_dot_allowedMods:ObjectArray;var allowedMods:ObjectArray)
 	for perk in game_effect_dot_allowedMods
-		for i in range(0,allowedMods.length)
+		for i in range(allowedMods.length)
 			if allowedMods[i] == perk
 				return true
 	return false
@@ -88,9 +88,9 @@ def verifyObj(total:int;objects:NObject[10000])
 def verifyManagedInt
 	testManagedInt() <| $ ( arr )
 		assert(arr.length==10)
-		for x in range(0,10)
+		for x in range(10)
 			assert(arr[x]==x)
-		for x,y in range(0,10),arr
+		for x,y in range(10),arr
 			assert(x==y)
 
 [export]
@@ -125,28 +125,28 @@ def test(var objects:ObjectArray)
     verifyObj(1,objects)
     // profile
     let simTN = profile(20,"native basic version") <|
-        for i in range(0,1000)
+        for i in range(1000)
             testSim(nobjects)
     let simTN_I = profile(20,"native basic version, inline") <|
-        for i in range(0,1000)
+        for i in range(1000)
             testSimI(nobjects)
     let simT = profile(20,"basic version") <|
-        for i in range(0,1000)
+        for i in range(1000)
             testSim(objects)
     let simT_I = profile(20,"basic version, inline") <|
-        for i in range(0,1000)
+        for i in range(1000)
             testSimI(objects)
     let cT = profile(20,"c++ version") <|
-        for i in range(0,1000)
+        for i in range(1000)
             interopUpdateTest(objects)
     let intT = profile(20,"interop version") <|
-        for i in range(0,1000)
+        for i in range(1000)
             testInterop(objects)
     let manyT = profile(20,"interop 10000 version") <|
-        for i in range(0,1000)
+        for i in range(1000)
             update10000(objects)
     let manyKsT = profile(20,"interop 10000-ks version") <|
-        for i in range(0,1000)
+        for i in range(1000)
             update10000ks(objects)
     print("ratio nsim/c++ {simTN/cT}\n")
     print("ratio sim/c++: {simT/cT}\n")

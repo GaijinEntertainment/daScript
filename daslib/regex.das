@@ -456,12 +456,12 @@ def re_assign_next ( var re:Regex )
 
 [private]
 def re_assign_groups ( var re:Regex )
-    push(re.groups, [[auto range(0,0),""]])
+    push(re.groups, [[auto range(0),""]])
     visit_top_down(re.root) <| $ ( var node )
         if node.op == ReOp Group
             let index = length(re.groups)
             node.index = index
-            push(re.groups, [[auto range(0,0),"{index}"]])
+            push(re.groups, [[auto range(0),"{index}"]])
 
 /*
     matching
@@ -843,7 +843,7 @@ def regex_debug ( regex:Regex )
             print("\t{g._1}\n")
 
 def debug_set(cset:CharSet)
-    for x in range(0,256)
+    for x in range(256)
         if (cset[x>>5] & uint(1<<(x & 31))) != 0u
             if x>=32 && x<=127
                 print("{to_char(x)}")

@@ -106,6 +106,26 @@ namespace das
         }
     };
 
+    template <typename TT, typename Policy>
+    struct SimNode_Range1Ctor: SimNode_CallBase {
+        SimNode_Range1Ctor(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Range1Ctor);
+            V_SUB(arguments[0]);
+            V_END();
+        }
+        virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
+            vec4f argValue;
+            evalArgs(context, &argValue);
+            alignas(16) TT ret[2];
+            ret[0] = 0;
+            ret[1] = cast<TT>::to(argValue);
+            return Policy::setXY(ret);
+        }
+    };
+
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
@@ -115,6 +135,12 @@ addFunction ( make_smart<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib,"v_zero",fal
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,1>,VTYPE,float>>   (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,1>,VTYPE,int32_t>> (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,VTYPE,uint32_t>>(#VTYPE,lib,VNAME,false) );
+
+#define ADD_RANGE_CTOR_1(VTYPE,VNAME) \
+addFunction ( make_smart<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib,"v_zero",false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<float,   SimPolicy<VTYPE>>,VTYPE,float>>   (#VTYPE,lib,"mk_" VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<int32_t, SimPolicy<VTYPE>>,VTYPE,int32_t>> (#VTYPE,lib,"mk_" VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<uint32_t,SimPolicy<VTYPE>>,VTYPE,uint32_t>>(#VTYPE,lib,"mk_" VNAME,false) );
 
 #define ADD_VEC_CTOR_2(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,2>,VTYPE,float,float>>      (#VTYPE,lib,VNAME,false) ); \
@@ -196,10 +222,10 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         ADD_VEC_CTOR_1(uint4,"uint4");
         ADD_VEC_CTOR_4(uint4,"uint4");
         // range
-        ADD_VEC_CTOR_1(range,"range");
+        ADD_RANGE_CTOR_1(range,"range");
         ADD_VEC_CTOR_2(range,"range");
         // urange
-        ADD_VEC_CTOR_1(urange,"urange");
+        ADD_RANGE_CTOR_1(urange,"urange");
         ADD_VEC_CTOR_2(urange,"urange");
     }
 }

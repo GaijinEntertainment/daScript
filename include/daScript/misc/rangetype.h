@@ -15,8 +15,8 @@ namespace das
             TT  y;
         };
         __forceinline RangeType() {}
+        __forceinline RangeType( TT t ) : from(0), to(t) {}
         __forceinline RangeType( TT f, TT t ) : from(f), to(t) {}
-        __forceinline RangeType( TT t ) : from(t), to(t) {}
         __forceinline RangeType(vec4f t) : from(vec_extract<TT>::x(t)), to(vec_extract<TT>::y(t)) {}
         template <typename AP>
         __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const RangeType<TT> & vec) {
@@ -29,7 +29,9 @@ namespace das
         __forceinline operator vec4f() const { return v_ldu_half((float *)this); };
     };
 
-    typedef RangeType<int32_t>  range;
-    typedef RangeType<uint32_t> urange;
-}
+    typedef struct RangeType<int32_t>  range;
+    typedef struct RangeType<uint32_t> urange;
 
+    __forceinline range mk_range ( int32_t i ) { return range(i); }
+    __forceinline urange mk_urange ( uint32_t i ) { return urange(i); }
+}

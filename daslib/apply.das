@@ -68,7 +68,7 @@ class ApplyMacro : AstCallMacro
             var call <- new [[ExprCall() name:="_::" + callName, at=expr.at]]
             push(call.arguments,clone_expression(expr.arguments[0]))
             let nfields = expr.arguments[0]._type.structType.fields.length
-            for i in range(0,nfields)
+            for i in range(nfields)
                 push(call.arguments,clone_expression(expr.arguments[1]))
             return <- call
         return [[ExpressionPtr]]

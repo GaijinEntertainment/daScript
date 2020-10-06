@@ -25,19 +25,19 @@ def is_compatible_cast( a,b:StructInfo )
 
 [generic]
 def context_for_each_function( blk:block<(info:FuncInfo):void> )
-    for fni in range(0,get_total_functions())
+    for fni in range(get_total_functions())
         invoke(blk,get_function_info(fni))
 
 [generic]
 def context_for_each_variable( blk:block<(info:VarInfo):void> )
-    for vi in range(0,get_total_variables())
+    for vi in range(get_total_variables())
         invoke(blk,get_variable_info(vi))
 
 [private]
 def each_dim_any(info)
     unsafe
         let pinfo = addr(info)
-        return <- [[ for index in range(0,int(pinfo.dimSize)); get_dim(*pinfo,index) ]]
+        return <- [[ for index in range(int(pinfo.dimSize)); get_dim(*pinfo,index) ]]
 
 [generic]
 def each_dim(info:TypeInfo)
@@ -53,7 +53,7 @@ def arg_types_any(info)
         let pinfo = addr(info)
         return <- generator<TypeInfo const&>() <| $()
             if pinfo.argTypes!=null
-                for index in range(0,int(pinfo.argCount))
+                for index in range(int(pinfo.argCount))
                     unsafe
                         yield *(pinfo.argTypes[index])
             return false
@@ -72,7 +72,7 @@ def arg_names_any(info)
         let pinfo = addr(info)
         return <- generator<string>() <| $()
             if pinfo.argNames!=null
-                for index in range(0,int(pinfo.argCount))
+                for index in range(int(pinfo.argCount))
                     unsafe
                         yield pinfo.argNames[index]
             return false

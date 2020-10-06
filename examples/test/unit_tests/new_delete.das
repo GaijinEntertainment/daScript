@@ -12,13 +12,13 @@ struct SomethingSmall
 def test_delete_array
     var a : array<int> [5]
     let w0 = heap_bytes_allocated()
-    for t in range(0,5)
+    for t in range(5)
         resize(a[t],10)
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
     assert(w1>w0 && w0==w2)
-    for t in range(0,5)
+    for t in range(5)
         assert(length(a[t])==0 && capacity(a[t])==0)
 
 def test_delete_table

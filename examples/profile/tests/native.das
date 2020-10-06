@@ -5,7 +5,7 @@ require testProfile
 [sideeffects]
 def testAdds()
     var count = 0
-    for i in range(0, 10000000)
+    for i in range( 10000000)
         count = AddOne(count)
     return count
 

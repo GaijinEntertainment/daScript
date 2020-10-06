@@ -2,7 +2,7 @@
 def checkIt ( gen : iterator<int> )
     //print("testing:\n")
     var count = 0
-    for x, y in gen, range(0,100500)
+    for x, y in gen, range(100500)
         //print("{x} vs {y}\n")
         if y >= 10
             assert(false,"output too long")
@@ -145,14 +145,14 @@ def test_while_finally
 
 def test_for
     let gen <- generator<int>() <| $()
-        for t in range(0,10)
+        for t in range(10)
             yield t
         return false
     checkIt(gen)
 
 def test_for_break
     let gen <- generator<int>() <| $()
-        for t in range(0,100)
+        for t in range(100)
             if t == 10
                 break
             yield t
@@ -161,7 +161,7 @@ def test_for_break
 
 def test_for_continue
     let gen <- generator<int>() <| $()
-        for t in range(0,100)
+        for t in range(100)
             if t >= 10
                 continue
             yield t
@@ -170,15 +170,15 @@ def test_for_continue
 
 def test_for_nested
     let gen <- generator<int>() <| $()
-        for q in range(0,2)
-            for t in range(0,5)
+        for q in range(2)
+            for t in range(5)
                 yield q*5 + t
         return false
     checkIt(gen)
 
 def test_for_finally
     let gen <- generator<int>() <| $()
-        for t in range(0,9)
+        for t in range(9)
             yield t
         finally
             yield 9

@@ -3,7 +3,7 @@
 options log=false, optimize=false
 options no_unused_function_arguments = false
 
-def test_vec2(a:auto(vec2) -const -&)
+def test_vec2(a:auto(vec2) -const -&; isRange = false)
     let f2_0  = vec2()
     let f2_x  = vec2(1.0,2.0)
     let f2_y  = vec2(1,2)
@@ -18,10 +18,16 @@ def test_vec2(a:auto(vec2) -const -&)
     assert("{f2_y}"=="1,2")
     assert("{f2_z}"=="1,2")
     assert("{f2_w}"=="1,2")
-    assert("{f2_xx}"=="1,1")
-    assert("{f2_yy}"=="1,1")
-    assert("{f2_zz}"=="1,1")
-    assert("{f2_ww}"=="1,1")
+    if isRange
+        assert("{f2_xx}"=="0,1")
+        assert("{f2_yy}"=="0,1")
+        assert("{f2_zz}"=="0,1")
+        assert("{f2_ww}"=="0,1")
+    else
+        assert("{f2_xx}"=="1,1")
+        assert("{f2_yy}"=="1,1")
+        assert("{f2_zz}"=="1,1")
+        assert("{f2_ww}"=="1,1")
 
 def test_vec3(a:auto(vec3) -const -&)
     let f3_0  = vec3()
@@ -74,6 +80,6 @@ def test
     test_vec2(uint2())
     test_vec3(uint3())
     test_vec4(uint4())
-    test_vec2(range())
-    test_vec2(urange())
+    test_vec2(range(),true)
+    test_vec2(urange(),true)
     return true

@@ -25,7 +25,7 @@ def pass_array ( var arr:array<int> )
 
 [sideeffects]
 def verifyIntArray(a:array<int>;var s:int;c,tail:int)
-    for t in range(0,c)
+    for t in range(c)
         verify(a[t]==s++)
     for t in range(c,c+tail)
         assert(a[t]==0)

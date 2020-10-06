@@ -136,13 +136,13 @@ def cycle(var src:iterator<auto(TT)>)
 def islice( var src : iterator<auto(TT)>; start,stop : int )
     static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> [[<-src]] () <| $ ()
-            for x,i in src,range(0,stop)
+            for x,i in src,range(stop)
                 if i>=start
                     yield x
             return false
     else
         return <- generator<TT &> [[<-src]] () <| $ ()
-            for x,i in src,range(0,stop)
+            for x,i in src,range(stop)
                 if i>=start
                     yield x
             return false
@@ -161,7 +161,7 @@ def repeat(value : auto(TT); var count : int = 0)
         if count == 0
             while true
                 yield value
-        for x in range(0,count)
+        for x in range(count)
             yield value
         return false
 

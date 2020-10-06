@@ -69,7 +69,7 @@ def test_group ( var regex:Regex; match:string; groups:array<string>)
     let tot = length(regex.groups) - 1
     assert(tot==length(groups),"group count mismatch")
     var failed = false
-    for x in range(0,tot)
+    for x in range(tot)
         let grp = regex_group(regex,x+1,match)
         let cgrp = groups[x]
         if grp != cgrp

@@ -12,7 +12,7 @@ def fibR(n)
 def fibI(n)
     var last = 0
     var cur = 1
-    for i in range(0, n-1)
+    for i in range( n-1)
         let tmp = cur
         cur += last
         last = tmp

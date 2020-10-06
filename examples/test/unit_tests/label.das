@@ -10,7 +10,7 @@ def basic_goto()
         goto label 0
         fail = true
         static_assert(false,"unreachable code")
-    for t in range(0,10)
+    for t in range(10)
         assert(arr[t]==t)
     assert(!fail)
 
@@ -27,14 +27,14 @@ def nested_goto()
             goto label 0
             fail = true
         fail = true
-    for t in range(0,10)
+    for t in range(10)
         assert(arr[t]==t)
 
 [sideeffects]
 def for_goto()
     var fail = false
     var arr : int[10]
-    for j in range(0,10)
+    for j in range(10)
         var i = 0
         label 0:
         arr[i] = i + j
@@ -42,10 +42,10 @@ def for_goto()
         if i < 10
             goto label 0
             fail = true
-        for t in range(0,10)
+        for t in range(10)
             assert(arr[t]==t + j)
         assert(!fail)
-    for t in range(0,10)
+    for t in range(10)
         assert(arr[t]==t + 9)
     assert(!fail)
 
@@ -62,11 +62,11 @@ def while_goto()
         if i < 10
             goto label 0
             fail = true
-        for t in range(0,10)
+        for t in range(10)
             assert(arr[t]==t + j)
         assert(!fail)
         j ++
-    for t in range(0,10)
+    for t in range(10)
         assert(arr[t]==t + 9)
     assert(!fail)
 

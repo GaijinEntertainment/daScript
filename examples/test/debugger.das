@@ -10,7 +10,7 @@ require UnitTest
 def funC(y:string)
     var j = 13
     j ++
-    for i in range(0,10)
+    for i in range(10)
         if i==3
             var t = float3(1,2,3)
             t.y = 11.1

@@ -6,9 +6,9 @@ def test
     for x,y in d,a
         assert(x==y)
     // range
-    for x,y in range(0,5),each(range(0,5))
+    for x,y in range(5),each(range(5))
         assert(x==y)
-    for x,y in range(0,5),to_array(each(range(0,5)))
+    for x,y in range(5),to_array(each(range(5)))
         assert(x==y)
     // static array
     unsafe

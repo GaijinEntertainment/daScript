@@ -26,7 +26,7 @@ class TelnetServer : Server
             self->save(session)
             gc0_save_smart_ptr("telnet-session", session)
     [unsafe] def override onData(msg:uint8?; size:int)
-        for i in range(0,size)
+        for i in range(size)
             let ch = int(msg[i])
             if ch=='\r'
                 continue

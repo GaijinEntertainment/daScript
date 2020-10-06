@@ -243,9 +243,9 @@ def make_table(tab:array<array<string>>;withHeader:bool=false)
         var wid : array<int>
         resize(wid,cols)
         for cc in tab
-            for x in range(0,cols)
+            for x in range(cols)
                 wid[x] = max(wid[x], length(cc[x]))
-        for ccc,idx in tab,range(0,100500)
+        for ccc,idx in tab,range(100500)
             write_table_separator(writer,wid,(idx==1 && withHeader) ? "=" : "-")
             write_table_line(writer,ccc,wid)
         write_table_separator(writer,wid)
@@ -274,7 +274,7 @@ def document_topic(doc_file:file;topic:string)
 def document_bitfield(doc_file:file; value:TypeDeclPtr)
     var tab : array<array<string>>
     emplace(tab,[{string "field"; "bit"; "value"}])
-    for an,bit in value.argNames,range(0,32)
+    for an,bit in value.argNames,range(32)
         var line : array<string>
         push(line,string(an))
         push(line,string(bit))
@@ -380,7 +380,7 @@ def document_function_declaration(doc_file:file;domain,func_name:string;
         argNames:array<string>;argTypes:array<TypeDecl?>;resType:TypeDeclPtr)
     fwrite(doc_file,make_domain(domain))
     fwrite(doc_file,"{func_name}(")
-    for an,at,i in argNames,argTypes,range(0,100500)
+    for an,at,i in argNames,argTypes,range(100500)
         if argument_needs_documenting(at)
             if i != 0
                 fwrite(doc_file,"; ")

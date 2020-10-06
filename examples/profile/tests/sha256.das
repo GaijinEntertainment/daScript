@@ -31,7 +31,7 @@ def toHex(hash:uint[8])
 
 def digestBlock(data:uint?; var hash:uint[8])
     var digest:uint[64]
-    for j in range(0,16)
+    for j in range(16)
         unsafe
             digest[j] = data[j]
     for j in range(16,64)
@@ -48,7 +48,7 @@ def digestBlock(data:uint?; var hash:uint[8])
     var f = hash[5]
     var g = hash[6]
     var h = hash[7]
-    for i in range(0,64)
+    for i in range(64)
         let s0 = (a >>> 2u) ^ (a >>> 13u) ^ (a >>> 22u)
         let maj = (a&b) ^ (a&c) ^ (b&c)
         let t2 = s0 + maj
@@ -84,16 +84,16 @@ def sha256(msg:array<uint8>)
         0x5be0cd19
     ]]
     let len = length(msg) / 64
-    for i in range(0,len)
+    for i in range(len)
         unsafe
             digestBlock(reinterpret<uint?>(addr(msg[i*64])),hash)
     return toHex(hash)
 
 [export]
 def test
-    let input <- [{for i in range(0,1024); uint8('.')}]
+    let input <- [{for i in range(1024); uint8('.')}]
     let dt = profile(20,"sha256") <|
-        for i in range(0,1024)
+        for i in range(1024)
             sha256(input)
     verify(sha256(input)=="8adcaee60bb05a9964a1df12d2f007adcb8f3fa20ff7d1ecfde0a2ac301ff412")
     print("{1.0/dt} mb/sec\n")

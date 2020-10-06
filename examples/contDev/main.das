@@ -63,7 +63,7 @@ def cppBaseTypeName(bt)
 def cppTypeDim(info)
     var res = ""
     if info.dimSize !=0u
-        for index in range(0,int(info.dimSize))
+        for index in range(int(info.dimSize))
             let d = get_dim(info,index)
             res += "[{d}]"
     return res

@@ -61,22 +61,22 @@ def test
     testProfile::verifyEsComponents()
     testProfile::initEsComponents()
     profile(20,"es-update") <|
-        for i in range(0,100)
+        for i in range(100)
             testProfile::testEsUpdate("ks")
     profile(20,"es-update-ref") <|
-        for i in range(0,100)
+        for i in range(100)
             testProfile::testEsUpdate("ks2")
     profile(20,"es-update-ref-const") <|
-        for i in range(0,100)
+        for i in range(100)
             testProfile::testEsUpdate("ks3")
     profile(20,"es-update-def-string") <|
-        for i in range(0,100)
+        for i in range(100)
             testProfile::testEsUpdate("ks4")
     profile(20,"query-1") <|
-        for i in range(0,100)
+        for i in range(100)
             queryOne()
     profile(20,"query-2") <|
-        for i in range(0,100)
+        for i in range(100)
             queryTwo()
     profile(20,"query-3") <|
         queryThree()

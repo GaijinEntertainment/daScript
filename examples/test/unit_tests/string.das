@@ -71,7 +71,7 @@ multi line string"
     assert(count==2)
     // check if builder does its jo, and deletes
     var zzs = build_string() <| $ ( writer )
-        for zzx in range(0,100500)
+        for zzx in range(100500)
             write(writer,zzx)
     unsafe
         delete_string(zzs)

@@ -3,14 +3,14 @@ def abs(i:int)
 
 def foo(var bar:array<int>)
     var b & = bar
-    for x in range(0,10)
+    for x in range(10)
         push(b,x)
     return <- b
 
 [export]
 def test
     var a : array<int>
-    for x in range(0,10)
+    for x in range(10)
         push(a,10-x)
     var t <- foo(a)
     assert(length(a)==0)

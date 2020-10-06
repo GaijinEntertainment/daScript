@@ -17,7 +17,7 @@ def add(a,b:int)
 
 [sideeffects]
 def verify_even(arr)
-    for x,y in arr,range(0,50)
+    for x,y in arr,range(50)
         assert(x==y*2)
 
 def first(x)
@@ -47,10 +47,10 @@ def verify_14 ( t )
 [export]
 def test
     // compehension
-    verify_even() <| [[for x in range(0,100); x; where x % 2==0]]
+    verify_even() <| [[for x in range(100); x; where x % 2==0]]
 
     // array comprehension
-    verify_even() <| [{for x in range(0,100); x; where x % 2==0}]
+    verify_even() <| [{for x in range(100); x; where x % 2==0}]
 
     // comprehension iterator with moveable type
     verify_14() <| [[for x in range(1,4); [{int x;2}] ]]
@@ -59,35 +59,35 @@ def test
     verify_14() <| [{for x in range(1,4); [{int x;2}] }]
 
     (   // filter with function
-            range(0,100)
+            range(100)
         |>  each()
         |>  filter(@@is_even)
         |>  verify_even()
     )
 
     (   // filter with lambda
-            range(0,100)
+            range(100)
         |>  each()
         |>  filter( @(x) => x % 2==0 )
         |>  verify_even()
     )
 
     (   // map
-            range(0,50)
+            range(50)
         |>  each()
         |>  map( @@twice )
         |>  verify_even()
     )
 
     (   // map with lambbda
-            range(0,50)
+            range(50)
         |>  each()
         |>  map( @(x : int) => x + x )
         |>  verify_even()
     )
 
     (   // filter and map with moveable type
-            [[for x in range(0,100); [{int x;2}] ]]
+            [[for x in range(100); [{int x;2}] ]]
         |>  filter( @(x) => x[0] % 2==0 )
         |>  map ( @(x) : array<int> => <- [{int x[0]; x[0]; x[0] }] )
         |>  map ( @(x) : int => x[0] )
@@ -95,7 +95,7 @@ def test
     )
 
     (   // reduce non-ref iterator with block
-            range(0,10)
+            range(10)
         |>  each()
         |>  reduce( $(x,y) => x + y )
         |>  is_equal(45)
@@ -103,14 +103,14 @@ def test
     )
 
     (   // reduce ref iterator with block
-            [[ for x in range(0,10); x ]]
+            [[ for x in range(10); x ]]
         |>  reduce( $(x,y) => x + y )
         |>  is_equal(45)
         |>  verify()
     )
 
     (   // reduce non-ref iterator with lambda
-            range(0,10)
+            range(10)
         |>  each()
         |>  reduce( @(x,y) => x + y )
         |>  is_equal(45)
@@ -118,7 +118,7 @@ def test
     )
 
     (   // reduce non-ref iterator with function
-            range(0,10)
+            range(10)
         |>  each()
         |>  reduce( @@add )
         |>  is_equal(45)
@@ -134,7 +134,7 @@ def test
     )
 
     (   // reduce ref type
-            range(0,10)
+            range(10)
         |>  each()
         |>  map( @(x : int) => [[auto x, 1.5]] )
         |>  reduce( $(x,y) => [[auto x._0 + y._0, 2.f]] )
@@ -144,7 +144,7 @@ def test
     )
 
     (   // sum
-            range(0,10)
+            range(10)
         |>  each()
         |>  sum()
         |>  is_equal(45)
@@ -158,7 +158,7 @@ def test
     )
 
     (   // any (fail)
-            range(0,10)
+            range(10)
         |>  each()
         |>  map ( @(x) : bool => x > 30 )
         |>  any()
@@ -167,7 +167,7 @@ def test
     )
 
     (   // all (pass)
-            range(0,10)
+            range(10)
         |>  each()
         |>  map ( @(x) : bool => x < 100 )
         |>  all()
@@ -175,7 +175,7 @@ def test
     )
 
     (   // all (fail)
-            range(0,10)
+            range(10)
         |>  each()
         |>  map ( @(x) : bool => x > 0 )
         // |>  to_array()   // if we uncomment this two, we can see intermediate values
@@ -186,7 +186,7 @@ def test
     )
 
     (   // islice
-            range(0,10)
+            range(10)
         |>  each()
         |>  islice(1,4)
         |>  sum()
@@ -224,7 +224,7 @@ def test
     |>  each()
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same( [[for x in range(0,10); (x % 3)+1]] )
+    |>  is_same( [[for x in range(10); (x % 3)+1]] )
     |>  verify()
     )
 
@@ -232,7 +232,7 @@ def test
         [[for x in range(1,4); [[tuple<int;float> x,2.5]]]]
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same([[for x in range(0,10); [[tuple<int;float> (x%3)+1,2.5]]]])
+    |>  is_same([[for x in range(10); [[tuple<int;float> (x%3)+1,2.5]]]])
     |>  verify()
     )
 
@@ -240,7 +240,7 @@ def test
         [[for x in range(1,4); [{int x;2}] ]]
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same([[for x in range(0,10); [{int (x%3)+1;2}] ]])
+    |>  is_same([[for x in range(10); [{int (x%3)+1;2}] ]])
     |>  verify()
     )
 

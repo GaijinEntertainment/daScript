@@ -3,6 +3,6 @@
 
 [export]
 def test
-    print("hello, world!\n")
+    print("{range(1)} {range(2.0)}\n")
     return true
 

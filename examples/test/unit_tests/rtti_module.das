@@ -8,7 +8,7 @@ def test:bool
     let v : variant<i:int; f:float>
     let vinfo & = typeinfo(rtti_typeinfo v)
     assert(vinfo.argCount==2u)
-    for i,n,t in range(0,2),arg_names(vinfo),arg_types(vinfo)
+    for i,n,t in range(2),arg_names(vinfo),arg_types(vinfo)
         if i==0
             assert(n=="i")
             verify(is_same_type(typeinfo(rtti_typeinfo 1),t,RefMatters no,ConstMatters no))

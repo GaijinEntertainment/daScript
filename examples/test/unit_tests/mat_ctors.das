@@ -5,8 +5,8 @@ def verifyIdentity(mat:auto(mat))
     let v : auto(vec) = mat[0]
     let col = typeinfo(sizeof type<vec>) / 4
     let row = typeinfo(sizeof type<mat>) / col / 4
-    for y in range(0,row)
-        for x in range(0,col)
+    for y in range(row)
+        for x in range(col)
             let t = x==y ? 1.0 : 0.0
             assert(mat[y][x]==t)
 
@@ -15,16 +15,16 @@ def verifySequence(mat:auto(mat))
     let col = typeinfo(sizeof type<vec>) / 4
     let row = typeinfo(sizeof type<mat>) / col / 4
     var t = 1.0
-    for y in range(0,row)
-        for x in range(0,col)
+    for y in range(row)
+        for x in range(col)
             verify(mat[y][x]==t++)
 
 def verifyRows(mat:auto(mat))
     let v : auto(vec) = mat[0]
     let col = typeinfo(sizeof type<vec>) / 4
     let row = typeinfo(sizeof type<mat>) / col / 4
-    for y in range(0,row)
-        for x in range(0,col)
+    for y in range(row)
+        for x in range(col)
             assert(mat[y][x]==float(y))
 
 def test_4x4
@@ -35,8 +35,8 @@ def test_4x4
     t[3] = float4(13,14,15,16)
     assert("{t}"=="[[ 1,2,3,4; 5,6,7,8; 9,10,11,12; 13,14,15,16]]")
     verifySequence(t)
-    for y in range(0,4)
-        for x in range(0,4)
+    for y in range(4)
+        for x in range(4)
             t[y][x] = x==y ? 1.0 : 0.0
     verifyIdentity(t)
     t.x = float4(1,2,3,4)
@@ -64,11 +64,11 @@ def test_any(var t:auto(mat))
     let row = typeinfo(sizeof type<mat>) / col / 4
     identity(t)
     verifyIdentity(t)
-    for r in range(0,row)
+    for r in range(row)
         t[r] = vec(r)
     verifyRows(t)
-    for y in range(0,row)
-        for x in range(0,col)
+    for y in range(row)
+        for x in range(col)
             t[y][x] = x==y ? 1.0 : 0.0
     verifyIdentity(t)
     var ops = false

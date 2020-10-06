@@ -16,7 +16,7 @@ def foo(var attached_fires : array<Foo>)
 [export]
 def test
     var a : array<Foo>
-    for x in range(0,1000)
+    for x in range(1000)
         foo(a)
     assert(length(a)==100)
     return true

@@ -10,7 +10,7 @@ def test
                 var dict : table<string; int>
                 fmap(f) <| $(data)
                     var offset, length, index = 0
-                    for ch,index in data,range(0,INT_MAX)
+                    for ch,index in data,range(INT_MAX)
                         if is_alpha(ch)
                             if length == 0
                                 offset = index

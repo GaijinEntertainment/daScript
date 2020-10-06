@@ -26,7 +26,7 @@ def describe(list:AnnotationList)
 def describe_bitfield(bf;merger:string = "")
     static_if typeinfo(is_bitfield bf)
         let bftd <- typeinfo(ast_typedecl bf)
-        return join( [{ for name,bit in bftd.argNames,range(0,32); "[{name}]";
+        return join( [{ for name,bit in bftd.argNames,range(32); "[{name}]";
             where (int(bf) & (1<<bit)) != 0 }], merger )
     else
         concept_assert(false,"requires bitfield")
@@ -279,7 +279,7 @@ def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expr
 	var einfo <- clone_type(info)
 	clear(einfo.dim)
 	var mkArr <- new [[ExprMakeArray() at=at, makeType := info]]
-	for x in range(0,total)
+	for x in range(total)
         unsafe
             var elem <- walk_and_convert(data + stride*x, einfo, at)
             push(mkArr.values, elem)
@@ -298,7 +298,7 @@ def walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
 [private]
 def walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     var mkArr <- new [[ExprMakeTuple() at=at, recordType<-clone_type(info)]]
-    for idx in range(0, info.argTypes.length)
+    for idx in range( info.argTypes.length)
         let offset = get_tuple_field_offset(info,idx)
         unsafe
             var elem <- walk_and_convert(data + offset, info.argTypes[idx], at)

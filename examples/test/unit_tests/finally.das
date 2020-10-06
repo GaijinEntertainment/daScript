@@ -4,7 +4,7 @@
 def test_if_finally
     var t : int[10]
     var count = 0
-    for x in range(0,10)
+    for x in range(10)
         t[x] = x+1
         if x==5
             break
@@ -18,7 +18,7 @@ def test_if_finally
 def test_for_finally
     var t : int[10]
     var count = 0
-    for x in range(0,10)
+    for x in range(10)
         let uno = one()
         t[x] = x+uno
         if x==5

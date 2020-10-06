@@ -24,14 +24,14 @@ def filter_a(src:array<auto(TT)>; blk:block<(what:TT):bool> ) : array<TT>
 
 def testGen(total,mod:int)
     return (
-        each(range(0,total))
+        each(range(total))
         |> filter ( @(x) => (x%mod)==0 )
         |> map ( @(x) => "{x}" )
         |> join(",")
     )
 
 def testArr(total,mod:int)
-    var a1 <- each_a(range(0,total))
+    var a1 <- each_a(range(total))
     var a2 <- filter_a(a1,$(x) => (x%mod)==0)
     var a3 <- map_a(a2, $(x) => "{x}")
     return join(a3,",")
@@ -43,7 +43,7 @@ finally
 def testLoop(total,mod:int)
     let st = build_string() <| $ (var writer)
         var skip_first = true
-        for t in range(0,total)
+        for t in range(total)
             if (t % mod) == 0
                 if skip_first
                     skip_first = false

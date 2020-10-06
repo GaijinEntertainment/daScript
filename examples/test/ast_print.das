@@ -123,7 +123,7 @@ class PrintVisitor : AstVisitor
         if blk.blockFlags.isClosure
             if blk.returnType!=null || blk.arguments.length!=0
                 print("$(")
-                for arg,argIndex in blk.arguments,range(0,blk.arguments.length)
+                for arg,argIndex in blk.arguments,range(blk.arguments.length)
                     if arg.annotation.length != 0
                         print("[{describe(arg.annotation)}] ")
                     if arg._type.flags.constant
@@ -729,8 +729,8 @@ def allExpr(arg:int)
     var mkt = [[auto 1,2.0,"three"]]
     mkt = [[auto 2,3.0,"four"]]
     // ExprArrayCompehension
-    var acomp <- [{for x in range(0,3); x*x; where x!=1}]
-    var gcomp <- [[for x in range(0,3); x*x; where x!=1]]
+    var acomp <- [{for x in range(3); x*x; where x!=1}]
+    var gcomp <- [[for x in range(3); x*x; where x!=1]]
     for ta,tg in acomp,gcomp
         verify(ta==tg)
     // ExprTypeInfo

@@ -67,22 +67,22 @@ def test:bool
     // 1 variable, range
     if true
         var i:int=0
-        for a in range(0,10)
+        for a in range(10)
             verify(a==i++)
         assert(i==10)
     // 2 variable, range hybrid
     if true
         var b:int[10]
         var i:int=0
-        for l,r in range(0,10),b    // note, this one is optimized out
+        for l,r in range(10),b    // note, this one is optimized out
             r = i++*2-5
         assert(i==10)
         i = 0
-        for l,r in range(0,10),b
+        for l,r in range(10),b
             assert(r==i*2-5)
             verify(l==i++)
         i = 0
-        for l,r in range(0,10),b
+        for l,r in range(10),b
             if l>r
                 assert(l>r)
                 i++

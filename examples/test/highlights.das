@@ -13,7 +13,7 @@ def main()
     let there = "
         multi line string
     "
-    for t in range(0,"a")
+    for t in range("a")
         let a =     foobar()
         let b =     foobar()
         let c =     foobar()

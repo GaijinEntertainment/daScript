@@ -5,7 +5,7 @@ require math
 require testProfile
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
-let 
+let
   SOLAR_MASS = 4.*PI*PI
 let
   DAYS_PER_YEAR = 365.24
@@ -36,7 +36,7 @@ var
               v = float3( 2.68067772490389322e-03 * DAYS_PER_YEAR, 1.62824170038242295e-03 * DAYS_PER_YEAR, -9.51592254519715870e-05 * DAYS_PER_YEAR ),
               mass = 5.15138902046611451e-05 * SOLAR_MASS
             ]]
-let 
+let
   nbodies = 5
 
 def offset_momentum()
@@ -82,7 +82,7 @@ def scale_bodies(scale)
 
 def nbodies(n)
   scale_bodies(0.01)
-  for i in range(0, n)
+  for i in range( n)
     advance()
   scale_bodies(1./0.01)
 

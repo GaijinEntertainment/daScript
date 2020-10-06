@@ -227,9 +227,9 @@ def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array
     var backbufferIdx = ymin * screenWidth
     for y in range(ymin,ymax)
         RAND_SEED = random_seed(y*117 + frameCount*13)
-        for x in range(0,screenWidth)
+        for x in range(screenWidth)
             var col = float3(0)
-            for s in range(0,DO_SAMPLES_PER_PIXEL)
+            for s in range(DO_SAMPLES_PER_PIXEL)
                 let uv = (float2(x,y) + random_float4(RAND_SEED).xy) * invWH
                 col += trace(getRay(cam, uv.x, uv.y), 0, rayCount)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)

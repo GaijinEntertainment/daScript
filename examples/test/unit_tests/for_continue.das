@@ -12,7 +12,7 @@ def test_while_continue()
 [sideeffects]
 def test_for_continue()
     var y = 0
-    for x in range(0,10)
+    for x in range(10)
         if (x & 1) == 0
             continue
         y += x
@@ -22,7 +22,7 @@ def test_for_continue()
 def test_complex_for_continue()
     var y = 0
     let arr = [[int 0;1;2;3;4;5;6;7;8;9]]
-    for x,s in range(0,10), arr
+    for x,s in range(10), arr
         assert(x==s)
         if (x & 1) == 0
             continue

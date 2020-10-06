@@ -18,7 +18,7 @@ def testVirtual(var objects:array<CObject>)
 		obj->update()
 
 def testVirtual2(var objects:array<CObject>;count:int)
-    for i in range(0,count)
+    for i in range(count)
         testVirtual(objects)
 
 def testMethod(var objects:array<CObject>)
@@ -26,7 +26,7 @@ def testMethod(var objects:array<CObject>)
 		CObject`update(obj)
 
 def testMethod2(var objects:array<CObject>;count:int)
-    for i in range(0,count)
+    for i in range(count)
         testMethod(objects)
 
 def init(var objects:array<CObject>)
@@ -48,7 +48,7 @@ def testSim(var objects:array<NObject>)
         update(obj)
 
 def testSim2(var objects:array<NObject>; count:int)
-    for i in range(0,count)
+    for i in range(count)
         testSim(objects)
 
 def testSimI(var objects:array<NObject>)
@@ -56,7 +56,7 @@ def testSimI(var objects:array<NObject>)
         obj.position += obj.velocity
 
 def testSim2I(var objects:array<NObject>; count:int)
-    for i in range(0,count)
+    for i in range(count)
         testSimI(objects)
 
 def init(var objects:array<NObject>)

@@ -16,13 +16,13 @@ def make_2
 
 def test_1
     var q = 0
-    for x in range(0,1000000)
+    for x in range(1000000)
         q += make_1().x
     return q
 
 def test_2
     var q = 0
-    for x in range(0,1000000)
+    for x in range(1000000)
         q += make_2().x
     return q
 
