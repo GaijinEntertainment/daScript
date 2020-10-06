@@ -504,6 +504,11 @@ namespace das {
     template <typename TT> struct das_index<const vec3<TT>> : das_vec_index<TT, vec3<TT>, 3> {};
     template <typename TT> struct das_index<const vec4<TT>> : das_vec_index<TT, vec4<TT>, 4> {};
 
+    template<> struct das_index<range> : das_vec_index<int32_t, range, 2> {};
+    template<> struct das_index<const range> : das_vec_index<int32_t, range, 2> {};
+
+    template<> struct das_index<urange> : das_vec_index<uint32_t, urange, 2> {};
+    template<> struct das_index<const urange> : das_vec_index<uint32_t, urange, 2> {};
 
     template <typename VecT, int size>
     struct das_index<Matrix<VecT,size>> {

@@ -406,6 +406,7 @@ def get_ptr ( src : smart_ptr<auto(TT)> ) : TT?
     unsafe
         return reinterpret<TT?> src
 
+[generic]
 def get_command_line_arguments : array<string>
     var args : array<string>
     builtin_get_command_line_arguments(args)

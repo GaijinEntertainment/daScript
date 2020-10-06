@@ -16,8 +16,8 @@ namespace das {
         smart_ptr_raw ( T * p ) : ptr(p) {}
         template <typename Y>
         __forceinline smart_ptr_raw ( const smart_ptr_raw<Y> & p ) {
-            static_assert( is_base_of<T,Y>::value, "can only cast if inherited" );
-            ptr = p.get();
+            static_assert( is_base_of<T,Y>::value || is_base_of<Y,T>::value, "can only cast if inherited" );
+            ptr = (T *) p.get();
         }
         __forceinline T * get() const {
             return ptr;

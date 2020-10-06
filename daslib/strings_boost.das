@@ -4,7 +4,6 @@ module strings_boost
 
 require strings public
 
-[export]
 def wide (text:string; width:int)
     let extra = width - length(text)
     if extra > 0
@@ -31,22 +30,18 @@ def join(it; separator:string)
                     write(writer, elem)
         return st
 
-[export]
 def split ( text, delim : string; blk : block< (arg:array<string>#) > )
     builtin_string_split ( text, delim, blk )
 
-[export]
 def split ( text, delim : string ) : array<string>
     var res : array<string>
     builtin_string_split(text, delim) <| $ ( arr : array<string># ) : void
         res := arr
     return <- res
 
-[export]
 def split_by_chars ( text, delim : string; blk : block< (arg:array<string>#) > )
     builtin_string_split_by_char ( text, delim, blk )
 
-[export]
 def split_by_chars ( text, delim : string ) : array<string>
     var res : array<string>
     builtin_string_split_by_char (text, delim) <| $ ( arr : array<string># ) : void

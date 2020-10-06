@@ -9130,4 +9130,5 @@ void runFunctionAnnotations ( Function * func, AnnotationList * annL, const Line
         swap ( func->annotations, *annL );
         delete annL;
     }
+    func->exports |= g_Program->policies.export_all_functions;
 }

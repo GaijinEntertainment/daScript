@@ -264,19 +264,6 @@ namespace das {
         }
     };
 
-    __forceinline void mks_vector_push ( MakeStruct & vec, MakeFieldDeclPtr value ) {
-        vec.push_back(value);
-    }
-    void mks_vector_pop ( MakeStruct & vec ) {
-        vec.pop_back();
-    }
-    void mks_vector_clear ( MakeStruct & vec ) {
-        vec.clear();
-    }
-    void mks_vector_resize ( MakeStruct & vec, int32_t newSize ) {
-        vec.resize(newSize);
-    }
-
     struct AstMakeStructAnnotation : ManagedVectorAnnotation<MakeStruct> {
         AstMakeStructAnnotation(ModuleLibrary & ml)
             :  ManagedVectorAnnotation<MakeStruct> ("MakeStruct", ml) {
@@ -917,17 +904,9 @@ namespace das {
         }
     };
 
-/*
-            struct EnumEntry {
-            string          name;
-            LineInfo        at;
-            ExpressionPtr   value;
-        };
-*/
-
     struct AstEnumEntryAnnotation : ManagedStructureAnnotation <Enumeration::EnumEntry> {
         AstEnumEntryAnnotation(ModuleLibrary & ml)
-            : ManagedStructureAnnotation ("EnumEntry", ml) {
+            : ManagedStructureAnnotation ("EnumEntry", ml, "Enumeration::EnumEntry") {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -1012,7 +991,7 @@ namespace das {
 
     struct AstFieldDeclarationAnnotation : ManagedStructureAnnotation<Structure::FieldDeclaration> {
         AstFieldDeclarationAnnotation(ModuleLibrary & ml)
-            : ManagedStructureAnnotation ("FieldDeclaration", ml) {
+            : ManagedStructureAnnotation ("FieldDeclaration", ml, "Structure::FieldDeclaration") {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -2609,9 +2588,9 @@ namespace das {
                 SideEffects::modifyExternal, "addModuleVariantMacro");
             // helper functions
             addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
-                SideEffects::none, "describe_typedecl");
+                SideEffects::none, "ast_describe_typedecl");
             addExtern<DAS_BIND_FUN(ast_describe_typedecl_cpp)>(*this, lib,  "describe_typedecl_cpp",
-                SideEffects::none, "describe_typedecl_cpp");
+                SideEffects::none, "ast_describe_typedecl_cpp");
             addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
                 SideEffects::none, "describe_expression");
             addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",

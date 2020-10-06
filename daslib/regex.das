@@ -744,11 +744,9 @@ def re_early_out ( var cset:CharSet; node:ReNode? ) : bool
     top level API
 */
 
-[export]
 def is_valid(var re:Regex)
     return re.root != null
 
-[export]
 def regex_compile( var re:Regex; expr:string ) : bool
     re.root = re_parse(expr)
     if re.root != null
@@ -759,21 +757,18 @@ def regex_compile( var re:Regex; expr:string ) : bool
         re.canEarlyOut = !is_set_empty(re.earlyOut)
     return re.root != null
 
-[export]
 def regex_compile ( expr : string )
     var re:Regex
     if !regex_compile(re,expr)
         panic("regular expression {expr} did not compile")
     return <- re
 
-[export]
 def regex_compile ( var re:Regex )
     if re.root != null
         re_assign_next(re)
         re_assign_match_functions(re)
     return <- re
 
-[export]
 def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
     if empty(str)
         return -1
@@ -786,12 +781,11 @@ def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
             return -1
         return int(mptr-regex.match)
 
-[export]
 def regex_group ( regex:Regex; index:int; match:string )
     let sub_range = regex.groups[index]._0
     return slice(match, sub_range.x, sub_range.y)
 
-[export,unsafe_deref]
+[unsafe_deref]
 def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     if empty(str)
         return
@@ -829,7 +823,6 @@ def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     printer
 */
 
-[export]
 def regex_debug ( regex:Regex )
     debug_re(regex.root,1)
     print("\n")

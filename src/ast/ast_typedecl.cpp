@@ -1174,6 +1174,10 @@ namespace das
         return (baseType==Type::tPointer) && (dim.size()==0);
     }
 
+    bool TypeDecl::isVoidPointer() const {
+        return isPointer() && (!firstType || firstType->isVoid());
+    }
+
     bool TypeDecl::isBitfield() const {
         return (baseType==Type::tBitfield) && (dim.size()==0);
     }

@@ -396,6 +396,27 @@ namespace das {
     char * ast_das_to_string ( Type bt, Context * context );
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context );
 
+    int32_t any_array_size ( void * _arr );
+    int32_t any_table_size ( void * _tab );
+    void any_array_foreach ( void * _arr, int stride, const TBlock<void,void *> & blk, Context * context );
+    void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context );
+
+    int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index );
+    int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index );
+
+    __forceinline void mks_vector_push ( MakeStruct & vec, MakeFieldDeclPtr value ) {
+        vec.push_back(value);
+    }
+    __forceinline void mks_vector_pop ( MakeStruct & vec ) {
+        vec.pop_back();
+    }
+    __forceinline void mks_vector_clear ( MakeStruct & vec ) {
+        vec.clear();
+    }
+    __forceinline void mks_vector_resize ( MakeStruct & vec, int32_t newSize ) {
+        vec.resize(newSize);
+    }
+
     Module * compileModule ( Context * context );
     smart_ptr_raw<Program> compileProgram ( Context * context );
 

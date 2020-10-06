@@ -3,6 +3,9 @@
 
 [export]
 def test
-    print("{range(1)} {range(2.0)}\n")
+    let t <- [{for x in range(5); x}]
+    print("t = {t}\n")
+    let z = iter_range(t)
+    print("length(t) = {z}\n")
     return true
 

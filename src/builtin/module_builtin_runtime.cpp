@@ -950,21 +950,27 @@ namespace das
         auto idpi = addExtern<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc");
         idpi->unsafeOperation = true;
         idpi->firstArgReturnType = true;
+        idpi->noPointerCast = true;
         auto idpd = addExtern<DAS_BIND_FUN(i_das_ptr_dec)>(*this, lib, "i_das_ptr_dec", SideEffects::modifyArgument, "das_ptr_dec");
         idpd->unsafeOperation = true;
         idpd->firstArgReturnType = true;
+        idpd->noPointerCast = true;
         auto idpa = addExtern<DAS_BIND_FUN(i_das_ptr_add)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add");
         idpa->unsafeOperation = true;
         idpa->firstArgReturnType = true;
+        idpa->noPointerCast = true;
         auto idps = addExtern<DAS_BIND_FUN(i_das_ptr_sub)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub");
         idps->unsafeOperation = true;
         idps->firstArgReturnType = true;
+        idps->noPointerCast = true;
         auto idpsa = addExtern<DAS_BIND_FUN(i_das_ptr_set_add)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add");
         idpsa->unsafeOperation = true;
         idpsa->firstArgReturnType = true;
+        idpsa->noPointerCast = true;
         auto idpss = addExtern<DAS_BIND_FUN(i_das_ptr_set_sub)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub");
         idpss->unsafeOperation = true;
         idpss->firstArgReturnType = true;
+        idpss->noPointerCast = true;
         addExtern<DAS_BIND_FUN(i_das_ptr_diff)>(*this, lib, "i_das_ptr_diff", SideEffects::none, "i_das_ptr_diff");
         // profile
         addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal, "builtin_profile");

@@ -1217,15 +1217,15 @@ namespace das {
                 ss << " = ";
             }
             if ( var->type->constant ) {
-                ss << "(";
+                ss << "((";
                 describeVarLocalCppType(ss, var->type);
                 ss << ")";
             }
             if ( var->type->ref ) {
                 ss << "&(";
             }
-            if ( expr->type->isPointer() && (!expr->type->firstType || expr->type->firstType->isVoid()) ) {
-                ss << "(" << describeCppType(var->type) << ")(";
+            if ( needPtrCast(var->type, expr->type) ) {
+                ss << "((" << describeCppType(var->type) << ") ";
             }
             if ( expr->type->isString() ) {
                 ss << "(char *)(";
@@ -1235,13 +1235,16 @@ namespace das {
             if ( expr->type->isString() ) {
                 ss << ")";
             }
-            if ( expr->type->isPointer() && (!expr->type->firstType || expr->type->firstType->isVoid()) ) {
+            if ( needPtrCast(var->type, expr->type) ) {
                 ss << ")";
             }
             if ( var->type->ref ) {
                 ss << ")";
             }
             if ( var->init_via_move ) {
+                ss << ")";
+            }
+            if ( var->type->constant ) {
                 ss << ")";
             }
             return Visitor::visitLetInit(let, var, expr);
@@ -2846,6 +2849,9 @@ namespace das {
             if (argType->baseType == Type::anyArgument) return false;
             return !argType->isSameType(*passType,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no);
         }
+        bool needPtrCast ( const TypeDeclPtr & argType, const TypeDeclPtr & passType ) const {
+            return argType->isVoidPointer() ^ passType->isVoidPointer();
+        }
         void CallFunc_preVisitCallArg ( ExprCallFunc * call, Expression * arg, bool ) {
             auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
                 return a.get() == arg;
@@ -2855,6 +2861,9 @@ namespace das {
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( funArgType->aotAlias ) {
                 ss << "das_alias<" << funArgType->alias << ">::to(";
+            }
+            if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) {
+                ss << "((" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ") ";
             }
             if ( needSubstitute(funArgType,arg->type) ) {
                 ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::pass(";
@@ -2892,6 +2901,7 @@ namespace das {
             }
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( needSubstitute(funArgType,arg->type) ) ss << ")";
+            if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) ss << ")";
             if ( funArgType->aotAlias ) ss << ")";
             if ( !last ) ss << ",";
         }

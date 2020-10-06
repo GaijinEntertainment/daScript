@@ -44,6 +44,7 @@ def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
         concept_assert(false, "not derived from ast::Expression")
         return [[ExpressionPtr]]
 
+[generic]
 def FunctionPtr ( fun : Function? ) : FunctionPtr
     unsafe
         return reinterpret<FunctionPtr> fun
@@ -528,6 +529,7 @@ def add_new_call_macro ( name:string; someClassPtr )
     unsafe
         delete ann
 
+[generic]
 def find_module(name:string) : Module?
     var rm : Module?
     program_for_each_module(this_program()) <| $ ( mod )

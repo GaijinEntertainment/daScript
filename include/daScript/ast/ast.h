@@ -608,6 +608,7 @@ namespace das
 
                 bool    lambda : 1;
                 bool    firstArgReturnType : 1;
+                bool    noPointerCast : 1;
                 bool    isClassMethod : 1;
             };
             uint32_t flags = 0;
@@ -960,6 +961,7 @@ namespace das
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
+        bool export_all_functions = true;               // will export all functions (good for module aot)
     // debugger
         //  when enabled
         //      1. disables [fastcall]
