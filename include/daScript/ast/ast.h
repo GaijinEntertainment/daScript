@@ -961,38 +961,12 @@ namespace das
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
-        bool export_all_functions = true;               // will export all functions (good for module aot)
+        bool export_all_functions = false;              // will export all functions (good for module aot)
     // debugger
         //  when enabled
         //      1. disables [fastcall]
         //      2. invoke of blocks will have extra prologue overhead
         bool debugger = false;
-    };
-
-    struct CursorVariable {
-        ExpressionPtr   expr;
-        int32_t         index;
-        Function *      function;
-        CursorVariable ( Expression * e, int32_t i, Function * f )
-            : expr(e), index(i), function(f) {
-        }
-    };
-
-    struct CursorConstant {
-        ExpressionPtr   expr;
-        Function *      function;
-        CursorConstant ( Expression * e,  Function * f )
-            : expr(e), function(f) {
-        }
-    };
-
-    struct CursorInfo {
-        LineInfo                at;         // cursor location
-        vector<FunctionPtr>     function;   // function, whre cursor is
-        vector<ExpressionPtr>   call;       // call, if cursor is pointing at one (ExprCall, ExprLooksLikeCall, etc)
-        vector<CursorVariable>  variable;   // variables (ExprVar, ExprField, etc)
-        vector<CursorConstant>  constants;  // ExprConst...
-        string reportJson() const;
     };
 
     class Program : public ptr_ref_count {
@@ -1050,7 +1024,6 @@ namespace das
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
         void buildMNLookup ( Context & context, TextWriter & logs );
         void buildADLookup ( Context & context, TextWriter & logs );
-        CursorInfo cursor ( const LineInfo & info );
         bool getOptimize() const;
         bool getDebugger() const;
         void makeMacroModule( TextWriter & logs );
