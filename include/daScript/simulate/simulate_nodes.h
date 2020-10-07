@@ -1491,7 +1491,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             return subexpr.computeArgumentRefOff(context);
         }
-        uint32_t offset;
     };
 
     template <typename TT>
