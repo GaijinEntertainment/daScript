@@ -2870,7 +2870,7 @@ namespace das {
                 ss << "das_alias<" << funArgType->alias << ">::to(";
             }
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) {
-                ss << "static_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">(";
+                ss << "das_auto_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::cast(";
             }
             if ( needSubstitute(funArgType,arg->type) ) {
                 ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::pass(";
