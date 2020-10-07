@@ -412,13 +412,30 @@ namespace das {
                 if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
                     if ( !var->local && !var->argument && !var->block ) {
                         if ( variable->init->rtti_isConstant() ) {
-                            return variable->init;
+                            reportFolding();
+                            return cloneWithType(variable->init);
                         }
                     }
                 }
             }
             return Visitor::visit(var);
         }
+        virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
+            if ( init->rtti_isVar() ) {
+                auto evar = static_cast<ExprVar *>(init);
+                auto variable = evar->variable;
+                if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
+                    if ( !evar->local && !evar->argument && !evar->block ) {
+                        if ( variable->init->rtti_isConstant() ) {
+                            reportFolding();
+                            return cloneWithType(variable->init);
+                        }
+                    }
+                }
+            }
+            return Visitor::visitLetInit(expr,var,init);
+        }
+
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             if (expr->func->sideEffectFlags) {
