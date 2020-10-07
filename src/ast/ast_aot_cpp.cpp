@@ -1899,11 +1899,17 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstDouble * c ) override {
-            ss << c->getValue();
+            double val = c->getValue();
+            if ( val==DBL_MIN ) ss << "DBL_MIN";
+            else if ( val==DBL_MAX ) ss << "DBL_MAX";
+            else ss << to_string_ex(val);
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            ss << to_string_ex(c->getValue()) << "f";
+            float val = c->getValue();
+            if ( val==FLT_MIN ) ss << "FLT_MIN";
+            else if ( val==FLT_MAX ) ss << "FLT_MAX";
+            else ss << to_string_ex(val) << "f";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
