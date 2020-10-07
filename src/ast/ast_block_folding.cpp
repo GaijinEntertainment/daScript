@@ -115,6 +115,16 @@ namespace das {
                 return Visitor::visit(expr);
             }
         }
+        // ExprLet
+        virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
+            if ( var->type->isFoldable() && init->type->ref && init->type->constant ) {
+                reportFolding();
+                auto iv = Expression::autoDereference(init);
+                iv->type->ref = false;
+                return iv;
+            }
+            return Visitor::visitLetInit(expr,var,init);
+        }
     };
 
     class BlockFolding : public PassVisitor {
