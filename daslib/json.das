@@ -1,4 +1,5 @@
 options indenting = 4
+options remove_unused_symbols = false
 
 module json
 
@@ -36,9 +37,8 @@ def JV ( v : double )
 def JV ( v : bool )
     return new [[JsonValue value <- [[JsValue _bool = v]]]]
 
-def JV ( v : void? )
-    assert(v==null,"only null allowed")
-    return new [[JsonValue value <- [[JsValue _null = v]]]]
+def JVNULL
+    return new [[JsonValue value <- [[JsValue _null = null]]]]
 
 def JV ( var v : table<string;JsonValue?> )
     return new [[JsonValue value <- [[JsValue _object <- v]]]]
@@ -233,7 +233,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
     elif ahead is _bool
         return JV(ahead as _bool)
     elif ahead is _null
-        return JV(null)
+        return JVNULL()
     else
         error = "{ahead}"
         return null

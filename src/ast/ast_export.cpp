@@ -236,6 +236,7 @@ namespace das {
     }
 
     void Program::markOrRemoveUnusedSymbols(bool forceAll) {
+        forceAll |=  !options.getBoolOption("remove_unused_symbols",true);
         clearSymbolUse();
         MarkSymbolUse vis(false);
         visit(vis);

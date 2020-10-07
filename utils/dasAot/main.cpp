@@ -42,7 +42,7 @@ bool compile ( const string & fn, const string & cppFn ) {
     ModuleGroup dummyGroup;
     bool firstError = true;
     CodeOfPolicies policies;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,true,policies) ) {
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {
             if (json)
                 tout << "{ \"result\": \"failed to compile\",\n\"diagnostics\": [\n";

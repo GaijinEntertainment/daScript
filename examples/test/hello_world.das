@@ -1,11 +1,16 @@
-// options log_infer_passes = true
-// options log_generics = true
+options log = true
+
+options log_nodes = true
+
+var
+    FMAX = FLT_MAX
+
+def logit(t)
+    print("t = {t}\n")
 
 [export]
 def test
-    let t <- [{for x in range(5); x}]
-    print("t = {t}\n")
-    let z = iter_range(t)
-    print("length(t) = {z}\n")
+    let t = FLT_MAX
+    logit(t)
     return true
 
