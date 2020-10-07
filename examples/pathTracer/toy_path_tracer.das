@@ -2,7 +2,7 @@
 // options logCpp=true
 // options log_nodes=true
 
-options no_aot=true, fusion=true
+module tpt
 
 require math
 require PathTracerHelper
