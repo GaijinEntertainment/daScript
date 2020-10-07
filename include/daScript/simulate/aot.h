@@ -36,6 +36,14 @@ namespace das {
     void das_debug ( Context * context, TypeInfo * typeInfo, const char * FILE, int LINE, vec4f res, const char * message = nullptr );
 
     template <typename TT>
+    struct das_auto_cast {
+        template <typename QQ>
+        __forceinline static TT cast ( QQ && expr ) {
+            return (TT) expr;
+        }
+    };
+
+    template <typename TT>
     __forceinline void das_zero ( TT & a ) {
         memset(&a, 0, sizeof(TT));
     }

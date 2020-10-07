@@ -1225,7 +1225,7 @@ namespace das {
                 ss << "&(";
             }
             if ( needPtrCast(var->type, expr->type) ) {
-                ss << "static_cast<" << describeCppType(var->type) << ">(";
+                ss << "das_auto_cast<" << describeCppType(var->type) << ">::cast(";
             }
             if ( expr->type->isString() ) {
                 ss << "(char *)(";
@@ -1515,7 +1515,7 @@ namespace das {
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
             }
-            ss << "static_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">(";
+            ss << "das_auto_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
         }
         virtual void preVisitRight ( ExprOp3 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
@@ -1524,7 +1524,7 @@ namespace das {
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
             }
-            ss << "static_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">(";
+            ss << "das_auto_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
             ss << ")";
@@ -1537,7 +1537,7 @@ namespace das {
             ss << "return ";
             if ( expr->moveSemantics ) ss << "/* <- */ ";
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
-            if ( !retT->isVoid() ) ss << "static_cast<" << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">(";
+            if ( !retT->isVoid() ) ss << "das_auto_cast<" << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
         }
         virtual ExpressionPtr visit(ExprReturn* expr) override {
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
