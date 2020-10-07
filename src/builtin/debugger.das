@@ -1,3 +1,5 @@
+options indenting = 4
+
 require debugapi
 
 require rtti public
