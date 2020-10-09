@@ -220,7 +220,7 @@ def each ( rng : range ) : iterator<int>
 
 def iter_range ( foo )
     concept_assert(typeinfo(is_iterable foo),"requires iterable")
-    return range(length(foo)) // assuming length(foo) exists
+    return range(_::length(foo)) // assuming length(foo) exists
 
 [generic,unsafe_operation]
 def each ( str : string ) : iterator<int>
