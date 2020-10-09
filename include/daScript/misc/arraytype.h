@@ -100,6 +100,7 @@ namespace das
     void array_unlock ( Context & context, Array & arr );
     void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride );
     void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero );
+    void array_grow ( Context & context, Array & arr, uint32_t newSize, uint32_t stride );  // always grows
     void array_clear ( Context & context, Array & arr );
 
     struct Table : Array {

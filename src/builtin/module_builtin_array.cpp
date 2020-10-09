@@ -28,35 +28,6 @@ namespace das {
         array_reserve( *context, pArray, newSize, stride );
     }
 
-    int builtin_array_push ( Array & pArray, int index, int stride, Context * context ) {
-        uint32_t idx = pArray.size;
-        array_resize(*context, pArray, idx + 1, stride, false);
-        if ( index >=0 ) {
-            if ( uint32_t(index) >= pArray.size ) {
-                context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-                return 0;
-            }
-            memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
-            idx = index;
-        }
-        return idx;
-    }
-
-    int builtin_array_push_zero ( Array & pArray, int index, int stride, Context * context ) {
-        uint32_t idx = pArray.size;
-        array_resize(*context, pArray, idx + 1, stride, false);
-        if ( index >=0 ) {
-            if ( uint32_t(index) >= pArray.size ) {
-                context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-                return 0;
-            }
-            memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
-            idx = index;
-        }
-        memset(pArray.data + idx*stride, 0, stride);
-        return idx;
-    }
-
     void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) {
         if ( uint32_t(index) >= pArray.size ) {
             context->throw_error_ex("erase index out of range, %u of %u", uint32_t(index), pArray.size);
@@ -92,6 +63,8 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve", SideEffects::modifyArgument, "builtin_array_reserve");
         addExtern<DAS_BIND_FUN(builtin_array_push)>(*this, lib, "__builtin_array_push", SideEffects::modifyArgument, "builtin_array_push");
         addExtern<DAS_BIND_FUN(builtin_array_push_zero)>(*this, lib, "__builtin_array_push_zero", SideEffects::modifyArgument, "builtin_array_push_zero");
+        addExtern<DAS_BIND_FUN(builtin_array_push_back)>(*this, lib, "__builtin_array_push_back", SideEffects::modifyArgument, "builtin_array_push_back");
+        addExtern<DAS_BIND_FUN(builtin_array_push_back_zero)>(*this, lib, "__builtin_array_push_back_zero", SideEffects::modifyArgument, "builtin_array_push_back_zero");
         addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase", SideEffects::modifyArgument, "builtin_array_erase");
         addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock", SideEffects::modifyArgumentAndExternal, "builtin_array_lock");
         addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock", SideEffects::modifyArgumentAndExternal, "builtin_array_unlock");

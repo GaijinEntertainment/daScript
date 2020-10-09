@@ -25,24 +25,42 @@ def resize(var Arr:array<auto(numT)>;newSize:int)
 def reserve(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_reserve(Arr,newSize,typeinfo(sizeof type<numT>))
 
-def push(var Arr:array<auto(numT)>;value:numT const;at:int=-1)
+def pop(var Arr:array<auto(numT)>)
+    resize(Arr, length(Arr)-1)  // resize will throw if negative
+
+def push(var Arr:array<auto(numT)>;value:numT const;at:int)
     static_if typeinfo(can_copy value)
         Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type<numT>))] = value
     else
         concept_assert(false,"can't push value, which can't be copied")
 
-def pop(var Arr:array<auto(numT)>)
-    resize(Arr, length(Arr)-1)  // resize will throw if negative
+def push(var Arr:array<auto(numT)>;value:numT const)
+    static_if typeinfo(can_copy value)
+        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof type<numT>))] = value
+    else
+        concept_assert(false,"can't push value, which can't be copied")
 
-def emplace(var Arr:array<auto(numT)>;var value:numT;at:int=-1)
+def emplace(var Arr:array<auto(numT)>;var value:numT;at:int)
     static_if typeinfo(can_move value)
         Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type<numT>))] <- value
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
-def push_clone(var Arr:array<auto(numT)>;value:numT;at:int=-1)
+def emplace(var Arr:array<auto(numT)>;var value:numT)
+    static_if typeinfo(can_move value)
+        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof type<numT>))] <- value
+    else
+        concept_assert(false,"can't emplace value, which can't be moved")
+
+def push_clone(var Arr:array<auto(numT)>;value:numT;at:int)
     static_if typeinfo(can_clone value)
         Arr[__builtin_array_push_zero(Arr,at,typeinfo(sizeof type<numT>))] := value
+    else
+        concept_assert(false,"can't push-clone value, which can't be moved")
+
+def push_clone(var Arr:array<auto(numT)>;value:numT)
+    static_if typeinfo(can_clone value)
+        Arr[__builtin_array_push_back_zero(Arr,typeinfo(sizeof type<numT>))] := value
     else
         concept_assert(false,"can't push-clone value, which can't be moved")
 
