@@ -112,10 +112,7 @@ namespace das {
     __forceinline int builtin_array_push ( Array & pArray, int index, int stride, Context * context ) {
         uint32_t idx = pArray.size;
         array_grow(*context, pArray, stride);
-        if ( uint32_t(index) >= pArray.size ) {
-            context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-            return 0;
-        }
+        if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
         memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
         return index;
     }
@@ -123,10 +120,7 @@ namespace das {
     __forceinline int builtin_array_push_zero ( Array & pArray, int index, int stride, Context * context ) {
         uint32_t idx = pArray.size;
         array_grow(*context, pArray, stride);
-        if ( uint32_t(index) >= pArray.size ) {
-            context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-            return 0;
-        }
+        if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
         memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
         memset ( pArray.data + index*stride, 0, stride );
         return index;
