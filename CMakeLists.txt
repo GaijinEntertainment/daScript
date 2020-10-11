@@ -570,7 +570,17 @@ ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)
 add_dependencies(daScriptProfile daScriptProfileAot dasAotStub)
 
-# tutorial 01
+# tutorial 00 - nano
+
+SET(TUTORIAL_00_SRC
+examples/tutorial/tutorial00.cpp
+)
+add_executable(tutorial00 ${TUTORIAL_00_SRC})
+TARGET_LINK_LIBRARIES(tutorial00 libDaScript)
+ADD_DEPENDENCIES(tutorial00 libDaScript)
+SETUP_CPP11(tutorial00)
+
+# tutorial 01 - all error checking, external files
 
 SET(TUTORIAL_01_SRC
 examples/tutorial/tutorial01.cpp

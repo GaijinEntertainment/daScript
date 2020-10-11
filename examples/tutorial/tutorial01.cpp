@@ -8,10 +8,9 @@ using namespace das;
 void tutorial () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
     ModuleGroup dummyLibGroup;                      // module group for compiled program
-    CodeOfPolicies policies;                        // compiler policies
     auto fAccess = make_smart<FsFileAccess>();      // default file access
     // compile program
-    auto program = compileDaScript(getDasRoot() + TUTORIAL_NAME, fAccess, tout, dummyLibGroup, false, policies);
+    auto program = compileDaScript(getDasRoot() + TUTORIAL_NAME, fAccess, tout, dummyLibGroup);
     if ( program->failed() ) {
         // if compilation failed, report errors
         tout << "failed to compile\n";

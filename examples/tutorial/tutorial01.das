@@ -1,4 +1,4 @@
 [export]
 def test
-    print("hello, world!\n")
+    print("this is basic tutorial with error checking and file access\n")
 
