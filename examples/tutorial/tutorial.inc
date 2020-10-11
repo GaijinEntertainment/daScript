@@ -1,10 +1,3 @@
-#include "daScript/daScript.h"
-#include "msvc32.inc"
-
-using namespace das;
-
-#define TUTORIAL_NAME   "/examples/tutorial/tutorial01.das"
-
 void tutorial () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
     ModuleGroup dummyLibGroup;                      // module group for compiled program
@@ -47,14 +40,4 @@ void tutorial () {
         tout << "exception: " << ex << "\n";
         return;
     }
-}
-
-int main( int, char * [] ) {
-    // request all da-script built in modules
-    NEED_ALL_DEFAULT_MODULES;
-    // run the tutorial
-    tutorial();
-    // shut-down daScript, free all memory
-    Module::Shutdown();
-    return 0;
 }

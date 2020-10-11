@@ -1,17 +1,17 @@
 #include "daScript/daScript.h"
 #include "msvc32.inc"
 
+using namespace das;
+
 const char * tutorial_text = R""""(
 [export]
 def test
     print("this is nano tutorial\n")
 )"""";
 
-using namespace das;
-
 int main( int, char * [] ) {
     // request all da-script built in modules
-    NEED_ALL_DEFAULT_MODULES
+    NEED_ALL_DEFAULT_MODULES;
     // make file access, introduce string as if it was a file
     auto fAccess = make_smart<FsFileAccess>();
     auto fileInfo = make_unique<FileInfo>(tutorial_text, uint32_t(strlen(tutorial_text)));
