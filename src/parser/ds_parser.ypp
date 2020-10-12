@@ -1481,7 +1481,6 @@ expr_field
         delete $name;
     }
     |   expr[subexpr] '.'[loc] { das_supress_errors=true; } error { das_supress_errors=false; } {
-        printf("here\n");
         $$ = new ExprField(tokAt(@loc), tokAt(@loc), ExpressionPtr($subexpr), "");
         yyerrok;
     }
