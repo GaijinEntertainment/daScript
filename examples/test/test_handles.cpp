@@ -519,6 +519,19 @@ public:
     virtual bool isIndexMutable ( const TypeDeclPtr & ) const override { return true; }
 };
 
+MAKE_TYPE_FACTORY(EntityId,EntityId);
+
+struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
+    EntityIdAnnotation() : ManagedValueAnnotation  ("EntityId","EntityId") {}
+    virtual void walk ( das::DataWalker & walker, void * data ) override {
+        if ( !walker.reading ) {
+            const EntityId * t = (EntityId *) data;
+            int32_t eidV = t->value;
+            walker.Int(eidV);
+        }
+    }
+};
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -643,7 +656,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // table mojo
     addExtern<DAS_BIND_FUN(tableMojo)>(*this, lib, "tableMojo",
         SideEffects::modifyExternal, "tableMojo");
-
+    // EntityId
+    addAnnotation(make_smart<EntityIdAnnotation>());
+    addExtern<DAS_BIND_FUN(make_invalid_id)>(*this, lib, "make_invalid_id",
+        SideEffects::none, "make_invalid_id");
     // and verify
     verifyAotReady();
 }

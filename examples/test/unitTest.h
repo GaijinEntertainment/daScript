@@ -198,3 +198,22 @@ __forceinline SampleVariant makeSampleS() {
 __forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg->line : 0; }
 
 void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context );
+
+struct EntityId {
+    int32_t value;
+    EntityId() : value(0) {}
+    EntityId( const EntityId & t ) : value(t.value) {}
+    EntityId( int32_t t ) : value(t) {}
+    EntityId & operator = ( const EntityId & t ) { value = t.value; return * this; }
+};
+
+namespace das {
+    template <>
+    struct cast<EntityId> {
+        static __forceinline EntityId to ( vec4f x )            { return EntityId(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( EntityId x )          { return v_cast_vec4f(v_splatsi(x.value)); }
+    };
+}
+__forceinline EntityId make_invalid_id() {
+    return EntityId(-1);
+}
