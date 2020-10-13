@@ -105,6 +105,7 @@ namespace das
         virtual void walk(DataWalker & walker, void * data) override;
         int32_t fieldCount() const { return int32_t(fields.size()); }
         das_map<string,StructureField> fields;
+        vector<string>                 fieldsInOrder;
         DebugInfoHelper            helpA;
         StructInfo *               sti = nullptr;
         ModuleLibrary *            mlib = nullptr;

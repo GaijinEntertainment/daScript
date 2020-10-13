@@ -105,6 +105,7 @@ namespace das {
             DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
             DAS_FATAL_ERROR;
         }
+        fieldsInOrder.push_back(na);
         field.cppName = cppNa;
         field.decl = pT;
         field.offset = offset;
@@ -156,12 +157,12 @@ namespace das {
             sti->size = (uint32_t) getSizeOf();
             sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
             int i = 0;
-            for ( auto & fi : fields ) {
-                auto & var = fi.second;
+            for ( const auto & fn : fieldsInOrder ) {
+                auto & var = fields[fn];
                 if ( var.offset != -1U ) {
                     VarInfo * vi = debugInfo->template makeNode<VarInfo>();
                     helpA.makeTypeInfo(vi, var.decl);
-                    vi->name = debugInfo->allocateName(fi.first);
+                    vi->name = debugInfo->allocateName(fn);
                     vi->offset = var.offset;
                     sti->fields[i++] = vi;
                 }

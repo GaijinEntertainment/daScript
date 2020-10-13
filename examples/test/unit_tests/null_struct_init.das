@@ -1,7 +1,7 @@
 require UnitTest
 
 typedef
-    EntityId = int
+    EntityIdDummy = int
 
 [event]
 struct NullEvent {}
@@ -17,7 +17,7 @@ def ecs_hash(name)
     return hash(name)
 
 [generic]
-def sendEvent ( eid:EntityId const; var evt)
+def sendEvent ( eid:EntityIdDummy const; var evt)
     concept_assert(typeinfo(struct_has_annotation<cpp_event> evt) || typeinfo(struct_has_annotation<event> evt), "Event type should be struct with event or cpp_event annotations, and it is not <{typename(evt)}>")
     concept_assert(typeinfo(struct_has_annotation<cpp_event> evt) || typeinfo(is_raw evt), "We currently don't support non blob das events")
     if (typeinfo(struct_has_annotation<cpp_event> evt) || typeinfo(struct_has_annotation<event> evt))

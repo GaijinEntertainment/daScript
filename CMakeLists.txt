@@ -590,7 +590,7 @@ examples/tutorial/tutorial01.das
 )
 DAS_TUTORIAL(tutorial01 "${TUTORIAL_01_SRC}")
 
-# tutorial 01 - all error checking, external files
+# tutorial 02 - module, function, constant
 SET(TUTORIAL_02_SRC
 examples/tutorial/tutorial.inc
 examples/tutorial/tutorial02.cpp
@@ -598,3 +598,10 @@ examples/tutorial/tutorial02.das
 )
 DAS_TUTORIAL(tutorial02 "${TUTORIAL_02_SRC}")
 
+# tutorial 03 - custom type
+SET(TUTORIAL_03_SRC
+examples/tutorial/tutorial.inc
+examples/tutorial/tutorial03.cpp
+examples/tutorial/tutorial03.das
+)
+DAS_TUTORIAL(tutorial03 "${TUTORIAL_03_SRC}")
