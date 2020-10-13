@@ -1491,6 +1491,7 @@ namespace das {
                 } else {
                     TypeDecl::applyAutoContracts(varT, arg->type);
                     arg->type = varT;
+                    arg->type->ref = false; // so that def ( a = VAR ) infers as def ( a : var_type ), not as def ( a : var_type & )
                     reportAstChanged();
                     return Visitor::visitArgumentInit(f, arg, that);
                 }
@@ -3552,6 +3553,7 @@ namespace das {
                 } else {
                     TypeDecl::applyAutoContracts(argT, arg->type);
                     arg->type = argT;
+                    arg->type->ref = false; // so that def ( a = VAR ) infers as def ( a : var_type ), not as def ( a : var_type & )
                     reportAstChanged();
                     return Visitor::visitBlockArgumentInit(block, arg, that);
                 }
