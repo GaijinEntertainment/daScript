@@ -37,7 +37,7 @@ def JV ( v : double )
 def JV ( v : bool )
     return new [[JsonValue value <- [[JsValue _bool = v]]]]
 
-def JVNULL
+def JV ( v : void? )
     return new [[JsonValue value <- [[JsValue _null = null]]]]
 
 def JV ( var v : table<string;JsonValue?> )
@@ -233,7 +233,7 @@ def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
     elif ahead is _bool
         return JV(ahead as _bool)
     elif ahead is _null
-        return JVNULL()
+        return JV(null)
     else
         error = "{ahead}"
         return null

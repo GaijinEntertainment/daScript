@@ -328,9 +328,9 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
     list(APPEND ${genList} ${out_src})
 ENDMACRO()
 
-MACRO(DAS_AOT_DIR inFiles genList mainTarget)
+MACRO(DAS_AOT_DIR inFiles genList mainTarget dasAotTool)
     FOREACH(inF ${inFiles})
-        DAS_AOT(${inF} ${genList} ${mainTarget}  dasAot)
+        DAS_AOT(${inF} ${genList} ${mainTarget} ${dasAotTool})
     ENDFOREACH()
 ENDMACRO()
 
@@ -518,8 +518,8 @@ SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
 
 add_custom_target(daScriptTestAot)
 SET(TEST_GENERATED_SRC)
-DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot)
-#DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC daScriptTestAot)
+DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot dasAot)
+#DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC daScriptTestAot dasAot)
 SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
@@ -560,7 +560,7 @@ SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
 
 add_custom_target(daScriptProfileAot)
 SET(PROFILE_GENERATED_SRC)
-DAS_AOT_DIR("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot)
+DAS_AOT_DIR("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot dasAot)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC} ${AOT_GENERATED_SRC})
