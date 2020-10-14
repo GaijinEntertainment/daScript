@@ -16,6 +16,7 @@ namespace das
     };
 
     void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+        if ( length<=1 ) return;
         vec4f bargs[2];
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
             das_qsort_r(anyData, length, elementSize, [&](const void * x, const void * y){
@@ -27,6 +28,7 @@ namespace das
     }
 
     void builtin_sort_string ( void * data, int32_t length ) {
+        if ( length<=1 ) return;
         const char ** pdata = (const char **) data;
         sort ( pdata, pdata + length, [&](const char * a, const char * b){
             return strcmp(to_rts(a), to_rts(b))<0;

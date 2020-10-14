@@ -55,7 +55,7 @@ namespace das {
 
     template <typename TT>
     __forceinline void builtin_sort ( TT * data, int32_t length ) {
-        sort ( data, data + length );
+        if ( length>1 ) sort ( data, data + length );
     }
 
     void builtin_sort_string ( void * data, int32_t length );
@@ -63,6 +63,7 @@ namespace das {
 
     template <typename TT>
     void builtin_sort_cblock ( TT * data, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context ) {
+        if ( length<=1 ) return;
         vec4f bargs[2];
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
             sort ( data, data+length, [&](TT x, TT y) -> bool {
