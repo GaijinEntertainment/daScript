@@ -386,6 +386,7 @@ namespace das {
                         return nullptr;
                     }
                 }
+                if ( !resT->firstType ) return nullptr;
                 resT->firstType = inferAlias(decl->firstType,fptr,aliases);
                 if ( !resT->firstType ) return nullptr;
             } else if ( decl->baseType==Type::tVariant || decl->baseType==Type::tTuple ) {
@@ -1259,7 +1260,7 @@ namespace das {
                     decl.type->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined type " + decl.type->describe(),  "", "",
+                    error("undefined structure field type " + decl.type->describe(),  "", "",
                         decl.at, CompilationError::invalid_structure_field_type );
                 }
             }
@@ -1367,7 +1368,7 @@ namespace das {
                     var->type = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined type " + var->type->describe(),  "", "",
+                    error("undefined global variable type " + var->type->describe(),  "", "",
                         var->at, CompilationError::invalid_type );
                 }
             }
@@ -1473,7 +1474,7 @@ namespace das {
                     var->type = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined type " + var->type->describe(),  "", "",
+                    error("undefined function argument type " + var->type->describe(),  "", "",
                         var->at, CompilationError::type_not_found );
                 }
             }
@@ -1533,7 +1534,7 @@ namespace das {
                     func->result->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined type " + func->result->describe(),  "", "",
+                    error("undefined function result type " + func->result->describe(),  "", "",
                         func->at, CompilationError::type_not_found );
                 }
             }
@@ -1734,7 +1735,7 @@ namespace das {
                         expr->funcType = aT;
                         reportAstChanged();
                     } else {
-                        error("undefined type " + expr->funcType->describe(),  "", "",
+                        error("undefined address expression type " + expr->funcType->describe(),  "", "",
                             expr->at, CompilationError::type_not_found);
                         return Visitor::visit(expr);
                     }
@@ -1971,7 +1972,7 @@ namespace das {
                     expr->iterType = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined type " + expr->iterType->describe(),  "", "",
+                    error("undefined generator type " + expr->iterType->describe(),  "", "",
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -2422,7 +2423,7 @@ namespace das {
                     reportAstChanged();
                     return Visitor::visit(expr);
                 } else {
-                    error("undefined type " + expr->typeexpr->describe(), "", "",
+                    error("undefined is expression type " + expr->typeexpr->describe(), "", "",
                           expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -2472,7 +2473,7 @@ namespace das {
                     reportAstChanged();
                     return Visitor::visit(expr);
                 } else {
-                    error("undefined type " + expr->typeexpr->describe(), "", "",
+                    error("undefined typeinfo type expression type " + expr->typeexpr->describe(), "", "",
                           expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -3058,7 +3059,7 @@ namespace das {
                     expr->castType->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined type " + expr->castType->describe(),  "", "",
+                    error("undefined cast type " + expr->castType->describe(),  "", "",
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -3159,7 +3160,7 @@ namespace das {
                     expr->typeexpr->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined type " + expr->typeexpr->describe(), "", "",
+                    error("undefined new expression type " + expr->typeexpr->describe(), "", "",
                           expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -3529,7 +3530,7 @@ namespace das {
                     var->type = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined type " + var->type->describe(),  "", "",
+                    error("undefined block argument type " + var->type->describe(),  "", "",
                         var->at, CompilationError::type_not_found);
                 }
             }
@@ -4967,7 +4968,7 @@ namespace das {
                     var->type->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined type " + var->type->describe(), "", "",
+                    error("undefined let type " + var->type->describe(), "", "",
                         var->at, CompilationError::type_not_found);
                 }
             }
@@ -5860,7 +5861,7 @@ namespace das {
                     expr->makeType = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined type " + expr->makeType->describe(),  "", "",
+                    error("undefined [[ ]] expression type " + expr->makeType->describe(),  "", "",
                         expr->makeType->at, CompilationError::type_not_found );
                 }
             }

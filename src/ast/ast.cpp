@@ -2250,7 +2250,7 @@ namespace das {
             candidates += describeCandidates(handles, false);
             candidates += describeCandidates(enums, false);
             candidates += describeCandidates(aliases, false);
-            error("undefined type "+name,candidates,"",
+            error("undefined make type declaration type "+name,candidates,"",
                 at,CompilationError::type_not_found);
             return nullptr;
         } else if ( structs.size() ) {
