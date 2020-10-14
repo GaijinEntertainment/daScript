@@ -305,7 +305,7 @@ ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDa
 SETUP_CPP11(dasAot)
 SETUP_LTO(dasAot)
 
-MACRO(DAS_AOT input genList mainTarget)
+MACRO(DAS_AOT input genList mainTarget dasAotTool)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
@@ -314,10 +314,10 @@ MACRO(DAS_AOT input genList mainTarget)
     file(MAKE_DIRECTORY ${out_dir})
 	ADD_CUSTOM_COMMAND(
 		DEPENDS ${input_src}
-        DEPENDS dasAot
+        DEPENDS ${dasAotTool}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND dasAot ${input_src} ${out_src}
+        COMMAND ${dasAotTool} ${input_src} ${out_src}
     )
     set(custom_name ${mainTarget}_${input_name}_aot)
     ADD_CUSTOM_TARGET(${custom_name}
@@ -330,22 +330,22 @@ ENDMACRO()
 
 MACRO(DAS_AOT_DIR inFiles genList mainTarget)
     FOREACH(inF ${inFiles})
-        DAS_AOT(${inF} ${genList} ${mainTarget})
+        DAS_AOT(${inF} ${genList} ${mainTarget}  dasAot)
     ENDFOREACH()
 ENDMACRO()
 
 add_custom_target(dasAotStub)
 SET(AOT_GENERATED_SRC)
-DAS_AOT("examples/test/aot_dummy.das" AOT_GENERATED_SRC dasAotStub)
-DAS_AOT("daslib/ast_boost.das" AOT_GENERATED_SRC dasAotStub)
-DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub)
-DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub)
-DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub)
-DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub)
-DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub)
-DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub)
-# DAS_AOT("daslib/rst.das" AOT_GENERATED_SRC dasAotStub)
-# DAS_AOT("daslib/cpp_bind.das" AOT_GENERATED_SRC dasAotStub)
+DAS_AOT("examples/test/aot_dummy.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/ast_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
+# DAS_AOT("daslib/rst.das" AOT_GENERATED_SRC dasAotStub  dasAot)
+# DAS_AOT("daslib/cpp_bind.das" AOT_GENERATED_SRC dasAotStub  dasAot)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 
 # libUriParser
@@ -426,7 +426,7 @@ SOURCE_GROUP_FILES("source" PATH_TRACER_MAIN_SRC)
 
 add_custom_target(pathTracerAot)
 SET(PATH_TRACER_GEN_SRC)
-DAS_AOT(examples/pathTracer/toy_path_tracer.das PATH_TRACER_GEN_SRC pathTracerAot)
+DAS_AOT(examples/pathTracer/toy_path_tracer.das PATH_TRACER_GEN_SRC pathTracerAot dasAot)
 SOURCE_GROUP_FILES("generated" PATH_TRACER_GEN_SRC)
 
 add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} ${PATH_TRACER_GEN_SRC} ${AOT_GENERATED_SRC})
@@ -577,20 +577,26 @@ MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
     SETUP_CPP11(${tutorial_name})
 ENDMACRO()
 
+####################
 # tutorial 00 - nano
+####################
 SET(TUTORIAL_00_SRC
 examples/tutorial/tutorial00.cpp
 )
 DAS_TUTORIAL(tutorial00 "${TUTORIAL_00_SRC}")
 
+##################################################
 # tutorial 01 - all error checking, external files
+##################################################
 SET(TUTORIAL_01_SRC
 examples/tutorial/tutorial01.cpp
 examples/tutorial/tutorial01.das
 )
 DAS_TUTORIAL(tutorial01 "${TUTORIAL_01_SRC}")
 
+##########################################
 # tutorial 02 - module, function, constant
+##########################################
 SET(TUTORIAL_02_SRC
 examples/tutorial/tutorial.inc
 examples/tutorial/tutorial02.cpp
@@ -598,7 +604,45 @@ examples/tutorial/tutorial02.das
 )
 DAS_TUTORIAL(tutorial02 "${TUTORIAL_02_SRC}")
 
+##########################################################
+# tutorial 02 AOT - same as tutorial02, only setup for AOT
+##########################################################
+
+### 1. setup custom AOT utility
+SET(TUTORIAL_02_DASAOT_MAIN_SRC
+examples/tutorial/tutorial02_dasaot.cpp
+examples/tutorial/tutorial02aot.h
+examples/tutorial/tutorial02module.cpp
+utils/dasAot/main.cpp
+)
+add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
+target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=das_aot_main)
+TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser)
+SETUP_CPP11(tutorial02_dasAot)
+SETUP_LTO(tutorial02_dasAot)
+
+### 2. setup aot target for the tutorial
+add_custom_target(tutorial02_dasAotStub)
+SET(TUTORIAL_02_AOT_GENERATED_SRC)
+DAS_AOT("examples/tutorial/tutorial02.das" TUTORIAL_02_AOT_GENERATED_SRC tutorial02_dasAotStub tutorial02_dasAot)
+
+### setup main tutorial executable
+SET(TUTORIAL_02_AOT_SRC
+examples/tutorial/tutorial02aot.cpp
+examples/tutorial/tutorial02aot.h
+examples/tutorial/tutorial02module.cpp
+examples/tutorial/tutorial02.das
+)
+add_executable(tutorial02aot ${TUTORIAL_02_AOT_SRC} ${TUTORIAL_02_AOT_GENERATED_SRC})
+target_include_directories(tutorial02aot PUBLIC ${CMAKE_SOURCE_DIR}/examples/tutorial)
+TARGET_LINK_LIBRARIES(tutorial02aot libDaScript)
+ADD_DEPENDENCIES(tutorial02aot libDaScript tutorial02_dasAotStub)
+SETUP_CPP11(tutorial02aot)
+
+###########################
 # tutorial 03 - custom type
+###########################
 SET(TUTORIAL_03_SRC
 examples/tutorial/tutorial.inc
 examples/tutorial/tutorial03.cpp
