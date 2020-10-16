@@ -125,7 +125,14 @@ namespace das {
     // at
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
+            if ( expr->subexpr->type->isHandle() && expr->subexpr->type->annotation->isIndexMutable(expr->index->type.get()) ) {
+                expr->noSideEffects = false;
+            } else if ( expr->subexpr->type->isGoodTableType() ) {
+                expr->noSideEffects = false;
+            } else {
+                expr->noSideEffects = true;
+            }
+            // expr->noSideEffects = true; // !expr->write;
             expr->noNativeSideEffects = true;
         }
     // at

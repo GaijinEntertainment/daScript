@@ -113,9 +113,10 @@ namespace das {
         void propagateAt ( ExprAt * at ) {
             if ( at->subexpr->type->isHandle() && at->subexpr->type->annotation->isIndexMutable(at->index->type.get()) ) {
                 propagateWrite(at->subexpr.get());
+            } else if ( at->subexpr->type->isGoodTableType() ) {
+                propagateWrite(at->subexpr.get());  // note: this makes it so tab[foo] modifies itself
             } else {
                 propagateRead(at->subexpr.get());
-                // propagateWrite(at->subexpr.get()); // note: this makes it so a[foo] modifies itself
             }
             propagateRead(at->index.get());
         }

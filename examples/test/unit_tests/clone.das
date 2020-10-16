@@ -55,7 +55,7 @@ def test_clone_array
     for t in range(3)
         x[t] = t + 1
     for t in range(3)
-        assert(y[t]==t)
+        verify(y[t]==t)
 
 [sideeffects]
 def test_clone_table
@@ -67,7 +67,7 @@ def test_clone_table
         x[t] = string(t+1)
     assert(length(y)==3)
     for t in range(3)
-        assert(y[t]==string(t))
+        verify(y[t]==string(t))
 
 [export]
 def test

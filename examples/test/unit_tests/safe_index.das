@@ -37,7 +37,7 @@ def test()
     assert(dummy==1)
     ta["one"] = 0
     ta?["one"] ?? dummy = 2
-    assert(length(ta)==1 && ta["one"]==2)
+    verify(length(ta)==1 && ta["one"]==2)
     assert(dummy==1)
 
     var pta = safe_addr(ta)
@@ -48,7 +48,7 @@ def test()
     assert(length(ta)==0)
     ta["one"] = 1
     pta?["one"] ?? dummy = 2
-    assert(length(ta)==1 && ta["one"]==2)
+    verify(length(ta)==1 && ta["one"]==2)
     assert(dummy==1)
     pta = null
     pta?["one"] ?? dummy = 3

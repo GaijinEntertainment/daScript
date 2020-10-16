@@ -46,7 +46,7 @@ def test : bool
     // debug(tab)
     i = 0
     while i!=total
-        assert(tab[string(i)]==i)
+        verify(tab[string(i)]==i)
         i++
     assert(length(tab)==total)
     // debug(tab)
@@ -105,7 +105,7 @@ def test : bool
     // debug(tab)
     i = 0
     while i!=total
-        assert(tab[string(i)]==i)
+        verify(tab[string(i)]==i)
         i++
     assert(length(tab)==total)
     // debug(tab)
@@ -148,7 +148,7 @@ def test : bool
     assert(!key_exists(tab_string, " "))
     tab_string[""] = -2
     assert(key_exists(tab_string, ""))
-    assert(tab_string[""] == -2)
+    verify(tab_string[""] == -2)
     erase(tab_string, "")
     assert(!key_exists(tab_string, ""))
 
