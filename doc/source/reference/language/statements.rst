@@ -323,11 +323,11 @@ try/recover
 
     stat ::= 'try' stat 'recover' visibility-block
 
-The try statement encloses a block of code in which an exceptional condition can occur,
-such as a runtime error or a panic function. The catch clause provides the exception-handling
+The try statement encloses a block of code in which an panic condition can occur,
+such as a fatal runtime error or a panic function. The try-recover clause provides the panic-handling
 code.
 
-It is important to understand that try/recover is not a correct error handling code.
+It is important to understand that try/recover is not a correct error handling code, and definetly not a way to implement control-flow.
 Much like in GO lang, this is really invalid situation which should not normally happen in the production environment.
 Examples of potential exceptions are: dereferencing null pointer, indexing array out of bounds, etc.
 
