@@ -649,3 +649,18 @@ examples/tutorial/tutorial03.cpp
 examples/tutorial/tutorial03.das
 )
 DAS_TUTORIAL(tutorial03 "${TUTORIAL_03_SRC}")
+
+#################################
+# tutorial 04 - C++ class adapter
+#################################
+SET(TUTORIAL_04_SRC
+examples/tutorial/tutorial.inc
+examples/tutorial/tutorial04.cpp
+examples/tutorial/tutorial04.das
+examples/tutorial/tutorial04module.das
+examples/tutorial/tutorial04module.das.inc
+)
+DAS_TUTORIAL(tutorial04 "${TUTORIAL_04_SRC}")
+target_include_directories(tutorial04 PUBLIC ${CMAKE_SOURCE_DIR}/src/builtin)   # we need RTTI to bind StructInfo and such
+XXD(examples/tutorial/tutorial04module.das)
+
