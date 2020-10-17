@@ -42,6 +42,7 @@ float3 tick ( float dt ) {
 #include "tutorial04_gen.inc"
 
 // here we derive both from the original base class, as well as generated adapter
+// functions in the generated adapter require classPtr and context to be invoked
 class BaseClassAdapter : public BaseClass, public TutorialBaseClass {
 public:
     // in the constructor we store pointer to the original class and context
@@ -69,6 +70,7 @@ protected:
     Context *   context;    // stored pointer to the daScript context (its optional, if we know the context by other means)
 };
 
+// we expose this function to das, so that it can 'register' derived classes with C++
 void addObject ( const void * pClass, const StructInfo * info, Context * context ) {
     auto obj = make_shared<BaseClassAdapter>((char *)pClass,info,context);
     g_allObjects.emplace_back(obj);
@@ -85,12 +87,13 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         lib.addModule(Module::require("rtti"));     // we add RTTI to ModuleLibrary so that we can bind addObject
-        // register functions to manipulate base class
+        // add_object is how daScript will 'register' objects with C++
         addExtern<DAS_BIND_FUN(addObject)>(*this, lib, "add_object",
             SideEffects::modifyExternal, "addObject");
+        // expose tick to daScript, for the purposes of example
         addExtern<DAS_BIND_FUN(tick)>(*this, lib, "tick",
             SideEffects::modifyExternal, "tick");
-        // add builtin module
+        // add builtin module (tutorial04module.das is converted to .das.inc file and included as embedded string)
         compileBuiltinModule("tutorial04module.das",tutorial04module_das,sizeof(tutorial04module_das));
     }
 };

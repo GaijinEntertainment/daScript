@@ -1,6 +1,7 @@
 require tutorial_04
 
 // uncomment the section to generate C++ bindings for the TutorialBaseClass
+// this code will generate tutorial04_gen.inc which contains C++ bindings
 /*
 require fio
 require ast
