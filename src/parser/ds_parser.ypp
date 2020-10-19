@@ -1791,6 +1791,12 @@ struct_variable_declaration_list
         }
         $$ = $list;
     }
+    |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
+        das_yyerror("Structure field or class method annotation expected to remain on the same line with field or class.",
+            tokAt(@annL), CompilationError::syntax_error);
+        delete $annL;
+        $$ = $list;
+    }
     ;
 
 function_argument_declaration
