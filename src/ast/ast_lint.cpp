@@ -67,6 +67,7 @@ namespace das {
         bool checkNoGlobalHeap;
         bool checkNoGlobalVariables;
         bool checkUnusedArgument;
+        bool checkUnusedBlockArgument;
         bool checkUnsafe;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
@@ -75,6 +76,7 @@ namespace das {
             checkNoGlobalHeap = program->options.getBoolOption("no_global_heap", program->policies.no_global_heap);
             checkNoGlobalVariables = program->options.getBoolOption("no_global_variables", program->policies.no_global_variables);
             checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
+            checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe;
         }
     protected:
@@ -314,6 +316,13 @@ namespace das {
                 program->error("invalid block argument variable name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
             }
+            if ( checkUnusedBlockArgument ) {
+                if ( !var->marked_used && var->isAccessUnused() ) {
+                    program->error("unused block argument " + var->name, "",
+                          "use [unused_argument(" + var->name + ")] if intentional",
+                        var->at, CompilationError::unused_block_argument);
+                }
+            }
         }
     public:
         ProgramPtr program;
@@ -332,6 +341,7 @@ namespace das {
         "no_global_heap",               Type::tBool,
         "no_global_variables",          Type::tBool,
         "no_unused_function_arguments", Type::tBool,
+        "no_unused_block_arguments",    Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,

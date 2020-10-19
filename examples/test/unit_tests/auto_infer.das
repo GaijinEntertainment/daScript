@@ -1,6 +1,8 @@
 // options optimize=false, log=true
 // options log_infer_passes=true
 
+options no_unused_block_arguments = true
+
 options no_unused_function_arguments = false
 
 struct Foo
@@ -108,7 +110,7 @@ def test
     let ZZA = [[auto[] "two"=>2]]
     assert(typeinfo(is_dim ZZA) && typeinfo(dim ZZA)==1)
     // infering block goo
-    qq(1,$(XX,YY) => true,2.0)
+    qq(1,$ [unused_argument(XX,YY)] (XX,YY) => true,2.0)
     return true
 
 def fn3

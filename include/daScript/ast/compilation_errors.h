@@ -140,6 +140,7 @@ namespace das
     ,   no_global_variables                     =   40205       // var a = ...
     ,   unused_function_argument                =   40206       // def foo ( a ) ..... /* no a here */
     ,   unsafe_function                         =   40207       // [unsafe] when code of policies prohibits
+    ,   unused_block_argument                   =   40208       // foo() <| $ ( a ) ..... /* no a here */
 
     ,   too_many_infer_passes                   =   41000
 

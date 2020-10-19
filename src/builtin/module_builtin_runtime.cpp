@@ -142,6 +142,14 @@ namespace das
             }
             return true;
         };
+        virtual bool apply(ExprBlock * block, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
+            for ( auto & bArg : block->arguments ) {
+                if ( auto optArg = args.find(bArg->name, Type::tBool) ) {
+                    bArg->marked_used = optArg->bValue;
+                }
+            }
+            return true;
+        };
     };
 
     // totally dummy annotation, needed for comments
