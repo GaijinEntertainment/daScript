@@ -883,6 +883,15 @@ namespace das {
     };
 
     template <typename TT>
+    struct TSequence : Sequence {
+        __forceinline TSequence () { this->iter = nullptr; }
+        __forceinline TSequence ( Sequence && s ) { this->iter = s.iter; s.iter = nullptr; }
+        __forceinline TSequence ( const Sequence & s ) { this->iter = s.iter; }
+        __forceinline TSequence<TT> & operator = ( Sequence && s ) { this->iter = s.iter; s.iter = nullptr;return *this; }
+        __forceinline TSequence<TT> & operator = ( const Sequence & s ) { this->iter = s.iter; return *this; }
+    };
+
+    template <typename TT>
     struct das_iterator;
 
     template <>
@@ -2118,6 +2127,54 @@ namespace das {
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,sizeof(TV));
         return thh.erase(tab, key, hfn) != -1;
+    }
+
+    template <typename VectorType>
+    struct StdVectorIterator : Iterator {
+        using OT = typename VectorType::value_type;
+        StdVectorIterator  ( VectorType * ar ) : array(ar) {}
+        virtual bool first ( Context &, char * _value ) override {
+            char ** value = (char **) _value;
+            char * data     = (char *) array->data();
+            uint32_t size   = (uint32_t) array->size();
+            *value          = data;
+            array_end       = data + size * sizeof(OT);
+            return (bool) size;
+        }
+        virtual bool next  ( Context &, char * _value ) override {
+            char ** value = (char **) _value;
+            char * data = *value + sizeof(OT);
+            *value = data;
+            return data != array_end;
+        }
+        virtual void close ( Context & context, char * _value ) override {
+            if ( _value ) {
+                char ** value = (char **) _value;
+                *value = nullptr;
+            }
+            context.heap->free((char *)this, sizeof(StdVectorIterator));
+        }
+        VectorType * array;
+        char * array_end = nullptr;
+    };
+
+    template <typename TT>
+    Sequence das_vector_each_sequence ( const vector<TT> & vec, Context * context ) {
+        using VectorIterator = StdVectorIterator<vector<TT>>;
+        char * iter = context->heap->allocate(sizeof(VectorIterator));
+        context->heap->mark_comment(iter, "std::vector<> iterator");
+        new (iter) VectorIterator((vector<TT> *)&vec);
+        return { (Iterator *) iter };
+    }
+
+    template <typename TT>
+    __forceinline TSequence<TT &> das_vector_each ( vector<TT> & vec, Context * context ) {
+        return das_vector_each_sequence(vec,context);
+    }
+
+    template <typename TT>
+    __forceinline TSequence<const TT &> das_vector_each_const ( const vector<TT> & vec, Context * context ) {
+        return das_vector_each_sequence(vec,context);
     }
 
     template <typename TT, typename QQ>

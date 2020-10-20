@@ -394,6 +394,19 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct TSequence;
+
+    template <typename TT>
+    struct typeFactory<TSequence<TT>> {
+        static TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_smart<TypeDecl>(Type::tIterator);
+            t->firstType = typeFactory<TT>::make(lib);
+            return t;
+        }
+    };
+
+
     template <typename TT, int dim>
     struct typeFactory<TT[dim]> {
         static TypeDeclPtr make(const ModuleLibrary & lib) {

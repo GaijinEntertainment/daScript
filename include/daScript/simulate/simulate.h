@@ -689,7 +689,7 @@ namespace das
     };
 
     struct Sequence {
-        mutable Iterator * iter;
+        mutable Iterator * iter = nullptr;
     };
 
 #if DAS_ENABLE_PROFILER

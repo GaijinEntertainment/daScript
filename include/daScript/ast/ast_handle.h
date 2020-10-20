@@ -281,32 +281,6 @@ namespace das
             DAS_EVAL_NODE
 #undef EVAL_NODE
         };
-        struct VectorIterator : Iterator {
-            VectorIterator  ( VectorType * ar ) : array(ar) {}
-            virtual bool first ( Context &, char * _value ) override {
-                char ** value = (char **) _value;
-                char * data     = (char *) array->data();
-                uint32_t size   = (uint32_t) array->size();
-                *value          = data;
-                array_end       = data + size * sizeof(OT);
-                return (bool) size;
-            }
-            virtual bool next  ( Context &, char * _value ) override {
-                char ** value = (char **) _value;
-                char * data = *value + sizeof(OT);
-                *value = data;
-                return data != array_end;
-            }
-            virtual void close ( Context & context, char * _value ) override {
-                if ( _value ) {
-                    char ** value = (char **) _value;
-                    *value = nullptr;
-                }
-                context.heap->free((char *)this, sizeof(VectorIterator));
-            }
-            VectorType * array;
-            char * array_end = nullptr;
-        };
         ManagedVectorAnnotation(const string & n, ModuleLibrary & lib)
             : TypeAnnotation(n) {
                 vecType = makeType<OT>(lib);
@@ -371,7 +345,7 @@ namespace das
 
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
             auto rv = src->simulate(context);
-            return context.code->makeNode<SimNode_AnyIterator<VectorType,VectorIterator>>(at, rv);
+            return context.code->makeNode<SimNode_AnyIterator<VectorType,StdVectorIterator<VectorType>>>(at, rv);
         }
         virtual SimNode * simulateGetField ( const string & na, Context & context,
                                             const LineInfo & at, const ExpressionPtr & value ) const override {
@@ -421,6 +395,7 @@ namespace das
     template <typename TT, bool byValue = has_cast<TT>::value >
     struct registerVectorFunctions;
 
+
     template <typename TT>
     struct registerVectorFunctions<TT,false> {
         static void init ( Module * mod, const ModuleLibrary & lib ) {
@@ -432,6 +407,10 @@ namespace das
                 SideEffects::modifyArgument, "das_vector_clear")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
                 SideEffects::modifyArgument, "das_vector_resize")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove>(*mod, lib, "each",
+                SideEffects::none, "das_vector_each")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove>(*mod, lib, "each",
+                SideEffects::none, "das_vector_each_const")->generated = true;
         }
     };
 
@@ -446,6 +425,10 @@ namespace das
                 SideEffects::modifyArgument, "das_vector_clear")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
                 SideEffects::modifyArgument, "das_vector_resize")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove>(*mod, lib, "each",
+                SideEffects::none, "das_vector_each")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove>(*mod, lib, "each",
+                SideEffects::none, "das_vector_each_const")->generated = true;
         }
     };
 
