@@ -963,6 +963,7 @@ namespace das
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
+        bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
     // debugger
         //  when enabled
         //      1. disables [fastcall]

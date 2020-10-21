@@ -1,3 +1,5 @@
+options remove_unused_symbols = false
+
 require _module_a
 
 var

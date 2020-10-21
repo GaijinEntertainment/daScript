@@ -42,6 +42,7 @@ bool compile ( const string & fn, const string & cppFn ) {
     ModuleGroup dummyGroup;
     bool firstError = true;
     CodeOfPolicies policies;
+    policies.fail_on_lack_of_aot_export = true;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {
             if (json)

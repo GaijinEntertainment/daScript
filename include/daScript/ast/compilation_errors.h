@@ -95,6 +95,7 @@ namespace das
 
     ,   module_not_found                        =   30901       //  require wtf
     ,   module_already_has_a_name               =   30902       //  module a; module aa
+    ,   module_does_not_export_unused_symbols   =   30903       //  options remove_unused_symbols = false is missing from the module
 
     ,   cant_new_handle                         =   31001       //  new Handle
     ,   bad_delete                              =   31002       //  delete ;

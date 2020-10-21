@@ -1,3 +1,5 @@
+options remove_unused_symbols = false
+
 var
     global_1 = "from a"
     global_2 = "from a"

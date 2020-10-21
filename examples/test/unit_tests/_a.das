@@ -1,3 +1,5 @@
+options remove_unused_symbols = false
+
 require _b
 
 [sideeffects]
