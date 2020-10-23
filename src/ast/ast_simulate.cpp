@@ -2763,7 +2763,7 @@ namespace das
             }
             for ( int i=0; i!=context.totalFunctions; ++i ) {
                 if (SimFunction * fn = context.getFunction(i)) {
-                    logs << "// " << fn->name << "\n";
+                    logs << "// " << fn->name << " " << fn->mangledName << "\n";
                     printSimFunction(logs, &context, indexToFunction[i], fn->code, displayHash);
                     logs << "\n\n";
                 }

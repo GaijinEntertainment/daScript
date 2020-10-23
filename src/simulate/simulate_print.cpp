@@ -206,13 +206,25 @@ namespace das {
         prv.displayHash = debugHash;
         // append return type and result type
         if ( debugHash ) {
-            ss << "// " << fun->name << "\n";
+            ss << "// " << fun->name << " " << fun->getMangledName() << "\n";
         }
         string resT = fun->result->describe();
+        if ( debugHash ) {
+            ss << "(result " << resT << " ";
+        }
         prv.write(resT.c_str(), uint32_t(resT.length()));
+        if ( debugHash ) {
+            ss << ")\n";
+        }
         for ( auto & arg : fun->arguments ) {
             string argT = arg->type->describe();
+            if ( debugHash ) {
+                ss << "(argument " << argT << " ";
+            }
             prv.write(argT.c_str(), uint32_t(argT.length()));
+            if ( debugHash ) {
+                ss << ")\n";
+            }
         }
         node->visit(prv);
     }
