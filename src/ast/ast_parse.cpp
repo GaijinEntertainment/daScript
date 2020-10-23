@@ -289,16 +289,22 @@ namespace das {
                     if ( program->failed() ) {
                         return program;
                     }
-                    if ( program->thisModule->name.empty() ) {
-                        program->thisModule->name = mod.moduleName;
-                    }
                     if ( policies.fail_on_lack_of_aot_export && &mod != &req.back() ) {
                         if ( program->options.getBoolOption("remove_unused_symbols",true) ) {
-                            program->error("Module " + program->thisModule->name +" is not setup correctly for AOT",
+                            program->error("Module " + program->thisModule->name + "aka " + mod.moduleName + " is not setup correctly for AOT",
                                 "options remove_unused_symbols = false is required", "", LineInfo(),
                                     CompilationError::module_does_not_export_unused_symbols);
                             return program;
                         }
+                        if ( program->thisModule->name.empty() ) {
+                            program->error("Module " + mod.moduleName + " is not setup correctly for AOT",
+                                "module " + mod.moduleName + " is required", "", LineInfo(),
+                                    CompilationError::module_does_not_have_a_name);
+                            return program;
+                        }
+                    }
+                    if ( program->thisModule->name.empty() ) {
+                        program->thisModule->name = mod.moduleName;
                     }
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {

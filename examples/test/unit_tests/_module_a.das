@@ -1,4 +1,5 @@
 options remove_unused_symbols = false
+module _module_a
 
 var
     global_1 = "from a"
