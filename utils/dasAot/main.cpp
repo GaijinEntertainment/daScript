@@ -134,6 +134,7 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
                 tw << "#pragma warning(disable:4114)   // same qualifier more than once\n";
                 tw << "#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted\n";
+                tw << "#pragma warning(disable:4946)   //  reinterpret_cast used between related classes\n";
                 tw << "#endif\n";
                 tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
                 tw << "#pragma GCC diagnostic push\n";

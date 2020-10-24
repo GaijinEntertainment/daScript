@@ -1,3 +1,6 @@
+options indenting = 4
+options no_aot = true
+
 module rst
 
 require fio

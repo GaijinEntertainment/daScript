@@ -2579,7 +2579,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(makeCallMacro)>(*this, lib,  "make_call_macro",
                 SideEffects::modifyExternal, "makeCallMacro");
             addExtern<DAS_BIND_FUN(addModuleCallMacro)>(*this, lib,  "add_call_macro",
-                SideEffects::modifyExternal, "addModulemakeCallMacro");
+                SideEffects::modifyExternal, "addModuleCallMacro");
             // variant macro
             addAnnotation(make_smart<AstVariantMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVariantMacro)>(*this, lib,  "make_variant_macro",

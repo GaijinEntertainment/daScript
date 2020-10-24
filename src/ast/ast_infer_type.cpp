@@ -32,6 +32,7 @@ namespace das {
     public:
         InferTypes( const ProgramPtr & prog ) : FoldingVisitor(prog ) {
             enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding",true);
+            disableAot = prog->options.getBoolOption("no_aot",false);
         }
         bool finished() const { return !needRestart; }
     protected:
@@ -50,6 +51,7 @@ namespace das {
         const Structure *       cppLayoutParent = nullptr;
         bool                    needRestart = false;
         bool                    enableInferTimeFolding;
+        bool                    disableAot;
         Expression *            lastEnuValue = nullptr;
         int32_t                 unsafeDepth = 0;
     public:
@@ -1466,6 +1468,7 @@ namespace das {
             unsafeDepth = 0;
             func = f;
             func->hasReturn = false;
+            func->noAot |= disableAot;
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
