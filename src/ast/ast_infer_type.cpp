@@ -3484,6 +3484,7 @@ namespace das {
             }
             scopes.push_back(block);
             pushVarStack();
+            block->inFunction = func.get();
         }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);

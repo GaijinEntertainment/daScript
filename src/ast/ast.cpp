@@ -1212,6 +1212,7 @@ namespace das {
         }
         cexpr->annotations = annotations;
         cexpr->maxLabelIndex = maxLabelIndex;
+        cexpr->inFunction = inFunction;
         return cexpr;
     }
 

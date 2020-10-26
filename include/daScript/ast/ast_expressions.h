@@ -162,6 +162,7 @@ namespace das
         bool collapse();
         static void collapse ( vector<ExpressionPtr> & res, const vector<ExpressionPtr> & lst );
         TypeDeclPtr makeBlockType () const;
+        Function *              inFunction = nullptr;
         vector<ExpressionPtr>   list;
         vector<ExpressionPtr>   finalList;
         TypeDeclPtr             returnType;
