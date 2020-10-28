@@ -23,14 +23,14 @@ namespace das
 
     template <typename Result, typename ...Args>
     struct TBlock : Block {
-        TBlock()  {}
+        TBlock() {}
         TBlock( const TBlock & ) = default;
         TBlock( const Block & that ) { *(Block *)this = that; }
     };
 
     struct Func {
         int32_t     index;
-        Func() = default;
+        Func() {}
         Func(int32_t idx) : index(idx) {}
         __forceinline operator bool () const { return index!=0; }
         __forceinline bool operator == ( void * ptr ) const {
@@ -56,7 +56,7 @@ namespace das
     };
 
     struct Lambda {
-        Lambda() = default;
+        Lambda() {}
         Lambda(void * ptr) : capture((char *)ptr) {}
         char *      capture;
         __forceinline TypeInfo * getTypeInfo() const {

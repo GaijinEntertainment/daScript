@@ -950,6 +950,7 @@ namespace das {
                 ss << " : " << that->parent->name;
             }
             ss << " {\n";
+            ss << "\t" << that->name << "() {}\n";
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);

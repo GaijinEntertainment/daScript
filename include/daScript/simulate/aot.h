@@ -45,13 +45,13 @@ namespace das {
 
     template <typename TT>
     __forceinline void das_zero ( TT & a ) {
-        using TTNC = remove_const<TT>::type;
+        using TTNC = typename remove_const<TT>::type;
         memset(const_cast<TTNC *>(&a), 0, sizeof(TT));
     }
 
     template <typename TT, typename QQ>
     __forceinline void das_move ( TT & a, const QQ & b ) {
-        using TTNC = remove_const<TT>::type;
+        using TTNC = typename remove_const<TT>::type;
         static_assert(sizeof(TT)<=sizeof(QQ),"can't move from smaller type");
         memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
         memset((TTNC *)&b, 0, sizeof(TT));
@@ -59,7 +59,7 @@ namespace das {
 
     template <typename TT, typename QQ>
     __forceinline void das_copy ( TT & a, const QQ b ) {
-        using TTNC = remove_const<TT>::type;
+        using TTNC = typename remove_const<TT>::type;
         static_assert(sizeof(TT)<=sizeof(QQ),"can't copy from smaller type");
         memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
     }
@@ -588,6 +588,7 @@ namespace das {
         using THIS_TYPE = TDim<TT, size>;
         enum { capacity = size };
         TT  data[size];
+        TDim() {}
         __forceinline TT & operator [] ( int32_t index ) {
             return data[index];
         }

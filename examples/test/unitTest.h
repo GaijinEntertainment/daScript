@@ -70,6 +70,7 @@ struct TestObjectFoo {
     int fooData;
     SomeEnum_16 e16;
     TestObjectFoo * foo_loop = nullptr;
+    TestObjectFoo() {}
     int propAdd13() {
         return fooData + 13;
     }

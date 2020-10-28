@@ -223,14 +223,14 @@ namespace das
 
     template <>
     struct cast <Func> {
-        static __forceinline Func to ( vec4f x )             { union { vec4f v; Func t; } A; A.v = x; return A.t; }
-        static __forceinline vec4f from ( const Func x )     { union { vec4f v; Func t; } A; A.t = x; return A.v; }
+        static __forceinline Func to ( vec4f x )             { return Func(cast<int32_t>::to(x)); }
+        static __forceinline vec4f from ( const Func x )     { return cast<int32_t>::from(x.index); }
     };
 
     template <>
     struct cast <Lambda> {
-        static __forceinline Lambda to ( vec4f x )           { union { vec4f v; Lambda t; } A; A.v = x; return A.t; }
-        static __forceinline vec4f from ( const Lambda x )   { union { vec4f v; Lambda t; } A; A.t = x; return A.v; }
+        static __forceinline Lambda to ( vec4f x )           { return Lambda(cast<void *>::to(x)); }
+        static __forceinline vec4f from ( const Lambda x )   { return cast<void *>::from(x.capture); }
     };
 
     template <typename TT>
