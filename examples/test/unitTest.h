@@ -80,6 +80,8 @@ struct TestObjectFoo {
     __forceinline bool operator != ( const TestObjectFoo & obj ) const {
         return fooData != obj.fooData;
     }
+    __forceinline bool isReadOnly() { return false; }
+    __forceinline bool isReadOnly() const { return true; }
 };
 
 typedef das::vector<TestObjectFoo> FooArray;

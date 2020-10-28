@@ -1190,7 +1190,7 @@ namespace das {
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if ( !collector.isMoved(var) ) {
-                describeVarLocalCppType(ss, var->type);
+                describeLocalCppType(ss, var->type);
                 ss << " ";
             }
             ss << collector.getVarName(var);

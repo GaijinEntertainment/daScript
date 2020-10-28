@@ -84,6 +84,10 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
         addField<DAS_BIND_MANAGED_FIELD(e16)>("e16");
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
         addProperty<DAS_BIND_MANAGED_PROP(hitPos)>("hitPos");
+        addPropertyExtConst<
+            bool (TestObjectFoo::*)(), &TestObjectFoo::isReadOnly,
+            bool (TestObjectFoo::*)() const, &TestObjectFoo::isReadOnly
+        >("isReadOnly");
     }
     void init() {
         addField<DAS_BIND_MANAGED_FIELD(foo_loop)>("foo_loop");

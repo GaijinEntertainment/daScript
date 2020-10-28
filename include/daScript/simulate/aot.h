@@ -45,20 +45,23 @@ namespace das {
 
     template <typename TT>
     __forceinline void das_zero ( TT & a ) {
-        memset(&a, 0, sizeof(TT));
+        using TTNC = remove_const<TT>::type;
+        memset(const_cast<TTNC *>(&a), 0, sizeof(TT));
     }
 
     template <typename TT, typename QQ>
     __forceinline void das_move ( TT & a, const QQ & b ) {
+        using TTNC = remove_const<TT>::type;
         static_assert(sizeof(TT)<=sizeof(QQ),"can't move from smaller type");
-        memcpy(&a, &b, sizeof(TT));
-        memset((TT *)&b, 0, sizeof(TT));
+        memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
+        memset((TTNC *)&b, 0, sizeof(TT));
     }
 
     template <typename TT, typename QQ>
     __forceinline void das_copy ( TT & a, const QQ b ) {
+        using TTNC = remove_const<TT>::type;
         static_assert(sizeof(TT)<=sizeof(QQ),"can't copy from smaller type");
-        memcpy(&a, &b, sizeof(TT));
+        memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
     }
 
     template <typename TT>

@@ -152,6 +152,44 @@ namespace das
                 }
             };
         }
+        template <typename FunT, FunT PROP, typename FunTConst, FunTConst PROP_CONST>
+        void addPropertyExtConst ( const string & na, const string & cppNa="" ) {
+            auto & field = fields[na];
+            if ( field.decl ) {
+                DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
+                DAS_FATAL_ERROR;
+            }
+            using resultType = decltype((((ManagedType *)0)->*PROP)());
+            field.cppName = (cppNa.empty() ? na : cppNa) + "()";
+            field.decl = makeType<resultType>(*mlib);
+            DAS_ASSERTF ( !(field.decl->isRefType() && !field.decl->ref), "property can't be CMRES, in %s", field.decl->describe().c_str() );
+            field.offset = -1U;
+            field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
+                switch ( nt ) {
+                    case FactoryNodeType::getField:
+                        if ( value->type->constant ) {
+                            return context.code->makeNode<SimNode_Property<ManagedType,FunTConst,PROP_CONST,false>>(at, value->simulate(context));
+                        } else {
+                            return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
+                        }
+                    case FactoryNodeType::getFieldPtr:
+                        if ( value->type->constant ) {
+                            return context.code->makeNode<SimNode_Property<ManagedType,FunTConst,PROP_CONST,true>>(at, value->simulate(context));
+                        } else {
+                            return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
+                        }
+                    case FactoryNodeType::safeGetField:
+                    case FactoryNodeType::safeGetFieldPtr:
+                    case FactoryNodeType::getFieldR2V:
+                    case FactoryNodeType::getFieldPtrR2V:
+                        DAS_ASSERTF(0, "property requested property type, which is meaningless for the non-ref"
+                                    "we should not be here, since property can't have ref type"
+                                    "daScript compiler will later report missing node error");
+                    default:
+                        return nullptr;
+                }
+            };
+        }
         template <typename TT, off_t off>
         __forceinline void addField ( const string & na, const string & cppNa = "" ) {
             addFieldEx ( na, cppNa.empty() ? na : cppNa, off, makeType<TT>(*mlib) );
