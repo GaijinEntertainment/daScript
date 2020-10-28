@@ -190,7 +190,8 @@ namespace das
             };
             uint32_t            blockFlags = 0;
         };
-        Function *              inFunction = nullptr;
+        Function *              inFunction = nullptr;       // moving this to the last position of a class
+                                                            // is a workaround of a compiler bug in 32-bit MVSC 2015
     };
 
     struct ExprVar : Expression {

@@ -47,7 +47,7 @@ namespace das {
                 };
                 uint32_t    offset;
             };
-            vec4f __dummy = v_zero();
+            vec4f __dummy;
         };
         SimSourceType   type = SimSourceType::sSimNode;
         union {
@@ -56,6 +56,9 @@ namespace das {
             };
             uint32_t    flags = 0;
         };
+        __forceinline SimSource() {
+            __dummy = v_zero();         // this is not an inline initialization to work around EDG compiler
+        }
         void visit ( SimVisitor & vis );
         // construct
         __forceinline void setSimNode(SimNode * se) {
