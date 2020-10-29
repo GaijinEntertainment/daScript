@@ -1,6 +1,5 @@
 require UnitTest
 
-expect 30102:1    // invalid_return_type
 expect 30106
 expect 30303:4    // operator_not_found
 expect 30304:2    // function_not_found
@@ -37,7 +36,7 @@ def setFooPtr(var f:Foo?)
     f.a = 0
 
 def goodPassThrough(var a:int?):int const?
-    return a            // invalid return type              (30102)
+    return a            // fine
 
 def passThrough(a:int? const):int?
     return a

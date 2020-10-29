@@ -50,7 +50,7 @@ namespace das {
         bool canAot() const;
         bool canAot( das_set<Structure *> & recAot ) const;
         bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters,
-            TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute = AllowSubstitute::no, bool topLevel = true ) const;
+            TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute = AllowSubstitute::no, bool topLevel = true, bool isPassType = false ) const;
         void sanitize();
         bool isExprType() const;
         bool isSimpleType () const;

@@ -864,7 +864,8 @@ namespace das
              ConstMatters constMatters,
              TemporaryMatters temporaryMatters,
              AllowSubstitute allowSubstitute,
-             bool topLevel ) const {
+             bool topLevel,
+             bool isPassType ) const {
         if ( topLevel && !isRef() && !isPointer() ) {
             constMatters = ConstMatters::no;
         }
@@ -897,8 +898,12 @@ namespace das
             bool iAmVoid = !firstType || firstType->isVoid();
             bool heIsVoid = !decl.firstType || decl.firstType->isVoid();
             if ( topLevel ) {
+                ConstMatters pcm = ConstMatters::yes;
+                if ( isPassType && firstType && firstType->constant ) {
+                    pcm = ConstMatters::no;
+                }
                 if ( !iAmVoid && !heIsVoid &&
-                        !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
+                        !firstType->isSameType(*decl.firstType,RefMatters::yes,pcm,
                             TemporaryMatters::yes,isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
                     return false;
                 }

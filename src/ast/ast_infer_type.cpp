@@ -666,7 +666,7 @@ namespace das {
             }
             // compare types which don't need inference
             auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
-            if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, tempMatters, AllowSubstitute::yes) ) {
+            if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, tempMatters, AllowSubstitute::yes, true, true) ) {
                 return false;
             }
             // can't pass non-ref to ref
@@ -4117,6 +4117,14 @@ namespace das {
                 || (op=="<<=") || (op==">>=") || (op=="<<<=") || (op==">>>=");
         }
 
+        bool canOperateOnPointers ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter ) const {
+            if ( leftType->baseType==Type::tPointer ) {
+                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::yes);
+            } else {
+                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::no);
+            }
+        }
+
         bool isSameSmartPtrType ( const TypeDeclPtr & lt, const TypeDeclPtr & rt, bool leftOnly = false ) {
             auto lt_smart = lt->smartPtr;
             auto rt_smart = rt->smartPtr;
@@ -4129,7 +4137,7 @@ namespace das {
             }
             lt->smartPtr = false;
             rt->smartPtr = false;
-            bool res =  canCopyOrMoveType(lt,rt,TemporaryMatters::no);
+            bool res =  canOperateOnPointers(lt,rt,TemporaryMatters::no);
             lt->smartPtr = lt_smart;
             rt->smartPtr = rt_smart;
             return res;
@@ -4296,9 +4304,9 @@ namespace das {
     // ExprMove
         bool canCopyOrMoveType ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter ) const {
             if ( leftType->baseType==Type::tPointer ) {
-                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::yes);
+                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::yes, true, true);
             } else {
-                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::no);
+                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::no, true, true);
             }
         }
         string moveErrorInfo(ExprMove * expr) const {
