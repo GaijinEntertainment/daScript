@@ -30,7 +30,7 @@ namespace das
 
     struct Func {
         int32_t     index;
-        Func() {}
+        Func() : index(0) {}
         Func(int32_t idx) : index(idx) {}
         __forceinline operator bool () const { return index!=0; }
         __forceinline bool operator == ( void * ptr ) const {
@@ -56,7 +56,7 @@ namespace das
     };
 
     struct Lambda {
-        Lambda() {}
+        Lambda() : capture(nullptr) {}
         Lambda(void * ptr) : capture((char *)ptr) {}
         char *      capture;
         __forceinline TypeInfo * getTypeInfo() const {
