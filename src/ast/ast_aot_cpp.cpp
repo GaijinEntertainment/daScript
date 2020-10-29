@@ -950,7 +950,6 @@ namespace das {
                 ss << " : " << that->parent->name;
             }
             ss << " {\n";
-            ss << "\t" << that->name << "() {}\n";
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
@@ -1132,8 +1131,11 @@ namespace das {
                 ss << string(tab,'\t');
                 describeVarLocalCppType(ss, var->type);
                 auto vname = collector.getVarName(var);
-                ss  << " " << vname << "; "
-                    << "memset(&" << vname << ",0,sizeof(" << vname << "));"
+                ss  << " " << vname;
+                if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
+                    ss << "_ConstRef";
+                }
+                ss << "; " << "memset(&" << vname << ",0,sizeof(" << vname << "));"
                     << "\n";
             }
             // pre-declare locals
@@ -1191,10 +1193,15 @@ namespace das {
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if ( !collector.isMoved(var) ) {
-                describeLocalCppType(ss, var->type);
+                describeVarLocalCppType(ss, var->type);
                 ss << " ";
             }
-            ss << collector.getVarName(var);
+            auto vname = collector.getVarName(var);
+            auto cvname = vname;
+            if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
+                cvname += "_ConstRef";
+            }
+            ss << cvname;
             if ( !var->init && var->type->canInitWithZero() ) {
                 if ( isLocalVec(var->type) ) {
                     ss << " = v_zero()";
@@ -1202,18 +1209,30 @@ namespace das {
                     ss << " = 0";
                 }
             } else if ( !var->init && !var->type->canInitWithZero() ) {
-                ss << "; das_zero(" << collector.getVarName(var) << ")";
+                ss << "; das_zero(" << cvname;
+                ss << ")";
             }
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( !last ) ss << "; ";
+            if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
+                auto vname = collector.getVarName(var);
+                ss << ";\n\t";
+                describeLocalCppType(ss, var->type);
+                ss << " & " << vname << " = " << vname << "_ConstRef; ";
+            }
             return Visitor::visitLet(let, var, last);
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
             if ( var->init_via_move ) {
-                ss  << "; das_zero(" << collector.getVarName(var) << ")"
-                    << "; das_move(" << collector.getVarName(var) << ", ";
+                auto vname = collector.getVarName(var);
+                auto cvname = vname;
+                if ( var->type->constant && var->type->isRefType() ) {
+                    cvname += "_ConstRef";
+                }
+                ss  << "; das_zero(" << cvname << ")"
+                    << "; das_move(" << cvname << ", ";
             } else {
                 ss << " = ";
             }
