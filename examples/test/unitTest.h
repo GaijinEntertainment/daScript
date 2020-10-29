@@ -67,7 +67,7 @@ __forceinline void project_to_nearest_navmesh_point(Point3 & a, float t) { a = P
 
 struct TestObjectFoo {
     Point3 hit;
-    int fooData;
+    int32_t fooData;
     SomeEnum_16 e16;
     TestObjectFoo * foo_loop = nullptr;
     TestObjectFoo() {}
@@ -88,6 +88,8 @@ struct TestObjectFoo {
 typedef das::vector<TestObjectFoo> FooArray;
 
 void testFooArray(const das::TBlock<void, const FooArray> & blk, das::Context * context);
+
+__forceinline void set_foo_data (TestObjectFoo * obj, int32_t data ) { obj->fooData = data; }
 
 struct TestObjectSmart : public das::ptr_ref_count {
      int fooData = 1234;

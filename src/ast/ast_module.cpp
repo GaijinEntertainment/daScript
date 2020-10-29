@@ -266,6 +266,8 @@ namespace das {
             for ( const auto & arg : fn->arguments ) {
                 if ( arg->type->isRef() && !arg->type->isConst() ) {
                     anyRW = true;
+                } else if ( arg->type->isPointer() && arg->type->firstType && !arg->type->firstType->isConst() ) {
+                    anyRW = true;
                 }
             }
             if ( !anyRW ) {

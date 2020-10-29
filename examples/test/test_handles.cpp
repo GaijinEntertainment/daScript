@@ -568,6 +568,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // foo array
     addExtern<DAS_BIND_FUN(testFooArray)>(*this, lib, "testFooArray",
         SideEffects::modifyExternal, "testFooArray");
+    addExtern<DAS_BIND_FUN(set_foo_data)>(*this, lib, "set_foo_data",
+        das::SideEffects::modifyArgument, "set_foo_data");
     // utf8 print
     addExtern<DAS_BIND_FUN(builtin_printw)>(*this, lib, "printw",
         SideEffects::modifyExternal, "builtin_printw");
