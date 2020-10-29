@@ -83,6 +83,8 @@ struct TestObjectFoo {
     }
     __forceinline bool isReadOnly() { return false; }
     __forceinline bool isReadOnly() const { return true; }
+    __forceinline TestObjectFoo * getLoop() { return foo_loop; }
+    __forceinline const TestObjectFoo * getLoop() const { return foo_loop; }
 };
 
 typedef das::vector<TestObjectFoo> FooArray;

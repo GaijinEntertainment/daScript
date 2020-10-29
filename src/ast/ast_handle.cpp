@@ -10,11 +10,12 @@ namespace das {
         mlib = nullptr;
     }
 
-    TypeDeclPtr BasicStructureAnnotation::makeFieldType ( const string & na ) const {
+    TypeDeclPtr BasicStructureAnnotation::makeFieldType ( const string & na, bool isConst ) const {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {
-            auto t = make_smart<TypeDecl>(*it->second.decl);
-            if ( it->second.offset != -1U ) {
+            auto & sfield = it->second;
+            auto t = isConst && sfield.constDecl ? make_smart<TypeDecl>(*sfield.constDecl) :  make_smart<TypeDecl>(*sfield.decl);
+            if ( sfield.offset != -1U ) {
                 t->ref = true;
             }
             return t;
@@ -23,10 +24,15 @@ namespace das {
         }
     }
 
-    TypeDeclPtr BasicStructureAnnotation::makeSafeFieldType ( const string & na ) const {
+    TypeDeclPtr BasicStructureAnnotation::makeSafeFieldType ( const string & na, bool isConst ) const {
         auto it = fields.find(na);
-        if ( it!=fields.end() && it->second.offset!=-1U ) {
-            return make_smart<TypeDecl>(*it->second.decl);
+        if ( it!=fields.end() ) {
+            auto & sfield = it->second;
+            if ( sfield.offset!=-1U ) {
+                return isConst && sfield.constDecl ? make_smart<TypeDecl>(*sfield.constDecl) : make_smart<TypeDecl>(*sfield.decl);
+            } else {
+                return nullptr;
+            }
         } else {
             return nullptr;
         }

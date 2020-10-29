@@ -335,8 +335,8 @@ namespace das
         virtual string getSmartAnnotationCloneFunction () const { return ""; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
-        virtual TypeDeclPtr makeFieldType ( const string & ) const { return nullptr; }
-        virtual TypeDeclPtr makeSafeFieldType ( const string & ) const { return nullptr; }
+        virtual TypeDeclPtr makeFieldType ( const string &, bool ) const { return nullptr; }
+        virtual TypeDeclPtr makeSafeFieldType ( const string &, bool ) const { return nullptr; }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr & /*src*/, const ExpressionPtr & /*idx*/ ) const { return nullptr; }
         virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & /*src*/ ) const { return nullptr; }
         // aot

@@ -2660,7 +2660,7 @@ namespace das {
                         return make_smart<ExprConstBool>(expr->at, expr->typeexpr->structType->findField(expr->subtrait));
                     } else if ( expr->typeexpr->isHandle() ) {
                         reportAstChanged();
-                        auto ft = expr->typeexpr->annotation->makeFieldType(expr->subtrait);
+                        auto ft = expr->typeexpr->annotation->makeFieldType(expr->subtrait, false);
                         return make_smart<ExprConstBool>(expr->at, ft!=nullptr);
                     } else {
                         if ( expr->trait=="safe_has_field" ) {
@@ -3794,7 +3794,7 @@ namespace das {
                 expr->fieldIndex = index;
             } else if ( valT->isHandle() ) {
                 expr->annotation = valT->annotation;
-                expr->type = expr->annotation->makeFieldType(expr->name);
+                expr->type = expr->annotation->makeFieldType(expr->name, valT->constant);
             } else if ( valT->isStructure() ) {
                 expr->field = valT->structType->findField(expr->name);
             } else if ( valT->isPointer() ) {
@@ -3804,7 +3804,7 @@ namespace das {
                     expr->field = valT->firstType->structType->findField(expr->name);
                 } else if ( valT->firstType->isHandle() ) {
                     expr->annotation = valT->firstType->annotation;
-                    expr->type = expr->annotation->makeFieldType(expr->name);
+                    expr->type = expr->annotation->makeFieldType(expr->name, expr->value->type->constant);
                 } else if ( valT->firstType->isGoodTupleType() ) {
                     int index = expr->tupleFieldIndex();
                     if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
@@ -3904,7 +3904,7 @@ namespace das {
                 expr->type = make_smart<TypeDecl>(*expr->field->type);
             } else if ( valT->firstType->isHandle() ) {
                 expr->annotation = valT->firstType->annotation;
-                expr->type = expr->annotation->makeSafeFieldType(expr->name);
+                expr->type = expr->annotation->makeSafeFieldType(expr->name, valT->constant);
                 if ( !expr->type ) {
                     error("can't safe get field " + expr->name, "", "",
                         expr->at, CompilationError::cant_get_field);
@@ -5840,7 +5840,7 @@ namespace das {
                         decl->at, CompilationError::cant_get_field);
                 }
             } else if ( expr->makeType->baseType == Type::tHandle ) {
-                if ( auto fldt = expr->makeType->annotation->makeFieldType(decl->name) ) {
+                if ( auto fldt = expr->makeType->annotation->makeFieldType(decl->name, false) ) {
                     if ( !fldt->isRef() ) {
                         error("field is a property, not a value; " + decl->name, "", "",
                             decl->at, CompilationError::cant_get_field);

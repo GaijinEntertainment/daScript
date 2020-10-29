@@ -87,10 +87,14 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
         addPropertyExtConst<
             bool (TestObjectFoo::*)(), &TestObjectFoo::isReadOnly,
             bool (TestObjectFoo::*)() const, &TestObjectFoo::isReadOnly
-        >("isReadOnly");
+        >("isReadOnly","isReadOnly");
     }
     void init() {
         addField<DAS_BIND_MANAGED_FIELD(foo_loop)>("foo_loop");
+        addPropertyExtConst<
+            TestObjectFoo * (TestObjectFoo::*)(), &TestObjectFoo::getLoop,
+            const TestObjectFoo * (TestObjectFoo::*)() const, &TestObjectFoo::getLoop
+        >("getLoop","getLoop");
     }
     virtual bool isLocal() const override { return true; }
     virtual bool canMove() const override { return true; }
@@ -274,15 +278,15 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
         }
         return !fail;
     }
-    virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
-        if ( auto pF = makeSafeFieldType(na) ) {
+    virtual TypeDeclPtr makeFieldType ( const string & na, bool isConst ) const override {
+        if ( auto pF = makeSafeFieldType(na, isConst) ) {
             pF->ref = true;
             return pF;
         } else {
             return nullptr;
         }
     }
-    virtual TypeDeclPtr makeSafeFieldType ( const string & na ) const override {
+    virtual TypeDeclPtr makeSafeFieldType ( const string & na, bool ) const override {
         auto pF = structureType->findField(na);
         return pF ? make_smart<TypeDecl>(*pF->type) : nullptr;
     }

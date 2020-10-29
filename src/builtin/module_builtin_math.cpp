@@ -209,15 +209,15 @@ namespace das {
         virtual size_t getSizeOf() const override {
             return sizeof(ThisMatrix);
         }
-        virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
-            if ( auto ft = makeSafeFieldType(na) ) {
+        virtual TypeDeclPtr makeFieldType ( const string & na, bool isConst ) const override {
+            if ( auto ft = makeSafeFieldType(na, isConst) ) {
                 ft->ref = true;
                 return ft;
             } else {
                 return nullptr;
             }
         }
-        virtual TypeDeclPtr makeSafeFieldType ( const string & na ) const override {
+        virtual TypeDeclPtr makeSafeFieldType ( const string & na, bool ) const override {
             int field = GetField(na);
             if ( field<0  )
                 return nullptr;

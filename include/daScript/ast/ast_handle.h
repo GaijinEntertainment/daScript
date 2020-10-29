@@ -79,6 +79,7 @@ namespace das
             string      name;
             string      cppName;
             TypeDeclPtr decl;
+            TypeDeclPtr constDecl;
             uint32_t    offset;
             function<SimNode * (FactoryNodeType,Context &,const LineInfo &, const ExpressionPtr &)>   factory;
         };
@@ -89,8 +90,8 @@ namespace das
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool rtti_isBasicStructureAnnotation() const override { return true; }
         virtual bool isRefType() const override { return true; }
-        virtual TypeDeclPtr makeFieldType(const string & na) const override;
-        virtual TypeDeclPtr makeSafeFieldType(const string & na) const override;
+        virtual TypeDeclPtr makeFieldType(const string & na, bool isConst) const override;
+        virtual TypeDeclPtr makeSafeFieldType(const string & na, bool isConst) const override;
         virtual SimNode * simulateGetField(const string & na, Context & context,
             const LineInfo & at, const ExpressionPtr & value) const override;
         virtual SimNode * simulateGetFieldR2V(const string & na, Context & context,
@@ -163,6 +164,9 @@ namespace das
             field.cppName = (cppNa.empty() ? na : cppNa) + "()";
             field.decl = makeType<resultType>(*mlib);
             DAS_ASSERTF ( !(field.decl->isRefType() && !field.decl->ref), "property can't be CMRES, in %s", field.decl->describe().c_str() );
+            using constResultType = decltype((((ManagedType *)0)->*PROP_CONST)());
+            field.constDecl = makeType<constResultType>(*mlib);
+            DAS_ASSERTF ( !(field.constDecl->isRefType() && !field.constDecl->ref), "property can't be CMRES, in %s", field.constDecl->describe().c_str() );
             field.offset = -1U;
             field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
                 switch ( nt ) {
@@ -333,7 +337,7 @@ namespace das
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
-        virtual TypeDeclPtr makeFieldType ( const string & na ) const override {
+        virtual TypeDeclPtr makeFieldType ( const string & na, bool ) const override {
             if ( na=="length" ) return make_smart<TypeDecl>(Type::tInt);
             return nullptr;
         }

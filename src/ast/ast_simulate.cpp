@@ -646,7 +646,7 @@ namespace das
                 }
                 // now, setup fields
                 for ( const auto & decl : *fields ) {
-                    auto fieldType = ann->makeFieldType(decl->name);
+                    auto fieldType = ann->makeFieldType(decl->name, false);
                     DAS_ASSERT(fieldType && "how did this infer?");
                     uint32_t fieldSize = fieldType->getSizeOf();
                     SimNode * cpy = nullptr;
