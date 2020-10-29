@@ -996,6 +996,12 @@ namespace das
         return true;
     }
 
+    bool TypeDecl::canWrite() const {
+        bool cw = isRef() || baseType==Type::tPointer || baseType==Type::anyArgument;
+        if ( baseType!=Type::tPointer ) cw &= constant;
+        return cw;
+    }
+
     // validate swizzle mask and build mask type
 
     bool TypeDecl::isSequencialMask ( const vector<uint8_t> & fields ) {

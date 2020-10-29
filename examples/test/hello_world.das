@@ -1,33 +1,16 @@
 require UnitTest
 
-//options log_nodes = true
 options log = true
-options print_ref = true
+options print_var_access = true
 
-let
-    Eid0 : EntityId = make_invalid_id()
-
-def get_int ( i : EntityId; name : string )
-    print("get_int({i},{name})\n")
-    return 0
-
-[export]
-def get_es ( i = Eid0 )
+def efoo ( var foo : TestObjectFoo )
     unsafe
-        let pi = addr(i)
-        debug(pi, "pi is")
-    debug(i, "i is")
-    var t = get_int(i,"foo")
-    t --
-    t ++
-    print("returned {t}\n")
+        var pfoo = addr(foo)
+        set_foo_data(pfoo, 1)
 
 [export]
 def test
-    debug(Eid0, "Eid0 is")
-    unsafe
-        let pi = addr(Eid0)
-        debug(pi, "pEid0 is ")
-    get_es()
+    var foo: TestObjectFoo
+    efoo(foo)
     return true
 

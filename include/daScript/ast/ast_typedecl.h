@@ -68,6 +68,7 @@ namespace das {
         bool isRef() const;
         bool isRefType() const;
         bool isRefOrPointer() const { return isRef() || isPointer(); }
+        bool canWrite() const;
         bool isTemp( bool topLevel = true, bool refMatters = true) const;
         bool isTemp(bool topLevel, bool refMatters, das_set<Structure*> & dep) const;
         bool isTempType(bool refMatters = true) const;
