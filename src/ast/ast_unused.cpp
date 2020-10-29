@@ -346,11 +346,11 @@ namespace das {
             auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 auto leftT = expr->left->type;
-                if ( leftT->canWrite() ) {
+                if ( leftT->isRefOrPointer() && !leftT->constant ) {
                     propagateWrite(expr->left.get());
                 }
                 auto rightT = expr->right->type;
-                if ( rightT->canWrite() ) {
+                if ( rightT->isRefOrPointer() && !rightT->constant ) {
                     propagateWrite(expr->right.get());
                 }
             }
@@ -361,15 +361,15 @@ namespace das {
             auto sef = expr->func ? getSideEffects(expr->func) : 0;
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
                 auto condT = expr->subexpr->type;
-                if ( condT->canWrite() ) {
+                if ( condT->isRefOrPointer() && !condT->constant ) {
                     propagateWrite(expr->subexpr.get());
                 }
                 auto leftT = expr->left->type;
-                if ( leftT->canWrite() ) {
+                if ( leftT->isRefOrPointer() && !leftT->constant ) {
                     propagateWrite(expr->left.get());
                 }
                 auto rightT = expr->right->type;
-                if ( rightT->canWrite() ) {
+                if ( rightT->isRefOrPointer() && !rightT->constant ) {
                     propagateWrite(expr->right.get());
                 }
             }
@@ -399,12 +399,14 @@ namespace das {
                     for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                         const auto & argT = expr->func->arguments[ai]->type;
                         if ( argT->canWrite() ) {
-                            if ( expr->func->knownSideEffects && !expr->func->builtIn ) {
-                                if ( expr->func->arguments[ai]->access_ref ) {
+                            if ( !expr->func->builtIn ) {
+                                if ( expr->func->knownSideEffects ) {
                                     propagateWrite(expr->arguments[ai].get());
                                 }
                             } else {
-                                propagateWrite(expr->arguments[ai].get());
+                                if ( expr->func->modifyArgument ) {
+                                    propagateWrite(expr->arguments[ai].get());
+                                }
                             }
                         }
                     }
@@ -435,12 +437,14 @@ namespace das {
                 for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
                     if ( argT->canWrite() ) {
-                        if ( expr->func->knownSideEffects && !expr->func->builtIn ) {
-                            if ( expr->func->arguments[ai]->access_ref ) {
+                        if ( !expr->func->builtIn ) {
+                            if ( expr->func->knownSideEffects ) {
                                 propagateWrite(expr->arguments[ai].get());
                             }
                         } else {
-                            propagateWrite(expr->arguments[ai].get());
+                            if ( expr->func->modifyArgument ) {
+                                propagateWrite(expr->arguments[ai].get());
+                            }
                         }
                     }
                 }
@@ -451,7 +455,7 @@ namespace das {
             Visitor::preVisit(expr);
             for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                 const auto & argT = expr->arguments[ai]->type;
-                if ( argT->canWrite() ) {
+                if ( argT->isRefOrPointer() && !argT->constant ) {
                     propagateWrite(expr->arguments[ai].get());
                 }
             }
@@ -464,7 +468,7 @@ namespace das {
             }
             for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                 const auto & argT = expr->arguments[ai]->type;
-                if ( argT->canWrite() ) {
+                if ( argT->isRefOrPointer() && !argT->constant ) {
                     propagateWrite(expr->arguments[ai].get());
                 }
             }

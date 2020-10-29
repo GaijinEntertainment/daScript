@@ -998,7 +998,11 @@ namespace das
 
     bool TypeDecl::canWrite() const {
         bool cw = isRef() || baseType==Type::tPointer || baseType==Type::anyArgument;
-        if ( baseType!=Type::tPointer ) cw &= constant;
+        if ( baseType!=Type::tPointer ) {
+            cw &= !constant;
+        } else if ( firstType ) {
+            cw &= !firstType->constant;
+        }
         return cw;
     }
 
