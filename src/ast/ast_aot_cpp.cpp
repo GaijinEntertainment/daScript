@@ -7,6 +7,8 @@
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/hash.h"
 
+#include <float.h>
+
 namespace das {
 
     Enum<Type> g_cppCTypeTable = {
