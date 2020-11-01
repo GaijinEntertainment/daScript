@@ -405,7 +405,7 @@ namespace das
             stream << " explicit";
         }
         if ( explicitConst ) {
-            stream << "!";
+            stream << " =const";
         }
         if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {

@@ -103,14 +103,15 @@ namespace das
 
     struct defaultTempFn {
         defaultTempFn() = default;
-        defaultTempFn ( bool args, bool impl, bool result )
-            : tempArgs(args), implicitArgs(impl), tempResult(result) {}
+        defaultTempFn ( bool args, bool impl, bool result, bool econst )
+            : tempArgs(args), implicitArgs(impl), tempResult(result), explicitConstArgs(econst) {}
         bool operator () ( Function * fn ) {
             if ( tempArgs || implicitArgs ) {
                 for ( auto & arg : fn->arguments ) {
                     if ( arg->type->isTempType() ) {
                         arg->type->temporary = tempArgs;
                         arg->type->implicit = implicitArgs;
+                        arg->type->explicitConst = explicitConstArgs;
                     }
                 }
             }
@@ -124,14 +125,19 @@ namespace das
         bool tempArgs = false;
         bool implicitArgs = true;
         bool tempResult = false;
+        bool explicitConstArgs = false;
     };
 
     struct permanentArgFn : defaultTempFn {
-        permanentArgFn() : defaultTempFn(false,false,false) {}
+        permanentArgFn() : defaultTempFn(false,false,false,false) {}
     };
 
     struct temporaryArgFn : defaultTempFn {
-        temporaryArgFn() : defaultTempFn(true,false,false) {}
+        temporaryArgFn() : defaultTempFn(true,false,false,false) {}
+    };
+
+    struct explicitConstArgFn : defaultTempFn {
+        explicitConstArgFn() : defaultTempFn(false,true,false,true) {}
     };
 
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
