@@ -337,6 +337,15 @@ namespace das
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
+        mutable bool sibstituting = false;
+        virtual bool canSubstitute(TypeAnnotation * passType) const override
+        {
+            if (sibstituting) return false;
+            sibstituting = true;
+            bool result = passType->canSubstitute((TypeAnnotation *)this);
+            sibstituting = false;
+            return result;
+        }
         virtual TypeDeclPtr makeFieldType ( const string & na, bool ) const override {
             if ( na=="length" ) return make_smart<TypeDecl>(Type::tInt);
             return nullptr;
@@ -467,9 +476,9 @@ namespace das
                 SideEffects::modifyArgument, "das_vector_clear")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
                 SideEffects::modifyArgument, "das_vector_resize")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove>(*mod, lib, "each",
+            addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each")->generated = true;
-            addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove>(*mod, lib, "each",
+            addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each_const")->generated = true;
         }
     };
