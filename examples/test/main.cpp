@@ -348,7 +348,8 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/doc/reflections/das2rst.das"
 // examples
     // #define TEST_NAME   "/examples/test/dict_pg.das"
-    #define TEST_NAME   "/examples/test/hello_world.das"
+    // #define TEST_NAME   "/examples/test/hello_world.das"
+    #define TEST_NAME   "/examples/test/base64.das"
     // #define TEST_NAME   "/examples/test/regex_lite.das"
     // #define TEST_NAME   "/examples/test/hello_world.das"
     // #define TEST_NAME   "/examples/test/json_example.das"
