@@ -51,7 +51,7 @@ def each_dim(info:VarInfo)
 def arg_types_any(info)
     unsafe
         let pinfo = addr(info)
-        return <- generator<TypeInfo const&>() <| $()
+        return <- generator<TypeInfo const&>() <|
             if pinfo.argTypes!=null
                 for index in range(int(pinfo.argCount))
                     unsafe
@@ -70,7 +70,7 @@ def arg_types(info:VarInfo)
 def arg_names_any(info)
     unsafe
         let pinfo = addr(info)
-        return <- generator<string>() <| $()
+        return <- generator<string>() <|
             if pinfo.argNames!=null
                 for index in range(int(pinfo.argCount))
                     unsafe

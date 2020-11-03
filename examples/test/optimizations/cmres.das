@@ -74,14 +74,14 @@ def test
     f4 = [[Foo a = pass123()]]              // stack ptr to hold &f4
     assert(f4.a[0]==1 && f4.a[1]==2 && f4.a[2]==3)
     // Optimization - invoke CMRES ref to be passed directly to invoke
-    let f5 = invoke() <| $()
+    let f5 = invoke() <|
         return [[Foo x=1,y=2]]
     assert(f5.x==1 && f5.y==2)
     // Optimization - invoke CMRES ref
     //      InitLocal
     //      InvokeAndCopyOrMove (GetLocal f6)
     var f6 : Foo
-    f6 = invoke() <| $()
+    f6 = invoke() <|
         return [[ Foo x=1, y=2, a=inv123() ]]
     assert(f6.x==1 && f6.y==2 && f6.a[0]==1 && f6.a[1]==2 && f6.a[2]==3)
     // Optimization

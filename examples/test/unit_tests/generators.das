@@ -11,7 +11,7 @@ def checkIt ( gen : iterator<int> )
     assert(count==10,"output too short")
 
 def test_yield
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         yield 0
         yield 1
         yield 2
@@ -26,7 +26,7 @@ def test_yield
     checkIt(gen)
 
 def test_local
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var  t = 0
         yield t++
         yield t++
@@ -42,7 +42,7 @@ def test_local
     checkIt(gen)
 
 def test_local_ref
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var t = 0
         var T : int & = t
         yield t++
@@ -59,7 +59,7 @@ def test_local_ref
     checkIt(gen)
 
 def test_if
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var  t = 0
         yield t++
         // if
@@ -94,7 +94,7 @@ def test_if
     checkIt(gen)
 
 def test_while
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var t = 0
         while t < 10
             yield t ++
@@ -102,7 +102,7 @@ def test_while
     checkIt(gen)
 
 def test_while_break
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var t = 0
         while t < 100
             if t == 10
@@ -112,7 +112,7 @@ def test_while_break
     checkIt(gen)
 
 def test_while_continue
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var t = 0
         while t < 100
             if t >= 10
@@ -123,7 +123,7 @@ def test_while_continue
     checkIt(gen)
 
 def test_while_nested
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var q = 0
         while q < 2
             var t = 0
@@ -134,7 +134,7 @@ def test_while_nested
     checkIt(gen)
 
 def test_while_finally
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         var t = 0
         while t < 9
             yield t ++
@@ -144,14 +144,14 @@ def test_while_finally
     checkIt(gen)
 
 def test_for
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         for t in range(10)
             yield t
         return false
     checkIt(gen)
 
 def test_for_break
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         for t in range(100)
             if t == 10
                 break
@@ -160,7 +160,7 @@ def test_for_break
     checkIt(gen)
 
 def test_for_continue
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         for t in range(100)
             if t >= 10
                 continue
@@ -169,7 +169,7 @@ def test_for_continue
     checkIt(gen)
 
 def test_for_nested
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         for q in range(2)
             for t in range(5)
                 yield q*5 + t
@@ -177,7 +177,7 @@ def test_for_nested
     checkIt(gen)
 
 def test_for_finally
-    let gen <- generator<int>() <| $()
+    let gen <- generator<int>() <|
         for t in range(9)
             yield t
         finally

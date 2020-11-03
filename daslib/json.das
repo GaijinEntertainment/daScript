@@ -58,7 +58,7 @@ def lexer ( text : array<uint8> )
 
 [private]
 def _lexer ( var stext : string implicit )
-    return <- generator<Token>() <| $()
+    return <- generator<Token>() <|
         var tin : iterator<int>
         unsafe
             tin <- each(stext)
