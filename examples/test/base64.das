@@ -2,19 +2,19 @@ require strings
 
 // note: this is equivalent to
 //  unsafe
-//      return <- each(inpu)
+//      return <- each(input)
 // unsafe is required due to lifetime of inp. version bellow will keep string alive
 def from_sv ( inp : string )
-    return <- generator<int>() <| $()
+    return <- generator<int>() <|
         for x in inp
             yield x
         return false
 
 def chunk6 ( var inp : iterator<int> )
-    return <- generator<int> [[<-inp]] () <| $()
-        var b0 : int
+    return <- generator<int> [[<-inp]] () <|
+        var b0 = 0
         while next(inp, b0)
-            var b1, b2 : int
+            var b1, b2 = 0
             let has1 = next(inp, b1)
             let has2 = next(inp, b2)
             yield b0 >> 2
@@ -33,13 +33,13 @@ let
 //      return <- [[ for i in inp; yield xlattable64[i] ]]
 // unsafe is required due to implicit capture of inp
 def xlat ( var inp : iterator<int> )
-    return <- generator<int> [[<-inp]] () <| $()
+    return <- generator<int> [[<-inp]] () <|
         for i in inp
             yield xlattable64[i]
         return false
 
 def pad4 ( var inp : iterator<int> )
-    return <- generator<int> [[<-inp]] () <| $()
+    return <- generator<int> [[<-inp]] () <|
         var len = 0
         for c in inp
             yield c
@@ -48,16 +48,16 @@ def pad4 ( var inp : iterator<int> )
             yield '='
         return false
 
-def linebreak ( var inp : iterator<int>; linewidth : int = 76 )
-    return <- generator<int> [[<-inp]] () <| $()
+def linebreak ( var inp : iterator<int>; linewidth = 76 )
+    return <- generator<int> [[<-inp]] () <|
         for c,len in inp, range(1,INT_MAX)
             yield c
             if (len % linewidth)==0
                 yield '\n'
         return false
 
-def base64 ( inp : string; linewidth : int = 76 )
-    return <- generator<int> () <| $()
+def base64 ( inp : string; linewidth = 76 )
+    return <- generator<int> () <|
         var lb <- inp |> from_sv() |> chunk6() |> xlat() |> pad4() |> linebreak(linewidth)
         for c in lb
             yield c
