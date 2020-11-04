@@ -2152,6 +2152,10 @@ namespace das {
         return module->addFunction(func, true);
     }
 
+    bool addModuleVariable ( Module * module, VariablePtr var, Context * ) {
+        return module->addVariable(var, false);
+    }
+
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr ann, Context * context ) {
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_ex("can't add function annotation %s to module %s",
@@ -2552,10 +2556,13 @@ namespace das {
                 SideEffects::modifyExternal, "makeFunctionAnnotation");
             addExtern<DAS_BIND_FUN(addModuleFunctionAnnotation)>(*this, lib,  "add_function_annotation",
                 SideEffects::modifyExternal, "addModuleFunctionAnnotation");
-            addExtern<DAS_BIND_FUN(addModuleFunction)>(*this, lib,  "add_function",
+            addExtern<DAS_BIND_FUN(addModuleFunction)>(*this, lib, "add_function",
                 SideEffects::modifyExternal, "addModuleFunction");
             addExtern<DAS_BIND_FUN(addFunctionFunctionAnnotation)>(*this, lib,  "add_function_annotation",
                 SideEffects::modifyExternal, "addFunctionFunctionAnnotation");
+            // variables
+            addExtern<DAS_BIND_FUN(addModuleVariable)>(*this, lib, "add_variable",
+                SideEffects::modifyExternal, "addModuleVariable");
             // structure annotation
             addAnnotation(make_smart<AstStructureAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeStructureAnnotation)>(*this, lib,  "make_structure_annotation",
