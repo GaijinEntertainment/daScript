@@ -135,15 +135,19 @@ namespace das
             field.decl = makeType<resultType>(*mlib);
             DAS_ASSERTF ( !(field.decl->isRefType() && !field.decl->ref), "property can't be CMRES, in %s", field.decl->describe().c_str() );
             field.offset = -1U;
-            field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
+            auto sft = make_smart<TypeDecl>(*field.decl);
+            field.factory = [sft](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
                 switch ( nt ) {
                     case FactoryNodeType::getField:
                         return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
                     case FactoryNodeType::getFieldPtr:
                         return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
+                    case FactoryNodeType::getFieldR2V: {
+                        auto getFieldNode = context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
+                        return ExprRef2Value::GetR2V(context, at, sft, getFieldNode);
+                    }
                     case FactoryNodeType::safeGetField:
                     case FactoryNodeType::safeGetFieldPtr:
-                    case FactoryNodeType::getFieldR2V:
                     case FactoryNodeType::getFieldPtrR2V:
                         DAS_ASSERTF(0, "property requested property type, which is meaningless for the non-ref"
                                     "we should not be here, since property can't have ref type"
@@ -168,7 +172,9 @@ namespace das
             field.constDecl = makeType<constResultType>(*mlib);
             DAS_ASSERTF ( !(field.constDecl->isRefType() && !field.constDecl->ref), "property can't be CMRES, in %s", field.constDecl->describe().c_str() );
             field.offset = -1U;
-            field.factory = [](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
+            auto sft = make_smart<TypeDecl>(*field.decl);
+            auto sftc = make_smart<TypeDecl>(*field.constDecl);
+            field.factory = [sft,sftc](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
                 switch ( nt ) {
                     case FactoryNodeType::getField:
                         if ( value->type->constant ) {
@@ -182,9 +188,16 @@ namespace das
                         } else {
                             return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
                         }
+                    case FactoryNodeType::getFieldR2V:
+                        if ( value->type->constant ) {
+                            auto getFieldNode =  context.code->makeNode<SimNode_Property<ManagedType,FunTConst,PROP_CONST,false>>(at, value->simulate(context));
+                            return ExprRef2Value::GetR2V(context, at, sftc, getFieldNode);
+                        } else {
+                            auto getFieldNode =  context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
+                            return ExprRef2Value::GetR2V(context, at, sft, getFieldNode);
+                        }
                     case FactoryNodeType::safeGetField:
                     case FactoryNodeType::safeGetFieldPtr:
-                    case FactoryNodeType::getFieldR2V:
                     case FactoryNodeType::getFieldPtrR2V:
                         DAS_ASSERTF(0, "property requested property type, which is meaningless for the non-ref"
                                     "we should not be here, since property can't have ref type"

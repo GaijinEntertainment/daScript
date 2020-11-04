@@ -75,6 +75,7 @@ struct TestObjectFoo {
         return fooData + 13;
     }
     __forceinline Point3 hitPos() const { return hit; }
+    __forceinline const Point3 & hitPosRef() const { return hit; }
     __forceinline bool operator == ( const TestObjectFoo & obj ) const {
         return fooData == obj.fooData;
     }

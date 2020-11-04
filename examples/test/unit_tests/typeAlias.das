@@ -35,6 +35,8 @@ def test:bool
     assert(qq2.x==0.0 && qq2.y==1.0 && qq2.z==2.0)
     var qq3 = foo.hitPos
     assert(qq3.x==0.0 && qq3.y==1.0 && qq3.z==2.0)
+    let qq4 = foo.hitPosRef * float3(1)
+    assert(qq4.x==0.0 && qq4.y==1.0 && qq4.z==2.0)
     var hitDir = normalize(-foo.hit |> UnitTest::doubleSamplePoint3())
     let nhd = normalize(-float3(0,2,4))
     assert(hitDir.x==nhd.x && hitDir.y==nhd.y && hitDir.z==nhd.z)
