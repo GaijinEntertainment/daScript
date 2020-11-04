@@ -337,15 +337,6 @@ namespace das
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
-        mutable bool sibstituting = false;
-        virtual bool canSubstitute(TypeAnnotation * passType) const override
-        {
-            if (sibstituting) return false;
-            sibstituting = true;
-            bool result = passType->canSubstitute((TypeAnnotation *)this);
-            sibstituting = false;
-            return result;
-        }
         virtual TypeDeclPtr makeFieldType ( const string & na, bool ) const override {
             if ( na=="length" ) return make_smart<TypeDecl>(Type::tInt);
             return nullptr;

@@ -879,6 +879,8 @@ namespace das
             if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
                 if ( annotation->canSubstitute(decl.annotation) ) {
                     return true;
+                } else if ( decl.annotation->canBeSubstituted(annotation) ) {
+                    return true;
                 }
             }
             return false;

@@ -332,6 +332,7 @@ namespace das
         virtual bool isShareable ( ) const { return true; }
         virtual bool isSmart() const { return false; }
         virtual bool canSubstitute ( TypeAnnotation * /* passType */ ) const { return false; }
+        virtual bool canBeSubstituted ( TypeAnnotation * /* passType */ ) const { return false; }
         virtual string getSmartAnnotationCloneFunction () const { return ""; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
