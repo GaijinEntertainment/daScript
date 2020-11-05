@@ -275,6 +275,9 @@ class AstVisitor
 // static_assert
     def abstract preVisitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>) : void
     def abstract visitExprStaticAssert(expr:smart_ptr<ExprStaticAssert>) : ExpressionPtr
+// quote
+    def abstract preVisitExprQuote(expr:smart_ptr<ExprQuote>) : void
+    def abstract visitExprQuote(expr:smart_ptr<ExprQuote>) : ExpressionPtr
 // debug
     def abstract preVisitExprDebug(expr:smart_ptr<ExprDebug>) : void
     def abstract visitExprDebug(expr:smart_ptr<ExprDebug>) : ExpressionPtr

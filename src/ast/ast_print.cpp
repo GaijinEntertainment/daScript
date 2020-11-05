@@ -97,6 +97,8 @@ namespace das {
         __forceinline static bool noBracket ( Expression * expr ) {
             return expr->topLevel || expr->bottomLevel || expr->argLevel;
         }
+    // can we see inside quote
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return true; }
     // TYPE
         bool ET = false;
         virtual void preVisit ( TypeDecl * td ) override {

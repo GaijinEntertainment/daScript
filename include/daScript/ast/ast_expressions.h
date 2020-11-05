@@ -910,6 +910,15 @@ namespace das
         bool isVerify = false;
     };
 
+    struct ExprQuote : ExprLikeCall<ExprQuote> {
+        ExprQuote ( ) { __rtti = "ExprQuote"; };
+        ExprQuote ( const LineInfo & a, const string & name )
+            : ExprLikeCall<ExprQuote>(a,name) { __rtti = "ExprQuote"; }
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+
     struct ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
         ExprStaticAssert () { __rtti = "ExprStaticAssert"; };
         ExprStaticAssert ( const LineInfo & a, const string & name )

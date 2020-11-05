@@ -14,6 +14,8 @@
 
 #include "daScript/misc/lookup1.h"
 
+#include "daScript/simulate/simulate_visit_op.h"
+
 namespace das
 {
     // common for move and copy
@@ -1013,6 +1015,41 @@ namespace das
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
         return context.code->makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.constStringHeap->allocateString(message));
+    }
+
+    struct SimNode_AstGetExpression : SimNode_CallBase {
+        DAS_PTR_NODE;
+        SimNode_AstGetExpression ( const LineInfo & at, const ExpressionPtr & e, char * d )
+            : SimNode_CallBase(at) {
+            expr = e.get();
+            descr = d;
+        }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_AstGetExpression *) SimNode::copyNode(context, code);
+            that->descr = code->allocateName(descr);
+            return that;
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(AstGetExpression);
+            V_ARG(descr);
+            V_END();
+        }
+        __forceinline char * compute(Context &) {
+            DAS_PROFILE_NODE
+            return (char *) expr;
+        }
+        Expression *  expr;   // requires RTTI
+        char *        descr;
+    };
+
+    SimNode * ExprQuote::simulate (Context & context) const {
+        DAS_ASSERTF(arguments.size()==1,"Quote expects to return only one ExpressionPtr."
+        "We should not be here, since typeinfer should catch the mismatch.");
+        TextWriter ss;
+        ss << *arguments[0];
+        char * descr = context.code->allocateName(ss.str());
+        return context.code->makeNode<SimNode_AstGetExpression>(at, arguments[0], descr);
     }
 
     SimNode * ExprDebug::simulate (Context & context) const {

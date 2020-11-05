@@ -20,8 +20,7 @@ namespace das {
 
     class Visitor : public ptr_ref_count {
     protected:
-      virtual ~Visitor() {}
-
+        virtual ~Visitor() {}
     public:
         // what do we visit
         virtual bool canVisitFunction ( Function * fun ) { return true; }
@@ -30,6 +29,7 @@ namespace das {
         virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) { return true; }
         virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) { return true; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) { return false; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}
@@ -174,6 +174,7 @@ namespace das {
         VISIT_EXPR(ExprNullCoalescing)
         VISIT_EXPR(ExprAssert)
         VISIT_EXPR(ExprStaticAssert)
+        VISIT_EXPR(ExprQuote)
         VISIT_EXPR(ExprDebug)
         VISIT_EXPR(ExprInvoke)
         VISIT_EXPR(ExprErase)

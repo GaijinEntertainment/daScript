@@ -75,6 +75,7 @@ MAKE_TYPE_FACTORY(ExprRef2Ptr,ExprRef2Ptr);
 MAKE_TYPE_FACTORY(ExprAddr,ExprAddr);
 MAKE_TYPE_FACTORY(ExprAssert,ExprAssert);
 MAKE_TYPE_FACTORY(ExprStaticAssert,ExprStaticAssert);
+MAKE_TYPE_FACTORY(ExprQuote,ExprQuote);
 MAKE_TYPE_FACTORY(ExprDebug,ExprDebug);
 MAKE_TYPE_FACTORY(ExprInvoke,ExprInvoke);
 MAKE_TYPE_FACTORY(ExprErase,ExprErase);
@@ -582,6 +583,12 @@ namespace das {
         }
     };
 
+    struct AstExprQuoteAnnotation : AstExprLikeCallAnnotation<ExprQuote> {
+        AstExprQuoteAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprQuote> ("ExprQuote", ml) {
+        }
+    };
+
     struct AstExprAssertAnnotation : AstExprLikeCallAnnotation<ExprAssert> {
         AstExprAssertAnnotation(ModuleLibrary & ml)
             :  AstExprLikeCallAnnotation<ExprAssert> ("ExprAssert", ml) {
@@ -807,7 +814,7 @@ namespace das {
     struct AstExprMakeBlockAnnotation : AstExpressionAnnotation<ExprMakeBlock> {
         AstExprMakeBlockAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprMakeBlock> ("ExprMakeBlock", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(block)>("block");
+            addField<DAS_BIND_MANAGED_FIELD(block)>("_block","block");
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
             addField<DAS_BIND_MANAGED_FIELD(capture)>("capture");
             addFieldEx ( "mmFlags", "mmFlags", offsetof(ExprMakeBlock, mmFlags), makeExprMakeBlockFlags() );
@@ -1149,32 +1156,6 @@ namespace das {
         TypeDecl *  typeExpr;   // requires RTTI
     };
 
-    struct SimNode_AstGetExpression : SimNode_CallBase {
-        DAS_PTR_NODE;
-        SimNode_AstGetExpression ( const LineInfo & at, const ExpressionPtr & e, char * d )
-            : SimNode_CallBase(at) {
-            expr = e.get();
-            descr = d;
-        }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
-            auto that = (SimNode_AstGetExpression *) SimNode::copyNode(context, code);
-            that->descr = code->allocateName(descr);
-            return that;
-        }
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            V_OP(AstGetExpression);
-            V_ARG(descr);
-            V_END();
-        }
-        __forceinline char * compute(Context &) {
-            DAS_PROFILE_NODE
-            return (char *) expr;
-        }
-        Expression *  expr;   // requires RTTI
-        char *        descr;
-    };
-
     struct SimNode_AstGetFunction : SimNode_CallBase {
         DAS_PTR_NODE;
         SimNode_AstGetFunction ( const LineInfo & at, Function * f )
@@ -1202,28 +1183,6 @@ namespace das {
         virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) override {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
             return context->code->makeNode<SimNode_AstGetTypeDecl>(expr->at, exprTypeInfo->typeexpr);
-        }
-        virtual bool noAot ( const ExpressionPtr & ) const override {
-            return true;
-        }
-    };
-
-    struct AstExpressionMacro : TypeInfoMacro {
-        AstExpressionMacro() : TypeInfoMacro("ast_expression") {}
-        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
-            return typeFactory<smart_ptr<Expression>>::make(lib);
-        }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & errors ) override {
-            auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
-            if ( exprTypeInfo->subexpr ) {
-                TextWriter ss;
-                ss << *exprTypeInfo->subexpr;
-                char * descr = context->code->allocateName(ss.str());
-                return context->code->makeNode<SimNode_AstGetExpression>(expr->at, exprTypeInfo->subexpr, descr);
-            } else {
-                errors = "ast_expression requires expression, not just type";
-                return nullptr;
-            }
         }
         virtual bool noAot ( const ExpressionPtr & ) const override {
             return true;
@@ -1462,6 +1421,7 @@ namespace das {
         IMPL_ADAPT(ExprAddr);
         IMPL_ADAPT(ExprAssert);
         IMPL_ADAPT(ExprStaticAssert);
+        IMPL_ADAPT(ExprQuote);
         IMPL_ADAPT(ExprDebug);
         IMPL_ADAPT(ExprInvoke);
         IMPL_ADAPT(ExprErase);
@@ -1773,6 +1733,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprAddr);
     IMPL_BIND_EXPR(ExprAssert);
     IMPL_BIND_EXPR(ExprStaticAssert);
+    IMPL_BIND_EXPR(ExprQuote);
     IMPL_BIND_EXPR(ExprDebug);
     IMPL_BIND_EXPR(ExprInvoke);
     IMPL_BIND_EXPR(ExprErase);
@@ -2206,6 +2167,10 @@ namespace das {
         func->visit(*adapter);
     }
 
+    void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter ) {
+        expr->visit(*adapter);
+    }
+
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
         return context->stringHeap->allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
@@ -2357,8 +2322,9 @@ namespace das {
             lib.addModule(Module::require("rtti"));
             // THE MAGNIFICENT TWO
             addTypeInfoMacro(make_smart<AstTypeDeclMacro>());
-            addTypeInfoMacro(make_smart<AstExpressionMacro>());
             addTypeInfoMacro(make_smart<AstFunctionMacro>());
+            // QUOTE
+            addCall<ExprQuote>("quote");
             // FLAGS?
             addAlias(makeTypeDeclFlags());
             addAlias(makeFieldDeclarationFlags());
@@ -2464,6 +2430,7 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprRef2PtrAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprAddrAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprAssertAnnotation>(lib))->from("ExprLooksLikeCall");
+            addExpressionAnnotation(make_smart<AstExprQuoteAnnotation>(lib))->from("ExprLooksLikeCall");
             addExpressionAnnotation(make_smart<AstExprStaticAssertAnnotation>(lib))->from("ExprLooksLikeCall");
             addExpressionAnnotation(make_smart<AstExprDebugAnnotation>(lib))->from("ExprLooksLikeCall");
             addExpressionAnnotation(make_smart<AstExprInvokeAnnotation>(lib))->from("ExprLooksLikeCall");
@@ -2550,6 +2517,8 @@ namespace das {
                 SideEffects::accessExternal, "astVisit");
             addExtern<DAS_BIND_FUN(astVisitFunction)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisitFunction");
+            addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",
+                SideEffects::accessExternal, "astVisitExpression");
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",

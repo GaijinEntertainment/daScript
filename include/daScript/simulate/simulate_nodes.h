@@ -3071,7 +3071,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         int32_t     variant;
     };
 
-
 #if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)
 #define _msc_inline_bug __declspec(noinline)
 #else

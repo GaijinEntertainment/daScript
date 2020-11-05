@@ -812,7 +812,7 @@ def test
     var y = 2
     x = 3
     y = 4
-    let ed <- typeinfo(ast_expression x+y)
+    let ed <- quote(x+y)
     print("ed = {describe(ed)}\n")
     // ast_function
     let fd <- typeinfo(ast_function @@add)

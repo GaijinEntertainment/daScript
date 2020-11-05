@@ -1928,6 +1928,21 @@ namespace das {
             expr->type = make_smart<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
+    // ExprQuote
+        virtual ExpressionPtr visit ( ExprQuote * expr ) override {
+            if ( expr->arguments.size()!=1  ) {
+                error("quote(expr) only. can only return one expression tree",  "", "",
+                    expr->at, CompilationError::invalid_argument_count);
+                return Visitor::visit(expr);
+            }
+            // infer
+            expr->type = make_smart<TypeDecl>(Type::tPointer);
+            expr->type->smartPtr = true;
+            expr->type->smartPtrNative = true;
+            expr->type->firstType = make_smart<TypeDecl>(Type::tHandle);
+            expr->type->firstType->annotation = (TypeAnnotation *) Module::require("ast")->findAnnotation("Expression").get();
+            return Visitor::visit(expr);
+        }
     // ExprDebug
         virtual ExpressionPtr visit ( ExprDebug * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
