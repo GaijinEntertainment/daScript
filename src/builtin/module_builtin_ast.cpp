@@ -5,6 +5,7 @@
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_generate.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/performance_time.h"
@@ -2519,6 +2520,8 @@ namespace das {
                 SideEffects::accessExternal, "astVisitFunction");
             addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisitExpression");
+            addExtern<DAS_BIND_FUN(forceAt)>(*this, lib,  "force_at",
+                SideEffects::accessExternal, "forceAt");
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",

@@ -1037,7 +1037,7 @@ namespace das
         }
         __forceinline char * compute(Context &) {
             DAS_PROFILE_NODE
-            return (char *) expr;
+            return (char *) expr->clone().orphan();
         }
         Expression *  expr;   // requires RTTI
         char *        descr;
