@@ -1,7 +1,7 @@
 options indenting = 4
 options remove_unused_symbols = false
 
-module template
+module template_boost
 
 require ast
 require daslib/ast_boost
@@ -25,7 +25,7 @@ class TemplateVisitor : AstVisitor
             return <- clone_expression(rules.var2expr[vn])
         return expr
 
-def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression> ) : smart_ptr<Expression>
+def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression> )
     var prules : Template?
     unsafe
         prules = addr(rules)
@@ -36,19 +36,13 @@ def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Express
     unsafe
         delete astVisitorAdapter
         delete astVisitor
-    return <- expr
 
 def unquote_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
     assert(expr is ExprMakeBlock)
     unsafe
         var mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
-        var blk <- mkb._block
+        var blk := mkb._block
         return reinterpret<smart_ptr<ExprBlock>>(blk)
-
-def unquote_flat_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
-    var blk <- unquote_block(expr)
-    blk.blockFlags &= ~ ExprBlockFlags isClosure
-    return <- blk
 
 [private]
 def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr )

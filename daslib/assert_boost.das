@@ -33,4 +33,7 @@ class AssertOnceMacro : AstFunctionAnnotation
         rules |> renameVariable("__assert_once_I") <| once_name
         rules |> replaceVariable("expr") <| clone_expression(call.arguments[0])
         rules |> replaceVariable("message") <| clone_expression(call.arguments[1])
-        return <- apply_template(rules, call.at, qblock) |> unquote_flat_block()
+        apply_template(rules, call.at, qblock)
+        var res <- unquote_block(qblock)
+        qblock := null
+        return res

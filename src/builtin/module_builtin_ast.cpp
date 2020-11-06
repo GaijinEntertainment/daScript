@@ -2300,6 +2300,10 @@ namespace das {
         return context->stringHeap->allocateString(func->getMangledName());
     }
 
+    void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at ) {
+        forceAt(expr, at);
+    }
+
     class Module_Ast : public Module {
     public:
         template <typename RecAnn>
@@ -2520,8 +2524,8 @@ namespace das {
                 SideEffects::accessExternal, "astVisitFunction");
             addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisitExpression");
-            addExtern<DAS_BIND_FUN(forceAt)>(*this, lib,  "force_at",
-                SideEffects::accessExternal, "forceAt");
+            addExtern<DAS_BIND_FUN(forceAtRaw)>(*this, lib,  "force_at",
+                SideEffects::accessExternal, "forceAtRaw");
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",

@@ -450,7 +450,7 @@ namespace das {
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value->clone(); }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
-    ExpressionPtr forceAt ( const ExpressionPtr & expr, const LineInfo & at );
+    void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
