@@ -13,6 +13,8 @@ set(EXECUTABLE_OUTPUT_PATH  ${PROJECT_SOURCE_DIR}/bin/)
 
 FIND_XXD()
 FIND_FLEX_AND_BISON()
+FIND_PYTHON3()
+FIND_VULKAN()
 
 SETUP_COMPILER()
 
@@ -531,6 +533,45 @@ TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)
 SETUP_LTO(daScriptTest)
+
+# dasBinder test module
+
+SET(BINDER_TEST_SRC
+examples/test/binder/main.cpp
+examples/test/binder/generated_bindings.cpp
+)
+
+add_executable(dasBinderTest ${BINDER_TEST_SRC})
+TARGET_LINK_LIBRARIES(dasBinderTest libDaScript)
+SETUP_CPP11(dasBinderTest)
+
+DAS_BINDER(
+    examples/test/binder/header_to_bind.h
+    examples/test/binder/generated_bindings.cpp
+    examples/test/binder/binding_config.py
+)
+
+# vulkan example module
+
+IF(NOT Vulkan_FOUND)
+    MESSAGE(STATUS "Vulkan SDK not found. Not building vulkanExample.")
+ELSE()
+    SET(VULKAN_EXAMPLE_SRC
+    examples/vulkan/main.cpp
+    examples/vulkan/vulkan_module.cpp
+    )
+
+    add_executable(vulkanExample ${VULKAN_EXAMPLE_SRC})
+    TARGET_LINK_LIBRARIES(vulkanExample libDaScript ${Vulkan_LIBRARY})
+    TARGET_INCLUDE_DIRECTORIES(vulkanExample PUBLIC ${Vulkan_INCLUDE_DIR})
+    SETUP_CPP11(vulkanExample)
+
+    DAS_BINDER(
+        ${Vulkan_INCLUDE_DIR}/vulkan/vulkan.h
+        examples/vulkan/vulkan_module.cpp
+        examples/vulkan/vulkan_binding_config.py
+    )
+ENDIF()
 
 # Profile module
 
