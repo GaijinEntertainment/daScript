@@ -1,3 +1,7 @@
+#include <stdbool.h>
+#include <stdint.h>
+
+
 enum FirstEnum {
     FirstEnum_zero = 0
 ,   FirstEnum_one  = 1
@@ -9,3 +13,30 @@ enum SecondEnum {
 ,   SecondEnum_one  = 1
 ,   SecondEnum_two  = 2
 };
+
+struct FirstStruct {
+    bool bool_field;
+    int32_t int_field;
+    float float_field;
+};
+
+struct SecondStruct {
+    bool bool_field;
+    int32_t int_field;
+    float float_field;
+};
+
+//FIXME: following are used in vulkan but not supported by das yet
+
+/*
+struct StructWithArray {
+    char some_chars[10];
+};
+*/
+
+/*
+struct StructWithBitFields {
+    uint32_t field24:24;
+    uint32_t field8:8;
+};
+*/

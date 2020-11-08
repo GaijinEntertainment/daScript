@@ -155,17 +155,33 @@ MACRO(BISON input)
 	ENDIF()
 ENDMACRO()
 
+MACRO(SETUP_UTILS)
+    SET(DAS_PYTHON_SHARED_SRC
+        src/python/das/__init__.py
+        src/python/das/shared/__init__.py
+        src/python/das/shared/assertions.py
+        src/python/das/shared/object_base.py
+        src/python/das/shared/op_sys.py
+    )
+    SET(DAS_BINDER_SRC
+        src/python/das/binder/__init__.py
+        src/python/das/binder/binder.py
+        src/python/das/binder/config.py
+        utils/dasBinder/main.py
+    )
+    SET(DAS_GEN_FOR_EACH_SRC
+        src/python/das/gen_for_each/__init__.py
+        src/python/das/gen_for_each/gen_for_each.py
+        utils/dasGenForEach/main.py
+    )
+ENDMACRO()
+
 MACRO(DAS_BINDER c_header_from module_to config)
     IF(NOT Python3_FOUND OR NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
         MESSAGE(STATUS "Prerequisites for dasBinder not found. Pre-generated binding files will be used.")
     ELSE()
-        SET(DAS_BINDER_SRC
-            utils/dasBinder/das_binder/__init__.py
-            utils/dasBinder/das_binder/config.py
-            utils/dasBinder/main.py
-        )
         ADD_CUSTOM_COMMAND(
-            DEPENDS ${c_header_from} ${config} ${DAS_BINDER_SRC}
+            DEPENDS ${c_header_from} ${config} ${DAS_BINDER_SRC} ${DAS_PYTHON_SHARED_SRC}
             OUTPUT ${CMAKE_SOURCE_DIR}/${module_to}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             VERBATIM
@@ -177,6 +193,23 @@ MACRO(DAS_BINDER c_header_from module_to config)
                 --include_dirs "${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES}"
                 --include_dirs_sep ";"
             COMMENT "Writing generated das bindings for ${c_header_from} to ${module_to}"
+        )
+    ENDIF()
+ENDMACRO()
+
+MACRO(DAS_GEN_FOR_EACH write_to max_args)
+    IF(NOT Python3_FOUND)
+        MESSAGE(STATUS "Prerequisites for dasGenForEach not found. Pre-generated files will be used.")
+    ELSE()
+        ADD_CUSTOM_COMMAND(
+            DEPENDS ${DAS_GEN_FOR_EACH_SRC} ${DAS_PYTHON_SHARED_SRC}
+            OUTPUT ${CMAKE_SOURCE_DIR}/${write_to}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            VERBATIM
+            COMMAND ${Python3_EXECUTABLE} -B utils/dasGenForEach/main.py
+                --write_to ${write_to}
+                --max_args ${max_args}
+            COMMENT "Writing generated DAS_FOR_EACH macros to ${write_to}"
         )
     ENDIF()
 ENDMACRO()

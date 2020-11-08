@@ -1,4 +1,4 @@
-from das_binder.config import ConfigBase
+from das.binder.config import ConfigBase
 
 
 class Config(ConfigBase):
@@ -11,10 +11,23 @@ class Config(ConfigBase):
     def c_header_include(self):
         return 'vulkan/vulkan.h'
 
-    def configure_enum(self, enum):
-        #FIXME: these are failing to bind, saying incomplete type
-        if enum.name in {
-            'VkFormat',
-            'VkStructureType',
-        }:
-            enum.ignore()
+    def configure_struct(self, struct):
+        #FIXME: make it work for all structs
+        for field in struct.fields:
+            if (field.is_array
+                or field.name.startswith('pfn')
+                or field.is_bit_field
+            ):
+                struct.ignore()
+                return
+            for kw in [
+                '*',
+                'unsigned long',
+
+                # the following are unions:
+                'VkClearValue',
+                'VkPerformanceValueDataINTEL',
+            ]:
+                if kw in field.type:
+                    struct.ignore()
+                    return

@@ -13,3 +13,7 @@ class ConfigBase(object):
     def configure_enum(self, enum):
         '''This function is called for each encountered enum.'''
         pass
+
+    def configure_struct(self, struct):
+        '''This function is called for each encountered struct.'''
+        pass

@@ -1,4 +1,4 @@
-from das_binder.config import ConfigBase
+from das.binder.config import ConfigBase
 
 
 class Config(ConfigBase):
