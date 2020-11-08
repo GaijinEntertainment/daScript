@@ -185,6 +185,7 @@ class C_TranslationUnit(LoggingObject):
         self.__all_structs = list(self.__get_nodes(node_class=C_Struct,
             configure_fn=self.__config.configure_struct))
 
+        # Ignoring all types which depend on ignored types
         self.__ignored_types = set()
         while True:
             self.__ignored_types = set(node.name
@@ -302,7 +303,7 @@ class C_Struct(C_InnerNode):
     @staticmethod
     def maybe_create(root):
         if (root['kind'] == 'RecordDecl'
-            and root['tagUsed'] in 'struct'
+            and root['tagUsed'] == 'struct'
             and 'inner' in root
         ):
             return C_Struct(root=root)

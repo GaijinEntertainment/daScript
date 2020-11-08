@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 
 enum FirstEnum {
@@ -38,5 +39,18 @@ struct StructWithArray {
 struct StructWithBitFields {
     uint32_t field24:24;
     uint32_t field8:8;
+};
+*/
+
+/*
+struct StructWithSizeT {
+    size_t my_size;
+};
+*/
+
+/*
+typedef struct SomeOpaqueData_T * SomeOpaqueHandle;
+struct StructWithOpaqueHandle {
+    SomeOpaqueHandle handle;
 };
 */
