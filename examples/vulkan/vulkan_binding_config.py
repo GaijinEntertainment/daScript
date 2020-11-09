@@ -11,23 +11,22 @@ class Config(ConfigBase):
     def c_header_include(self):
         return 'vulkan/vulkan.h'
 
-    def configure_struct(self, struct):
-        #FIXME: make it work for all structs
-        for field in struct.fields:
-            if (field.is_array
-                or field.name.startswith('pfn')
-                or field.is_bit_field
-            ):
-                struct.ignore()
-                return
-            for kw in [
-                '*',
-                'unsigned long',
+    def configure_struct_field(self, field):
+        #FIXME: make it work for all fields
+        if (field.is_array
+            or field.name.startswith('pfn')
+            or field.is_bit_field
+        ):
+            field.ignore()
+        for kw in [
+            '*',
+            'unsigned long',
 
-                # the following are unions:
-                'VkClearValue',
-                'VkPerformanceValueDataINTEL',
-            ]:
-                if kw in field.type:
-                    struct.ignore()
-                    return
+            # the following are unions:
+            'VkClearColorValue',
+            'VkClearValue',
+            'VkPerformanceValueDataINTEL',
+            'VkPipelineExecutableStatisticValueKHR',
+        ]:
+            if kw in field.type:
+                field.ignore()

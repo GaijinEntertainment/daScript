@@ -180,34 +180,9 @@ class C_TranslationUnit(LoggingObject):
         self.__root = json.loads(out)
         self.__config = config
 
-        self.__all_enums = list(self.__get_nodes(node_class=C_Enum,
-            configure_fn=self.__config.configure_enum))
-        self.__all_structs = list(self.__get_nodes(node_class=C_Struct,
-            configure_fn=self.__config.configure_struct))
-
-        # Ignoring all types which depend on ignored types
-        self.__ignored_types = set()
-        while True:
-            self.__ignored_types = set(node.name
-                for nodes in [self.__all_enums, self.__all_structs]
-                for node in nodes
-                if node.is_ignored)
-            anything_new_ignored = False
-            for struct in self.__all_structs:
-                if (not struct.is_ignored
-                    and struct.depends_on(self.__ignored_types)
-                ):
-                    struct.ignore()
-                    anything_new_ignored = True
-            if not anything_new_ignored:
-                break
-
-        self._log_info('Ignoring following types:\n{}'.format('\n'.join(
-            sorted(self.__ignored_types))))
-
     def __get_nodes(self, node_class, configure_fn):
         for inner in self.__root['inner']:
-            node = node_class.maybe_create(root=inner)
+            node = node_class.maybe_create(root=inner, config=self.__config)
             if node is None or node.is_builtin:
                 continue
             configure_fn(node)
@@ -215,25 +190,28 @@ class C_TranslationUnit(LoggingObject):
 
     @property
     def enums(self):
-        for enum in self.__all_enums:
-            if not enum.is_ignored:
-                yield enum
+        return self.__get_nodes(node_class=C_Enum,
+            configure_fn=self.__config.configure_enum)
 
     @property
     def structs(self):
-        for struct in self.__all_structs:
-            if not struct.is_ignored:
-                yield struct
+        return self.__get_nodes(node_class=C_Struct,
+            configure_fn=self.__config.configure_struct)
 
 
 class C_InnerNode(object):
 
-    def __init__(self, root):
+    def __init__(self, root, config):
         self.__root = root
         self.__ignored = False
+        self.__config = config
 
     def ignore(self):
         self.__ignored = True
+
+    @property
+    def config(self):
+        return self.__config
 
     @property
     def is_ignored(self):
@@ -261,9 +239,9 @@ class C_InnerNode(object):
 class C_Enum(C_InnerNode):
 
     @staticmethod
-    def maybe_create(root):
+    def maybe_create(root, **kwargs):
         if root['kind'] == 'EnumDecl':
-            return C_Enum(root=root)
+            return C_Enum(root=root, **kwargs)
 
     @property
     def fields(self):
@@ -301,18 +279,21 @@ class C_Struct(C_InnerNode):
         self.__can_move = can_move
 
     @staticmethod
-    def maybe_create(root):
+    def maybe_create(root, **kwargs):
         if (root['kind'] == 'RecordDecl'
             and root['tagUsed'] == 'struct'
             and 'inner' in root
         ):
-            return C_Struct(root=root)
+            return C_Struct(root=root, **kwargs)
 
     @property
     def fields(self):
         for inner in self.root['inner']:
             if inner['kind'] == 'FieldDecl':
-                yield C_StructField(root=inner)
+                field = C_StructField(root=inner, config=self.config)
+                self.config.configure_struct_field(field=field)
+                if not field.is_ignored:
+                    yield field
 
     def depends_on(self, types):
         for type_ in types:

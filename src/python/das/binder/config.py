@@ -17,3 +17,7 @@ class ConfigBase(object):
     def configure_struct(self, struct):
         '''This function is called for each encountered struct.'''
         pass
+
+    def configure_struct_field(self, field):
+        '''This function is called for each field in each struct.'''
+        pass
