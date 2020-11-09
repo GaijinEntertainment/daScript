@@ -133,10 +133,12 @@ namespace das
         ModuleFileAccess ( const string & pak, const FileAccessPtr & access );
         virtual ~ModuleFileAccess();
         bool failed() const { return !context || !modGet; }
-        virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
+        virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;
+        virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const override;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;
+        SimFunction *       includeGet = nullptr;
     };
 
     struct LineInfo {
