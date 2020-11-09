@@ -70,18 +70,17 @@ class Binder(LoggingObject):
     def __init__(self, argv):
         self.__settings = Settings(argv=argv[1:])
         self.__config = self.__read_config(self.__settings.config_fpath)
-        self.__c_header = None
+        self.__c_header = C_TranslationUnit(
+            c_src_fpath=self.__settings.c_header_from,
+            clang_c_exe=self.__settings.clang_c_exe,
+            include_dirs=self.__settings.include_dirs,
+            config=self.__config)
 
     def run(self):
         logging.basicConfig(level=self.__settings.log_level,
             format='%(asctime)s [%(levelname)s:%(name)s] %(message)s')
         self._log_info(f'Generating bindings for '
             f'{self.__settings.c_header_from}')
-        self.__c_header = C_TranslationUnit(
-            c_src_fpath=self.__settings.c_header_from,
-            clang_c_exe=self.__settings.clang_c_exe,
-            include_dirs=self.__settings.include_dirs,
-            config=self.__config)
         write_to_file(fpath=self.__settings.module_to,
             content='\n'.join(self.__generate_module() + ['']))
         self._log_info(f'Wrote generated das::Module to '
@@ -168,7 +167,7 @@ class Binder(LoggingObject):
         return lines
 
 
-class C_TranslationUnit(LoggingObject):
+class C_TranslationUnit(object):
 
     def __init__(self, c_src_fpath, clang_c_exe, include_dirs, config):
         cmd = []
