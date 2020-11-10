@@ -42,6 +42,15 @@ namespace das {
         __forceinline operator bool() const {
             return ptr != nullptr;
         }
+        __forceinline smart_ptr<T, smart_ptr_policy<T>> marshal() const {
+            if ( ptr ) {
+                smart_ptr<T, smart_ptr_policy<T>> res = ptr;
+                DAS_VERIFY ( !smart_ptr_policy<T>::delRef(ptr) );
+                return res;
+            } else {
+                return ptr;
+            }
+        }
         T * ptr;
     };
 
@@ -121,9 +130,12 @@ namespace das {
             return set(p.get());
         }
         __forceinline smart_ptr & operator = ( smart_ptr && p ) {
-            reset();
-            ptr = p.ptr;
-            p.ptr = nullptr;
+            if ( ptr==p.get() ) {
+                p.ptr = nullptr;
+            } else {
+                set(p.get());
+                p.set(nullptr);
+            }
             return *this;
         }
         __forceinline smart_ptr & operator = ( T * p ) {

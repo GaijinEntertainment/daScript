@@ -1234,25 +1234,25 @@ namespace das {
 
 #define IMPL_PREVISIT1(WHAT,WHATTYPE) \
     if ( FN_PREVISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>> \
             (context,FN_PREVISIT(WHAT),classPtr,expr); \
     }
 
 #define IMPL_PREVISIT2(WHAT,WHATTYPE,ARG1T,ARG1) \
     if ( FN_PREVISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T> \
             (context,FN_PREVISIT(WHAT),classPtr,expr,ARG1); \
     }
 
 #define IMPL_PREVISIT3(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2) \
     if ( FN_PREVISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T> \
             (context,FN_PREVISIT(WHAT),classPtr,expr,ARG1,ARG2); \
     }
 
 #define IMPL_PREVISIT4(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
     if ( FN_PREVISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
             (context,FN_PREVISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
     }
 
@@ -1260,56 +1260,56 @@ namespace das {
 
 #define IMPL_VISIT_VOID1(WHAT,WHATTYPE) \
     if ( FN_VISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>> \
             (context,FN_VISIT(WHAT),classPtr,expr); \
     }
 
 #define IMPL_VISIT_VOID2(WHAT,WHATTYPE,ARG1T,ARG1) \
     if ( FN_VISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T> \
             (context,FN_VISIT(WHAT),classPtr,expr,ARG1); \
     }
 
 #define IMPL_VISIT_VOID3(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2) \
     if ( FN_VISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T> \
             (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2); \
     }
 
 #define IMPL_VISIT_VOID4(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
     if ( FN_VISIT(WHAT) ) { \
-        das_invoke_function<void>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
+        das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
             (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
     }
 
 #define IMPL_VISIT1(WHAT,WHATTYPE,RETTYPE,RETVALUE) \
     if ( FN_VISIT(WHAT) ) { \
-        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr<WHATTYPE>> \
-            (context,FN_VISIT(WHAT),classPtr,expr); \
+        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>> \
+            (context,FN_VISIT(WHAT),classPtr,expr).marshal(); \
     } else { \
         return RETVALUE; \
     }
 
 #define IMPL_VISIT2(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1) \
     if ( FN_VISIT(WHAT) ) { \
-        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1); \
+        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T> \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1).marshal(); \
     } else { \
         return RETVALUE; \
     }
 
 #define IMPL_VISIT3(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1,ARG2T,ARG2) \
     if ( FN_VISIT(WHAT) ) { \
-        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2); \
+        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T> \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2).marshal(); \
     } else { \
         return RETVALUE; \
     }
 
 #define IMPL_VISIT4(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
     if ( FN_VISIT(WHAT) ) { \
-        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
+        return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3).marshal(); \
     } else { \
         return RETVALUE; \
     }
@@ -1558,7 +1558,7 @@ namespace das {
         { IMPL_PREVISIT1(ExprBlockFinal,ExprBlock); }
     void VisitorAdapter::visitBlockFinal ( ExprBlock * expr )  {
         if ( FN_VISIT(ExprBlockFinal) ) {
-            das_invoke_function<void>::invoke<void *,smart_ptr<ExprBlock>>
+            das_invoke_function<void>::invoke<void *,smart_ptr_raw<ExprBlock>>
                 (context,FN_VISIT(ExprBlockFinal),classPtr,expr);
         }
     }

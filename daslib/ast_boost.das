@@ -182,7 +182,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
         fn.flags |= FunctionFlags init
-        fn.result <- new [[TypeDecl() baseType=Type tVoid]]
+        fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
         var blk <- new [[ExprBlock() at=at]]
         var iblk <- new [[ExprBlock() at=at]]
         let res = get_ptr(iblk)
@@ -225,9 +225,10 @@ class SetupAnyAnnotation : AstStructureAnnotation
         var cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
         self->setup_call(st,cll)
         var nee <- new [[ExprNew() at=st.at, initializer=true]]
-        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st)]]
+        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at=st.at]]
         emplace(cll.arguments,nee)
         emplace(blk.list,cll)
+        blk := null
         return true
 
 class SetupFunctionAnnotatoin : SetupAnyAnnotation
@@ -352,7 +353,7 @@ def walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
 def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     let total = any_table_size(data)
     if total != 0
-        var tupT <- new [[TypeDecl() baseType=Type tTuple]]
+        var tupT <- new [[TypeDecl() baseType=Type tTuple, at=at]]
         emplace(tupT.argTypes,clone_type(info.firstType))
         emplace(tupT.argTypes,clone_type(info.secondType))
         var arrT <- clone_type(tupT)

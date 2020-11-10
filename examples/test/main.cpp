@@ -321,7 +321,7 @@ int main( int argc, char * argv[] ) {
     // ptr_ref_count::ref_count_track = 0x1242c;
     // das_track_string_breakpoint(189);
     // das_track_breakpoint(8);
-    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+    // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;

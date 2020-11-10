@@ -26,15 +26,30 @@ namespace das
                 tp << " id=" << HEX << ptr->ref_count_id << DEC;
 #endif
                 if ( auto td = dynamic_cast<TypeDecl *>(ptr.get()) ) {
-                    tp << " TypeDecl at " << around(td->at);
+                    tp << " TypeDecl at " << around(td->at) << " ";
+                    if ( td->baseType==Type::tStructure ) {
+                        tp << "structure";
+                    } else if ( td->baseType==Type::tHandle ) {
+                        tp << "handle";
+                    } else {
+                        tp << das_to_string(td->baseType);
+                    }
                 } else if ( auto ex = dynamic_cast<Expression *>(ptr.get()) ) {
                     tp << " " <<  ex->__rtti << " at " << around(ex->at);
                     if ( strcmp(ex->__rtti,"ExprConstString")==0 ) {
                         auto excs = static_cast<ExprConstString *>(ex);
                         tp << " \"" << excs->text << "\"";
+                    } else if ( strcmp(ex->__rtti,"ExprField")==0 ) {
+                        auto exf = static_cast<ExprField *>(ex);
+                        tp << " ." << exf->field;
+                    } else if ( strcmp(ex->__rtti,"ExprCall")==0 ) {
+                        auto exc = static_cast<ExprCall *>(ex);
+                        tp << " " << exc->name << "(with " << exc->arguments.size() << " arguments)";
                     }
                 } else if ( auto vp = dynamic_cast<Variable *>(ptr.get()) ) {
                     tp << " Variable " << vp->name << " at " << around(vp->at);
+                } else if ( auto fp = dynamic_cast<Function *>(ptr.get()) ) {
+                    tp << " Function " << fp->name << " at " << around(fp->at);
                 }
                 tp << "\n";
                 total ++;
