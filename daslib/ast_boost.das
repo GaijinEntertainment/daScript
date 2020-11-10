@@ -72,6 +72,26 @@ def is_class_method ( cinfo:StructurePtr; finfo:TypeDeclPtr )
         return false
     return true
 
+def emplace ( var vec:dasvector`smart_ptr`Expression; var ptr:smart_ptr<Expression> )
+    push(vec,ptr)
+    ptr := null
+
+def emplace ( var vec:dasvector`smart_ptr`TypeDecl; var ptr:smart_ptr<TypeDecl> )
+    push(vec,ptr)
+    ptr := null
+
+def emplace ( var vec:dasvector`smart_ptr`MakeFieldDecl; var ptr:smart_ptr<MakeFieldDecl> )
+    push(vec,ptr)
+    ptr := null
+
+def emplace ( var vec:dasvector`smart_ptr`MakeStruct; var ptr:smart_ptr<MakeStruct> )
+    push(vec,ptr)
+    ptr := null
+
+def emplace ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
+    push(vec,ptr)
+    ptr := null
+
 class MacroMacro : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         compiling_program().flags |= ProgramFlags needMacroModule
@@ -79,7 +99,7 @@ class MacroMacro : AstFunctionAnnotation
         var blk <- new [[ExprBlock() at=func.at]]
         var ifm <- new [[ExprCall() at=func.at, name:="is_compiling_macros"]]
         var ife <- new [[ExprIfThenElse() at=func.at, cond<-ifm, if_true<-func.body]]
-        push(blk.list,ife)
+        emplace(blk.list,ife)
         func.body <- blk
         return true
 
@@ -165,15 +185,17 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         fn.result <- new [[TypeDecl() baseType=Type tVoid]]
         var blk <- new [[ExprBlock() at=at]]
         var iblk <- new [[ExprBlock() at=at]]
+        let res = get_ptr(iblk)
         var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros_in_module"]]
         var ifmn <- new [[ExprConstString() at=at, value:=compiling_module().name]]
-        push(ifm.arguments,ifmn)
-        var ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true:=iblk]]
-        push(blk.list,ife)
+        emplace(ifm.arguments,ifmn)
+        var ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true<-iblk]]
+        emplace(blk.list,ife)
         fn.body <- blk
         if !(compiling_module() |> add_function(fn))
             panic("can't setup")
-        return get_ptr(iblk)
+        fn := null
+        return res
     else
         if fn.body.__rtti != "ExprBlock"
             panic("expecting func.ExprBlock")
@@ -190,7 +212,7 @@ class SetupAnyAnnotation : AstStructureAnnotation
     annotation_function_call : string = ""
     name : string
     def setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
-        push(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
+        emplace(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
         if argName is nothing
@@ -204,8 +226,8 @@ class SetupAnyAnnotation : AstStructureAnnotation
         self->setup_call(st,cll)
         var nee <- new [[ExprNew() at=st.at, initializer=true]]
         nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st)]]
-        push(cll.arguments,nee)
-        push(blk.list,cll)
+        emplace(cll.arguments,nee)
+        emplace(blk.list,cll)
         return true
 
 class SetupFunctionAnnotatoin : SetupAnyAnnotation
@@ -224,8 +246,8 @@ class TagFunctionMacro : SetupAnyAnnotation
     override annotation_function_call : string = "setup_tag_annotation"
     tag : string
     def override setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
-        push(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
-        push(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
+        emplace(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
+        emplace(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let argTag = find_arg("tag", args)
         if argTag is nothing
@@ -254,10 +276,10 @@ def walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
         var mkArr <- new [[ExprMakeArray() at=at, makeType<-clone_type(info.firstType)]]
         any_array_foreach(data, stride) <| $ ( value )
             var elem <- walk_and_convert(value, info.firstType, at)
-            push(mkArr.values, elem)
+            emplace(mkArr.values, elem)
         push(mkArr.makeType.dim,total)
         var mkToArrayMove <- new [[ExprCall() at=at, name:="to_array_move"]]
-        push(mkToArrayMove.arguments,mkArr)
+        emplace(mkToArrayMove.arguments,mkArr)
         return mkToArrayMove
     else
         var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
@@ -273,7 +295,7 @@ def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expr
 	for x in range(total)
         unsafe
             var elem <- walk_and_convert(data + stride*x, einfo, at)
-            push(mkArr.values, elem)
+            emplace(mkArr.values, elem)
     unsafe
 	    delete einfo
 	return mkArr
@@ -293,7 +315,7 @@ def walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
         let offset = get_tuple_field_offset(info,idx)
         unsafe
             var elem <- walk_and_convert(data + offset, info.argTypes[idx], at)
-            push(mkArr.values, elem)
+            emplace(mkArr.values, elem)
     return mkArr
 
 [private]
@@ -309,8 +331,8 @@ def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) 
                 var mkF <- new [[MakeFieldDecl() at=at, name := x.name, value <- elem]]
                 if !x._type.canCopy
                     mkF.flags = FieldDeclarationFlags moveSemantics
-                push(*mkS, mkF)
-    push(mkStruct.structs, mkS)
+                emplace(*mkS, mkF)
+    emplace(mkStruct.structs, mkS)
 	return mkStruct
 
 [private]
@@ -323,7 +345,7 @@ def walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
         var mkS <- new [[MakeFieldDecl() at=at, name:=info.argNames[vindex], value <- elem]]
         if !info.argTypes[vindex].canCopy
             mkS.flags = FieldDeclarationFlags moveSemantics
-        push(mkVariant.variants, mkS)
+        emplace(mkVariant.variants, mkS)
         return mkVariant
 
 [private]
@@ -331,8 +353,8 @@ def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
     let total = any_table_size(data)
     if total != 0
         var tupT <- new [[TypeDecl() baseType=Type tTuple]]
-        push(tupT.argTypes,clone_type(info.firstType))
-        push(tupT.argTypes,clone_type(info.secondType))
+        emplace(tupT.argTypes,clone_type(info.firstType))
+        emplace(tupT.argTypes,clone_type(info.secondType))
         var arrT <- clone_type(tupT)
         var mkArr <- new [[ExprMakeArray() at=at, makeType <- arrT]]
         var key_stride = info.firstType.sizeOf
@@ -341,12 +363,12 @@ def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
             var key <- walk_and_convert ( pkey, info.firstType, at)
             var value <- walk_and_convert ( pvalue, info.secondType, at)
             var mkTup <- new [[ExprMakeTuple() at=at, recordType<-clone_type(tupT), isKeyValue=true]]
-            push(mkTup.values,key)
-            push(mkTup.values,value)
-            push(mkArr.values,mkTup)
+            emplace(mkTup.values,key)
+            emplace(mkTup.values,value)
+            emplace(mkArr.values,mkTup)
         push(mkArr.makeType.dim,total)
         var mkToTableMove <- new [[ExprCall() at=at, name:="to_table_move"]]
-        push(mkToTableMove.arguments,mkArr)
+        emplace(mkToTableMove.arguments,mkArr)
         return mkToTableMove
     else
         var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
