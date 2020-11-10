@@ -318,9 +318,10 @@ int main( int argc, char * argv[] ) {
         setDasRoot(argv[1]);
     }
     setCommandLineArguments(argc,argv);
+    // ptr_ref_count::ref_count_track = 0x1242c;
     // das_track_string_breakpoint(189);
     // das_track_breakpoint(8);
-    // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // _CrtSetBreakAlloc(6836533);
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
@@ -348,17 +349,18 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/doc/reflections/das2rst.das"
 // examples
     // #define TEST_NAME   "/examples/test/dict_pg.das"
-    #define TEST_NAME   "/examples/test/hello_world.das"
+    // #define TEST_NAME   "/examples/test/hello_world.das"
     // #define TEST_NAME   "/examples/test/base64.das"
     // #define TEST_NAME   "/examples/test/regex_lite.das"
     // #define TEST_NAME   "/examples/test/hello_world.das"
     // #define TEST_NAME   "/examples/test/json_example.das"
     // #define TEST_NAME   "/examples/test/ast_print.das"
     // #define TEST_NAME   "/examples/test/unit_tests/hint_macros_example.das"
-    // #define TEST_NAME   "/examples/test/unit_tests/aonce.das"
+    #define TEST_NAME   "/examples/test/unit_tests/aonce.das"
     unit_test(getDasRoot() +  TEST_NAME,false);
     // unit_test(getDasRoot() +  TEST_NAME,true);
     Module::Shutdown();
+    dumpTrackingLeaks();
     getchar();
     return 0;
 #endif

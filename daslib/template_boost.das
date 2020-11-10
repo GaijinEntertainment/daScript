@@ -56,6 +56,7 @@ def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDecl
     ]]
     if !add_variable(mod, vvar)
         panic("can't add global variable {vname}")
+    vvar := null
 
 def add_global_var ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
     add_global_var_any(mod, vname, vat, TypeDeclFlags removeConstant, value)

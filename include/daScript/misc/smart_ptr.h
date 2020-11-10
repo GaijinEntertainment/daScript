@@ -2,6 +2,12 @@
 
 #include <functional> // std::hash
 
+#ifndef DAS_SMART_PTR_ID
+#define DAS_SMART_PTR_ID    0
+#endif
+
+void os_debug_break();
+
 namespace das {
 
     template<typename T, typename TP>
@@ -32,9 +38,6 @@ namespace das {
         }
         __forceinline operator smart_ptr_raw<void> & () const {
             return *((smart_ptr_raw<void> *)this);
-        }
-        __forceinline operator smart_ptr<T,smart_ptr_policy<T>> & () const {
-            return *((smart_ptr<T,smart_ptr_policy<T>> *)this);
         }
         __forceinline operator bool() const {
             return ptr != nullptr;
@@ -276,21 +279,43 @@ namespace das {
         return reinterpret_cast<T *>(r.get());
     }
 
+#if DAS_SMART_PTR_ID
+    #define DAS_UPDATE_SMART_PTR_ID        ref_count_id = ++ref_count_total;
+    #define DAS_TRACK_SMART_PTR_ID         if ( ref_count_id==ref_count_track ) os_debug_break();
+#else
+    #define DAS_UPDATE_SMART_PTR_ID
+    #define DAS_TRACK_SMART_PTR_ID
+#endif
+
     class ptr_ref_count {
     public:
-        __forceinline ptr_ref_count () {}
-        __forceinline ptr_ref_count ( const ptr_ref_count &  ) {}
-        __forceinline ptr_ref_count ( const ptr_ref_count && ) {}
+#if DAS_SMART_PTR_ID
+        uint64_t    ref_count_id;
+        static uint64_t ref_count_total;
+        static uint64_t ref_count_track;
+#endif
+    public:
+        __forceinline ptr_ref_count () {
+            DAS_UPDATE_SMART_PTR_ID
+        }
+        __forceinline ptr_ref_count ( const ptr_ref_count &  ) {
+            DAS_UPDATE_SMART_PTR_ID
+        }
+        __forceinline ptr_ref_count ( const ptr_ref_count && ) {
+            DAS_UPDATE_SMART_PTR_ID
+        }
         __forceinline ptr_ref_count & operator = ( const ptr_ref_count & ) { return *this;}
         __forceinline ptr_ref_count & operator = ( ptr_ref_count && ) { return *this; }
         virtual ~ptr_ref_count() {
             DAS_ASSERTF(ref_count == 0, "can only delete when ref_count==0");
         }
         __forceinline void addRef() {
+            DAS_TRACK_SMART_PTR_ID
             ref_count ++;
             DAS_ASSERTF(ref_count, "ref_count overflow");
         }
         __forceinline bool delRef() {
+            DAS_TRACK_SMART_PTR_ID
             DAS_ASSERTF(ref_count, "deleting reference on the object with ref_count==0");
             if ( --ref_count==0 ) {
                 delete this;
