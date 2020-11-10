@@ -130,12 +130,8 @@ namespace das {
             return set(p.get());
         }
         __forceinline smart_ptr & operator = ( smart_ptr && p ) {
-            if ( ptr==p.get() ) {
-                p.ptr = nullptr;
-            } else {
-                set(p.get());
-                p.set(nullptr);
-            }
+            set(p.get());
+            p.set(nullptr);
             return *this;
         }
         __forceinline smart_ptr & operator = ( T * p ) {
