@@ -15,6 +15,38 @@ namespace das
         return tw.str();
     }
 
+#if DAS_ENABLE_SMART_PTR_TRACKING
+    void safeDumpType ( TextWriter & tp, const TypeDeclPtr & td ) {
+        if ( td->baseType==Type::tStructure ) {
+            tp << "structure";
+        } else if ( td->baseType==Type::tHandle ) {
+            tp << "handle";
+        } else if ( td->baseType==Type::tPointer ) {
+            if ( td->firstType ) {
+                safeDumpType(tp,td->firstType);
+                tp << "?";
+            } else {
+                tp << "void?";
+            }
+        } else if ( td->baseType==Type::tTuple || td->baseType==Type::tVariant ) {
+            tp << das_to_string(td->baseType) << "<";
+            for ( auto & st : td->argTypes ) {
+                safeDumpType(tp, st);
+                if ( st != td->argTypes.back() ) tp << ";";
+            }
+            tp << ">";
+        } else {
+            tp << das_to_string(td->baseType);
+        }
+        for ( auto i : td->dim ) {
+            tp << "[" << i << "]";
+        }
+        if ( td->constant ) tp << " const";
+        if ( td->ref ) tp << " &";
+        if ( td->temporary ) tp << " #";
+    }
+#endif
+
     void dumpTrackingLeaks ( ) {
         TextPrinter tp;
 #if DAS_ENABLE_SMART_PTR_TRACKING
@@ -40,13 +72,7 @@ namespace das
 #endif
             if ( auto td = dynamic_cast<TypeDecl *>(ptr.get()) ) {
                 tp << " TypeDecl at " << around(td->at) << " ";
-                if ( td->baseType==Type::tStructure ) {
-                    tp << "structure";
-                } else if ( td->baseType==Type::tHandle ) {
-                    tp << "handle";
-                } else {
-                    tp << das_to_string(td->baseType);
-                }
+                safeDumpType(tp,td);
             } else if ( auto ex = dynamic_cast<Expression *>(ptr.get()) ) {
                 tp << " " <<  ex->__rtti << " at " << around(ex->at);
                 if ( strcmp(ex->__rtti,"ExprConstString")==0 ) {

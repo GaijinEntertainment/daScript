@@ -9,7 +9,7 @@ def prepend_cond(var fn:FunctionPtr; cond:string)
     var blk <- new [[ExprBlock() at=fn.at]]
     var ifm <- new [[ExprCall() at=fn.at, name:=cond]]
     var ife <- new [[ExprIfThenElse() at=fn.at, cond<-ifm, if_true:=iblk]]
-    push(blk.list,ife)
+    emplace(blk.list,ife)
     fn.body <- blk
 
 [function_macro(name="add_cond")]

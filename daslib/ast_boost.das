@@ -80,6 +80,10 @@ def emplace ( var vec:dasvector`smart_ptr`TypeDecl; var ptr:smart_ptr<TypeDecl> 
     push(vec,ptr)
     ptr := null
 
+def emplace ( var vec:dasvector`smart_ptr`Variable; var ptr:smart_ptr<Variable> )
+    push(vec,ptr)
+    ptr := null
+
 def emplace ( var vec:dasvector`smart_ptr`MakeFieldDecl; var ptr:smart_ptr<MakeFieldDecl> )
     push(vec,ptr)
     ptr := null
@@ -370,6 +374,7 @@ def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
         push(mkArr.makeType.dim,total)
         var mkToTableMove <- new [[ExprCall() at=at, name:="to_table_move"]]
         emplace(mkToTableMove.arguments,mkArr)
+        tupT := null
         return mkToTableMove
     else
         var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
