@@ -11,6 +11,10 @@
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/interop.h"
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4946)   // reinterpret_cast used between related classes
+#endif
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #if __GNUC__>=9
@@ -2221,6 +2225,9 @@ namespace das {
     void set_das_string(string & str, const char * bs);
 }
 
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif

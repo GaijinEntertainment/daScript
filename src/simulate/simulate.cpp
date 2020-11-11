@@ -195,7 +195,11 @@ namespace das
             if ( message )
                 error_message = error_message + ", " + message;
             string error = reportError(debugInfo, error_message, "", "");
+#ifdef NDEBUG
+            error = context.getStackWalk(&debugInfo, false, false) + error;
+#else
             error = context.getStackWalk(&debugInfo, true, true) + error;
+#endif
             context.to_err(error.c_str());
             context.throw_error_at(debugInfo,"assert failed");
         }
