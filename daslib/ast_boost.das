@@ -72,25 +72,11 @@ def is_class_method ( cinfo:StructurePtr; finfo:TypeDeclPtr )
         return false
     return true
 
-def emplace ( var vec:dasvector`smart_ptr`Expression; var ptr:smart_ptr<Expression> )
-    push(vec,ptr)
-    ptr := null
+def emplace_new ( var vec:dasvector`smart_ptr`Expression; var ptr:smart_ptr<Expression> )
+    emplace(vec,ptr)
 
-def emplace ( var vec:dasvector`smart_ptr`TypeDecl; var ptr:smart_ptr<TypeDecl> )
-    push(vec,ptr)
-    ptr := null
-
-def emplace ( var vec:dasvector`smart_ptr`Variable; var ptr:smart_ptr<Variable> )
-    push(vec,ptr)
-    ptr := null
-
-def emplace ( var vec:dasvector`smart_ptr`MakeFieldDecl; var ptr:smart_ptr<MakeFieldDecl> )
-    push(vec,ptr)
-    ptr := null
-
-def emplace ( var vec:dasvector`smart_ptr`MakeStruct; var ptr:smart_ptr<MakeStruct> )
-    push(vec,ptr)
-    ptr := null
+def emplace_new ( var vec:dasvector`smart_ptr`TypeDecl; var ptr:smart_ptr<TypeDecl> )
+    emplace(vec,ptr)
 
 def emplace ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
     push(vec,ptr)
@@ -216,7 +202,7 @@ class SetupAnyAnnotation : AstStructureAnnotation
     annotation_function_call : string = ""
     name : string
     def setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
-        emplace(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
+        emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
         if argName is nothing
@@ -251,8 +237,8 @@ class TagFunctionMacro : SetupAnyAnnotation
     override annotation_function_call : string = "setup_tag_annotation"
     tag : string
     def override setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
-        emplace(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
-        emplace(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
+        emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
+        emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let argTag = find_arg("tag", args)
         if argTag is nothing
@@ -358,8 +344,8 @@ def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
     let total = any_table_size(data)
     if total != 0
         var tupT <- new [[TypeDecl() baseType=Type tTuple, at=at]]
-        emplace(tupT.argTypes,clone_type(info.firstType))
-        emplace(tupT.argTypes,clone_type(info.secondType))
+        emplace_new(tupT.argTypes,clone_type(info.firstType))
+        emplace_new(tupT.argTypes,clone_type(info.secondType))
         var arrT <- clone_type(tupT)
         var mkArr <- new [[ExprMakeArray() at=at, makeType <- arrT]]
         var key_stride = info.firstType.sizeOf

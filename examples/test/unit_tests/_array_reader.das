@@ -22,5 +22,5 @@ class ArrayReader : AstReaderMacro
         var mkArr <- new [[ExprMakeArray() at = expr.at, makeType <- arrT]]
         for x in seqStr
             var mkC <- new [[ExprConstInt() at=expr.at, value=x]]
-            push(mkArr.values,mkC)
+            emplace(mkArr.values,mkC)
         return mkArr

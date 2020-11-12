@@ -360,7 +360,9 @@ int main( int argc, char * argv[] ) {
     unit_test(getDasRoot() +  TEST_NAME,false);
     // unit_test(getDasRoot() +  TEST_NAME,true);
     Module::Shutdown();
-    // dumpTrackingLeaks();
+#if DAS_ENABLE_SMART_PTR_TRACKING
+    dumpTrackingLeaks();
+#endif
     getchar();
     return 0;
 #endif

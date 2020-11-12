@@ -8,6 +8,7 @@ require fio
 
 let
     test_and_log = true
+    only_find_one_result = true
 
 [export]
 def test
@@ -37,7 +38,7 @@ def test
                 regex_foreach(r1,data) <| $ ( r )
                     static_if test_and_log
                         print("match {slice(data,r.x,r.y)}\n")
-                    return true
+                    return !only_find_one_result
         else
             print("can't open ")
     return true

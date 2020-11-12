@@ -2901,7 +2901,7 @@ namespace das {
                 ss << "das_auto_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::cast(";
             }
             if ( needSubstitute(funArgType,arg->type) ) {
-                ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::pass(";
+                ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
             }
             if ( call->func->interopFn ) {
                 ss << "cast<" << describeCppType(argType);

@@ -2195,6 +2195,11 @@ namespace das {
         vec.push_back(value);
     }
 
+    template <typename TT, typename QQ>
+    __forceinline void das_vector_emplace ( vector<TT> & vec, QQ & value ) {
+        vec.emplace_back(move(value));
+    }
+
     template <typename TT>
     __forceinline void das_vector_pop ( vector<TT> & vec ) {
         vec.pop_back();

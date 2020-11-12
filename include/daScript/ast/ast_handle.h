@@ -453,9 +453,15 @@ namespace das
 
     template <typename TT>
     struct registerVectorFunctions<TT,false> {
-        static void init ( Module * mod, const ModuleLibrary & lib ) {
-            addExtern<DAS_BIND_FUN((das_vector_push<TT,TT>))>(*mod, lib, "push",
-                SideEffects::modifyArgument, "das_vector_push")->generated = true;
+        static void init ( Module * mod, const ModuleLibrary & lib, bool canCopy, bool canMove ) {
+            if ( canMove ) {
+                addExtern<DAS_BIND_FUN((das_vector_emplace<TT,TT>))>(*mod, lib, "emplace",
+                    SideEffects::modifyArgument, "das_vector_emplace")->generated = true;
+            }
+            if ( canCopy ) {
+                addExtern<DAS_BIND_FUN((das_vector_push<TT,TT>))>(*mod, lib, "push",
+                    SideEffects::modifyArgument, "das_vector_push")->generated = true;
+            }
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_clear<TT>)>(*mod, lib, "clear",
@@ -471,9 +477,15 @@ namespace das
 
     template <typename TT>
     struct registerVectorFunctions<TT,true> {
-        static void init ( Module * mod, const ModuleLibrary & lib ) {
-            addExtern<DAS_BIND_FUN((das_vector_push_value<TT,TT>))>(*mod, lib, "push",
-                SideEffects::modifyArgument, "das_vector_push_value")->generated = true;
+        static void init ( Module * mod, const ModuleLibrary & lib, bool canCopy, bool canMove ) {
+            if ( canMove ) {
+                addExtern<DAS_BIND_FUN((das_vector_emplace<TT,TT>))>(*mod, lib, "emplace",
+                    SideEffects::modifyArgument, "das_vector_emplace")->generated = true;
+            }
+            if ( canCopy ) {
+                addExtern<DAS_BIND_FUN((das_vector_push_value<TT,TT>))>(*mod, lib, "push",
+                    SideEffects::modifyArgument, "das_vector_push_value")->generated = true;
+            }
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_clear<TT>)>(*mod, lib, "clear",
@@ -498,7 +510,10 @@ namespace das
                 ann->cppName = "das::vector<" + describeCppType(declT) + ">";
                 auto mod = library.front();
                 mod->addAnnotation(ann);
-                registerVectorFunctions<TT>::init(mod,library);
+                registerVectorFunctions<TT>::init(mod,library,
+                    declT->canCopy(),
+                    declT->canMove()
+                );
             }
             return makeHandleType(library,declN.c_str());
         }
