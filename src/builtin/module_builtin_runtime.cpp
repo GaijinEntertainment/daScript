@@ -300,8 +300,8 @@ namespace das
         return v_zero();
     }
 
-    void builtin_stackwalk ( Context * context, LineInfoArg * lineInfo ) {
-        context->stackWalk(lineInfo, true, true);
+    void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo ) {
+        context->stackWalk(lineInfo, args, vars);
     }
 
     void builtin_terminate ( Context * context ) {
@@ -873,8 +873,11 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print", SideEffects::modifyExternal, "builtin_print");
         addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint", SideEffects::modifyExternal, "builtin_sprint");
         addExtern<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate", SideEffects::modifyExternal, "terminate");
-        addExtern<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk", SideEffects::modifyExternal, "builtin_stackwalk");
         addInterop<builtin_breakpoint,void>(*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
+        // stackwalk
+        auto fnsw = addExtern<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk", SideEffects::modifyExternal, "builtin_stackwalk");
+        fnsw->arguments[0]->init = make_smart<ExprConstBool>(true);
+        fnsw->arguments[1]->init = make_smart<ExprConstBool>(true);
         // profiler
         addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "reset_profiler", SideEffects::modifyExternal, "resetProfiler");
         addExtern<DAS_BIND_FUN(dumpProfileInfo)>(*this, lib, "dump_profile_info", SideEffects::modifyExternal, "dumpProfileInfo");
