@@ -62,6 +62,7 @@
 #include <math.h>
 
 #include <stdint.h>
+#include <float.h>
 #include <daScript/das_config.h>
 
 #ifndef _MSC_VER

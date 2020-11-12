@@ -16,8 +16,17 @@ FIND_FLEX_AND_BISON()
 
 SETUP_COMPILER()
 
+FILE(GLOB DAS_MODULES RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
+FOREACH(module ${DAS_MODULES})
+    INCLUDE(modules/${module}/CMakeLists.txt OPTIONAL)
+ENDFOREACH()
+
 FLEX(src/parser/ds_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
+
+# maximum number of arguments for DAS_FOR_EACH macros.
+# increase if needed.
+SET(MAX_DAS_FOR_EACH_ARGS 600)
 
 SET(PARSER_GENERATED_SRC
 src/parser/ds_parser.hpp
@@ -292,6 +301,12 @@ ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${S
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC})
 SETUP_CPP11(libDaScript)
+
+IF(DAS_GEN_FOR_EACH_INCLUDED)
+    DAS_GEN_FOR_EACH(include/daScript/simulate/for_each.h ${MAX_DAS_FOR_EACH_ARGS})
+ELSE()
+    MESSAGE(STATUS "dasGenForEach module not found. Pre-generated files will be used.")
+ENDIF()
 
 # AOT compiler
 
