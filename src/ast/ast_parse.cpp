@@ -26,12 +26,13 @@ namespace das {
         return (ch>='0' && ch<='9') || (ch>='a' && ch<='z') || (ch>='A' && ch<='Z');
     }
 
-    vector<string> getAllRequie ( const char * src, uint32_t length ) {
+    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, vector<string> & req, das_set<FileInfo *> & collected  ) {
+        const char * src = fi->source;
+        uint32_t length = fi->sourceLength;
         if ( isUtf8Text(src,length) ) { // skip utf8 byte order mark
             src += 3;
             length -= 3;
         }
-        vector<string> req;
         const char * src_end = src + length;
         bool wb = true;
         while ( src < src_end ) {
@@ -66,8 +67,10 @@ namespace das {
                 src +=2;
                 wb = true;
                 continue;
-            } else if ( wb && ((src+8)<src_end) && src[0]=='r') {   // need space for 'require '
-                if ( memcmp(src, "require", 7)==0 ) {
+            } else if ( wb && ((src+8)<src_end) && (src[0]=='r' || src[0]=='i') ) {   // need space for 'require ' || 'include '
+                bool isReq = memcmp(src, "require", 7)==0;
+                bool isInc = !isReq && (memcmp(src, "include", 7)==0);
+                if ( isReq || isInc ) {
                     src += 7;
                     if ( isspace(src[0]) ) {
                         while ( src < src_end && isspace(src[0]) ) {
@@ -81,7 +84,18 @@ namespace das {
                             while ( src < src_end && (isalnumE(src[0]) || src[0]=='_' || src[0]=='.' || src[0]=='/') ) {
                                 mod += *src ++;
                             }
-                            req.push_back(mod);
+                            if ( isReq ) {
+                                req.push_back(mod);
+                            } else if ( isInc ) {
+                                string incFileName = access->getIncludeFileName(fi->name,mod);
+                                auto info = access->getFileInfo(incFileName);
+                                if ( info ) {
+                                    if ( collected.find(info)==collected.end() ) {
+                                        collected.insert(info);
+                                        getAllRequireReq(info, access, req, collected);
+                                    }
+                                }
+                            }
                             continue;
                         } else {
                             wb = true;
@@ -99,6 +113,12 @@ namespace das {
             wb = src[0]!='_' && (wb ? !isalnumE(src[0]) : !isalphaE(src[0]));
             src ++;
         }
+    }
+
+    vector<string> getAllRequire ( FileInfo * fi, const FileAccessPtr & access  ) {
+        das_set<FileInfo *> collected;
+        vector<string> req;
+        getAllRequireReq(fi, access, req, collected);
         return req;
     }
 
@@ -126,7 +146,7 @@ namespace das {
                           int tab ) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             log << string(tab,'\t') << "in " << fileName << "\n";
-            vector<string> ownReq = getAllRequie(fi->source, fi->sourceLength);
+            vector<string> ownReq = getAllRequire(fi, access);
             for ( auto & mod : ownReq ) {
                 log << string(tab,'\t') << "require " << mod << "\n";
                 auto module = Module::require(mod); // try native with that name
