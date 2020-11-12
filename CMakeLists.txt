@@ -26,7 +26,11 @@ BISON(src/parser/ds_parser.ypp)
 
 # maximum number of arguments for DAS_FOR_EACH macros.
 # increase if needed.
-SET(MAX_DAS_FOR_EACH_ARGS 600)
+IF(MSVC)
+    SET(MAX_DAS_FOR_EACH_ARGS 125)
+ELSE()
+    SET(MAX_DAS_FOR_EACH_ARGS 600)
+ENDIF()
 
 SET(PARSER_GENERATED_SRC
 src/parser/ds_parser.hpp
