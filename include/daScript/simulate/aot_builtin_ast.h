@@ -406,8 +406,8 @@ namespace das {
     int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index );
     int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index );
 
-    __forceinline void mks_vector_push ( MakeStruct & vec, MakeFieldDeclPtr value ) {
-        vec.push_back(value);
+    __forceinline void mks_vector_emplace ( MakeStruct & vec, MakeFieldDeclPtr & value ) {
+        vec.emplace_back(move(value));
     }
     __forceinline void mks_vector_pop ( MakeStruct & vec ) {
         vec.pop_back();

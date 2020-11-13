@@ -2504,8 +2504,8 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprUnsafeAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprCallMacroAnnotation>(lib))->from("ExprLooksLikeCall");
             // vector functions for custom containers
-            addExtern<DAS_BIND_FUN(mks_vector_push)>(*this, lib, "push",
-                SideEffects::modifyArgument, "mks_vector_push")->generated = true;
+            addExtern<DAS_BIND_FUN(mks_vector_emplace)>(*this, lib, "emplace",
+                SideEffects::modifyArgument, "mks_vector_emplace")->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_pop)>(*this, lib, "pop",
                 SideEffects::modifyArgument, "mks_vector_pop")->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_clear)>(*this, lib, "clear",

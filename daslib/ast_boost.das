@@ -81,10 +81,8 @@ def emplace_new ( var vec:dasvector`smart_ptr`TypeDecl; var ptr:smart_ptr<TypeDe
 def emplace_new ( var vec:dasvector`smart_ptr`Variable; var ptr:smart_ptr<Variable> )
     emplace(vec,ptr)
 
-
 def emplace_new ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
-    push(vec,ptr)
-    ptr := null
+    emplace(vec,ptr)
 
 class MacroMacro : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -220,7 +218,6 @@ class SetupAnyAnnotation : AstStructureAnnotation
         nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at=st.at]]
         emplace(cll.arguments,nee)
         emplace(blk.list,cll)
-        blk := null
         return true
 
 class SetupFunctionAnnotatoin : SetupAnyAnnotation
