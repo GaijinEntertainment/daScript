@@ -19,7 +19,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     fn.flags |= FunctionFlags generated
     fn.flags |= FunctionFlags privateFunction
     fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
-    var selfT := clone_type(stype)
+    var selfT <- clone_type(stype)
     selfT.flags |= TypeDeclFlags isExplicit
     selfT.flags |= TypeDeclFlags explicitConst
     emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
