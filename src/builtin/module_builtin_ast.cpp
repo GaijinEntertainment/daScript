@@ -2001,7 +2001,8 @@ namespace das {
         return make_smart<ReaderMacroAdapter>(name,(char *)pClass,info,context);
     }
 
-    void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context ) {
+    void addModuleReaderMacro ( Module * module, ReaderMacroPtr & _newM, Context * context ) {
+        ReaderMacroPtr newM = move(_newM);
         if ( !module->addReaderMacro(newM, true) ) {
             context->throw_error_ex("can't add reader macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
@@ -2011,7 +2012,8 @@ namespace das {
         return make_smart<CallMacroAdapter>(name,(char *)pClass,info,context);
     }
 
-    void addModuleCallMacro ( Module * module, CallMacroPtr newM, Context * context ) {
+    void addModuleCallMacro ( Module * module, CallMacroPtr & _newM, Context * context ) {
+        CallMacroPtr newM = move(_newM);
         if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
             auto ecm = new ExprCallMacro(at, newM->name);
             ecm->macro = newM.get();
@@ -2033,11 +2035,13 @@ namespace das {
         return make_smart<VariantMacroAdapter>(name,(char *)pClass,info,context);
     }
 
-    void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * ) {
+    void addModuleVariantMacro ( Module * module, VariantMacroPtr & _newM, Context * ) {
+        VariantMacroPtr newM = move(_newM);
         module->variantMacros.push_back(newM);
     }
 
-    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * ) {
+    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
+        PassMacroPtr newM = move(_newM);
         module->inferMacros.push_back(newM);
     }
 
@@ -2045,14 +2049,16 @@ namespace das {
         return make_smart<StructureAnnotationAdapter>(name,(char *)pClass,info,context);
     }
 
-    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr ann, Context * context ) {
+    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & _ann, Context * context ) {
+        StructureAnnotationPtr ann = move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_ex("can't add structure annotation %s to module %s",
                 ann->name.c_str(), module->name.c_str());
         }
     }
 
-    void addStructureStructureAnnotation ( smart_ptr_raw<Structure> st, StructureAnnotationPtr ann, Context * context ) {
+    void addStructureStructureAnnotation ( smart_ptr_raw<Structure> st, StructureAnnotationPtr & _ann, Context * context ) {
+        StructureAnnotationPtr ann = move(_ann);
         string err;
         ModuleGroup dummy;
         if ( !ann->touch(st, dummy, AnnotationArgumentList(), err) ) {
@@ -2110,22 +2116,26 @@ namespace das {
         return make_smart<FunctionAnnotationAdapter>(name,(char *)pClass,info,context);
     }
 
-    bool addModuleFunction ( Module * module, FunctionPtr func, Context * ) {
+    bool addModuleFunction ( Module * module, FunctionPtr & _func, Context * ) {
+        FunctionPtr func = move(_func);
         return module->addFunction(func, true);
     }
 
-    bool addModuleVariable ( Module * module, VariablePtr var, Context * ) {
-        return module->addVariable(var, false);
+    bool addModuleVariable ( Module * module, VariablePtr & _var, Context * ) {
+        VariablePtr var = move(_var);
+        return module->addVariable(move(var), false);
     }
 
-    void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr ann, Context * context ) {
+    void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & _ann, Context * context ) {
+        FunctionAnnotationPtr ann = move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_ex("can't add function annotation %s to module %s",
                 ann->name.c_str(), module->name.c_str());
         }
     }
 
-    void addFunctionFunctionAnnotation ( smart_ptr_raw<Function> func, FunctionAnnotationPtr ann, Context * context ) {
+    void addFunctionFunctionAnnotation ( smart_ptr_raw<Function> func, FunctionAnnotationPtr & _ann, Context * context ) {
+        FunctionAnnotationPtr ann = move(_ann);
         string err;
         ModuleGroup dummy;
         if ( !ann->apply(func, dummy, AnnotationArgumentList(), err) ) {

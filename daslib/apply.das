@@ -22,11 +22,11 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     var selfT := clone_type(stype)
     selfT.flags |= TypeDeclFlags isExplicit
     selfT.flags |= TypeDeclFlags explicitConst
-    emplace(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
+    emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
     for fld in stype.structType.fields
         var argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(name:string;x:field1type)>
-        emplace(argT.argTypes, new [[TypeDecl() baseType=Type tString, at=at]])
+        emplace_new(argT.argTypes, new [[TypeDecl() baseType=Type tString, at=at]])
         var fldT <- clone_type(fld._type)
         if stype.flags.constant
             fldT.flags |= TypeDeclFlags constant
@@ -46,7 +46,6 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         emplace(blk.list, cfield)
     fn.body <- blk
     compiling_module() |> add_function(fn)
-    fn := null
 
 [call_macro(name="apply")]  // apply(value, block)
 class ApplyMacro : AstCallMacro
@@ -67,10 +66,10 @@ class ApplyMacro : AstCallMacro
             generateApplyVisitStruct(expr.arguments[0]._type,callName,expr.at)
             // make a call
             var call <- new [[ExprCall() name:="_::" + callName, at=expr.at]]
-            emplace(call.arguments,clone_expression(expr.arguments[0]))
+            emplace_new(call.arguments,clone_expression(expr.arguments[0]))
             let nfields = expr.arguments[0]._type.structType.fields.length
             for i in range(nfields)
-                emplace(call.arguments,clone_expression(expr.arguments[1]))
+                emplace_new(call.arguments,clone_expression(expr.arguments[1]))
             return <- call
         return [[ExpressionPtr]]
 

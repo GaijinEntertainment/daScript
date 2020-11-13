@@ -78,7 +78,11 @@ def emplace_new ( var vec:dasvector`smart_ptr`Expression; var ptr:smart_ptr<Expr
 def emplace_new ( var vec:dasvector`smart_ptr`TypeDecl; var ptr:smart_ptr<TypeDecl> )
     emplace(vec,ptr)
 
-def emplace ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
+def emplace_new ( var vec:dasvector`smart_ptr`Variable; var ptr:smart_ptr<Variable> )
+    emplace(vec,ptr)
+
+
+def emplace_new ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
     push(vec,ptr)
     ptr := null
 
@@ -136,14 +140,13 @@ def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
 [private]
 def apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
     for_each_tag_function(this_module(), tag) <| $ ( func )
-        add_function_annotation(func, ann)
+        var tagAnn := ann
+        add_function_annotation(func, tagAnn)
 
 def setup_tag_annotation(name,tag:string; classPtr)
     var ann <- make_function_annotation(name, classPtr)
     apply_tag_annotation(tag, ann)
     this_module() |> add_function_annotation(ann)
-    unsafe
-        delete ann
 
 def find_unique_function ( mod : Module?; name : string )
     var res : FunctionPtr
@@ -184,7 +187,6 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         fn.body <- blk
         if !(compiling_module() |> add_function(fn))
             panic("can't setup")
-        fn := null
         return res
     else
         if fn.body.__rtti != "ExprBlock"
@@ -287,8 +289,7 @@ def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expr
         unsafe
             var elem <- walk_and_convert(data + stride*x, einfo, at)
             emplace(mkArr.values, elem)
-    unsafe
-	    delete einfo
+    einfo := null
 	return mkArr
 
 [private]
@@ -322,7 +323,7 @@ def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) 
                 var mkF <- new [[MakeFieldDecl() at=at, name := x.name, value <- elem]]
                 if !x._type.canCopy
                     mkF.flags = FieldDeclarationFlags moveSemantics
-                emplace(*mkS, mkF)
+                emplace_new(*mkS, mkF)
     emplace(mkStruct.structs, mkS)
 	return mkStruct
 

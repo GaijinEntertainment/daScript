@@ -59,6 +59,5 @@ class JsonReader : AstReaderMacro
             macro_error(prog,expr.at,"json did not parse ({error})")
             return [[ExpressionPtr]]
         else
-            var jsv <- convert_to_expression(json,expr.at)
-            return jsv
+            return <- convert_to_expression(json,expr.at)
 

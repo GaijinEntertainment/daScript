@@ -34,8 +34,8 @@ def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Express
     expr |> visit(astVisitorAdapter)
     expr |> force_at(at)
     unsafe
-        delete astVisitorAdapter
         delete astVisitor
+    astVisitorAdapter := null
 
 def unquote_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
     assert(expr is ExprMakeBlock)
@@ -43,6 +43,15 @@ def unquote_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
         var mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
         var blk := mkb._block
         return reinterpret<smart_ptr<ExprBlock>>(blk)
+
+def move_unquote_block ( var expr:ExpressionPtr& ) : smart_ptr<ExprBlock>
+    assert(expr is ExprMakeBlock)
+    unsafe
+        var mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
+        var blk := mkb._block
+        var res <- reinterpret<smart_ptr<ExprBlock>>(blk)
+        mkb := null
+        return res
 
 [private]
 def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr )
@@ -56,7 +65,6 @@ def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDecl
     ]]
     if !add_variable(mod, vvar)
         panic("can't add global variable {vname}")
-    vvar := null
 
 def add_global_var ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
     add_global_var_any(mod, vname, vat, TypeDeclFlags removeConstant, value)

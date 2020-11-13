@@ -23,11 +23,11 @@ class GetHintFnMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if call.arguments[1] is ExprConstString
             unsafe
+                var new_call := call // <- clone_expression(call)
                 let arg2 = reinterpret<ExprConstString?>(call.arguments[1])
                 let hint = hash("{arg2.value}")
-                emplace_new(call.arguments, new [[ExprConstUInt() at=arg2.at, value=hint]])
-                var res := call
-                return res
+                emplace_new(new_call.arguments, new [[ExprConstUInt() at=arg2.at, value=hint]])
+                return new_call
         return [[ExpressionPtr]]
 
 

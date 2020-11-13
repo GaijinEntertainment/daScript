@@ -430,23 +430,23 @@ namespace das {
     void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter );
     PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context );
-    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * context );
+    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & newM, Context * context );
     VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
-    void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * context );
-    void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr ann, Context * context );
+    void addModuleVariantMacro ( Module * module, VariantMacroPtr & newM, Context * context );
+    void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context );
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
-    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr ann, Context * context );
+    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & ann, Context * context );
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
-    bool addModuleFunction ( Module * module, FunctionPtr func, Context * context );
-    bool addModuleVariable ( Module * module, VariablePtr var, Context * );
+    bool addModuleFunction ( Module * module, FunctionPtr & func, Context * context );
+    bool addModuleVariable ( Module * module, VariablePtr & var, Context * );
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message );
-    void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context );
+    void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
-    void addModuleCallMacro ( Module * module, CallMacroPtr newM, Context * context );
+    void addModuleCallMacro ( Module * module, CallMacroPtr & newM, Context * context );
     CallMacroPtr makeCallMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
-    void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr ann, Context* context);
+    void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr & ann, Context* context);
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value->clone(); }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
