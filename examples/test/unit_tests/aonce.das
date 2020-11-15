@@ -2,7 +2,7 @@
 //  this is due to the fact, that in AOT mode assert does not cause panic, and does C++ assert instead
 options no_aot = true
 
-require daslib/assert_boost
+require daslib/assert_once
 
 [export]
 def test

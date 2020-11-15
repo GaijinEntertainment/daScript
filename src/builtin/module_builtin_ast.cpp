@@ -239,6 +239,7 @@ namespace das {
         AstExprLetAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprLet> ("ExprLet", ml) {
             addField<DAS_BIND_MANAGED_FIELD(variables)>("variables");
+            addField<DAS_BIND_MANAGED_FIELD(atInit)>("atInit");
         }
     };
 
@@ -979,6 +980,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
             addProperty<DAS_BIND_MANAGED_PROP(isClass)>("isClass","isClass");
             addProperty<DAS_BIND_MANAGED_PROP(isFunction)>("isFunction","isFunction");
+            addProperty<DAS_BIND_MANAGED_PROP(isPointer)>("isPointer","isPointer");
             addProperty<DAS_BIND_MANAGED_PROP(isRefType)>("isRefType","isRefType");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf","getSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getBaseSizeOf)>("baseSizeOf","getBaseSizeOf");

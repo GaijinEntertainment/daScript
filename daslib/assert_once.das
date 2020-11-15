@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module assert_boost
+module assert_once
 
 require ast
 require rtti
