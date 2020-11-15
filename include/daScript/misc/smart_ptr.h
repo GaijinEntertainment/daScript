@@ -55,6 +55,10 @@ namespace das {
             using SPT = smart_ptr<T, smart_ptr_policy<T>>;
             return *(SPT *)this;
         }
+        __forceinline operator const smart_ptr<T, smart_ptr_policy<T>> & () const {
+            using SPT = smart_ptr<T, smart_ptr_policy<T>>;
+            return *(const SPT *)this;
+        }
         T * ptr;
     };
 
