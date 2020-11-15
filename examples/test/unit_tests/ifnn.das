@@ -4,8 +4,7 @@ struct Foo
     a : int
 
 [sideeffects]
-def take3(var pfoo:Foo?; b,c:int)
-    assert(pfoo!=null)
+def take3(var pfoo:Foo; b,c:int)
     assert(pfoo.a==1 && b==2 && c==3)
 
 [export]

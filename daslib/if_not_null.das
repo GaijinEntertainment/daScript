@@ -14,7 +14,7 @@ require daslib/template_boost
     to
         var _ptr_var = ptr
         if _ptr_var
-            call(_ptr_var,...)
+            call(*_ptr_var,...)
 */
 [call_macro(name="if_not_null")]
 class ApplyMacro : AstCallMacro
@@ -47,7 +47,9 @@ class ApplyMacro : AstCallMacro
                 fcall = reinterpret<ExprCall?>(expr.arguments[1])
             // note: this can be clone+push(ecall.arguments,arg,1) but we are not bining 'push at' yet
             var ecall <- new [[ExprCall() at=fcall.at, name:=fcall.name]]
-            ecall.arguments |> emplace_new() <| new [[ExprVar() at=expr.at,name:=ifnn_name]]
+            ecall.arguments |> emplace_new() <| new [[ExprPtr2Ref() at=expr.at,
+                    subexpr <- new [[ExprVar() at=expr.at,name:=ifnn_name]]
+                ]]
             for arg in fcall.arguments
                 ecall.arguments |> emplace_new() <| clone_expression(arg)
             eblk.list |> emplace(ecall)
