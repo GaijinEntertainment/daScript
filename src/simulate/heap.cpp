@@ -145,7 +145,9 @@ namespace das {
     void StringHeapAllocator::recognize ( char * str ) {
         if ( !str ) return;
         uint32_t length = uint32_t(strlen(str));
-        if ( needIntern && isOwnPtr(str, length+1) ) {
+        uint32_t size = length + 1;
+        size = (size + 15) & ~15;
+        if ( needIntern && isOwnPtr(str, size) ) {
             internMap.insert(StrHashEntry(str,length));
         }
     }
