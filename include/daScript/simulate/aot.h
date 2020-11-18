@@ -2186,17 +2186,38 @@ namespace das {
     }
 
     template <typename TT, typename QQ>
-    __forceinline void das_vector_push ( vector<TT> & vec, const QQ & value ) {
+    __forceinline void das_vector_push ( vector<TT> & vec, const QQ & value, int32_t at, Context * context ) {
+        if ( at<0 || at>vec.size() ) {
+            context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
+        }
+        vec.insert(vec.begin() + at, value);
+    }
+
+    template <typename TT, typename QQ>
+    __forceinline void das_vector_push_value ( vector<TT> & vec, QQ value, int32_t at, Context * context ) {
+        if ( at<0 || at>vec.size() ) {
+            context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
+        }
+        vec.insert(vec.begin() + at, value);
+    }
+
+    template <typename TT, typename QQ>
+    __forceinline void das_vector_emplace ( vector<TT> & vec, QQ & value, int32_t at ) {
+        vec.emplace(vec.begin()+at, move(value));
+    }
+
+    template <typename TT, typename QQ>
+    __forceinline void das_vector_push_back ( vector<TT> & vec, const QQ & value ) {
         vec.push_back(value);
     }
 
     template <typename TT, typename QQ>
-    __forceinline void das_vector_push_value ( vector<TT> & vec, QQ value ) {
+    __forceinline void das_vector_push_back_value ( vector<TT> & vec, QQ value ) {
         vec.push_back(value);
     }
 
     template <typename TT, typename QQ>
-    __forceinline void das_vector_emplace ( vector<TT> & vec, QQ & value ) {
+    __forceinline void das_vector_emplace_back ( vector<TT> & vec, QQ & value ) {
         vec.emplace_back(move(value));
     }
 

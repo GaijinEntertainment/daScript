@@ -457,10 +457,14 @@ namespace das
             if ( canMove ) {
                 addExtern<DAS_BIND_FUN((das_vector_emplace<TT,TT>))>(*mod, lib, "emplace",
                     SideEffects::modifyArgument, "das_vector_emplace")->generated = true;
+                addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT,TT>))>(*mod, lib, "emplace",
+                    SideEffects::modifyArgument, "das_vector_emplace_back")->generated = true;
             }
             if ( canCopy ) {
                 addExtern<DAS_BIND_FUN((das_vector_push<TT,TT>))>(*mod, lib, "push",
                     SideEffects::modifyArgument, "das_vector_push")->generated = true;
+                addExtern<DAS_BIND_FUN((das_vector_push_back<TT,TT>))>(*mod, lib, "push",
+                    SideEffects::modifyArgument, "das_vector_push_back")->generated = true;
             }
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")->generated = true;
@@ -481,10 +485,14 @@ namespace das
             if ( canMove ) {
                 addExtern<DAS_BIND_FUN((das_vector_emplace<TT,TT>))>(*mod, lib, "emplace",
                     SideEffects::modifyArgument, "das_vector_emplace")->generated = true;
+                addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT,TT>))>(*mod, lib, "emplace",
+                    SideEffects::modifyArgument, "das_vector_emplace_back")->generated = true;
             }
             if ( canCopy ) {
                 addExtern<DAS_BIND_FUN((das_vector_push_value<TT,TT>))>(*mod, lib, "push",
                     SideEffects::modifyArgument, "das_vector_push_value")->generated = true;
+                addExtern<DAS_BIND_FUN((das_vector_push_back_value<TT,TT>))>(*mod, lib, "push",
+                    SideEffects::modifyArgument, "das_vector_push_back_value")->generated = true;
             }
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")->generated = true;

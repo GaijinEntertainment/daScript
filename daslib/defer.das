@@ -34,5 +34,5 @@ class DeferMacro : AstFunctionAnnotation
                 var c_arg <- clone_expression(call.arguments[0])
                 var from_block <- move_unquote_block(c_arg)
                 from_block.blockFlags ^= ExprBlockFlags isClosure
-                scope.finalList |> emplace_new(from_block)
+                scope.finalList |> emplace(from_block,0)
         return !success ? [[ExpressionPtr]] : quote() <| nada()
