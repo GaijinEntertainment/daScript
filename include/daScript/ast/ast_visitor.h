@@ -262,6 +262,17 @@ namespace das {
 #pragma clang diagnostic pop
 #endif
 
+    struct AstContext {
+        bool valid = false;
+        FunctionPtr             func;
+        vector<ExpressionPtr>   loop;
+        vector<ExpressionPtr>   blocks;
+        vector<ExpressionPtr>   scopes;
+        vector<ExpressionPtr>   with;
+    };
+
+    AstContext generateAstContext( const ProgramPtr & prog, Expression * expr );
+
     class PassVisitor : public Visitor {
     public:
         virtual void preVisitProgram ( Program * prog ) override;

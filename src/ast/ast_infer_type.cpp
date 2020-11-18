@@ -1565,6 +1565,7 @@ namespace das {
                 func->moveOnReturn = false;
             }
             // if any of this asserts failed, there is logic error in how we pop
+            DAS_ASSERT(loop.size()==0);
             DAS_ASSERT(scopes.size()==0);
             DAS_ASSERT(blocks.size()==0);
             DAS_ASSERT(local.size()==0);

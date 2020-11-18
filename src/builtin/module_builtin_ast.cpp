@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/performance_time.h"
@@ -34,6 +35,7 @@ MAKE_TYPE_FACTORY(ReaderMacro,ReaderMacro)
 MAKE_TYPE_FACTORY(CallMacro,CallMacro)
 MAKE_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 MAKE_TYPE_FACTORY(ModuleLibrary,ModuleLibrary)
+MAKE_TYPE_FACTORY(AstContext,AstContext)
 
 MAKE_TYPE_FACTORY(ExprBlock,ExprBlock)
 MAKE_TYPE_FACTORY(ExprLet,ExprLet)
@@ -899,7 +901,27 @@ namespace das {
         }
     };
 
-     // TYPE STUFF
+    // CONTEXT
+    struct AstContextAnnotation : ManagedStructureAnnotation<AstContext,false> {
+        AstContextAnnotation(ModuleLibrary & ml)
+            :  ManagedStructureAnnotation ("AstContext", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(func)>("func");
+            addField<DAS_BIND_MANAGED_FIELD(loop)>("loops");
+            addField<DAS_BIND_MANAGED_FIELD(blocks)>("blocks");
+            addField<DAS_BIND_MANAGED_FIELD(scopes)>("scopes");
+            addField<DAS_BIND_MANAGED_FIELD(with)>("withs");
+        }
+    };
+
+    void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context ) {
+        AstContext astc = generateAstContext(prog,expr.get());
+        __m128 args[2];
+        args[0] = cast<bool>::from ( astc.valid );
+        args[1] = astc.valid ? cast<AstContext&>::from(astc) : v_zero();
+        context->invoke(block, args, nullptr );
+    }
+
+    // TYPE STUFF
 
     struct AstModuleLibraryAnnotation : ManagedStructureAnnotation<ModuleLibrary,false> {
         AstModuleLibraryAnnotation(ModuleLibrary & ml)
@@ -2632,6 +2654,10 @@ namespace das {
                 SideEffects::modifyExternal, "for_each_global");
             addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
                 SideEffects::modifyExternal, "builtin_structure_for_each_field");
+            // context
+            addAnnotation(make_smart<AstContextAnnotation>(lib));
+            addExtern<DAS_BIND_FUN(getAstContext)>(*this, lib,  "get_ast_context",
+                SideEffects::modifyExternal, "get_ast_context");
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");
