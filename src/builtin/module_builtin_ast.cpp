@@ -682,7 +682,7 @@ namespace das {
     TypeDeclPtr makeExprVarFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprVarFlags";
-        ft->argNames = { "local", "argument", "block",
+        ft->argNames = { "local", "argument", "_block",
             "thisBlock", "r2v", "r2cr", "write" };
         return ft;
     }
@@ -998,6 +998,10 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isAuto)>("isAuto","isAuto");
             addProperty<DAS_BIND_MANAGED_PROP(isAlias)>("isAlias","isAlias");
             addProperty<DAS_BIND_MANAGED_PROP(isWorkhorseType)>("isWorkhorseType","isWorkhorseType");
+            addProperty<DAS_BIND_MANAGED_PROP(isStructure)>("isStructure","isStructure");
+            addProperty<DAS_BIND_MANAGED_PROP(isTuple)>("isTuple","isTuple");
+            addProperty<DAS_BIND_MANAGED_PROP(isVariant)>("isVariant","isVariant");
+            addProperty<DAS_BIND_MANAGED_PROP(isHandle)>("isHandle","isHandle");
             addProperty<DAS_BIND_MANAGED_PROP(isCtorType)>("isCtorType","isCtorType");
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
             addProperty<DAS_BIND_MANAGED_PROP(isClass)>("isClass","isClass");
