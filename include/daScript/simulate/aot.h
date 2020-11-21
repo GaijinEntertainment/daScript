@@ -2187,7 +2187,7 @@ namespace das {
 
     template <typename TT, typename QQ>
     __forceinline void das_vector_push ( vector<TT> & vec, const QQ & value, int32_t at, Context * context ) {
-        if ( at<0 || at>vec.size() ) {
+        if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
         vec.insert(vec.begin() + at, value);
@@ -2195,7 +2195,7 @@ namespace das {
 
     template <typename TT, typename QQ>
     __forceinline void das_vector_push_value ( vector<TT> & vec, QQ value, int32_t at, Context * context ) {
-        if ( at<0 || at>vec.size() ) {
+        if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
         vec.insert(vec.begin() + at, value);
@@ -2249,6 +2249,14 @@ namespace das {
 
     char * to_das_string(const string & str, Context * ctx);
     void set_das_string(string & str, const char * bs);
+
+    __forceinline int32_t enum_to_int   ( EnumStub stub )   { return stub.value; }
+    __forceinline int32_t enum8_to_int  ( EnumStub8 stub )  { return stub.value; }
+    __forceinline int32_t enum16_to_int ( EnumStub16 stub ) { return stub.value; }
+
+    __forceinline uint32_t enum_to_uint   ( EnumStub stub )   { return uint32_t(stub.value); }
+    __forceinline uint32_t enum8_to_uint  ( EnumStub8 stub )  { return uint32_t(stub.value); }
+    __forceinline uint32_t enum16_to_uint ( EnumStub16 stub ) { return uint32_t(stub.value); }
 }
 
 #if defined(_MSC_VER)
