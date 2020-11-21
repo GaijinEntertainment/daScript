@@ -40,3 +40,18 @@ def is_local_or_global_expr ( expr:ExpressionPtr )
             if !ef.value._type.isHandle
                 return is_local_or_global_expr(ef.value)
     return false
+
+def is_scope_expr ( expr:ExpressionPtr )
+    if expr is ExprVar
+        return true
+    elif expr is ExprAt
+        unsafe
+            let ea = reinterpret<ExprAt?>(expr)
+            if ea.subexpr._type!=null && ea.subexpr._type.dim.length!=0
+                return is_local_or_global_expr(ea.subexpr)
+    elif expr is ExprField
+        unsafe
+            let ef = reinterpret<ExprField?>(expr)
+            if !ef.value._type.isHandle
+                return is_local_or_global_expr(ef.value)
+    return false
