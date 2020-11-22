@@ -387,39 +387,36 @@ def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
             __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
     __builtin_array_unlock(a)
 
-def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT>#)> )
+def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT># implicit)> )
     __builtin_array_lock(a)
-    unsafe
-        invoke(blk, reinterpret<array<TT> #>(a))
+    invoke(blk, a)
     __builtin_array_unlock(a)
 
-def lock ( a : array<auto(TT)> = const; blk : block<(x : array<TT>#)> )
+def lock ( a : array<auto(TT)> = const; blk : block<(x : array<TT># implicit)> )
     __builtin_array_lock(a)
-    unsafe
-        invoke(blk, reinterpret<array<TT> const #>(a))
+    invoke(blk, a)
     __builtin_array_unlock(a)
 
-def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?#;s:int)> )
+def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?# implicit;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)
         unsafe
-            invoke(blk, reinterpret<TT?#>(addr(a[0])), len)
+            invoke(blk, addr(a[0]), len)
         __builtin_array_unlock(a)
     else
-        unsafe
-            invoke(blk, reinterpret<TT?#>(null), 0)
+        var nullT : TT?
+        invoke(blk, nullT, 0)
 
-def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT?#;s:int)> )
+def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT?# implicit;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)
         unsafe
-            invoke(blk, reinterpret<TT?#>(addr(a[0])), len)
+            invoke(blk, addr(a[0]), len)
         __builtin_array_unlock(a)
     else
-        unsafe
-            invoke(blk, reinterpret<TT?#>(null), 0)
+        invoke(blk, null, 0)
 
 def find_index ( arr : array<auto(TT)> implicit; key : TT )
     for i in range(length(arr))
