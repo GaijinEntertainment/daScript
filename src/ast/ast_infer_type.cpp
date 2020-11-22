@@ -1818,8 +1818,10 @@ namespace das {
                     expr->at, CompilationError::cant_dereference);
             } else {
                 if ( !safeExpression(expr) ) {
-                    error("address of reference requires unsafe",  "", "",
-                        expr->at, CompilationError::unsafe);
+                    if ( !expr->subexpr->type->temporary ) { // address of temp type is temp, but its safe
+                        error("address of reference requires unsafe",  "", "",
+                            expr->at, CompilationError::unsafe);
+                    }
                 }
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
