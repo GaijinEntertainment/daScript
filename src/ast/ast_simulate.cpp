@@ -335,7 +335,7 @@ namespace das
             } else if ( fastCall ) {
                 return context.code->makeNodeUnroll<SimNode_FastCall>(int(arguments.size()), at);
             } else {
-                return context.code->makeNodeUnroll<SimNode_Call>(int(arguments.size()), at);
+                return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
             }
         }
     }

@@ -70,14 +70,6 @@ namespace das {
     }
 
     template <int argCount>
-    SimNode * SimNode_Call<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(Call);
-        V_CALL();
-        V_END();
-    }
-
-    template <int argCount>
     SimNode * SimNode_CallAndCopyOrMove<argCount>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(CallAndCopyOrMove);

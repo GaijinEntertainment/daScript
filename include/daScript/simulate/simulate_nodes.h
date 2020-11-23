@@ -652,10 +652,15 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // FUNCTION CALL
+
+    struct SimNode_CallAny : SimNode_CallBase {
+        SimNode_CallAny ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor& vis ) override;
+    };
+
     template <int argCount>
-    struct SimNode_Call : SimNode_CallBase {
-        SimNode_Call ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+    struct SimNode_Call : SimNode_CallAny {
+        SimNode_Call ( const LineInfo & at ) : SimNode_CallAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
@@ -668,6 +673,26 @@ SIM_NODE_AT_VECTOR(Float, float)
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 return cast<CTYPE>::to(context.call(fnPtr, argValues, &debugInfo));             \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    template <>
+    struct SimNode_Call<-1> : SimNode_CallAny {
+        SimNode_Call ( const LineInfo & at ) : SimNode_CallAny(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[32];
+            evalArgs(context, argValues);
+            return context.call(fnPtr, argValues, &debugInfo);
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                vec4f argValues[32]; \
+                evalArgs(context, argValues); \
+                return cast<CTYPE>::to(context.call(fnPtr, argValues, &debugInfo)); \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE

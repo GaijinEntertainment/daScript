@@ -390,6 +390,21 @@ namespace das {
         }
 
         template < template <int TT> class NodeType, typename... Params>
+        SimNode* makeNodeUnrollAny(int count, Params... args) {
+            switch (count) {
+            case  0: return makeNode<NodeType< 0>>(args...);
+            case  1: return makeNode<NodeType< 1>>(args...);
+            case  2: return makeNode<NodeType< 2>>(args...);
+            case  3: return makeNode<NodeType< 3>>(args...);
+            case  4: return makeNode<NodeType< 4>>(args...);
+            case  5: return makeNode<NodeType< 5>>(args...);
+            case  6: return makeNode<NodeType< 6>>(args...);
+            case  7: return makeNode<NodeType< 7>>(args...);
+            default: return makeNode<NodeType<-1>>(args...);
+            }
+        }
+
+        template < template <int TT> class NodeType, typename... Params>
         SimNode * makeNodeUnroll(int count, Params... args) {
             switch (count) {
             case  0: return makeNode<NodeType< 0>>(args...);
