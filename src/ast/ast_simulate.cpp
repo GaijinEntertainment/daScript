@@ -1109,22 +1109,22 @@ namespace das
             if ( isCopyOrMove() ) {
                 auto getSp = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
                 if ( blockT->baseType==Type::tBlock ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollNZ<SimNodeDebug_InvokeAndCopyOrMove>(
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeAndCopyOrMove>(
                                                         int(arguments.size()), at, getSp);
                 } else if ( blockT->baseType==Type::tFunction ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollNZ<SimNodeDebug_InvokeAndCopyOrMoveFn>(
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeAndCopyOrMoveFn>(
                                                         int(arguments.size()), at, getSp);
                 } else {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollNZ<SimNodeDebug_InvokeAndCopyOrMoveLambda>(
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeAndCopyOrMoveLambda>(
                                                         int(arguments.size()), at, getSp);
                 }
             } else {
                 if ( blockT->baseType==Type::tBlock ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollNZ<SimNodeDebug_Invoke>(int(arguments.size()),at);
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_Invoke>(int(arguments.size()),at);
                 } else if ( blockT->baseType==Type::tFunction ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollNZ<SimNodeDebug_InvokeFn>(int(arguments.size()),at);
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeFn>(int(arguments.size()),at);
                 } else {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollNZ<SimNodeDebug_InvokeLambda>(int(arguments.size()),at);
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeLambda>(int(arguments.size()),at);
                 }
             }
         } else {
