@@ -87,9 +87,23 @@ namespace das {
         vis.sub(arguments, nArguments, "arguments");
     }
 
+    SimNode* SimNode_FastCallAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(FastCall);
+        V_CALL();
+        V_END();
+    }
+
     SimNode * SimNode_CallAny::visit(SimVisitor& vis) {
         V_BEGIN();
         V_OP(Call);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_CallAndCopyOrMoveAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(CallAndCopyOrMove);
         V_CALL();
         V_END();
     }
