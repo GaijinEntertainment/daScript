@@ -68,7 +68,7 @@ namespace das {
 
 #define MATCH_OP2_COPYREF_NODE(COMPUTEL,COMPUTER) \
     if (isFastCopyBytes(size)) { \
-        return context->code->makeNodeUnroll<SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER>(size); \
+        return context->code->makeNodeUnrollNZ<SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER>(size); \
     } else { \
         return context->code->makeNode<SimNode_CopyRefValue_##COMPUTEL##_##COMPUTER>(); \
     }
@@ -139,7 +139,7 @@ namespace das {
             else {
                 if (isFastCopyBytes(size)) {
                     anyLeft = anyRight = true;
-                    context->code->makeNodeUnroll<SimNode_CopyRefValueFixed_AnyPtr_AnyPtr>(size);
+                    context->code->makeNodeUnrollNZ<SimNode_CopyRefValueFixed_AnyPtr_AnyPtr>(size);
                 }
             }
             return nullptr;
