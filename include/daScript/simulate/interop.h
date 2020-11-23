@@ -151,23 +151,30 @@ namespace das
 #pragma warning(pop)
 #endif
 
-    template <typename FuncT, FuncT fn>
-    struct SimNode_ExtFuncCall : SimNode_CallBase {
-        enum { IS_CMRES = false };
-        const char * extFnName = nullptr;
-        SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
-            : SimNode_CallBase(at) { extFnName = fnName; }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
-            auto that = (SimNode_ExtFuncCall<FuncT,fn> *) SimNode_CallBase::copyNode(context, code);
+    struct SimNode_ExtFuncCallBase : SimNode_CallBase {
+        const char* extFnName = nullptr;
+        SimNode_ExtFuncCallBase(const LineInfo& at, const char* fnName)
+            : SimNode_CallBase(at) {
+            extFnName = fnName;
+        }
+        virtual SimNode* copyNode(Context& context, NodeAllocator* code) override {
+            auto that = (SimNode_ExtFuncCallBase *) SimNode_CallBase::copyNode(context, code);
             that->extFnName = code->allocateName(extFnName);
             return that;
         }
-        virtual SimNode * visit ( SimVisitor & vis ) override {
+        virtual SimNode* visit(SimVisitor& vis) override {
             V_BEGIN();
             vis.op(extFnName);
             V_CALL();
             V_END();
         }
+    };
+
+    template <typename FuncT, FuncT fn>
+    struct SimNode_ExtFuncCall : SimNode_ExtFuncCallBase {
+        enum { IS_CMRES = false };
+        SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
+            : SimNode_ExtFuncCallBase(at,fnName) { }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             using FunctionTrait = function_traits<FuncT>;
@@ -196,22 +203,10 @@ namespace das
     };
 
     template <typename FuncT, FuncT fn>
-    struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_CallBase {
+    struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_ExtFuncCallBase {
         enum { IS_CMRES = true };
-        const char * extFnName = nullptr;
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName )
-            : SimNode_CallBase(at) { extFnName = fnName; }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
-            auto that = (SimNode_ExtFuncCallAndCopyOrMove<FuncT,fn> *) SimNode_CallBase::copyNode(context, code);
-            that->extFnName = code->allocateName(extFnName);
-            return that;
-        }
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            vis.op(extFnName);
-            V_CALL();
-            V_END();
-        }
+            : SimNode_ExtFuncCallBase(at,fnName) { }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             using FunctionTrait = function_traits<FuncT>;
@@ -234,23 +229,11 @@ namespace das
     };
 
     template <typename FuncT, FuncT fn>
-    struct SimNode_ExtFuncCallRef : SimNode_CallBase {
+    struct SimNode_ExtFuncCallRef : SimNode_ExtFuncCallBase {
         DAS_PTR_NODE;
         enum { IS_CMRES = false };
-        const char * extFnName = nullptr;
         SimNode_ExtFuncCallRef ( const LineInfo & at, const char * fnName )
-            : SimNode_CallBase(at) { extFnName = fnName; }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
-            auto that = (SimNode_ExtFuncCallRef<FuncT,fn> *) SimNode_CallBase::copyNode(context, code);
-            that->extFnName = code->allocateName(extFnName);
-            return that;
-        }
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            vis.op(extFnName);
-            V_CALL();
-            V_END();
-        }
+            : SimNode_ExtFuncCallBase(at,fnName) { }
         __forceinline char * compute(Context & context) {
             DAS_PROFILE_NODE
             using FunctionTrait = function_traits<FuncT>;
@@ -265,21 +248,9 @@ namespace das
     typedef vec4f ( InteropFunction ) ( Context & context, SimNode_CallBase * node, vec4f * args );
 
     template <InteropFunction fn>
-    struct SimNode_InteropFuncCall : SimNode_CallBase {
-        const char * extFnName = nullptr;
+    struct SimNode_InteropFuncCall : SimNode_ExtFuncCallBase {
         SimNode_InteropFuncCall ( const LineInfo & at, const char * fnName )
-            : SimNode_CallBase(at) { extFnName = fnName; }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
-            auto that = (SimNode_InteropFuncCall<fn> *) SimNode_CallBase::copyNode(context, code);
-            that->extFnName = code->allocateName(extFnName);
-            return that;
-        }
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            vis.op(extFnName);
-            V_CALL();
-            V_END();
-        }
+            : SimNode_ExtFuncCallBase(at,fnName) { }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
