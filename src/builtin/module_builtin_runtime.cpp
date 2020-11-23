@@ -803,6 +803,16 @@ namespace das
         return context->stringHeap->allocateString(str, strLen);
     }
 
+    void builtin_temp_array ( void * data, int size, const Block & block, Context * context ) {
+        Array arr;
+        arr.data = (char *) data;
+        arr.size = arr.capacity = size;
+        arr.lock = 1;
+        arr.flags = 0;
+        vec4f args[1];
+        args[0] = cast<Array &>::from(arr);
+        context->invoke(block, args, nullptr);
+    }
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
@@ -992,5 +1002,9 @@ namespace das
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
             SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string", SideEffects::none, "builtin_string_clone");
+        // temp array out of mem
+        auto bta = addExtern<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array", SideEffects::invoke, "builtin_temp_array");
+        bta->unsafeOperation = true;
+        bta->privateFunction = true;
     }
 }

@@ -31,6 +31,7 @@ namespace das {
     void builtin_array_lock ( const Array & arr, Context * context );
     void builtin_array_unlock ( const Array & arr, Context * context );
     void builtin_array_clear_lock ( const Array & arr, Context * );
+    void builtin_temp_array ( void * data, int size, const Block & block, Context * context );
     void builtin_array_free ( Array & dim, int szt, Context * __context__ );
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ );
 

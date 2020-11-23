@@ -473,3 +473,11 @@ def get_command_line_arguments : array<string>
     var args : array<string>
     builtin_get_command_line_arguments(args)
     return <- args
+
+def map_to_array ( data:void?; len:int; blk:block<(var arg:array<auto(TT)>#)> )
+    assert(data != null,"expecting data")
+    assert(len > 0,"at least 1 element")
+    let elem_size = typeinfo(sizeof type<TT>)
+    let num_elem = len / elem_size
+    unsafe
+        _builtin_temp_array(data, num_elem, blk)
