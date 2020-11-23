@@ -285,11 +285,15 @@ namespace das
         struct SimNode_AtStdVector : SimNode_At {
             using TT = OT;
             DAS_PTR_NODE;
-            SimNode_AtStdVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
-                : SimNode_At(at, rv, idx, 0, ofs, 0) {}
+            SimNode_AtStdVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs, bool isR2V = false )
+                : SimNode_At(at, rv, idx, 0, ofs, 0), r2v(isR2V) {}
             virtual SimNode * visit ( SimVisitor & vis ) override {
                 V_BEGIN();
-                V_OP_TT(AtStdVector);
+                if ( r2v ) {
+                    V_OP_TT(AtStdVectorR2V);
+                } else {
+                    V_OP_TT(AtStdVector);
+                }
                 V_SUB_THIS(value);
                 V_SUB_THIS(index);
                 V_ARG_THIS(stride);
@@ -308,22 +312,13 @@ namespace das
                     return ((char *)(pValue->data() + idx)) + offset;
                 }
             }
+            bool r2v = false;
         };
         template <typename OOT>
         struct SimNode_AtStdVectorR2V : SimNode_AtStdVector {
             using TT = OOT;
             SimNode_AtStdVectorR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
-                : SimNode_AtStdVector(at, rv, idx, ofs) {}
-            virtual SimNode * visit ( SimVisitor & vis ) override {
-                V_BEGIN();
-                V_OP_TT(AtStdVectorR2V);
-                V_SUB_THIS(value);
-                V_SUB_THIS(index);
-                V_ARG_THIS(stride);
-                V_ARG_THIS(offset);
-                V_ARG_THIS(range);
-                V_END();
-            }
+                : SimNode_AtStdVector(at, rv, idx, ofs, true) {}
             virtual vec4f eval ( Context & context ) override {
                 DAS_PROFILE_NODE
                 OOT * pR = (OOT *) SimNode_AtStdVector::compute(context);
