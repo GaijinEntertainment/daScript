@@ -548,7 +548,7 @@ namespace das
             SimNode * init0;
             if ( useCMRES ) {
                 if ( bytes <= 32 ) {
-                    init0 = context.code->makeNodeUnroll<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
+                    init0 = context.code->makeNodeUnrollNZ<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
                 } else {
                     init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,bytes);
                 }
@@ -753,7 +753,7 @@ namespace das
             SimNode * init0;
             if ( useCMRES ) {
                 if ( bytes <= 32 ) {
-                    init0 = context.code->makeNodeUnroll<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
+                    init0 = context.code->makeNodeUnrollNZ<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
                 } else {
                     init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,bytes);
                 }
@@ -850,7 +850,7 @@ namespace das
             SimNode * init0;
             if ( useCMRES ) {
                 if ( sizeOf <= 32 ) {
-                    init0 = context.code->makeNodeUnroll<SimNode_InitLocalCMResN>(sizeOf, at,extraOffset);
+                    init0 = context.code->makeNodeUnrollNZ<SimNode_InitLocalCMResN>(sizeOf, at,extraOffset);
                 } else {
                     init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,sizeOf);
                 }
@@ -2440,7 +2440,7 @@ namespace das
             } else if (var->aliasCMRES ) {
                 int bytes = var->type->getSizeOf();
                 if ( bytes <= 32 ) {
-                    init = context.code->makeNodeUnroll<SimNode_InitLocalCMResN>(bytes, pLet->at,0);
+                    init = context.code->makeNodeUnrollNZ<SimNode_InitLocalCMResN>(bytes, pLet->at,0);
                 } else {
                     init = context.code->makeNode<SimNode_InitLocalCMRes>(pLet->at,0,bytes);
                 }
