@@ -423,7 +423,7 @@ namespace das
             SimNode * init0;
             if ( useCMRES ) {
                 if ( bytes <= 32 ) {
-                    init0 = context.code->makeNodeUnroll<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
+                    init0 = context.code->makeNodeUnrollNZ<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
                 } else {
                     init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,bytes);
                 }

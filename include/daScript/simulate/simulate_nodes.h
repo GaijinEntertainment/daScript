@@ -1565,17 +1565,15 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t offset, size;
     };
 
-    template <int size>
-    struct SimNode_InitLocalCMResN : SimNode {
+    template <int SIB>
+    struct SimNode_InitLocalCMResN : SimNode_InitLocalCMRes {
         SimNode_InitLocalCMResN(const LineInfo & at, uint32_t o)
-            : SimNode(at), offset(o) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+            : SimNode_InitLocalCMRes(at, o, SIB) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            memset(context.abiCopyOrMoveResult() + offset, 0, size);
+            memset(context.abiCopyOrMoveResult() + offset, 0, SIB);
             return v_zero();
         }
-        uint32_t offset;
     };
 
     // ZERO MEMORY OF UNITIALIZED LOCAL VARIABLE VIA REFERENCE AND OFFSET
