@@ -165,20 +165,23 @@ namespace das {
         return ft;
     }
 
+    void init_expr ( BasicStructureAnnotation & ann ) {
+        ann.addFieldEx("at", "at", offsetof(Expression, at), makeType<LineInfo>(*ann.mlib));
+        ann.addFieldEx("_type", "type", offsetof(Expression, type), makeType<TypeDeclPtr>(*ann.mlib));
+        ann.addFieldEx("__rtti", "__rtti", offsetof(Expression, __rtti), makeType<const char *>(*ann.mlib));
+        ann.addFieldEx("genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags());
+        ann.addFieldEx("flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags());
+        ann.addFieldEx("printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags());
+    }
+
     template <typename EXPR>
     struct AstExprAnnotation : ManagedStructureAnnotation <EXPR> {
         const char * parentExpression = nullptr;
         AstExprAnnotation(const string & en, ModuleLibrary & ml)
             : ManagedStructureAnnotation<EXPR> (en, ml) {
         }
-        void init() {
-            using ManagedType = EXPR;
-            this->template addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-            this->template addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
-            this->template addField<DAS_BIND_MANAGED_FIELD(__rtti)>("__rtti");
-            this->addFieldEx ( "genFlags", "genFlags", offsetof(Expression, genFlags), makeExprGenFlagsFlags() );
-            this->addFieldEx ( "flags", "flags", offsetof(Expression, flags), makeExprFlagsFlags() );
-            this->addFieldEx ( "printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags() );
+        __forceinline void init() {
+            init_expr(*this);
         }
         virtual bool canSubstitute ( TypeAnnotation * ann ) const override {
             if ( ann == this ) return true;
