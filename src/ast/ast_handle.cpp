@@ -176,4 +176,13 @@ namespace das {
         }
         walker.walk_struct((char *)data, sti);
     }
+
+    void BasicStructureAnnotation::from(const char* parentName) {
+        auto pann = (BasicStructureAnnotation*)(this->module->findAnnotation(parentName).get());
+        parents.reserve(pann->parents.size() + 1);
+        parents.push_back(pann);
+        for (auto pp : pann->parents) {
+            parents.push_back(pp);
+        }
+    }
 }

@@ -174,6 +174,17 @@ namespace das {
         ann.addFieldEx("printFlags", "printFlags", offsetof(Expression, printFlags), makeExprPrintFlagsFlags());
     }
 
+    bool canSubstituteExpr ( const TypeAnnotation* thisAnn, TypeAnnotation* ann ) {
+        if (ann == thisAnn) return true;
+        if (thisAnn->module != ann->module) return false;
+        if (memcmp(ann->name.c_str(), "Expr", 4) != 0) return false;
+        auto* AEA = static_cast<BasicStructureAnnotation*>(ann);
+        for (auto p : AEA->parents) {
+            if (p == thisAnn) return true;
+        }
+        return false;
+    }
+
     template <typename EXPR>
     struct AstExprAnnotation : ManagedStructureAnnotation <EXPR> {
         const char * parentExpression = nullptr;
@@ -184,24 +195,8 @@ namespace das {
             init_expr(*this);
         }
         virtual bool canSubstitute ( TypeAnnotation * ann ) const override {
-            if ( ann == this ) return true;
-            if ( this->module != ann->module ) return false;
-            if ( memcmp(ann->name.c_str(),"Expr",4)!=0 ) return false;
-            auto * AEA = static_cast<AstExprAnnotation *>(ann);
-            for ( auto p : AEA->parents ) {
-                if ( p == this ) return true;
-            }
-            return false;
+            return canSubstituteExpr(this, ann);
         }
-        void from ( const char * parentName ) {
-            auto pann = static_pointer_cast<AstExprAnnotation<EXPR>>(this->module->findAnnotation(parentName));
-            parents.reserve(pann->parents.size()+1);
-            parents.push_back(pann.get());
-            for ( auto pp : pann->parents ) {
-                parents.push_back(pp);
-            }
-        }
-        vector<TypeAnnotation *> parents;
     };
 
     template <typename EXPR>
