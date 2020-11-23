@@ -558,6 +558,90 @@ namespace das {
         cppName = fnCpp;
     }
 
+    void BuiltInFunction::construct (const vector<TypeDeclPtr> & args ) {
+        this->totalStackSize = sizeof(Prologue);
+        for ( size_t argi=0; argi != args.size(); ++argi ) {
+            auto arg = make_smart<Variable>();
+            arg->name = "arg" + to_string(argi);
+            arg->type = args[argi];
+            if ( arg->type->baseType==Type::fakeContext ) {
+                arg->init = make_smart<ExprFakeContext>(at);
+            } else if ( arg->type->baseType==Type::fakeLineInfo ) {
+                arg->init = make_smart<ExprFakeLineInfo>(at);
+            }
+            if ( arg->type->isTempType() ) {
+                arg->type->implicit = true;
+            }
+            this->arguments.push_back(arg);
+        }
+        if ( result->isRefType() ) {
+            if ( result->canCopy() ) {
+                copyOnReturn = true;
+                moveOnReturn = false;
+            } else if ( result->canMove() ) {
+                copyOnReturn = false;
+                moveOnReturn = true;
+            } else if ( !result->ref ) {
+                DAS_FATAL_LOG("BuiltInFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
+                DAS_FATAL_ERROR;
+            }
+        }
+    }
+
+    void BuiltInFunction::constructExternal (const vector<TypeDeclPtr> & args ) {
+        this->totalStackSize = sizeof(Prologue);
+        for ( size_t argi=0; argi != args.size(); ++argi ) {
+            auto arg = make_smart<Variable>();
+            arg->name = "arg" + to_string(argi);
+            arg->type = args[argi];
+            if ( arg->type->baseType==Type::fakeContext ) {
+                arg->init = make_smart<ExprFakeContext>(at);
+            } else if ( arg->type->baseType==Type::fakeLineInfo ) {
+                arg->init = make_smart<ExprFakeLineInfo>(at);
+            }
+            this->arguments.push_back(arg);
+        }
+        if ( result->isRefType() ) {
+            if ( result->canCopy() ) {
+                copyOnReturn = true;
+                moveOnReturn = false;
+            } else if ( result->canMove() ) {
+                copyOnReturn = false;
+                moveOnReturn = true;
+            } else if ( !result->ref ) {
+                DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
+                DAS_FATAL_ERROR;
+            }
+        }
+    }
+
+    void BuiltInFunction::constructInterop (const vector<TypeDeclPtr> & args ) {
+        this->totalStackSize = sizeof(Prologue);
+        for ( size_t argi=0; argi!=args.size(); ++argi ) {
+            auto arg = make_smart<Variable>();
+            arg->name = "arg" + to_string(argi);
+            arg->type = args[argi];
+            if ( arg->type->baseType==Type::fakeContext ) {
+                arg->init = make_smart<ExprFakeContext>(at);
+            } else if ( arg->type->baseType==Type::fakeLineInfo ) {
+                arg->init = make_smart<ExprFakeLineInfo>(at);
+            }
+            this->arguments.push_back(arg);
+        }
+        if ( result->isRefType() ) {
+            if ( result->canCopy() ) {
+                copyOnReturn = true;
+                moveOnReturn = false;
+            } else if ( result->canMove() ) {
+                copyOnReturn = false;
+                moveOnReturn = true;
+            } else if ( !result->ref ) {
+                DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
+                DAS_FATAL_ERROR;
+            }
+        }
+    }
+
     // expression
 
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {

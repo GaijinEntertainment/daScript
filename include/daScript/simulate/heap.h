@@ -318,7 +318,7 @@ namespace das {
         NodeAllocator() {}
 
         template<typename TT, typename... Params>
-        __forceinline TT * makeNode(Params... args) {
+        TT * makeNode(Params... args) {
             totalNodesAllocated ++;
             if ( prefixWithHeader ) {
                 char * data = allocate(sizeof(TT) + sizeof(NodePrefix));

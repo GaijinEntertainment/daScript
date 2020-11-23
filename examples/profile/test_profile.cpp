@@ -14,12 +14,6 @@
 
 using namespace das;
 
-#ifndef _MSC_VER
-#define __noinline    __attribute__((noinline))
-#else
-#define __noinline    __declspec(noinline)
-#endif
-
 void testManagedInt(const TBlock<void,const vector<int32_t>> & blk, Context * context) {
     vector<int32_t> arr;
     for (int32_t x = 0; x != 10; ++x) {

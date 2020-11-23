@@ -1,7 +1,6 @@
 #pragma once
 
 namespace  das {
-
     template  <typename SimT, typename RetT, typename ...Args>
     class BuiltInFn : public BuiltInFunction {
     public:
@@ -9,35 +8,7 @@ namespace  das {
         : BuiltInFunction(fn,cna) {
             this->policyBased = pbas;
             this->result = makeType<RetT>(lib);
-            this->totalStackSize = sizeof(Prologue);
-            vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
-            for ( size_t argi=0; argi != args.size(); ++argi ) {
-                auto arg = make_smart<Variable>();
-                arg->name = "arg" + to_string(argi);
-                arg->type = args[argi];
-                if ( arg->type->baseType==Type::fakeContext ) {
-                    arg->init = make_smart<ExprFakeContext>(at);
-                } else if ( arg->type->baseType==Type::fakeLineInfo ) {
-                    arg->init = make_smart<ExprFakeLineInfo>(at);
-                }
-                if ( arg->type->isTempType() ) {
-                    arg->type->implicit = true;
-                }
-                this->arguments.push_back(arg);
-            }
-            // copy on return and move on return
-            if ( result->isRefType() ) {
-                if ( result->canCopy() ) {
-                    copyOnReturn = true;
-                    moveOnReturn = false;
-                } else if ( result->canMove() ) {
-                    copyOnReturn = false;
-                    moveOnReturn = true;
-                } else if ( !result->ref ) {
-                    DAS_FATAL_LOG("BuiltInFn %s can't be bound. It returns values which can't be copied or moved\n", fn.c_str());
-                    DAS_FATAL_ERROR;
-                }
-            }
+            construct(makeBuiltinArgs<Args...>(lib));
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             return context.code->makeNode<SimT>(at);
