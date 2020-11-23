@@ -768,11 +768,15 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // Invoke
 
+    struct SimNode_InvokeAny : SimNode_CallBase {
+        SimNode_InvokeAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
     template <int argCount>
-    struct SimNode_Invoke : SimNode_CallBase {
+    struct SimNode_Invoke : SimNode_InvokeAny {
         SimNode_Invoke ( const LineInfo & at)
-            : SimNode_CallBase(at) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+            : SimNode_InvokeAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f argValues[argCount];
@@ -802,11 +806,15 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // Invoke with copy-or-move-on-return
 
+    struct SimNode_InvokeAndCopyOrMoveAny : SimNode_CallBase {
+        SimNode_InvokeAndCopyOrMoveAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
     template <int argCount>
-    struct SimNode_InvokeAndCopyOrMove : SimNode_CallBase {
+    struct SimNode_InvokeAndCopyOrMove : SimNode_InvokeAndCopyOrMoveAny {
         SimNode_InvokeAndCopyOrMove ( const LineInfo & at, SimNode * spCMRES )
-            : SimNode_CallBase(at){ cmresEval = spCMRES; }
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+            : SimNode_InvokeAndCopyOrMoveAny(at) { cmresEval = spCMRES; }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);
@@ -838,10 +846,14 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // Invoke function
 
+    struct SimNode_InvokeFnAny : SimNode_CallBase {
+        SimNode_InvokeFnAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
     template <int argCount>
-    struct SimNode_InvokeFn : SimNode_CallBase {
-        SimNode_InvokeFn ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+    struct SimNode_InvokeFn : SimNode_InvokeFnAny {
+        SimNode_InvokeFn ( const LineInfo & at ) : SimNode_InvokeFnAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             vec4f argValues[argCount];
@@ -873,10 +885,14 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // Invoke lambda
 
+    struct SimNode_InvokeLambdaAny : SimNode_CallBase {
+        SimNode_InvokeLambdaAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
     template <int argCount>
-    struct SimNode_InvokeLambda : SimNode_CallBase {
-        SimNode_InvokeLambda ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+    struct SimNode_InvokeLambda : SimNode_InvokeLambdaAny {
+        SimNode_InvokeLambda ( const LineInfo & at ) : SimNode_InvokeLambdaAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             vec4f argValues[argCount];
@@ -904,11 +920,15 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // Invoke function with copy-or-move-on-return
 
+    struct SimNode_InvokeAndCopyOrMoveFnAny : SimNode_CallBase {
+        SimNode_InvokeAndCopyOrMoveFnAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
     template <int argCount>
-    struct SimNode_InvokeAndCopyOrMoveFn : SimNode_CallBase {
+    struct SimNode_InvokeAndCopyOrMoveFn : SimNode_InvokeAndCopyOrMoveFnAny {
         SimNode_InvokeAndCopyOrMoveFn ( const LineInfo & at, SimNode * spEval )
-            : SimNode_CallBase(at) { cmresEval = spEval; }
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+            : SimNode_InvokeAndCopyOrMoveFnAny(at) { cmresEval = spEval; }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);
@@ -942,11 +962,15 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // Invoke lambda with copy-or-move-on-return
 
+    struct SimNode_InvokeAndCopyOrMoveLambdaAny : SimNode_CallBase {
+        SimNode_InvokeAndCopyOrMoveLambdaAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
     template <int argCount>
-    struct SimNode_InvokeAndCopyOrMoveLambda : SimNode_CallBase {
+    struct SimNode_InvokeAndCopyOrMoveLambda : SimNode_InvokeAndCopyOrMoveLambdaAny {
         SimNode_InvokeAndCopyOrMoveLambda ( const LineInfo & at, SimNode * spEval )
-            : SimNode_CallBase(at) { cmresEval = spEval; }
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+            : SimNode_InvokeAndCopyOrMoveLambdaAny(at) { cmresEval = spEval; }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);

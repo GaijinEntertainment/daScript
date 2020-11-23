@@ -61,54 +61,6 @@ namespace das {
         V_END();
     }
 
-    template <int argCount>
-    SimNode * SimNode_Invoke<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(Invoke);
-        V_CALL();
-        V_END();
-    }
-
-    template <int argCount>
-    SimNode * SimNode_InvokeAndCopyOrMove<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(InvokeAndCopyOrMove);
-        V_CALL();
-        V_END();
-    }
-
-    template <int argCount>
-    SimNode * SimNode_InvokeFn<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(InvokeFn);
-        V_CALL();
-        V_END();
-    }
-
-    template <int argCount>
-    SimNode * SimNode_InvokeLambda<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(InvokeLambda);
-        V_CALL();
-        V_END();
-    }
-
-    template <int argCount>
-    SimNode * SimNode_InvokeAndCopyOrMoveFn<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(InvokeAndCopyOrMoveFn);
-        V_CALL();
-        V_END();
-    }
-
-    template <int argCount>
-    SimNode * SimNode_InvokeAndCopyOrMoveLambda<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(InvokeAndCopyOrMoveLambda);
-        V_CALL();
-        V_END();
-    }
-
     template <typename CastTo, typename CastFrom>
     SimNode * SimNode_Cast<CastTo,CastFrom>::visit ( SimVisitor & vis ) {
         V_BEGIN();

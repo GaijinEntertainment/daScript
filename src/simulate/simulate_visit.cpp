@@ -108,6 +108,48 @@ namespace das {
         V_END();
     }
 
+    SimNode* SimNode_InvokeAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(Invoke);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_InvokeAndCopyOrMoveAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeAndCopyOrMove);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_InvokeFnAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeFn);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_InvokeLambdaAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeLambda);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_InvokeAndCopyOrMoveFnAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeAndCopyOrMoveFn);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_InvokeAndCopyOrMoveLambdaAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeAndCopyOrMoveLambda);
+        V_CALL();
+        V_END();
+    }
+
     SimNode * SimNode_DeleteStructPtr::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(DeleteStructPtr);
