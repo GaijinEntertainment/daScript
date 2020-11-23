@@ -352,9 +352,6 @@ namespace das {
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,
-    // plotting
-        "plot",                         Type::tBool,
-        "plot_read_write",              Type::tBool,
     // logging
         "log",                          Type::tBool,
         "log_optimization_passes",      Type::tBool,

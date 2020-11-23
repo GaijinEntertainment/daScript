@@ -274,9 +274,6 @@ namespace das {
                 if (program->options.getBoolOption("log")) {
                     logs << *program;
                 }
-                if (program->options.getBoolOption("plot")) {
-                    logs << "\n" << program->dotGraph() << "\n";
-                }
             }
             g_Program.reset();
             sort(program->errors.begin(), program->errors.end());

@@ -75,7 +75,6 @@ src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
 src/ast/ast_aot_cpp.cpp
-src/ast/ast_plot.cpp
 src/ast/ast_infer_type.cpp
 src/ast/ast_lint.cpp
 src/ast/ast_allocate_stack.cpp
