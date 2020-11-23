@@ -55,7 +55,7 @@ namespace das
         defaultTempFn() = default;
         defaultTempFn ( bool args, bool impl, bool result, bool econst )
             : tempArgs(args), implicitArgs(impl), tempResult(result), explicitConstArgs(econst) {}
-        bool operator () ( Function * fn ) {
+        __noinline bool operator () ( Function * fn ) {
             if ( tempArgs || implicitArgs ) {
                 for ( auto & arg : fn->arguments ) {
                     if ( arg->type->isTempType() ) {
@@ -90,29 +90,14 @@ namespace das
         explicitConstArgFn() : defaultTempFn(false,true,false,true) {}
     };
 
+    void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
+
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
     inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string(), QQ && tempFn = QQ() ) {
         auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncT>>(name, lib, cppName);
-        if ( !SimNodeT<FuncT,fn>::IS_CMRES ) {
-            if ( fnX->result->isRefType() && !fnX->result->ref ) {
-                DAS_FATAL_LOG(
-                    "addExtern(%s)::tempFn failed in module %s\n"
-                    "  this function should be bound with SimNode_ExtFuncCallAndCopyOrMove option\n"
-                    "  likely cast<> is implemented for the return type, and it should not\n",
-                name.c_str(), mod.name.c_str());
-                DAS_FATAL_ERROR;
-            }
-        }
-        fnX->setSideEffects(seFlags);
-        if ( !tempFn(fnX.get()) ) {
-            DAS_FATAL_LOG("addExtern(%s)::tempFn failed in module %s\n", name.c_str(), mod.name.c_str());
-            DAS_FATAL_ERROR;
-        }
-        if ( !mod.addFunction(fnX) ) {
-            DAS_FATAL_LOG("addExtern(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
-            DAS_FATAL_ERROR;
-        }
+        tempFn(fnX.get());
+        addExternFunc(mod, fnX, SimNodeT<FuncT, fn>::IS_CMRES, seFlags);
         return fnX;
     }
 
@@ -120,21 +105,7 @@ namespace das
     inline auto addExternEx ( Module & mod, const ModuleLibrary & lib, const string & name, SideEffects seFlags,
                                   const string & cppName = string()) {
         auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeT<FuncT, fn>, FuncArgT>>(name, lib, cppName);
-        if ( !SimNodeT<FuncT,fn>::IS_CMRES ) {
-            if ( fnX->result->isRefType() && !fnX->result->ref ) {
-                DAS_FATAL_LOG(
-                    "addExtern(%s)::tempFn failed in module %s\n"
-                    "  this function should be bound with SimNode_ExtFuncCallAndCopyOrMove option\n"
-                    "  likely cast<> is implemented for the return type, and it should not\n",
-                name.c_str(), mod.name.c_str());
-                DAS_FATAL_ERROR;
-            }
-        }
-        fnX->setSideEffects(seFlags);
-        if ( !mod.addFunction(fnX) ) {
-            DAS_FATAL_LOG("addExternEx(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
-            DAS_FATAL_ERROR;
-        }
+        addExternFunc(mod, fnX, SimNodeT<FuncT, fn>::IS_CMRES, seFlags);
         return fnX;
     }
 
@@ -143,10 +114,7 @@ namespace das
                                    const string & cppName = string() ) {
         auto fnX = make_smart<InteropFn<func, RetT, Args...>>(name, lib, cppName);
         fnX->setSideEffects(seFlags);
-        if ( !mod.addFunction(fnX) ) {
-            DAS_FATAL_LOG("addInterop(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
-            DAS_FATAL_ERROR;
-        }
+        addExternFunc(mod, fnX, true, seFlags);
         return fnX;
     }
 }
