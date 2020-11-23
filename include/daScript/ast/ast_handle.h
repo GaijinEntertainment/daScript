@@ -301,7 +301,7 @@ namespace das
                 V_ARG_THIS(range);
                 V_END();
             }
-            __forceinline char * compute ( Context & context ) {
+            __noinline char * compute ( Context & context ) {
                 DAS_PROFILE_NODE
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
@@ -320,14 +320,12 @@ namespace das
             SimNode_AtStdVectorR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
                 : SimNode_AtStdVector(at, rv, idx, ofs, true) {}
             virtual vec4f eval ( Context & context ) override {
-                DAS_PROFILE_NODE
                 OOT * pR = (OOT *) SimNode_AtStdVector::compute(context);
                 DAS_ASSERT(pR);
                 return cast<OOT>::from(*pR);
             }
 #define EVAL_NODE(TYPE,CTYPE)                                           \
             virtual CTYPE eval##TYPE ( Context & context ) override {   \
-                DAS_PROFILE_NODE \
                 return *(CTYPE *) SimNode_AtStdVector::compute(context);    \
             }
             DAS_EVAL_NODE
