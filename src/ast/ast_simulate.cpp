@@ -323,11 +323,11 @@ namespace das
     SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
         if ( context.thisProgram->getDebugger() ) {
             if ( copyOnReturn || moveOnReturn ) {
-                return context.code->makeNodeUnroll<SimNodeDebug_CallAndCopyOrMove>(int(arguments.size()), at);
+                return context.code->makeNodeUnrollAny<SimNodeDebug_CallAndCopyOrMove>(int(arguments.size()), at);
             } else if ( fastCall ) {
-                return context.code->makeNodeUnroll<SimNodeDebug_FastCall>(int(arguments.size()), at);
+                return context.code->makeNodeUnrollAny<SimNodeDebug_FastCall>(int(arguments.size()), at);
             } else {
-                return context.code->makeNodeUnroll<SimNodeDebug_Call>(int(arguments.size()), at);
+                return context.code->makeNodeUnrollAny<SimNodeDebug_Call>(int(arguments.size()), at);
             }
         } else {
             if ( copyOnReturn || moveOnReturn ) {

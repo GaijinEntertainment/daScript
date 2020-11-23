@@ -979,6 +979,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     /////////////////////////////////////////////
 
     // FUNCTION CALL via FASTCALL convention
+
     template <int argCount>
     struct SimNodeDebug_FastCall : SimNode_FastCall<argCount> {
         SimNodeDebug_FastCall ( const LineInfo & at )
@@ -1012,7 +1013,41 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    template <>
+    struct SimNodeDebug_FastCall<-1> : SimNode_FastCall<0> {
+        SimNodeDebug_FastCall(const LineInfo& at)
+            : SimNode_FastCall<0>(at) {}
+        virtual vec4f eval(Context& context) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[32];
+            evalArgs(context, argValues);
+            auto aa = context.abiArg;
+            context.abiArg = argValues;
+            DAS_SINGLE_STEP(context, this->fnPtr->code->debugInfo, true);
+            auto res = this->fnPtr->code->eval(context);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            context.abiArg = aa;
+            return res;
+        }
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                vec4f argValues[32]; \
+                evalArgs(context, argValues); \
+                auto aa = context.abiArg; \
+                context.abiArg = argValues; \
+                DAS_SINGLE_STEP(context,this->fnPtr->code->debugInfo,true); \
+                auto res = EvalTT<CTYPE>::eval(context, this->fnPtr->code); \
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
+                context.abiArg = aa; \
+                return res; \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
     // FUNCTION CALL
+
     template <int argCount>
     struct SimNodeDebug_Call : SimNode_Call<argCount> {
         SimNodeDebug_Call ( const LineInfo & at )
@@ -1036,7 +1071,31 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    template <>
+    struct SimNodeDebug_Call<-1> : SimNode_Call<0> {
+        SimNodeDebug_Call(const LineInfo& at)
+            : SimNode_Call<0>(at) {}
+        virtual vec4f eval(Context& context) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[32];
+            evalArgs(context, argValues);
+            DAS_SINGLE_STEP(context, this->fnPtr->code->debugInfo, true);
+            return context.call(this->fnPtr, argValues, &this->debugInfo);
+        }
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                vec4f argValues[32]; \
+                evalArgs(context, argValues); \
+                DAS_SINGLE_STEP(context,this->fnPtr->code->debugInfo,true); \
+                return cast<CTYPE>::to(context.call(this->fnPtr, argValues, &this->debugInfo)); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
     // FUNCTION CALL with copy-or-move-on-return
+
     template <int argCount>
     struct SimNodeDebug_CallAndCopyOrMove : SimNode_CallAndCopyOrMove<argCount> {
         DAS_PTR_NODE;
@@ -1049,6 +1108,21 @@ SIM_NODE_AT_VECTOR(Float, float)
                 EvalBlock<argCount>::eval(context, this->arguments, argValues);
                 DAS_SINGLE_STEP(context,this->fnPtr->code->debugInfo,true);
                 return cast<char *>::to(context.callWithCopyOnReturn(this->fnPtr, argValues, cmres, &this->debugInfo));
+        }
+    };
+
+    template <>
+    struct SimNodeDebug_CallAndCopyOrMove<-1> : SimNode_CallAndCopyOrMove<0> {
+        DAS_PTR_NODE;
+        SimNodeDebug_CallAndCopyOrMove(const LineInfo& at)
+            : SimNode_CallAndCopyOrMove<0>(at) {}
+        __forceinline char* compute(Context& context) {
+            DAS_PROFILE_NODE
+            auto cmres = this->cmresEval->evalPtr(context);
+            vec4f argValues[32];
+            evalArgs(context,argValues);
+            DAS_SINGLE_STEP(context, this->fnPtr->code->debugInfo, true);
+            return cast<char*>::to(context.callWithCopyOnReturn(this->fnPtr, argValues, cmres, &this->debugInfo));
         }
     };
 
