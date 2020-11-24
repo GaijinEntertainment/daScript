@@ -779,7 +779,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_InvokeAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             Block * block = cast<Block *>::to(argValues[0]);
             if ( argCount>1 ) {
@@ -791,7 +791,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1];                                                          \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             Block * block = cast<Block *>::to(argValues[0]);                                    \
             if ( argCount>1 ) {                                                                 \
@@ -841,7 +841,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             Block * block = cast<Block *>::to(argValues[0]);
             if ( argCount>1 ) {
@@ -854,7 +854,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);                                           \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             Block * block = cast<Block *>::to(argValues[0]);                                    \
             if ( argCount>1 ) {                                                                 \
@@ -906,7 +906,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InvokeFn ( const LineInfo & at ) : SimNode_InvokeFnAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
@@ -919,7 +919,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);  \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
@@ -969,7 +969,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InvokeLambda ( const LineInfo & at ) : SimNode_InvokeLambdaAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");
@@ -980,7 +980,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                             \
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
@@ -1035,7 +1035,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
@@ -1049,7 +1049,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                                   \
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);                                               \
-            vec4f argValues[argCount];                                                              \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, arguments, argValues);                               \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);      \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");                 \
@@ -1106,7 +1106,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");
@@ -1118,7 +1118,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);                                           \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                             \
             if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
@@ -1324,7 +1324,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_Invoke<argCount>(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, this->arguments, argValues);
             Block * block = cast<Block *>::to(argValues[0]);
             DAS_SINGLE_STEP(context,block->body->debugInfo,true);
@@ -1337,7 +1337,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, this->arguments, argValues);                     \
             Block * block = cast<Block *>::to(argValues[0]);                                    \
             DAS_SINGLE_STEP(context,block->body->debugInfo,true);                               \
@@ -1386,7 +1386,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             auto cmres = this->cmresEval->evalPtr(context);
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, this->arguments, argValues);
             Block * block = cast<Block *>::to(argValues[0]);
             DAS_SINGLE_STEP(context,block->body->debugInfo,true);
@@ -1400,7 +1400,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
             auto cmres = this->cmresEval->evalPtr(context);                                     \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, this->arguments, argValues);                     \
             Block * block = cast<Block *>::to(argValues[0]);                                    \
             DAS_SINGLE_STEP(context,block->body->debugInfo,true);                               \
@@ -1450,7 +1450,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_InvokeFn<argCount>(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, this->arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
             if (!simFunc) context.throw_error_at(this->debugInfo,"invoke null function");
@@ -1464,7 +1464,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, this->arguments, argValues);                     \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);  \
             if (!simFunc) context.throw_error_at(this->debugInfo,"invoke null function");       \
@@ -1514,7 +1514,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_InvokeLambda<argCount>(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, this->arguments, argValues);
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);
             if (!funIndex) context.throw_error_at(this->debugInfo,"invoke null lambda");
@@ -1526,7 +1526,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)                                                                   \
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, this->arguments, argValues);                     \
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                             \
             if (!funIndex) context.throw_error_at(this->debugInfo,"invoke null lambda");        \
@@ -1579,7 +1579,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             auto cmres = this->cmresEval->evalPtr(context);
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, this->arguments, argValues);
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
             if (!simFunc) context.throw_error_at(this->debugInfo,"invoke null function");
@@ -1594,7 +1594,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                                   \
             DAS_PROFILE_NODE \
             auto cmres = this->cmresEval->evalPtr(context);                                         \
-            vec4f argValues[argCount];                                                              \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, this->arguments, argValues);                         \
             SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);      \
             if (!simFunc) context.throw_error_at(this->debugInfo,"invoke null function");           \
@@ -1648,7 +1648,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto cmres = this->cmresEval->evalPtr(context);
-            vec4f argValues[argCount];
+            vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, this->arguments, argValues);
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);
             if (!funIndex) context.throw_error_at(this->debugInfo,"invoke null lambda");
@@ -1661,7 +1661,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
             DAS_PROFILE_NODE \
             auto cmres = this->cmresEval->evalPtr(context);                                     \
-            vec4f argValues[argCount];                                                          \
+            vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, this->arguments, argValues);                     \
             int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                             \
             if (!funIndex) context.throw_error_at(this->debugInfo,"invoke null lambda");        \
