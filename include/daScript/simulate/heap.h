@@ -304,7 +304,11 @@ namespace das {
 
     struct NodePrefix {
         uint32_t    size = 0;
+#ifdef NDEBUG
+        uint32_t    magic;
+#else
         uint32_t    magic = 0xdeadc0de;
+#endif
         uint32_t    padd0, padd1;
         NodePrefix ( size_t sz ) : size(uint32_t(sz)) {}
     };
@@ -317,7 +321,11 @@ namespace das {
     public:
         NodeAllocator() {}
 
-#if defined(__GNUC__) && !defined(_MSC_VER)
+        /*
+        * GCC really likes the version with separate if. CLANG \ MSVC strongly prefer the one bellow with __forceinline.
+        * This saves ~1.6mb of code on MSVC\CLANG as of 11/23/2020.
+        */
+#if defined(__GNUC__) && !defined(__clang__)
         template<typename TT, typename... Params>
         TT * makeNode(Params... args) {
             totalNodesAllocated ++;
