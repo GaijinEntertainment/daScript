@@ -552,17 +552,17 @@ namespace das {
 
     // built-in function
 
-    BuiltInFunction::BuiltInFunction ( const string & fn, const string & fnCpp ) {
+    BuiltInFunction::BuiltInFunction ( const char * fn, const char * fnCpp ) {
         builtIn = true;
         name = fn;
-        cppName = fnCpp;
+        cppName = fnCpp ? fnCpp : "";
     }
 
     void BuiltInFunction::construct (const vector<TypeDeclPtr> & args ) {
         this->totalStackSize = sizeof(Prologue);
-        for ( size_t argi=0; argi != args.size(); ++argi ) {
+        for ( size_t argi=1; argi != args.size(); ++argi ) {
             auto arg = make_smart<Variable>();
-            arg->name = "arg" + to_string(argi);
+            arg->name = "arg" + to_string(argi-1);
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
                 arg->init = make_smart<ExprFakeContext>(at);
@@ -574,6 +574,7 @@ namespace das {
             }
             this->arguments.push_back(arg);
         }
+        result = args[0];
         if ( result->isRefType() ) {
             if ( result->canCopy() ) {
                 copyOnReturn = true;
@@ -590,9 +591,9 @@ namespace das {
 
     void BuiltInFunction::constructExternal (const vector<TypeDeclPtr> & args ) {
         this->totalStackSize = sizeof(Prologue);
-        for ( size_t argi=0; argi != args.size(); ++argi ) {
+        for ( size_t argi=1; argi != args.size(); ++argi ) {
             auto arg = make_smart<Variable>();
-            arg->name = "arg" + to_string(argi);
+            arg->name = "arg" + to_string(argi-1);
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
                 arg->init = make_smart<ExprFakeContext>(at);
@@ -601,6 +602,7 @@ namespace das {
             }
             this->arguments.push_back(arg);
         }
+        result = args[0];
         if ( result->isRefType() ) {
             if ( result->canCopy() ) {
                 copyOnReturn = true;
@@ -617,9 +619,9 @@ namespace das {
 
     void BuiltInFunction::constructInterop (const vector<TypeDeclPtr> & args ) {
         this->totalStackSize = sizeof(Prologue);
-        for ( size_t argi=0; argi!=args.size(); ++argi ) {
+        for ( size_t argi=1; argi!=args.size(); ++argi ) {
             auto arg = make_smart<Variable>();
-            arg->name = "arg" + to_string(argi);
+            arg->name = "arg" + to_string(argi-1);
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
                 arg->init = make_smart<ExprFakeContext>(at);
@@ -628,6 +630,7 @@ namespace das {
             }
             this->arguments.push_back(arg);
         }
+        result = args[0];
         if ( result->isRefType() ) {
             if ( result->canCopy() ) {
                 copyOnReturn = true;

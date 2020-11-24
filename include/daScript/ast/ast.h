@@ -645,7 +645,7 @@ namespace das
 
     class BuiltInFunction : public Function {
     public:
-        BuiltInFunction ( const string & fn, const string & fnCpp );
+        BuiltInFunction ( const char *fn, const char * fnCpp );
         virtual string getAotBasicName() const override {
             return cppName.empty() ? name : cppName;
         }
@@ -670,18 +670,18 @@ namespace das
         string cppName;
     };
 
-    template <typename ...Args>
+    template <typename RetT, typename ...Args>
     __noinline vector<TypeDeclPtr> makeBuiltinArgs ( const ModuleLibrary & lib ) {
-        return { makeType<Args>(lib)... };
+        return { makeType<RetT>(lib), makeArgumentType<Args>(lib)... };
     }
 
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4100)
 #endif
-    template <typename ArgumentsType, size_t... I>
+    template <typename RetT, typename ArgumentsType, size_t... I>
     __noinline vector<TypeDeclPtr> makeArgs ( const ModuleLibrary & lib, index_sequence<I...> ) {
-        return { makeArgumentType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
+        return { makeType<RetT>(lib), makeArgumentType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
     }
 #ifdef _MSC_VER
 #pragma warning(pop)
