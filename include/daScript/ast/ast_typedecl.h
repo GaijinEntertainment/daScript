@@ -481,7 +481,7 @@ namespace das {
     };
 
     template <typename TT>
-    __noinline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
+    __forceinline TypeDeclPtr makeType(const ModuleLibrary & ctx) {
         return typeFactory<TT>::make(ctx);
     }
 
