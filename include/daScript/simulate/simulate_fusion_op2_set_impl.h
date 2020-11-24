@@ -1,12 +1,12 @@
 #define MATCH_OP2_SET(OPNAME,LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
     else if ( is2(info,node_l,node_r,LNODENAME,RNODENAME) ) { \
-        return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER>(); \
+        return ccode.makeNode<SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER>(); \
     }
 
 #define MATCH_OP2_SET_ANY(OPNAME,LNODENAME,COMPUTEL) \
     else if ( is(info, node_l,LNODENAME) ) { \
         anyRight = true; \
-        return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_Any>(); \
+        return ccode.makeNode<SimNode_##OPNAME##_##COMPUTEL##_Any>(); \
     }
 
 //  a SetOPNAME b
@@ -37,6 +37,7 @@
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff); \
         IMPLEMENT_OP2_SET_NODE_ANY(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef); \
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
+            auto & ccode = *(context->code); \
             /* match op2 */ if ( !node_l || !node_r ) { return nullptr; } \
             MATCH_OP2_SET(OPNAME,"GetCMResOfs","ConstValue",CMResOfs,Const) \
             MATCH_OP2_SET(OPNAME,"GetGlobal","GetLocalR2V",Global,Local) \
