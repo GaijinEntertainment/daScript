@@ -30,7 +30,7 @@ namespace das
     #define DAS_ENABLE_EXCEPTIONS   0
     #endif
 
-    #define MAX_FOR_ITERATORS   32
+    #define MAX_FOR_ITERATORS   8
 
     #if DAS_ENABLE_PROFILER
         #define DAS_PROFILE_NODE    profileNode(this);

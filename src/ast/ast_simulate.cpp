@@ -2293,9 +2293,9 @@ namespace das
         if ( (sourceTypes>1) || hybridRange || nativeIterators || stringChars ) {
             SimNode_ForWithIteratorBase * result;
             if ( context.thisProgram->getDebugger() ) {
-                result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnroll<SimNodeDebug_ForWithIterator>(total, at);
+                result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForWithIterator>(total, at);
             } else {
-                result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnroll<SimNode_ForWithIterator>(total, at);
+                result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNode_ForWithIterator>(total, at);
             }
             for ( int t=0; t!=total; ++t ) {
                 if ( sources[t]->type->isGoodIteratorType() ) {
@@ -2352,15 +2352,15 @@ namespace das
             if ( context.thisProgram->getDebugger() ) {
                 if ( dynamicArrays ) {
                     if (loop1) {
-                        result = (SimNode_ForBase *) context.code->makeNodeUnroll<SimNodeDebug_ForGoodArray1>(total, at);
+                        result = (SimNode_ForBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForGoodArray1>(total, at);
                     } else {
-                        result = (SimNode_ForBase *) context.code->makeNodeUnroll<SimNodeDebug_ForGoodArray>(total, at);
+                        result = (SimNode_ForBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForGoodArray>(total, at);
                     }
                 } else if ( fixedArrays ) {
                     if (loop1) {
-                        result = (SimNode_ForBase *)context.code->makeNodeUnroll<SimNodeDebug_ForFixedArray1>(total, at);
+                        result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForFixedArray1>(total, at);
                     } else {
-                        result = (SimNode_ForBase *)context.code->makeNodeUnroll<SimNodeDebug_ForFixedArray>(total, at);
+                        result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForFixedArray>(total, at);
                     }
                 } else if ( rangeBase ) {
                     assert(total==1 && "simple range on 1 loop only");
@@ -2385,15 +2385,15 @@ namespace das
             } else {
                 if ( dynamicArrays ) {
                     if (loop1) {
-                        result = (SimNode_ForBase *) context.code->makeNodeUnroll<SimNode_ForGoodArray1>(total, at);
+                        result = (SimNode_ForBase *) context.code->makeNodeUnrollNZ_FOR<SimNode_ForGoodArray1>(total, at);
                     } else {
-                        result = (SimNode_ForBase *) context.code->makeNodeUnroll<SimNode_ForGoodArray>(total, at);
+                        result = (SimNode_ForBase *) context.code->makeNodeUnrollNZ_FOR<SimNode_ForGoodArray>(total, at);
                     }
                 } else if ( fixedArrays ) {
                     if (loop1) {
-                        result = (SimNode_ForBase *)context.code->makeNodeUnroll<SimNode_ForFixedArray1>(total, at);
+                        result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNode_ForFixedArray1>(total, at);
                     } else {
-                        result = (SimNode_ForBase *)context.code->makeNodeUnroll<SimNode_ForFixedArray>(total, at);
+                        result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNode_ForFixedArray>(total, at);
                     }
                 } else if ( rangeBase ) {
                     assert(total==1 && "simple range on 1 loop only");

@@ -490,6 +490,25 @@ namespace das {
                 return nullptr;
             }
         }
+
+        template < template <int TT> class NodeType, typename... Params>
+        SimNode* makeNodeUnrollNZ_FOR(int count, Params... args) {
+            switch (count) {
+            case  1: return makeNode<NodeType< 1>>(args...);
+            case  2: return makeNode<NodeType< 2>>(args...);
+            case  3: return makeNode<NodeType< 3>>(args...);
+            case  4: return makeNode<NodeType< 4>>(args...);
+            case  5: return makeNode<NodeType< 5>>(args...);
+            case  6: return makeNode<NodeType< 6>>(args...);
+            case  7: return makeNode<NodeType< 7>>(args...);
+            case  8: return makeNode<NodeType< 8>>(args...);
+            default:
+                DAS_ASSERTF(0, "we should not even be here. we are calling makeNodeUnrollNZ8 on a large number or a negative number."
+                    "if its negative, there is some issue with the logic of count."
+                    "if its large, bigger specialization for unroll should be added.");
+                return nullptr;
+            }
+        }
     };
 
     class DebugInfoAllocator : public NodeAllocator {
