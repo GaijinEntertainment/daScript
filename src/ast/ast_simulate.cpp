@@ -1323,7 +1323,8 @@ namespace das
             }
             int32_t bytes = type->firstType->getSizeOf();
             if ( initializer ) {
-                auto pCall = (SimNode_CallBase *) context.code->makeNodeUnroll<SimNode_NewWithInitializer>(int(arguments.size()),at,bytes,persistent);
+                auto pCall = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_NewWithInitializer>(
+                    int(arguments.size()),at,bytes,persistent);
                 pCall->cmresEval = nullptr;
                 newNode = ExprCall::simulateCall(func, this, context, pCall);
             } else {

@@ -150,6 +150,15 @@ namespace das {
         V_END();
     }
 
+    SimNode* SimNode_NewWithInitializerAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(NewWithInitializer);
+        V_CALL();
+        V_ARG(bytes);
+        V_ARG(persistent);
+        V_END();
+    }
+
     SimNode * SimNode_DeleteStructPtr::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(DeleteStructPtr);

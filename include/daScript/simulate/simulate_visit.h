@@ -189,16 +189,6 @@ namespace das {
         V_END();
     }
 
-    template <int argCount>
-    SimNode * SimNode_NewWithInitializer<argCount>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(NewWithInitializer);
-        V_CALL();
-        V_ARG(bytes);
-        V_ARG(persistent);
-        V_END();
-    }
-
     template <typename TT>
     SimNode * SimNode_Set<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();

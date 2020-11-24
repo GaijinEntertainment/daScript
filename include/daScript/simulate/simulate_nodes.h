@@ -2585,13 +2585,21 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint32_t    stackTop;
     };
 
+    // new with initializer
+
+    struct SimNode_NewWithInitializerAny : SimNode_CallBase {
+        SimNode_NewWithInitializerAny(const LineInfo& at, uint32_t b, bool ps)
+            : SimNode_CallBase(at), bytes(b), persistent(ps) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+        uint32_t     bytes;
+        bool         persistent;
+    };
 
     template <int argCount>
-    struct SimNode_NewWithInitializer : SimNode_CallBase {
+    struct SimNode_NewWithInitializer : SimNode_NewWithInitializerAny {
         DAS_PTR_NODE;
         SimNode_NewWithInitializer ( const LineInfo & at, uint32_t b, bool ps )
-            : SimNode_CallBase(at), bytes(b), persistent(ps) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
+            : SimNode_NewWithInitializerAny(at,b,ps) {}
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             char * ptr;
@@ -2612,9 +2620,36 @@ SIM_NODE_AT_VECTOR(Float, float)
                 return nullptr;
             }
         }
-        uint32_t     bytes;
-        bool         persistent;
     };
+
+    template <>
+    struct SimNode_NewWithInitializer<-1> : SimNode_NewWithInitializer<0> {
+        DAS_PTR_NODE;
+        SimNode_NewWithInitializer(const LineInfo& at, uint32_t b, bool ps)
+            : SimNode_NewWithInitializer<0>(at, b, ps) {}
+        __forceinline char* compute(Context& context) {
+            DAS_PROFILE_NODE
+            char* ptr;
+            if (!persistent) {
+                ptr = context.heap->allocate(bytes);
+                context.heap->mark_comment(ptr, "new with initializer");
+                context.heap->mark_location(ptr, &debugInfo);
+            } else {
+                ptr = (char*)das_aligned_alloc16(bytes);
+            }
+            if (ptr) {
+                vec4f argValues[32];
+                evalArgs(context, argValues);
+                context.callWithCopyOnReturn(fnPtr, argValues, ptr, &debugInfo);
+                return ptr;
+            } else {
+                context.throw_error_at(debugInfo, "out of heap");
+                return nullptr;
+            }
+        }
+    };
+
+    // new array
 
     struct SimNode_NewArray : SimNode {
         DAS_PTR_NODE;
