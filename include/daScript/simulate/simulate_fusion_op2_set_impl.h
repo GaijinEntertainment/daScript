@@ -1,5 +1,5 @@
 #define MATCH_OP2_SET(OPNAME,LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
-    else if ( is(info, node_l,LNODENAME) &&  is(info,node_r,RNODENAME) ) { \
+    else if ( is2(info,node_l,node_r,LNODENAME,RNODENAME) ) { \
         return context->code->makeNode<SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER>(); \
     }
 

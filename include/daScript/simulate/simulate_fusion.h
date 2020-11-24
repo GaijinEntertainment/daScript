@@ -23,19 +23,10 @@ namespace das {
     struct FusionPoint {
         FusionPoint () {}
         virtual ~FusionPoint() {}
-        virtual SimNode * fuse ( const SimNodeInfoLookup &, SimNode * node, Context * ) {
-            return node;
-        }
-        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name ) {
-            auto it = info.find(node);
-            if ( it==info.end() ) return false;
-            return it->second.name == name;
-        }
-        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const string & typeName ) {
-            auto it = info.find(node);
-            if ( it==info.end() ) return false;
-            return (it->second.name == name) && (it->second.typeName==typeName);
-        }
+        virtual SimNode * fuse ( const SimNodeInfoLookup &, SimNode * node, Context * ) { return node; }
+        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name );
+        static bool is2 ( const SimNodeInfoLookup & info, SimNode * lnode, SimNode * rnode, const char * lname, const char * rname );
+        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const string & typeName );
     };
     typedef unique_ptr<FusionPoint> FusionPointPtr;
 

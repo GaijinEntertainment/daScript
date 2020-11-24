@@ -11,6 +11,26 @@
 
 namespace das {
 
+    bool FusionPoint::is ( const SimNodeInfoLookup & info, SimNode * node, const char * name ) {
+        auto it = info.find(node);
+        if ( it==info.end() ) return false;
+        return it->second.name == name;
+    }
+
+    bool FusionPoint::is2 ( const SimNodeInfoLookup & info, SimNode * lnode, SimNode * rnode, const char * lname, const char * rname ) {
+        auto itl = info.find(lnode);
+        if ( itl==info.end() || itl->second.name!=lname ) return false;
+        auto itr = info.find(rnode);
+        if ( itr==info.end() || itr->second.name!=rname ) return false;
+        return true;
+    }
+
+    bool FusionPoint::is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const string & typeName ) {
+        auto it = info.find(node);
+        if ( it==info.end() ) return false;
+        return (it->second.name == name) && (it->second.typeName==typeName);
+    }
+
     SimNode * SimNode_Op1Fusion::visit(SimVisitor & vis) {
         V_BEGIN();
         string name = op;

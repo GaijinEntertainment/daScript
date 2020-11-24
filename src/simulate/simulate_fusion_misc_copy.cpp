@@ -86,7 +86,7 @@ namespace das {
     }
 
 #define MATCH_OP2_COPYREF(LNODENAME,RNODENAME,COMPUTEL,COMPUTER) \
-    else if (is(info, node_l, LNODENAME) && is(info, node_r, RNODENAME)) { \
+    else if ( is2(info,node_l,node_r,LNODENAME,RNODENAME) ) { \
         MATCH_OP2_COPYREF_NODE(COMPUTEL,COMPUTER); \
     }
 
