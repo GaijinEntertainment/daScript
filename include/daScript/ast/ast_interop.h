@@ -18,7 +18,7 @@ namespace das
     class ExternalFn : public ExternalFnBase {
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
     public:
-        ExternalFn(const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
+        __forceinline ExternalFn(const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
         : ExternalFnBase(name,cppName) {
             using FunctionTrait = function_traits<FuncArgT>;
             const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
@@ -36,7 +36,7 @@ namespace das
     template  <InteropFunction func, typename RetT, typename ...Args>
     class InteropFn : public BuiltInFunction {
     public:
-        InteropFn(const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
+        __forceinline InteropFn(const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
             : BuiltInFunction(name,cppName) {
             this->callBased = true;
             this->interopFn = true;

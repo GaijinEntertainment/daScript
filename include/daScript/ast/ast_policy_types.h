@@ -4,7 +4,7 @@ namespace  das {
     template  <typename SimT, typename RetT, typename ...Args>
     class BuiltInFn : public BuiltInFunction {
     public:
-        BuiltInFn(const char * fn, const ModuleLibrary & lib, const char * cna = nullptr, bool pbas = true)
+        __forceinline BuiltInFn(const char * fn, const ModuleLibrary & lib, const char * cna = nullptr, bool pbas = true)
         : BuiltInFunction(fn,cna) {
             this->policyBased = pbas;
             construct(makeBuiltinArgs<RetT,Args...>(lib));
