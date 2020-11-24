@@ -52,7 +52,9 @@ namespace das
 
     SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
         auto prefix = ((NodePrefix *)this) - 1;
+#ifndef NDEBUG
         DAS_ASSERTF(prefix->magic==0xdeadc0de,"node was allocated on the heap without prefix");
+#endif
         char * newNode = code->allocate(prefix->size);
         memcpy ( newNode, (char *)this, prefix->size );
         return (SimNode *) newNode;

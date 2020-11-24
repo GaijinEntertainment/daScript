@@ -303,9 +303,9 @@ namespace das {
     };
 
     struct NodePrefix {
-        uint32_t    magic = 0xdeadc0de;
         uint32_t    size = 0;
-        uint32_t    padd0 = 0, padd1 = 0;
+        uint32_t    magic = 0xdeadc0de;
+        uint32_t    padd0, padd1;
         NodePrefix ( size_t sz ) : size(uint32_t(sz)) {}
     };
     static_assert(sizeof(NodePrefix)==sizeof(vec4f), "node prefix must be one alignment line");
@@ -317,6 +317,7 @@ namespace das {
     public:
         NodeAllocator() {}
 
+#if defined(__GNUC__) && !defined(_MSC_VER)
         template<typename TT, typename... Params>
         TT * makeNode(Params... args) {
             totalNodesAllocated ++;
@@ -328,6 +329,18 @@ namespace das {
                 return new (allocate(sizeof(TT))) TT(args...);
             }
         }
+#else
+        template<typename TT, typename... Params>
+        __forceinline TT * makeNode(Params... args) {
+            totalNodesAllocated++;
+            char * data = allocate(prefixWithHeader ? (sizeof(TT)+sizeof(NodePrefix)) : sizeof(TT));
+            if ( prefixWithHeader ) {
+                new (data) NodePrefix(sizeof(TT));
+                data += sizeof(NodePrefix);
+            }
+            return new (data) TT(args...);
+        }
+#endif
 
         template < template <typename TT> class NodeType, typename... Params>
         SimNode * makeNumericValueNode(Type baseType, Params... args) {
