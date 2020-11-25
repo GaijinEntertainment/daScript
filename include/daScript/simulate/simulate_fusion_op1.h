@@ -23,7 +23,7 @@
         };
 
 #define MATCH_ANY_OP1_NODE(CTYPE,NODENAME,COMPUTE) \
-    else if ( is(info,node_x,NODENAME) ) { return context->code->makeNode<SimNode_Op1##COMPUTE>(); }
+    else if ( is(info,node_x,NODENAME) ) { return ccode.makeNode<SimNode_Op1##COMPUTE>(); }
 
 #define IMPLEMENT_OP1_SETUP_NODE(result,node)
 

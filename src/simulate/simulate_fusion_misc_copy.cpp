@@ -68,9 +68,9 @@ namespace das {
 
 #define MATCH_OP2_COPYREF_NODE(COMPUTEL,COMPUTER) \
     if (isFastCopyBytes(size)) { \
-        return context->code->makeNodeUnrollNZ<SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER>(size); \
+        return ccode.makeNodeUnrollNZ<SimNode_CopyRefValueFixed_##COMPUTEL##_##COMPUTER>(size); \
     } else { \
-        return context->code->makeNode<SimNode_CopyRefValue_##COMPUTEL##_##COMPUTER>(); \
+        return ccode.makeNode<SimNode_CopyRefValue_##COMPUTEL##_##COMPUTER>(); \
     }
 
 #define MATCH_OP2_COPYREF_LEFT_ANY(NODENAME,COMPUTEL) \
@@ -114,6 +114,7 @@ namespace das {
         virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             uint32_t size = crnode->size;
+            auto & ccode = *(context->code);
             if (false) { }
             // *, *
             MATCH_OP2_COPYREF("GetLocal","GetLocal",Local,Local)
@@ -139,7 +140,7 @@ namespace das {
             else {
                 if (isFastCopyBytes(size)) {
                     anyLeft = anyRight = true;
-                    context->code->makeNodeUnrollNZ<SimNode_CopyRefValueFixed_AnyPtr_AnyPtr>(size);
+                    ccode.makeNodeUnrollNZ<SimNode_CopyRefValueFixed_AnyPtr_AnyPtr>(size);
                 }
             }
             return nullptr;
