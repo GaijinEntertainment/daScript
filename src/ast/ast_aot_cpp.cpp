@@ -2900,16 +2900,17 @@ namespace das {
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) {
                 ss << "das_auto_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::cast(";
             }
-            if ( needSubstitute(funArgType,arg->type) ) {
-                ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
-            }
             if ( call->func->interopFn ) {
                 ss << "cast<" << describeCppType(argType);
                 if ( argType->isRefType() && !argType->ref ) {
                     ss << " &";
                 }
                 ss << ">::from(";
-            } else if ( arg->type->isRefType() ) {
+            }
+            if ( needSubstitute(funArgType,arg->type) ) {
+                ss << "das_reinterpret<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
+            }
+            if ( !call->func->interopFn && arg->type->isRefType() ) {
                 if ( needsArgPass(arg) ) {
                     ss << "das_arg<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
                 }
@@ -2929,13 +2930,14 @@ namespace das {
             }
             if ( call->func->interopFn ) {
                 ss << ")";
-            } else if ( arg->type->isRefType() ) {
+            }
+            auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
+            if ( needSubstitute(funArgType,arg->type) ) ss << ")";
+            if ( !call->func->interopFn && arg->type->isRefType() ) {
                 if ( needsArgPass(arg) ) {
                     ss << ")";
                 }
             }
-            auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
-            if ( needSubstitute(funArgType,arg->type) ) ss << ")";
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) ss << ")";
             if ( funArgType->aotAlias ) ss << ")";
             if ( !last ) ss << ",";
