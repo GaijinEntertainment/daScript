@@ -283,14 +283,17 @@ namespace das {
         }
     };
 
+    void init_expr_looks_like_call ( BasicStructureAnnotation & ann ) {
+        ann.addFieldEx("name", "name", offsetof(ExprLooksLikeCall, name), makeType<string>(*ann.mlib));
+        ann.addFieldEx("arguments", "arguments", offsetof(ExprLooksLikeCall, arguments), makeType<vector<ExpressionPtr>>(*ann.mlib));
+        ann.addFieldEx("argumentsFailedToInfer", "argumentsFailedToInfer", offsetof(ExprLooksLikeCall, argumentsFailedToInfer), makeType<bool>(*ann.mlib));
+    }
+
     template <typename EXPR>
     struct AstExprLooksLikeCallAnnotation : AstExpressionAnnotation<EXPR> {
         AstExprLooksLikeCallAnnotation(const string & na, ModuleLibrary & ml)
             :  AstExpressionAnnotation<EXPR> (na, ml) {
-            using ManagedType = EXPR;
-            this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            this->template addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
-            this->template addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
+            init_expr_looks_like_call(*this);
         }
     };
 
