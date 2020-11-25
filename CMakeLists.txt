@@ -356,18 +356,12 @@ ENDMACRO()
 
 add_custom_target(dasAotStub)
 SET(AOT_GENERATED_SRC)
-DAS_AOT("examples/test/aot_dummy.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/ast_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/rst.das" AOT_GENERATED_SRC dasAotStub  dasAot)
-DAS_AOT("daslib/cpp_bind.das" AOT_GENERATED_SRC dasAotStub  dasAot)
-DAS_AOT("daslib/template_boost.das" AOT_GENERATED_SRC dasAotStub  dasAot)
-DAS_AOT("daslib/is_local.das" AOT_GENERATED_SRC dasAotStub  dasAot)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 
 # libUriParser
