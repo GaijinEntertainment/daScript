@@ -26,7 +26,7 @@ namespace das {
         virtual SimNode * fuse ( const SimNodeInfoLookup &, SimNode * node, Context * ) { return node; }
         static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name );
         static bool is2 ( const SimNodeInfoLookup & info, SimNode * lnode, SimNode * rnode, const char * lname, const char * rname );
-        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const string & typeName );
+        static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const char * typeName );
     };
     typedef unique_ptr<FusionPoint> FusionPointPtr;
 
@@ -79,7 +79,7 @@ namespace das {
     string fuseName ( const string & name, const string & typeName );
     void resetFusionEngine();
     void createFusionEngine();
-    void registerFusion ( const char * OpName, const string & CTypeName, FusionPoint * node );
+    void registerFusion ( const char * OpName, const char * CTypeName, FusionPoint * node );
 
 #if DAS_FUSION
     // fusion engine subsections

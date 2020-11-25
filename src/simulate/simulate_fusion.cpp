@@ -25,7 +25,7 @@ namespace das {
         return true;
     }
 
-    bool FusionPoint::is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const string & typeName ) {
+    bool FusionPoint::is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const char * typeName ) {
         auto it = info.find(node);
         if ( it==info.end() ) return false;
         return (it->second.name == name) && (it->second.typeName==typeName);
@@ -226,7 +226,7 @@ namespace das {
         }
     }
 
-    void registerFusion ( const char * OpName, const string & CTypeName, FusionPoint * node ) {
+    void registerFusion ( const char * OpName, const char * CTypeName, FusionPoint * node ) {
         (*g_fusionEngine)[fuseName(OpName,CTypeName)].emplace_back(node);
     }
 }

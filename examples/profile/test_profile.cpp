@@ -72,7 +72,7 @@ MAKE_TYPE_FACTORY(Object, Object)
 namespace das {
     template <>
     struct typeName<ObjectArray> {
-        static string name() {
+        constexpr static const char * name() {
             return "ObjectArray";
         }
     };

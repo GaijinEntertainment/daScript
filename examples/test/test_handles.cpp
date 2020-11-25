@@ -21,7 +21,7 @@ namespace das {
         }
     };
 
-    template <> struct typeName<Point3>   { static string name() { return "Point3"; } };
+    template <> struct typeName<Point3>   { constexpr static const char * name() { return "Point3"; } };
 }
 
 DAS_BASE_BIND_ENUM_98(SomeEnum_16, SomeEnum_16, SomeEnum_16_zero, SomeEnum_16_one, SomeEnum_16_two)

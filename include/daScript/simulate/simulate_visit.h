@@ -64,7 +64,7 @@ namespace das {
     template <typename CastTo, typename CastFrom>
     SimNode * SimNode_Cast<CastTo,CastFrom>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        string opName = "Cast_to_" + typeName<CastTo>::name();
+        string opName = string("Cast_to_") + typeName<CastTo>::name();
         vis.op(opName.c_str(), sizeof(CastFrom), typeName<CastFrom>::name());
         V_SUB(arguments[0]);
         V_END();

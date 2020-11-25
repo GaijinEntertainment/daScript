@@ -79,7 +79,7 @@ Lets look at implementation of ``MAKE_TYPE_FACTORY`` macro::
         }; \
         template <> \
         struct typeName<CTYPE> { \
-            static string name() { return #TYPE; } \
+            constexpr static const char * name() { return #TYPE; } \
         }; \
         };
 
@@ -108,7 +108,7 @@ Custom type factory is preferable way to create aliases::
         }
     };
 
-    template <> struct typeName<Point3>   { static string name() { return "Point3"; } };
+    template <> struct typeName<Point3>   { constexpr static const char * name() { return "Point3"; } };
 
 In the example above C++ application already has `Point3` type, which is very similar to daScript float3.
 Exposing C++ functions which operate on Point3 is preferable, so implementation creates an alias named `Point3`

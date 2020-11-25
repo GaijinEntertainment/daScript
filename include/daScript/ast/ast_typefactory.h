@@ -15,7 +15,7 @@ namespace das { \
   }; \
   template <> \
   struct typeName<CTYPE> { \
-      static string name() { return #TYPE; } \
+      constexpr static const char * name() { return #TYPE; } \
   }; \
 };
 
@@ -32,7 +32,7 @@ namespace das { \
   template <typename TT> struct typeName; \
   template <> \
   struct typeName<CTYPE> { \
-      static string name() { return #TYPE; } \
+      constexpr static const char * name() { return #TYPE; } \
   }; \
 };
 

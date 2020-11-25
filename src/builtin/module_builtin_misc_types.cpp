@@ -36,9 +36,9 @@ namespace das
         }
     };
 
-    template <> struct typeName<EnumStub>    { static string name() { return "enum"; } };
-    template <> struct typeName<EnumStub8>   { static string name() { return "enum8"; } };
-    template <> struct typeName<EnumStub16>  { static string name() { return "enum16"; } };
+    template <> struct typeName<EnumStub>    { constexpr static const char * name() { return "enum"; } };
+    template <> struct typeName<EnumStub8>   { constexpr static const char * name() { return "enum8"; } };
+    template <> struct typeName<EnumStub16>  { constexpr static const char * name() { return "enum16"; } };
 
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub);
