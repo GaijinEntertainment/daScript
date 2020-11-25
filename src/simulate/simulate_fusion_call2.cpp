@@ -259,9 +259,9 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
 IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
 
     void createFusionEngine_call2() {
-        (*g_fusionEngine)["Call"].push_back(make_unique<FusionPoint_Call_StringPtr>());
-        (*g_fusionEngine)["CallAndCopyOrMove"].push_back(make_unique<FusionPoint_CallAndCopyOrMove_StringPtr>());
-        (*g_fusionEngine)["FastCall"].push_back(make_unique<FusionPoint_FastCall_StringPtr>());
+        (*g_fusionEngine)["Call"].emplace_back(new FusionPoint_Call_StringPtr());
+        (*g_fusionEngine)["CallAndCopyOrMove"].emplace_back(new FusionPoint_CallAndCopyOrMove_StringPtr());
+        (*g_fusionEngine)["FastCall"].emplace_back(new FusionPoint_FastCall_StringPtr());
     }
 }
 

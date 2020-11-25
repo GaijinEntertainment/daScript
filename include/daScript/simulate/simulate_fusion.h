@@ -79,6 +79,7 @@ namespace das {
     string fuseName ( const string & name, const string & typeName );
     void resetFusionEngine();
     void createFusionEngine();
+    void registerFusion ( const char * OpName, const string & CTypeName, FusionPoint * node );
 
 #if DAS_FUSION
     // fusion engine subsections

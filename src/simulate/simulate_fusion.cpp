@@ -225,5 +225,9 @@ namespace das {
             }
         }
     }
+
+    void registerFusion ( const char * OpName, const string & CTypeName, FusionPoint * node ) {
+        (*g_fusionEngine)[fuseName(OpName,CTypeName)].emplace_back(node);
+    }
 }
 

@@ -153,8 +153,8 @@ namespace das {
     void createFusionEngine_at() {
         REGISTER_SETOP_SCALAR(AtR2V);
         REGISTER_SETOP_NUMERIC_VEC(AtR2V);
-        (*g_fusionEngine)["At"].push_back(make_unique<FusionPoint_Set_At_StringPtr>());
-        (*g_fusionEngine)["At"].push_back(make_unique<FusionPoint_Set_At_VoidPtr>());
+        (*g_fusionEngine)["At"].emplace_back(new FusionPoint_Set_At_StringPtr());
+        (*g_fusionEngine)["At"].emplace_back(new FusionPoint_Set_At_VoidPtr());
     }
 }
 

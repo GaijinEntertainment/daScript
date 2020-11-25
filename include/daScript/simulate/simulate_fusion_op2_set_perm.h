@@ -2,7 +2,7 @@
     IMPLEMENT_ANY_SETOP_VALUE(,CTYPE)
 
 #define REGISTER_SETOP(OPNAME,TYPE,CTYPE) \
-    (*g_fusionEngine)[fuseName(#OPNAME,typeName<CTYPE>::name())].push_back(make_unique<FusionPoint_Set_##OPNAME##_##CTYPE>());
+    registerFusion(#OPNAME,typeName<CTYPE>::name(),new FusionPoint_Set_##OPNAME##_##CTYPE());
 
 #define IMPLEMENT_SETOP_INTEGER(OPNAME) \
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Int,int32_t,int32_t); \
