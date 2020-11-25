@@ -93,14 +93,13 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Strings);
+    NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Debugger);
-    NEED_MODULE(Module_FIO);
-    NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
-    require_project_specific_modules();
+    NEED_MODULE(Module_FIO);
     for ( ;; ) {
         if ( !compile_and_run(main_das) ) {
             wait_for_file_to_change(main_das);
