@@ -271,8 +271,7 @@ namespace das {
 
     template< class T, class... Args >
     __forceinline smart_ptr<T> make_smart ( Args&&... args ) {
-        T * p = new T(args...);
-        return smart_ptr<T>(p);
+        return new T(args...);
     }
 
     template< class T, class U >
