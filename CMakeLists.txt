@@ -463,8 +463,8 @@ utils/daScript/main.cpp
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 add_executable(daScript ${DASCRIPT_MAIN_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
-ADD_DEPENDENCIES(daScript libDaScript libPathTracerHelper libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser)
+TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser)
+ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser)
 SETUP_CPP11(daScript)
 add_dependencies(daScript dasAotStub)
 SETUP_LTO(daScript)
