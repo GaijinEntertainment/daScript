@@ -106,6 +106,7 @@ namespace  das {
         static __forceinline TT Min   ( TT a, TT b, Context & ) { return a < b ? a : b; }
         static __forceinline TT Max   ( TT a, TT b, Context & ) { return a > b ? a : b; }
         static __forceinline TT Sat   ( TT a, Context & )    { return a < 0 ? 0  : (a > 1 ? 1 : a);}
+        static __forceinline TT Clamp ( TT t, TT a, TT b, Context & ) { return t>a ? (t<b ? t : b) : a; }
     };
 
     struct SimPolicy_Int : SimPolicy_Bin<int32_t>, SimPolicy_MathTT<int32_t> {};
@@ -144,6 +145,7 @@ namespace  das {
         static __forceinline vec4f Sat   ( vec4f a, Context & ) {
             return v_cast_vec4f(v_mini(v_maxi(v_cast_vec4i(a),v_cast_vec4i(v_zero())),v_splatsi(1)));
         }
+        static __forceinline vec4f Clamp ( vec4f t, vec4f a, vec4f b, Context & ctx ) { return Max(a, Min(t, b, ctx), ctx); }
     };
 
     struct SimPolicy_MathFloat {

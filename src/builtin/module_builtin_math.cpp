@@ -39,6 +39,12 @@ namespace das {
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int3);     \
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int4);
 
+#define MATH_FUN_OP3I(fun)\
+      IMPLEMENT_OP3_FUNCTION_POLICY(fun,Int,int32_t);\
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int2);     \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int3);     \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int4);
+
 #define MATH_FUN_OP3(fun)\
       DEFINE_POLICY(fun);\
       IMPLEMENT_OP3_FUNCTION_POLICY(fun,Float,float);\
@@ -54,9 +60,18 @@ namespace das {
     IMPLEMENT_OP2_FUNCTION_POLICY(fun,UInt64,uint64_t); \
     IMPLEMENT_OP2_FUNCTION_POLICY(fun,Double,double);
 
+#define MATH_FUN_OP3A(fun)                              \
+    MATH_FUN_OP3(fun);                                  \
+    MATH_FUN_OP3I(fun);                                 \
+    IMPLEMENT_OP3_FUNCTION_POLICY(fun,UInt,uint32_t);   \
+    IMPLEMENT_OP3_FUNCTION_POLICY(fun,Int64,int64_t);   \
+    IMPLEMENT_OP3_FUNCTION_POLICY(fun,UInt64,uint64_t); \
+    IMPLEMENT_OP3_FUNCTION_POLICY(fun,Double,double);
+
     // everything
     MATH_FUN_OP2A(Min)
     MATH_FUN_OP2A(Max)
+    MATH_FUN_OP3A(Clamp)
 
     //common
     MATH_FUN_OP1(Abs)
@@ -66,7 +81,6 @@ namespace das {
     MATH_FUN_OP1(RSqrt)
     MATH_FUN_OP1(RSqrtEst)
     MATH_FUN_OP1(Sat)
-    MATH_FUN_OP3(Clamp)
     MATH_FUN_OP3(Mad)
     MATH_FUN_OP3(Lerp)
 
@@ -116,8 +130,9 @@ namespace das {
 
     template <typename TT>
     void addFunctionCommonTyped(Module & mod, const ModuleLibrary & lib) {
-        mod.addFunction( make_smart<BuiltInFn<Sim_Min <TT>, TT,   TT,   TT>   >("min", lib, "Min")->args({"x","y"}) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_Max <TT>, TT,   TT,   TT>   >("max", lib, "Max")->args({"x","y"}) );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Min <TT>, TT,   TT,   TT>      >("min",   lib, "Min")->args({"x","y"}) );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Max <TT>, TT,   TT,   TT>      >("max",   lib, "Max")->args({"x","y"}) );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Clamp<TT>,TT,   TT,   TT,  TT> >("clamp", lib, "Clamp")->args({"t","a","b"}) );
     }
 
     template <typename TT>
@@ -155,9 +170,8 @@ namespace das {
     template <typename TT>
     void addFunctionOp3(Module & mod, const ModuleLibrary & lib) {
         //                                     policy         ret arg1 arg2 arg3   name
-        mod.addFunction( make_smart<BuiltInFn<Sim_Lerp<TT>,  TT, TT,  TT,  TT> >("lerp",  lib, "Lerp")->args({"a","b","t"}) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_Clamp<TT>, TT, TT,  TT,  TT> >("clamp", lib, "Clamp")->args({"t","a","b"}) );
         mod.addFunction( make_smart<BuiltInFn<Sim_Mad<TT>,   TT, TT,  TT,  TT> >("mad",   lib, "Mad")->args({"a","b","c"}) );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Lerp<TT>,  TT, TT,  TT,  TT> >("lerp",  lib, "Lerp")->args({"a","b","t"}) );
     }
 
     template <typename VecT, int RowC>
