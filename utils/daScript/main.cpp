@@ -84,7 +84,7 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_Debugger);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
-    require_project_specific_modules();
+    NEED_MODULE(Module_FIO);
     // compile and run
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);
