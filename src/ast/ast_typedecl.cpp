@@ -899,6 +899,7 @@ namespace das
             }
             bool iAmVoid = !firstType || firstType->isVoid();
             bool heIsVoid = !decl.firstType || decl.firstType->isVoid();
+            TemporaryMatters tpm = implicit ? TemporaryMatters::no : TemporaryMatters::yes;
             if ( topLevel ) {
                 ConstMatters pcm = ConstMatters::yes;
                 if ( isPassType && firstType && firstType->constant ) {
@@ -906,13 +907,13 @@ namespace das
                 }
                 if ( !iAmVoid && !heIsVoid &&
                         !firstType->isSameType(*decl.firstType,RefMatters::yes,pcm,
-                            TemporaryMatters::yes,isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
+                            tpm, isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
                     return false;
                 }
             } else {
                 if ( !iAmVoid && !heIsVoid ) {
                     if ( !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
-                                TemporaryMatters::yes,isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
+                                tpm, isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
                         return false;
                     }
                 } else {

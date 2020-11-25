@@ -1885,7 +1885,7 @@ namespace das {
             } else {
                 expr->type = make_smart<TypeDecl>(*dvT);
                 expr->type->constant |= expr->subexpr->type->constant;
-                propagateTempType(expr->subexpr->type, expr->type);
+                propagateTempType(expr->subexpr->type, expr->type); // t?# ?? def = #t
                 propagateAlwaysSafe(expr->subexpr);
             }
             return Visitor::visit(expr);
@@ -3332,7 +3332,7 @@ namespace das {
                     expr->type->constant |= seT->constant;
                 }
             }
-            propagateTempType(expr->subexpr->type, expr->type);
+            propagateTempType(expr->subexpr->type, expr->type); // foo#[a] = a#
             return Visitor::visit(expr);
         }
     // ExprSafeAt
@@ -3472,7 +3472,7 @@ namespace das {
                     expr->subexpr->at, CompilationError::cant_index);
                 return Visitor::visit(expr);
             }
-            propagateTempType(expr->subexpr->type, expr->type);
+            propagateTempType(expr->subexpr->type, expr->type); // foo#?[a] = a?#
             return Visitor::visit(expr);
         }
     // ExprBlock
@@ -3692,7 +3692,7 @@ namespace das {
             expr->type = make_smart<TypeDecl>(*valT->argTypes[expr->fieldIndex]);
             expr->type->ref = true;
             expr->type->constant |= valT->constant;
-            propagateTempType(expr->value->type, expr->type);
+            propagateTempType(expr->value->type, expr->type); // a# as foo = foo#
             return Visitor::visit(expr);
         }
     // ExprSafeAsVariant
@@ -3744,7 +3744,7 @@ namespace das {
                 expr->type->firstType = fieldType;
             }
             expr->type->constant |= valT->constant | expr->value->type->constant;
-            propagateTempType(expr->value->type, expr->type);
+            propagateTempType(expr->value->type, expr->type); // a# ?as foo = foo?#
             return Visitor::visit(expr);
         }
     // ExprIsVariant
@@ -3898,7 +3898,7 @@ namespace das {
             } else {
                 expr->type->constant |= valT->constant;
             }
-            propagateTempType(expr->value->type, expr->type);
+            propagateTempType(expr->value->type, expr->type);   // a#.foo = foo#
             return Visitor::visit(expr);
         }
     // ExprSafeField
@@ -3963,7 +3963,7 @@ namespace das {
                 expr->type->firstType = fieldType;
             }
             expr->type->constant |= valT->constant;
-            propagateTempType(expr->value->type, expr->type);
+            propagateTempType(expr->value->type, expr->type); // a#?.foo = foo?#
             return Visitor::visit(expr);
         }
     // ExprVar

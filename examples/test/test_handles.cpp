@@ -101,6 +101,12 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     virtual bool isLocal() const override { return true; }
     virtual bool canMove() const override { return true; }
     virtual bool canCopy() const override { return true; }
+    virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+        return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(TestObjectFoo)));
+    }
+    virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+        return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(TestObjectFoo)));
+    }
 };
 
 struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
