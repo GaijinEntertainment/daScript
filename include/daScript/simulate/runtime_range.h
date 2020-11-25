@@ -57,6 +57,8 @@ namespace das
     // FOR RANGE DEBUG
     //////////////////
 
+#if DAS_DEBUGGER
+
     struct SimNodeDebug_ForRange : SimNode_ForRange  {
         SimNodeDebug_ForRange ( const LineInfo & at )
             : SimNode_ForRange(at) {}
@@ -80,6 +82,8 @@ namespace das
             : SimNode_ForRangeNF1(at) {}
         virtual vec4f eval ( Context & context ) override;
     };
+
+#endif
 
 }
 

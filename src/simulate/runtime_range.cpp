@@ -111,6 +111,8 @@ namespace das
         return v_zero();
     }
 
+#if DAS_DEBUGGER
+
     //////////////////
     // FOR RANGE DEBUG
     //////////////////
@@ -192,5 +194,7 @@ namespace das
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
+
+#endif
 
 }

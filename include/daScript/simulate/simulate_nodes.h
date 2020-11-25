@@ -1163,6 +1163,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+#if DAS_DEBUGGER
 
     /////////////////////////////////////////////
     // CALL, INVOKE, INVOKEFN, INVOKELAMBDA DEBUG
@@ -1707,7 +1708,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
-
+#endif
 
     // StringBuilder
     struct SimNode_StringBuilder : SimNode_CallBase {
@@ -2911,6 +2912,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
     };
 
+#if DAS_DEBUGGER
+
     // IF-THEN-ELSE (also Cond)
     struct SimNodeDebug_IfThenElse : SimNode_IfThenElse {
         SimNodeDebug_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
@@ -2944,6 +2947,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
     };
 
+#endif
+
     template <typename TT>
     struct SimNode_IfZeroThenElse : SimNode_IfTheElseAny {
         SimNode_IfZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
@@ -2971,6 +2976,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_NODE
 #undef EVAL_NODE
     };
+
+#if DAS_DEBUGGER
 
     template <typename TT>
     struct SimNodeDebug_IfZeroThenElse : SimNode_IfZeroThenElse<TT> {
@@ -3005,6 +3012,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
     };
 
+#endif
+
     template <typename TT>
     struct SimNode_IfNotZeroThenElse : SimNode_IfTheElseAny {
         SimNode_IfNotZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
@@ -3035,6 +3044,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_NODE
 #undef EVAL_NODE
     };
+
+#if DAS_DEBUGGER
 
     template <typename TT>
     struct SimNodeDebug_IfNotZeroThenElse : SimNode_IfNotZeroThenElse<TT> {
@@ -3069,6 +3080,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
     };
 
+#endif
+
     // IF-THEN
     struct SimNode_IfThen : SimNode_IfTheElseAny {
         SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
@@ -3084,6 +3097,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         }
     };
+
+#if DAS_DEBUGGER
 
     struct SimNodeDebug_IfThen : SimNode_IfThen {
         SimNodeDebug_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
@@ -3101,6 +3116,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+#endif
+
     template <typename TT>
     struct SimNode_IfZeroThen : SimNode_IfTheElseAny {
         SimNode_IfZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
@@ -3116,6 +3133,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         }
     };
+
+#if DAS_DEBUGGER
 
     template <typename TT>
     struct SimNodeDebug_IfZeroThen : SimNode_IfZeroThen<TT> {
@@ -3134,6 +3153,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+#endif
+
     template <typename TT>
     struct SimNode_IfNotZeroThen : SimNode_IfTheElseAny {
         SimNode_IfNotZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
@@ -3149,6 +3170,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         }
     };
+
+#if DAS_DEBUGGER
 
     template <typename TT>
     struct SimNodeDebug_IfNotZeroThen : SimNode_IfNotZeroThen<TT> {
@@ -3167,6 +3190,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+#endif
+
     // WHILE
     struct SimNode_While : SimNode_Block {
         SimNode_While ( const LineInfo & at, SimNode * c )
@@ -3176,11 +3201,15 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * cond;
     };
 
+#if DAS_DEBUGGER
+
     struct SimNodeDebug_While : SimNode_While {
         SimNodeDebug_While ( const LineInfo & at, SimNode * c )
             : SimNode_While(at,c) {}
         virtual vec4f eval ( Context & context ) override;
     };
+
+#endif
 
     template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
     struct SimNode_PropertyImpl : SimNode {
@@ -3416,6 +3445,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
+#if DAS_DEBUGGER
+
     //////////////////////////
     // FOR WITH ITERATOR DEBUG
     //////////////////////////
@@ -3505,6 +3536,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             return v_zero();
         }
     };
+
+#endif
 
     // ANY ITER
 
