@@ -6,7 +6,7 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 
-#if DAS_FUSION
+#if DAS_FUSION>=2
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
@@ -35,6 +35,13 @@ namespace das {
         REGISTER_OP2_NUMERIC_VEC(Div);
         REGISTER_OP2_NUMERIC_VEC(Mod);
         REGISTER_OP2_NUMERIC_VEC(Mul);
+    }
+}
+
+#else
+
+namespace das {
+    void createFusionEngine_op2_vec() {
     }
 }
 

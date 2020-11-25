@@ -6,7 +6,7 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 
-#if DAS_FUSION
+#if DAS_FUSION >=2
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
@@ -52,6 +52,13 @@ namespace das {
         REGISTER_SETOP_INTEGER_VEC(SetBinXor);
         REGISTER_SETOP_INTEGER_VEC(SetBinShl);
         REGISTER_SETOP_INTEGER_VEC(SetBinShr);
+    }
+}
+
+#else
+
+namespace das {
+    void createFusionEngine_op2_set_vec() {
     }
 }
 

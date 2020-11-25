@@ -9,7 +9,7 @@
         return ccode.makeNode<SimNode_##OPNAME##_##COMPUTEL##_Any>(); \
     }
 
-#if DAS_FUSION==2
+#if DAS_FUSION>=2
 
 //  a SetOPNAME b
 #define IMPLEMENT_ANY_SETOP(INLINE,OPNAME,TYPE,CTYPE,RCTYPE) \

@@ -15,7 +15,7 @@
         return ccode.makeNode<SimNode_##OPNAME##_Any_##COMPUTER>(); \
     }
 
-#if DAS_FUSION==2
+#if DAS_FUSION>=2
 
 //  A opname B
 #define IMPLEMENT_ANY_OP2(INLINE,OPNAME,TYPE,CTYPE) \
