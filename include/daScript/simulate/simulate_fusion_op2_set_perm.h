@@ -4,6 +4,8 @@
 #define REGISTER_SETOP(OPNAME,TYPE,CTYPE) \
     registerFusion(#OPNAME,typeName<CTYPE>::name(),new FusionPoint_Set_##OPNAME##_##CTYPE());
 
+#if DAS_FUSION>=2
+
 #define IMPLEMENT_SETOP_INTEGER(OPNAME) \
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Int,int32_t,int32_t); \
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,UInt,uint32_t,uint32_t); \
@@ -15,6 +17,18 @@
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Float,float,float); \
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Double,double,double);
 
+#else
+
+#define IMPLEMENT_SETOP_INTEGER(OPNAME) \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Int,int32_t,int32_t); \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,UInt,uint32_t,uint32_t);
+
+#define IMPLEMENT_SETOP_NUMERIC(OPNAME) \
+    IMPLEMENT_SETOP_INTEGER(OPNAME); \
+    IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Float,float,float);
+
+#endif
+
 #define IMPLEMENT_SETOP_SCALAR(OPNAME) \
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Bool,bool,bool); \
     IMPLEMENT_SETOP_NUMERIC(OPNAME);
@@ -23,6 +37,8 @@
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Ptr,StringPtr,StringPtr); \
     IMPLEMENT_ANY_SETOP(__forceinline,OPNAME,Ptr,VoidPtr,StringPtr); \
     IMPLEMENT_SETOP_SCALAR(OPNAME);
+
+#if DAS_FUSION>=2
 
 #define REGISTER_SETOP_INTEGER(OPNAME) \
     REGISTER_SETOP(OPNAME,Int,int32_t); \
@@ -34,6 +50,18 @@
     REGISTER_SETOP_INTEGER(OPNAME); \
     REGISTER_SETOP(OPNAME,Float,float); \
     REGISTER_SETOP(OPNAME,Double,double);
+
+#else
+
+#define REGISTER_SETOP_INTEGER(OPNAME) \
+    REGISTER_SETOP(OPNAME,Int,int32_t); \
+    REGISTER_SETOP(OPNAME,UInt,uint32_t);
+
+#define REGISTER_SETOP_NUMERIC(OPNAME) \
+    REGISTER_SETOP_INTEGER(OPNAME); \
+    REGISTER_SETOP(OPNAME,Float,float);
+
+#endif
 
 #define REGISTER_SETOP_SCALAR(OPNAME) \
     REGISTER_SETOP(OPNAME,Bool,bool); \

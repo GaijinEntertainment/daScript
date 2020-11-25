@@ -1,5 +1,7 @@
 // int and numeric
 
+#if DAS_FUSION>=2
+
 #define IMPLEMENT_OP1_INTEGER_FUSION_POINT(OPNAME) \
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Int,int32_t,int32_t); \
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,UInt,uint32_t,uint32_t); \
@@ -11,6 +13,18 @@
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Float,float,float); \
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Double,double,double);
 
+#else
+
+#define IMPLEMENT_OP1_INTEGER_FUSION_POINT(OPNAME) \
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Int,int32_t,int32_t); \
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,UInt,uint32_t,uint32_t);
+
+#define IMPLEMENT_OP1_NUMERIC_FUSION_POINT(OPNAME) \
+    IMPLEMENT_OP1_INTEGER_FUSION_POINT(OPNAME); \
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Float,float,float);
+
+#endif
+
 #define IMPLEMENT_OP1_SCALAR_FUSION_POINT(OPNAME) \
     IMPLEMENT_OP1_NUMERIC_FUSION_POINT(OPNAME); \
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Bool,bool,bool);
@@ -19,6 +33,8 @@
     IMPLEMENT_OP1_SCALAR_FUSION_POINT(OPNAME); \
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Ptr,StringPtr,StringPtr); \
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,Ptr,VoidPtr,StringPtr);
+
+#if DAS_FUSION>=2
 
 #define IMPLEMENT_OP1_VEC(OPNAME,CTYPE) \
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,OPNAME,,CTYPE,CTYPE)
@@ -37,4 +53,8 @@
     IMPLEMENT_OP1_VEC(OPNAME,float3 ); \
     IMPLEMENT_OP1_VEC(OPNAME,float4 );
 
+#else
 
+#define IMPLEMENT_OP1_NUMERIC_VEC(OPNAME)
+
+#endif

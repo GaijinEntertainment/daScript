@@ -4,6 +4,8 @@
 #define REGISTER_OP2(OPNAME,TYPE,CTYPE) \
     registerFusion(#OPNAME,typeName<CTYPE>::name(),new FusionPoint_##OPNAME##_##CTYPE());
 
+#if DAS_FUSION>=2
+
 #define IMPLEMENT_OP2_INTEGER(OPNAME) \
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Int,int32_t); \
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,UInt,uint32_t); \
@@ -15,6 +17,18 @@
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Float,float); \
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Double,double);
 
+#else
+
+#define IMPLEMENT_OP2_INTEGER(OPNAME) \
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Int,int32_t); \
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,UInt,uint32_t);
+
+#define IMPLEMENT_OP2_NUMERIC(OPNAME) \
+    IMPLEMENT_OP2_INTEGER(OPNAME); \
+    IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Float,float);
+
+#endif
+
 #define IMPLEMENT_OP2_SCALAR(OPNAME) \
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Bool,bool); \
     IMPLEMENT_OP2_NUMERIC(OPNAME);
@@ -23,6 +37,8 @@
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Ptr,StringPtr); \
     IMPLEMENT_ANY_OP2(__forceinline,OPNAME,Ptr,VoidPtr); \
     IMPLEMENT_OP2_SCALAR(OPNAME);
+
+#if DAS_FUSION>=2
 
 #define REGISTER_OP2_INTEGER(OPNAME) \
     REGISTER_OP2(OPNAME,Int,int32_t); \
@@ -34,6 +50,18 @@
     REGISTER_OP2_INTEGER(OPNAME); \
     REGISTER_OP2(OPNAME,Float,float); \
     REGISTER_OP2(OPNAME,Double,double);
+
+#else
+
+#define REGISTER_OP2_INTEGER(OPNAME) \
+    REGISTER_OP2(OPNAME,Int,int32_t); \
+    REGISTER_OP2(OPNAME,UInt,uint32_t);
+
+#define REGISTER_OP2_NUMERIC(OPNAME) \
+    REGISTER_OP2_INTEGER(OPNAME); \
+    REGISTER_OP2(OPNAME,Float,float);
+
+#endif
 
 #define REGISTER_OP2_SCALAR(OPNAME) \
     REGISTER_OP2(OPNAME,Bool,bool); \

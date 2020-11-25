@@ -6,7 +6,7 @@
 
 #include "daScript/simulate/simulate_fusion.h"
 
-#if DAS_FUSION >=2
+#if DAS_FUSION>=2
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
