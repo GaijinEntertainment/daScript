@@ -340,6 +340,10 @@ namespace das {
             if ( res->options.getBoolOption("log_require",false) ) {
                 logs << "module dependency graph:\n" << tw.str();
             }
+            if ( !res->failed() ) {
+                uint32_t hf = hash_blockz32((uint8_t *)fileName.c_str());
+                res->thisNamespace = "_anon_" + to_string(hf);
+            }
             return res;
         } else {
             auto program = make_smart<Program>();

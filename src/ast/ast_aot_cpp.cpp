@@ -932,8 +932,9 @@ namespace das {
                 }
                 auto castType = das_to_cppString(enu->baseType);
                 ss  << "}\n"
-                    << "template <> struct cast< " << enuName << " > : cast_enum < " << enuName << " > {};\n"
-                    << "namespace {\n";
+                    << "template <> struct cast< das::" << program->thisNamespace << "::" << enuName
+                    << " > : cast_enum < das::" << program->thisNamespace << "::" << enuName << " > {};\n"
+                    << "namespace " << program->thisNamespace << " {\n";
             }
             return Visitor::visit(enu);
         }

@@ -1067,6 +1067,7 @@ namespace das
             return ss.str();
         }
     public:
+        string                      thisNamespace;
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         ModuleGroup *               thisModuleGroup;

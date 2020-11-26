@@ -146,6 +146,7 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "#pragma GCC diagnostic ignored \"-Wreturn-local-addr\"\n";
                 tw << "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n";
                 tw << "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n";
+                tw << "#pragma GCC diagnostic ignored \"-Wsubobject-linkage\"\n";
                 tw << "#endif\n";
                 tw << "#if defined(__clang__)\n";
                 tw << "#pragma clang diagnostic push\n";
@@ -157,7 +158,7 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "#endif\n";
                 tw << "\n";
                 tw << "namespace das {\n";
-                tw << "namespace {\n"; // anonymous
+                tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
                 program->aotCpp(ctx, tw);
                 // list STUFF
                 tw << "struct AotList_impl : AotListBase {\n";
