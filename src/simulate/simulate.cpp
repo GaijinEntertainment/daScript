@@ -8,10 +8,6 @@
 #include "daScript/misc/debug_break.h"
 
 #include <stdarg.h>
-
-// this is here for the default implementation of to_out and to_err
-#include <setjmp.h>
-
 #include <mutex>
 
 namespace das
