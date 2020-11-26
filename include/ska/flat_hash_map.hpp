@@ -15,13 +15,6 @@
 #define SKA_NOINLINE(...) __VA_ARGS__ __attribute__((noinline))
 #endif
 
-#include <stdexcept>
-
-namespace das
-{
-  using out_of_range = std::out_of_range;
-}
-
 namespace das_ska
 {
 struct power_of_two_hash_policy;

@@ -16,6 +16,11 @@
 #include <initializer_list>
 #include <functional>
 #include <algorithm>
+#include <functional>
+#include <climits>
+
+#include <limits.h>
+#include <setjmp.h>
 
 namespace das {using namespace std;}
 

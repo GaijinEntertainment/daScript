@@ -1,8 +1,5 @@
 #include "daScript/misc/platform.h"
 
-#include <float.h>
-#include <limits.h>
-
 #include "module_builtin.h"
 
 #include "daScript/simulate/simulate_nodes.h"

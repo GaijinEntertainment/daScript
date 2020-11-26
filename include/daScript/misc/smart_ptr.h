@@ -1,7 +1,5 @@
 #pragma once
 
-#include <functional> // std::hash
-
 #ifndef DAS_SMART_PTR_ID
 #define DAS_SMART_PTR_ID    0
 #endif

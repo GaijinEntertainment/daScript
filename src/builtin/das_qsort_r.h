@@ -1,7 +1,3 @@
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
 #pragma once
 
 namespace das
