@@ -441,11 +441,10 @@ utils/dasContDev/main.cpp
 )
 SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
-add_executable(dasContDev ${DASCONTDEV_MAIN_SRC} ${AOT_GENERATED_SRC})
+add_executable(dasContDev ${DASCONTDEV_MAIN_SRC})
 TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser)
 ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser)
 SETUP_CPP11(dasContDev)
-add_dependencies(dasContDev dasAotStub)
 SETUP_LTO(dasContDev)
 
 # PathTracer helper
@@ -490,11 +489,10 @@ utils/daScript/main.cpp
 )
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
-add_executable(daScript ${DASCRIPT_MAIN_SRC} ${AOT_GENERATED_SRC})
+add_executable(daScript ${DASCRIPT_MAIN_SRC})
 TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser)
 ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser)
 SETUP_CPP11(daScript)
-add_dependencies(daScript dasAotStub)
 SETUP_LTO(daScript)
 
 # Test module
