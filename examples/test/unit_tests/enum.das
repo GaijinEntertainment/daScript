@@ -68,6 +68,10 @@ def test
     assert ( free_takeOne_giveTwo(SomeEnum two)==SomeEnum zero )
     verify ( efn_takeOne_giveTwo(SomeEnum one)==SomeEnum two )
     verify ( efn_takeOne_giveTwo_98(SomeEnum98 SomeEnum98_one)==SomeEnum98 SomeEnum98_two )
+
+    var result_efn = efn_takeOne_giveTwo(SomeEnum one)
+    assert(result_efn == SomeEnum two)
+
     var goo : GooEnum
     goo = GooEnum regular
     verify ( efn_flip(goo)==GooEnum hazardous )

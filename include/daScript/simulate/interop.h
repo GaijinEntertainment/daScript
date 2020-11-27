@@ -76,7 +76,10 @@ namespace das
         enum { value = is_pointer<T>::value || is_smart_ptr<T>::value };
     };
 
-    template <typename Result, typename CType,bool Pointer=is_any_pointer<Result>::value && is_any_pointer<CType>::value>
+    template <typename Result, typename CType,
+        bool Pointer=is_any_pointer<Result>::value && is_any_pointer<CType>::value,
+        bool IsEnum=is_enum<Result>::value
+    >
     struct ImplCallStaticFunctionImm {
         enum { valid = false };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
@@ -90,7 +93,7 @@ namespace das
     };
 
     template <typename Result, typename CType>
-    struct ImplCallStaticFunctionImm<smart_ptr<Result>, CType, true> {
+    struct ImplCallStaticFunctionImm<smart_ptr<Result>, CType, true, false> {
         enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
@@ -99,7 +102,7 @@ namespace das
     };
 
     template <typename Result, typename CType>
-    struct ImplCallStaticFunctionImm<smart_ptr_raw<Result>, CType, true> {
+    struct ImplCallStaticFunctionImm<smart_ptr_raw<Result>, CType, true, false> {
         enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
@@ -108,7 +111,16 @@ namespace das
     };
 
     template <typename Result, typename CType>
-    struct ImplCallStaticFunctionImm<Result, CType, true> {
+    struct ImplCallStaticFunctionImm<Result, CType, true, false> {
+        enum { valid = true };
+        template <typename FunctionType, typename ArgumentsType, size_t... I>
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
+            return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...);
+        }
+    };
+
+    template <typename Result, typename CType>
+    struct ImplCallStaticFunctionImm<Result, CType, false, true> {
         enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
@@ -117,7 +129,7 @@ namespace das
     };
 
     template <typename Result>
-    struct ImplCallStaticFunctionImm<Result,Result, false> {
+    struct ImplCallStaticFunctionImm<Result,Result, false, false> {
         enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline Result call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
@@ -125,8 +137,8 @@ namespace das
         }
     };
 
-    template <typename CType, bool Pointer>
-    struct ImplCallStaticFunctionImm<void,CType,Pointer> {
+    template <typename CType, bool Pointer, bool IsEnum>
+    struct ImplCallStaticFunctionImm<void,CType,Pointer,IsEnum> {
         enum { valid = true };
         template <typename FunctionType, typename ArgumentsType, size_t... I>
         static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
