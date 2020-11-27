@@ -20,7 +20,6 @@ void operator delete(void * p) throw()
 #endif
 
 static bool quiet = false;
-static bool json = false;
 
 TextPrinter tout;
 
@@ -40,47 +39,22 @@ bool saveToFile ( const string & fname, const string & str ) {
 bool compile ( const string & fn, const string & cppFn ) {
     auto access = get_file_access(nullptr);
     ModuleGroup dummyGroup;
-    bool firstError = true;
     CodeOfPolicies policies;
     policies.fail_on_lack_of_aot_export = true;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {
-            if (json)
-                tout << "{ \"result\": \"failed to compile\",\n\"diagnostics\": [\n";
-            else
-                tout << "failed to compile\n";
+            tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
-                if (json) {
-                    if (!firstError)
-                        tout << ",\n";
-                    firstError = false;
-                    tout << reportErrorJson(err.at, err.what, err.extra, err.fixme, err.cerr);
-                } else {
-                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                }
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
             }
-            if (json)
-                tout << "]\n}";
             return false;
         } else {
             Context ctx(program->getContextStackSize());
             if ( !program->simulate(ctx, tout) ) {
-                if (json)
-                    tout << "{ \"result\": \"failed to simulate\",\n\"diagnostics\": [\n";
-                else
-                    tout << "failed to simulate\n";
+                tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
-                    if (json) {
-                        if (!firstError)
-                            tout << ",\n";
-                        firstError = false;
-                        tout << reportErrorJson(err.at, err.what, err.extra, err.fixme, err.cerr);
-                    } else {
-                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                    }
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
-                if (json)
-                    tout << "]\n}";
                 return false;
             }
             // AOT time
@@ -206,8 +180,6 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
         for (int ai = 3; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
-            } else if ( strcmp(argv[ai],"-j")==0 ) {
-                json = true;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {

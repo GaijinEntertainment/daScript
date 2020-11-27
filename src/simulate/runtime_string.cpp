@@ -197,16 +197,6 @@ namespace das
                 message, extra, fixme, erc );
     }
 
-    string reportErrorJson(const struct LineInfo & at, const string & message,
-        const string & extra, const string & fixme, CompilationError erc) {
-        return reportErrorJson(
-            at.fileInfo ? at.fileInfo->source : nullptr,
-            at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
-            at.line, at.column, at.last_line, at.last_column,
-            at.fileInfo ? at.fileInfo->tabSize : 4,
-            message, extra,fixme, erc );
-    }
-
     string reportError ( const char * st, const char * fileName,
         int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
@@ -222,50 +212,6 @@ namespace das
         }
         if (!extra.empty()) ssw << extra << "\n";
         if (!fixme.empty()) ssw << "\t" << fixme << "\n";
-        return ssw.str();
-    }
-
-    string reportErrorJson ( const char *, const char * fileName,
-    int row, int col, int lrow, int lcol, int tabSize, const string & message,
-        const string & extra, const string & fixme, CompilationError erc ) {
-        TextWriter ssw;
-        ssw <<  "{\n"
-            <<  " \"uri\": \"" << escapeString(fileName ? fileName : "") << "\",\n"
-            <<  " \"tab\" : " << tabSize << ",\n"
-            <<  " \"range\": {\n"
-            <<  "  \"start\": {\n"
-            <<  "   \"line\": " << row << ",\n"
-            <<  "   \"character\": " << col << "\n"
-            <<  "  },\n"
-            <<  "  \"end\": {\n"
-            <<  "   \"line\": " << lrow << ",\n"
-            <<  "   \"character\": " << lcol << "\n"
-            <<  "  }\n"
-            <<  " },\n"
-            <<  " \"message\" : \"" << escapeString(message) << "\",\n"
-            <<  " \"severity\" : 1,\n"
-            <<  " \"code\" : " << int(erc);
-        if (!extra.empty() || !fixme.empty())
-            ssw <<  ",\n"
-                <<  " \"relatedInformation\" : [\n"
-                <<  "  {\n"
-                <<  "   \"location\" : {\n"
-                <<  "    \"uri\" : \"" << escapeString(fileName ? fileName : "") << "\",\n"
-                <<  "    \"range\": {\n"
-                <<  "     \"start\": {\n"
-                <<  "      \"line\": " << row << ",\n"
-                <<  "      \"character\": " << col << "\n"
-                <<  "     },\n"
-                <<  "     \"end\": {\n"
-                <<  "      \"line\": " << lrow << ",\n"
-                <<  "      \"character\": " << lcol << "\n"
-                <<  "     }\n"
-                <<  "    }\n"
-                <<  "   },\n"
-                <<  "   \"message\" : \"" << escapeString(extra) << (fixme.empty() ? "" : "\\n") << escapeString(fixme) <<  "\"\n"
-                <<  "  }\n"
-                <<  " ]\n";
-        ssw <<  "}\n";
         return ssw.str();
     }
 

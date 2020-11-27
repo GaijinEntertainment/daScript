@@ -15,9 +15,5 @@ namespace das
         const string & fixme, CompilationError erc = CompilationError::unspecified );
     string reportError ( const char * st, const char * fileName, int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc = CompilationError::unspecified );
-    string reportErrorJson(const struct LineInfo & at, const string & message, const string & extra,
-        const string & fixme, CompilationError erc = CompilationError::unspecified );
-    string reportErrorJson ( const char * st, const char * fileName, int row, int col, int lrow, int lcol, int tabSize, const string & message,
-        const string & extra, const string & fixme, CompilationError erc = CompilationError::unspecified );
 }
 
