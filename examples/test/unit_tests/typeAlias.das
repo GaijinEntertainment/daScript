@@ -19,6 +19,18 @@ def swizzleFail(battleAreaPoints:Point3Array)
     print("{pointStart}")
 
 [export]
+def arrayAliasFail
+    var foo : array<Point3>
+    push(foo,float3(1,2,3))
+    push(foo,float3(2,3,4))
+    push(foo,float3(3,4,5))
+    temp_array_alias_example(foo) <| $(tfoo)
+        var f = float3(0)
+        for it in tfoo
+            f += it
+        assert(f==float3(6,9,12))
+
+[export]
 def test:bool
     var a = UnitTest::getSamplePoint3()
     assert(typeinfo(typename a) == "float3")
@@ -49,5 +61,7 @@ def test:bool
         assert(arr.length==10)
         for p in arr
             assert(p.x==1.0 && p.y==2.0 && p.z==3.0)
+
+    arrayAliasFail()
 
     return true

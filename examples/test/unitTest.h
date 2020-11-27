@@ -167,6 +167,10 @@ bool tempArrayExample(const das::TArray<char *> & arr,
     const das::TBlock<void, das::TTemporary<const das::TArray<char *>>> & blk,
     das::Context * context);
 
+void tempArrayAliasExample(const das::TArray<Point3> & arr,
+    const das::TBlock<void, das::TTemporary<const das::TArray<Point3>>> & blk,
+    das::Context * context);
+
 __forceinline TestObjectFoo & fooPtr2Ref(TestObjectFoo * pMat) {
     return *pMat;
 }

@@ -548,6 +548,14 @@ struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
     }
 };
 
+void tempArrayAliasExample(const das::TArray<Point3> & arr,
+    const das::TBlock<void, das::TTemporary<const das::TArray<Point3>>> & blk,
+    das::Context * context) {
+    vec4f args[1];
+    args[0] = cast<void *>::from(&arr);
+    context->invoke(blk, args, nullptr);
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -574,6 +582,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // test
     addAnnotation(make_smart<TestFunctionAnnotation>());
     // point3 array
+    addAlias(typeFactory<Point3>::make(lib));
     addAnnotation(make_smart<Point3ArrayAnnotation>(lib));
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
@@ -643,6 +652,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::modifyExternal, "start_effect");
     addExtern<DAS_BIND_FUN(tempArrayExample)>(*this, lib, "temp_array_example",
         SideEffects::modifyExternal, "tempArrayExample");
+    addExtern<DAS_BIND_FUN(tempArrayAliasExample)>(*this, lib, "temp_array_alias_example",
+        SideEffects::invoke, "tempArrayAliasExample");
     // ptr2ref
     addExtern<DAS_BIND_FUN(fooPtr2Ref),SimNode_ExtFuncCallRef>(*this, lib, "fooPtr2Ref",
         SideEffects::none, "fooPtr2Ref");

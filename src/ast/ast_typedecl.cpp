@@ -1241,6 +1241,38 @@ namespace das
         }
     }
 
+    bool TypeDecl::isAotAlias () const {
+        if ( aotAlias ) {
+            return true;
+        } else  if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                return firstType->isAotAlias();
+        } else  if ( baseType==Type::tIterator ) {
+            if ( firstType )
+                return firstType->isAotAlias();
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType )
+                return firstType->isAotAlias();
+        } else if ( baseType==Type::tTable ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAotAlias();
+            if ( secondType )
+                any |= secondType->isAotAlias();
+            return any;
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
+                   baseType==Type::tLambda || baseType==Type::tTuple ||
+                   baseType==Type::tVariant ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAotAlias();
+            for ( auto & arg : argTypes )
+                any |= arg->isAotAlias();
+            return any;
+        }
+        return false;
+    }
+
     bool TypeDecl::isAlias() const {
         // auto is auto.... or auto....?
         if ( baseType==Type::alias ) {

@@ -132,11 +132,17 @@ namespace das {
         }
     }
 
-    string describeCppType ( const TypeDeclPtr & type,
+    enum CpptUseAlias {
+        no
+    ,   yes
+    };
+
+    string describeCppTypeEx ( const TypeDeclPtr & type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
-                            CpptRedundantConst redundantConst ) {
+                            CpptRedundantConst redundantConst,
+                            CpptUseAlias useAlias ) {
 
         TextWriter stream;
         auto baseType = type->baseType;
@@ -154,7 +160,9 @@ namespace das {
                 stream << "TDim<";
             }
         }
-        if ( baseType==Type::alias ) {
+        if ( useAlias==CpptUseAlias::yes && type->aotAlias && !type->alias.empty() ) {
+            stream << type->alias;
+        } else if ( baseType==Type::alias ) {
             stream << "DAS_COMMENT(alias)";
         } else if ( baseType==Type::autoinfer ) {
             stream << "DAS_COMMENT(auto";
@@ -170,26 +178,27 @@ namespace das {
             }
         } else if ( baseType==Type::tArray ) {
             if ( type->firstType ) {
-                stream << "TArray<" << describeCppType(type->firstType) << ">";
+                stream << "TArray<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias) << ">";
             } else {
                 stream << "Array";
             }
         } else if ( baseType==Type::tTable ) {
             if ( type->firstType && type->secondType ) {
-                stream << "TTable<" << describeCppType(type->firstType) << "," << describeCppType(type->secondType) << ">";
+                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias)
+                << "," << describeCppTypeEx(type->secondType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias) << ">";
             } else {
                 stream << "Table";
             }
         } else if ( baseType==Type::tTuple ) {
             stream << "TTuple<" << int(type->getTupleSize());
             for ( const auto & arg : type->argTypes ) {
-                stream << "," << describeCppType(arg);
+                stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
             }
             stream << ">";
         } else if ( baseType==Type::tVariant ) {
             stream << "TVariant<" << int(type->getVariantSize());
             for ( const auto & arg : type->argTypes ) {
-                stream << "," << describeCppType(arg);
+                stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
             }
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
@@ -205,14 +214,14 @@ namespace das {
         } else if ( baseType==Type::tPointer ) {
             if ( !type->smartPtr ) {
                 if ( type->firstType ) {
-                    stream << describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no) << " *";
+                    stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias) << " *";
                 } else {
                     stream << "void *";
                 }
             } else {
                 if ( type->firstType ) {
                     stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<")
-                            <<  describeCppType(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no)
+                            <<  describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias)
                             << ">";
                 } else {
                     stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<") << "void>";
@@ -232,7 +241,7 @@ namespace das {
             }
         } else if ( baseType==Type::tIterator ) {
             if ( type->firstType ) {
-                stream << "Sequence DAS_COMMENT((" << describeCppType(type->firstType,substituteRef,skipRef,skipConst) << "))";
+                stream << "Sequence DAS_COMMENT((" << describeCppTypeEx(type->firstType,substituteRef,skipRef,skipConst,CpptRedundantConst::yes,useAlias) << "))";
             } else {
                 stream << "Sequence";
             }
@@ -242,13 +251,13 @@ namespace das {
             }
             stream << das_to_cppString(baseType) << " DAS_COMMENT((";
             if ( type->firstType ) {
-                stream << describeCppType(type->firstType);
+                stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
             } else {
                 stream << "void";
             }
             if ( type->argTypes.size() ) {
                 for ( const auto & arg : type->argTypes ) {
-                    stream << "," << describeCppType(arg);
+                    stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
                 }
             }
             stream << "))";
@@ -274,6 +283,15 @@ namespace das {
         }
         return stream.str();
     }
+
+    string describeCppType ( const TypeDeclPtr & type,
+                            CpptSubstitureRef substituteRef,
+                            CpptSkipRef skipRef,
+                            CpptSkipConst skipConst,
+                            CpptRedundantConst redundantConst ) {
+        return describeCppTypeEx(type, substituteRef, skipRef, skipConst, redundantConst, CpptUseAlias::no);
+    }
+
 
     class NoAotMarker : public Visitor {
     public:
@@ -2893,8 +2911,13 @@ namespace das {
             DAS_ASSERT(it != call->arguments.end());
             auto argType = (*it)->type;
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
-            if ( funArgType->aotAlias ) {
-                ss << "das_alias<" << funArgType->alias << ">::to(";
+            if ( funArgType->isAotAlias() ) {
+                if ( funArgType->alias.empty() ) {
+                    ss << "das_reinterpret<"
+                    << describeCppTypeEx(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes) << ">::pass(";
+                } else {
+                    ss << "das_alias<" << funArgType->alias << ">::to(";
+                }
             }
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) {
                 ss << "das_auto_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::cast(";
@@ -2938,7 +2961,7 @@ namespace das {
                 }
             }
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) ss << ")";
-            if ( funArgType->aotAlias ) ss << ")";
+            if ( funArgType->isAotAlias() ) ss << ")";
             if ( !last ) ss << ",";
         }
         void CallFunc_visit ( ExprCallFunc * call ) {
@@ -3007,11 +3030,6 @@ namespace das {
                     ss << " && ";
                 }
                 ss << forSrcName(var->name) << ".next(__context__,";
-                if (var->type->aotAlias) {
-                    ss  << "reinterpret_cast<"
-                        << (var->type->constant ? "const " : "")
-                        << var->type->alias << " *&>";
-                }
                 ss << "(" << collector.getVarName(var) << "))";
             }
             ss << " )\n";
@@ -3029,7 +3047,7 @@ namespace das {
             ss << string(tab,'\t') << "// " << var->name << " : " << var->type->describe() << "\n";
             ss << string(tab,'\t') << "das_iterator<"
                 << describeCppType(ffor->sources[idx]->type,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
-                << "> " << forSrcName(var->name) << "(";
+                    << "> " << forSrcName(var->name) << "(";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
             size_t idx;
@@ -3049,11 +3067,6 @@ namespace das {
             auto nl = needLoopName(ffor);
             ss << string(tab, '\t') << nl << " = " << forSrcName(var->name)
                 << ".first(__context__,";
-            if (var->type->aotAlias) {
-                ss  << "reinterpret_cast<"
-                    << (var->type->constant ? "const " : "")
-                    << var->type->alias << " *&>";
-            }
             ss << "(" << collector.getVarName(var) << ")";
             ss << ") && " << nl << ";\n";
             return Visitor::visitForSource(ffor, that, last);
@@ -3062,11 +3075,6 @@ namespace das {
             ss << "\n";
             for ( auto & var : ffor->iteratorVariables ) {
                 ss << string(tab, '\t') << forSrcName(var->name) << ".close(__context__,";
-                if (var->type->aotAlias) {
-                    ss  << "reinterpret_cast<"
-                        << (var->type->constant ? "const " : "")
-                        << var->type->alias << " *&>";
-                }
                 ss << "(" << collector.getVarName(var) << "));\n";
             }
             tab --;

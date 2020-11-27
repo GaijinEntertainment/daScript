@@ -950,17 +950,20 @@ namespace das {
             that = &r;
             array_end = (TT *)(that->data + that->size * sizeof(TT));
         }
-        __forceinline bool first(Context * __context__, TT * & i) {
+        template <typename QQ>
+        __forceinline bool first(Context * __context__, QQ * & i) {
             context = __context__;
             array_lock(*__context__, *that);
-            i = (TT *)that->data;
-            return i != array_end;
+            i = (QQ *)that->data;
+            return i != (QQ *)array_end;
         }
-        __forceinline bool next(Context *, TT * & i) {
+        template <typename QQ>
+        __forceinline bool next(Context *, QQ * & i) {
             i++;
-            return i != array_end;
+            return i != (QQ *)array_end;
         }
-        __forceinline void close(Context * __context__, TT * & i) {
+        template <typename QQ>
+        __forceinline void close(Context * __context__, QQ * & i) {
             array_unlock(*__context__, *that);
             context = nullptr;
             i = nullptr;
@@ -980,17 +983,20 @@ namespace das {
             that = &r;
             array_end = (TT *)(that->data + that->size*sizeof(TT));
         }
-        __forceinline bool first ( Context * __context__, const TT * & i ) {
+        template <typename QQ>
+        __forceinline bool first ( Context * __context__, const QQ * & i ) {
             context = __context__;
             array_lock(*__context__, *(Array *)(that)); // technically we don't need for the const array, but...
-            i = (const TT *) that->data;
-            return i!=array_end;
+            i = (const QQ *) that->data;
+            return i!=(const QQ *)array_end;
         }
-        __forceinline bool next  ( Context *, const TT * & i ) {
+        template <typename QQ>
+        __forceinline bool next  ( Context *, const QQ * & i ) {
             i++;
-            return i!=array_end;
+            return i!=(const QQ *)array_end;
         }
-        __forceinline void close ( Context * __context__, const TT * & i ) {
+        template <typename QQ>
+        __forceinline void close ( Context * __context__, const QQ * & i ) {
             array_unlock(*__context__, *(Array *)(that));  // technically we don't need for the const array, but...
             context = nullptr;
             i = nullptr;
@@ -1051,15 +1057,18 @@ namespace das {
             array_start = r.data();
             array_end = array_start + r.size();
         }
-        __forceinline bool first ( Context *, TT * & i ) {
-            i = array_start;
-            return i!=array_end;
+        template <typename QQ>
+        __forceinline bool first ( Context *, QQ * & i ) {
+            i = (QQ *)array_start;
+            return i!=(QQ *)array_end;
         }
-        __forceinline bool next  ( Context *, TT * & i ) {
+        template <typename QQ>
+        __forceinline bool next  ( Context *, QQ * & i ) {
             i++;
-            return i!=array_end;
+            return i!=(QQ *)array_end;
         }
-        __forceinline void close ( Context *, TT * & i ) {
+        template <typename QQ>
+        __forceinline void close ( Context *, QQ * & i ) {
             i = nullptr;
         }
         TT *            array_start;
@@ -1072,15 +1081,18 @@ namespace das {
             array_start = r.data();
             array_end = array_start + r.size();
         }
-        __forceinline bool first ( Context *, const TT * & i ) {
-            i = array_start;
-            return i!=array_end;
+        template <typename QQ>
+        __forceinline bool first ( Context *, const QQ * & i ) {
+            i = (const QQ *)array_start;
+            return i!=(const QQ *)array_end;
         }
-        __forceinline bool next  ( Context *, const TT * & i ) {
+        template <typename QQ>
+        __forceinline bool next  ( Context *, const QQ * & i ) {
             i++;
-            return i!=array_end;
+            return i!=(const QQ *)array_end;
         }
-        __forceinline void close ( Context *, const TT * & i ) {
+        template <typename QQ>
+        __forceinline void close ( Context *, const QQ * & i ) {
             i = nullptr;
         }
         const TT *      array_start;

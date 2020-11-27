@@ -1,17 +1,14 @@
-require daslib/if_not_null
-
-struct Foo
-    a : int
-
-[sideeffects]
-def take3(var pfoo:Foo; b,c:int)
-    assert(pfoo.a==1 && b==2 && c==3)
+require UnitTest
 
 [export]
 def test
-    var pfoo : Foo?
-    pfoo |> if_not_null() <| take3(0,0)
-    pfoo = new [[Foo a=1]]
-    pfoo |> if_not_null() <| take3(2,3)
+    var foo : array<Point3>
+    push(foo,float3(1,2,3))
+    push(foo,float3(2,3,4))
+    push(foo,float3(3,4,5))
+    temp_array_alias_example(foo) <| $(tfoo)
+        var f = float3(0)
+        for it in tfoo
+            f += it
+        assert(f==float3(6,9,12))
     return true
-
