@@ -838,6 +838,18 @@ namespace das {
         return cexpr;
     }
 
+    // ConstPtr
+
+    ExpressionPtr ExprConstPtr::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprConstPtr>(expr);
+        ExprConst::clone(cexpr);
+        cexpr->isSmartPtr = isSmartPtr;
+        if ( ptrType ) {
+            cexpr->ptrType = make_smart<TypeDecl>(*ptrType);
+        }
+        return cexpr;
+    }
+
     // ConstEnumeration
 
     ExpressionPtr ExprConstEnumeration::visit(Visitor & vis) {

@@ -537,6 +537,8 @@ namespace das
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr)
             : ExprConstT(a,ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
         bool isSmartPtr = false;
+        TypeDeclPtr ptrType;
+        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
     };
 
     struct ExprConstInt : ExprConstT<int32_t,ExprConstInt> {

@@ -563,10 +563,16 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
+            if ( c->ptrType ) {
+                ss << "const_pointer<" << c->ptrType->describe() << ">(";
+            }
             if ( c->getValue() ) {
                 ss << "*0x" << HEX << intptr_t(c->getValue()) << DEC;
             } else {
                 ss << "null";
+            }
+            if ( c->ptrType ) {
+                ss << ")";
             }
             return Visitor::visit(c);
         }

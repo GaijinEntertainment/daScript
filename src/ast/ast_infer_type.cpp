@@ -1632,8 +1632,14 @@ namespace das {
                 c->type->constant = true;
             } else if ( c->baseType==Type::tPointer ) {
                 c->type = make_smart<TypeDecl>(c->baseType);
-                c->type->constant = true;
-                c->type->smartPtr = (static_cast<ExprConstPtr *>(c))->isSmartPtr;
+                auto cptr = static_cast<ExprConstPtr *>(c);
+                c->type->smartPtr = cptr->isSmartPtr;
+                if ( cptr->ptrType ) {
+                    c->type->firstType = make_smart<TypeDecl>(*cptr->ptrType);
+                    c->type->constant = c->type->firstType->constant;
+                } else {
+                    c->type->constant = true;
+                }
             } else {
                 c->type = make_smart<TypeDecl>(c->baseType);
                 c->type->constant = true;
@@ -6098,18 +6104,21 @@ namespace das {
                     error("[[" + expr->makeType->describe() + "() ]] enumeration is missing 0 value", "", "",
                           expr->at, CompilationError::invalid_type);
                 }
-            } else if ( expr->type->isWorkhorseType() ) {
-                expr->type->ref = false;
-                reportAstChanged();
-                auto ews = Program::makeConst(expr->at, expr->type, v_zero());
-                ews->type = make_smart<TypeDecl>(*expr->type);
-                return ews;
             } else if ( expr->type->isPointer() ) {
                 expr->type->ref = false;
                 reportAstChanged();
                 auto ews = make_smart<ExprConstPtr>(expr->at);
                 ews->type = make_smart<TypeDecl>(*expr->type);
                 ews->isSmartPtr = expr->type->smartPtr;
+                if ( expr->type->firstType ) {
+                    ews->ptrType = make_smart<TypeDecl>(*expr->type->firstType);
+                }
+                return ews;
+            } else if ( expr->type->isWorkhorseType() ) {
+                expr->type->ref = false;
+                reportAstChanged();
+                auto ews = Program::makeConst(expr->at, expr->type, v_zero());
+                ews->type = make_smart<TypeDecl>(*expr->type);
                 return ews;
             } else if ( !expr->type->isRefType() ) {
                 expr->type->ref = true;
