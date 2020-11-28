@@ -2246,7 +2246,8 @@ namespace das {
         return context->stringHeap->allocateString(bft->findBitfieldName(value));
     }
 
-    void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message ) {
+    void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
+        if ( !prog ) context->throw_error_at(*lineInfo,"program can't be null (expecting compiling_program())");
         prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
     }
 
