@@ -164,7 +164,6 @@ include/daScript/misc/fnv.h
 include/daScript/misc/smart_ptr.h
 include/daScript/misc/free_list.h
 include/daScript/misc/sysos.h
-include/daScript/misc/callable.h
 src/misc//sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
