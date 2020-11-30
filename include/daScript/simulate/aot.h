@@ -1615,17 +1615,24 @@ namespace das {
         char * EP, * SP;
     };
 
-    template <typename resType, typename ...argType>
-    struct das_make_block : Block, SimNode_ClosureBlock {
-        typedef callable < resType ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
+    struct das_make_block_base : Block, SimNode_ClosureBlock {
+        das_make_block_base ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi )
+                : SimNode_ClosureBlock(LineInfo(),false,false,ann) {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
-            aotFunction = &blockFunction;
             functionArguments = context->abiArguments();
             info = fi;
+        }
+    };
+
+    template <typename resType, typename ...argType>
+    struct das_make_block : das_make_block_base {
+        typedef callable < resType ( argType... ) > BlockFn;
+        template <typename Functor>
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
+            aotFunction = &blockFunction;
         };
         template <size_t... I>
         __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
@@ -1646,16 +1653,12 @@ namespace das {
 #endif
 
     template <typename resType>
-    struct das_make_block<resType> : Block, SimNode_ClosureBlock {
+    struct das_make_block<resType> : das_make_block_base {
         typedef callable < resType () > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
+        template <typename Functor>
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
-            functionArguments = context->abiArguments();
-            info = fi;
         };
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1665,16 +1668,12 @@ namespace das {
     };
 
     template <>
-    struct das_make_block<void> : Block, SimNode_ClosureBlock {
+    struct das_make_block<void> : das_make_block_base {
         typedef callable < void () > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
+        template <typename Functor>
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
-            functionArguments = context->abiArguments();
-            info = fi;
         };
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -1689,17 +1688,13 @@ namespace das {
 #endif
 
     template <typename ...argType>
-    struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
+    struct das_make_block<void,argType...> : das_make_block_base {
         typedef callable < void ( argType... ) > BlockFn;
-        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
-                : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
+        template <typename Functor>
+        __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
-            functionArguments = context->abiArguments();
-            info = fi;
-       };
+        };
         template <size_t... I>
         __forceinline void callBlockFunction(vec4f * args, index_sequence<I...>) {
             blockFunction((cast<argType>::to(args[I]))...);
@@ -1715,16 +1710,12 @@ namespace das {
     };
 
     template <typename resType, typename ...argType>
-    struct das_make_block_cmres : Block, SimNode_ClosureBlock {
+    struct das_make_block_cmres : das_make_block_base {
         typedef callable < resType ( argType... ) > BlockFn;
-        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
+        template <typename Functor>
+        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
-            functionArguments = context->abiArguments();
-            info = fi;
         };
         template <size_t... I>
         __forceinline resType callBlockFunction(vec4f * args, index_sequence<I...>) {
@@ -1743,16 +1734,12 @@ namespace das {
     };
 
     template <typename resType>
-    struct das_make_block_cmres<resType> : Block, SimNode_ClosureBlock {
+    struct das_make_block_cmres<resType> : das_make_block_base {
         typedef callable < resType () > BlockFn;
-        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
-            : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
-            stackOffset = context->stack.spi();
-            argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-            body = this;
+        template <typename Functor>
+        __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
-            functionArguments = context->abiArguments();
-            info = fi;
         };
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE

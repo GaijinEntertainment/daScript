@@ -1,76 +1,40 @@
 #pragma once
 
-#ifndef DAS_CALLABLE_BYTES
-#define DAS_CALLABLE_BYTES  128
-#endif
+/*
+    based on ideas from https://stackoverflow.com/a/38478032
+
+    this is NOT a general purpose replacement of std::function
+    this concept wraps around lambda, which is passed on the stack, and only exists at eval time, i.e
+        foo ( callable([&](...){}) )
+    this is as close to daScript block, as we can get
+*/
 
 namespace das {
-    template <typename RetT, typename ...Args>
-    struct CallableLambdaBase {
-        CallableLambdaBase () = default;
-        CallableLambdaBase ( const CallableLambdaBase & ) = delete;
-        CallableLambdaBase & operator = ( const CallableLambdaBase & ) = delete;
-        virtual RetT invoke ( Args... ) = 0;
-        virtual ~CallableLambdaBase() {}
-    };
 
-    template <typename LL, typename RetT, typename ...Args>
-    struct CallableLambda : CallableLambdaBase<RetT,Args...> {
-        CallableLambda ( LL && o ) : obj(o) {}
-        virtual RetT invoke ( Args ...args ) override { return obj(forward<Args>(args)...); };
-        LL  obj;
-    };
+    template <typename T>
+    class callable;
 
-    template <typename LL, typename ...Args>
-    struct CallableLambda<LL,void,Args...> : CallableLambdaBase<void,Args...> {
-        CallableLambda ( LL && o ) : obj(o) {}
-        virtual void invoke ( Args ...args ) override { obj(forward<Args>(args)...); };
-        LL  obj;
-    };
-
-    template <typename RetT, typename ...Args>
-    struct CallableBase {
-        using Callable  = CallableLambdaBase<RetT,Args...>;
-        CallableBase ( const CallableBase & ) = delete;
-        CallableBase & operator = ( const CallableBase & ) = delete;
-        template <typename LL>
-        CallableBase ( LL && obj ) {
-            using CallableObject = CallableLambda<LL,RetT,Args...>;
-            auto size = sizeof(CallableObject);
-            if ( size <= DAS_CALLABLE_BYTES ) {
-                callobj = (CallableObject *) bytes;
-                new (callobj) CallableObject(obj);
-            } else {
-                callobj = new CallableObject(obj);
-            }
-
+    template <typename R, typename... Args>
+    class callable<R(Args...)> {
+        typedef R (*invoke_fn_t)(char*, Args...);
+        template <typename Functor>
+        static __forceinline R invoke_fn(Functor* fn, Args... args) {
+            return (*fn)(forward<Args>(args)...);
         }
-        ~CallableBase() {
-            if ( (void*)bytes != (void*)callobj ) {
-                delete callobj;
-            } else {
-                callobj->~Callable();
-            }
+        invoke_fn_t     invoke_f;
+        char *          data_ptr;
+    public:
+        callable(callable && rhs) = delete;
+        callable(callable const& rhs) = delete;
+        __forceinline callable() = default;
+        template <typename Functor>
+        __forceinline callable(Functor * f)
+            : invoke_f(reinterpret_cast<invoke_fn_t>(invoke_fn<Functor>))
+            , data_ptr(reinterpret_cast<char *>(f)) {
         }
-        Callable *  callobj;
-        vec4f       bytes[DAS_CALLABLE_BYTES/16];
-    };
-
-    template <typename Func>
-    struct callable;
-
-    template <typename RetT, typename ...Args>
-    struct callable<RetT (Args...)> : CallableBase<RetT,Args...> {
-        template <typename LL>
-        __forceinline callable ( LL && obj ) : CallableBase<RetT,Args...>(obj) {}
-        __forceinline RetT operator () ( Args... args ) { return this->callobj->invoke(forward<Args>(args)...); }
-    };
-
-    template <typename ...Args>
-    struct callable<void (Args...)> : CallableBase<void,Args...> {
-        template <typename LL>
-        __forceinline callable ( LL && obj ) : CallableBase<void,Args...>(obj) {}
-        __forceinline void operator () ( Args... args ) { this->callobj->invoke(forward<Args>(args)...); }
+        __forceinline R operator()(Args... args) {
+            return this->invoke_f(this->data_ptr, forward<Args>(args)...);
+        }
     };
 }
 
