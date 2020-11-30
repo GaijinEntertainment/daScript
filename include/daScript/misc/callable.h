@@ -43,9 +43,10 @@ namespace das {
 
         }
         ~CallableBase() {
-            callobj->~Callable();
             if ( (void*)bytes != (void*)callobj ) {
                 delete callobj;
+            } else {
+                callobj->~Callable();
             }
         }
         Callable *  callobj;
