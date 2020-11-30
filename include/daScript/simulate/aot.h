@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/misc/function_traits.h"
+#include "daScript/misc/callable.h"
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/simulate/sim_policy.h"
@@ -1616,7 +1617,7 @@ namespace das {
 
     template <typename resType, typename ...argType>
     struct das_make_block : Block, SimNode_ClosureBlock {
-        typedef function < resType ( argType... ) > BlockFn;
+        typedef callable < resType ( argType... ) > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
                 : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
@@ -1646,7 +1647,7 @@ namespace das {
 
     template <typename resType>
     struct das_make_block<resType> : Block, SimNode_ClosureBlock {
-        typedef function < resType () > BlockFn;
+        typedef callable < resType () > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
@@ -1665,7 +1666,7 @@ namespace das {
 
     template <>
     struct das_make_block<void> : Block, SimNode_ClosureBlock {
-        typedef function < void () > BlockFn;
+        typedef callable < void () > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
@@ -1689,7 +1690,7 @@ namespace das {
 
     template <typename ...argType>
     struct das_make_block<void,argType...> : Block, SimNode_ClosureBlock {
-        typedef function < void ( argType... ) > BlockFn;
+        typedef callable < void ( argType... ) > BlockFn;
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
                 : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
@@ -1715,7 +1716,7 @@ namespace das {
 
     template <typename resType, typename ...argType>
     struct das_make_block_cmres : Block, SimNode_ClosureBlock {
-        typedef function < resType ( argType... ) > BlockFn;
+        typedef callable < resType ( argType... ) > BlockFn;
         __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
@@ -1743,7 +1744,7 @@ namespace das {
 
     template <typename resType>
     struct das_make_block_cmres<resType> : Block, SimNode_ClosureBlock {
-        typedef function < resType () > BlockFn;
+        typedef callable < resType () > BlockFn;
         __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, BlockFn && func )
             : SimNode_ClosureBlock(LineInfo(),false,false,ann), blockFunction(func) {
             stackOffset = context->stack.spi();
@@ -1772,7 +1773,7 @@ namespace das {
     struct das_invoke {
         // vector cast
         static __forceinline ResType invoke ( Context * __context__, const Block & blk ) {
-            using BlockFn = function < ResType () >;
+            using BlockFn = callable < ResType () >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 return (*fn) ();
@@ -1783,7 +1784,7 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            using BlockFn = function < ResType ( ArgType... ) >;
+            using BlockFn = callable < ResType ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 return (*fn) ( arg... );
@@ -1795,7 +1796,7 @@ namespace das {
         }
         // cmres
         static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk ) {
-            using BlockFn = function < ResType () >;
+            using BlockFn = callable < ResType () >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 return (*fn) ();
@@ -1807,7 +1808,7 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            using BlockFn = function < ResType ( ArgType... ) >;
+            using BlockFn = callable < ResType ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 return (*fn) ( arg... );
@@ -1827,7 +1828,7 @@ namespace das {
     template <>
     struct das_invoke<void> {
         static __forceinline void invoke ( Context * __context__, const Block & blk ) {
-            using BlockFn = function < void () >;
+            using BlockFn = callable < void () >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 (*fn) ();
@@ -1837,7 +1838,7 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
-            using BlockFn = function < void ( ArgType... ) >;
+            using BlockFn = callable < void ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 (*fn) ( arg... );
