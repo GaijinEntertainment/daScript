@@ -1631,7 +1631,7 @@ namespace das {
         typedef callable < resType ( argType... ) > BlockFn;
         template <typename Functor>
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
-                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(context,func) {
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
         };
         template <size_t... I>
@@ -1657,7 +1657,7 @@ namespace das {
         typedef callable < resType () > BlockFn;
         template <typename Functor>
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
-                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(context,func) {
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
         };
         virtual vec4f eval ( Context & context ) override {
@@ -1672,7 +1672,7 @@ namespace das {
         typedef callable < void () > BlockFn;
         template <typename Functor>
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
-                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(context,func) {
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
         };
         virtual vec4f eval ( Context & context ) override {
@@ -1692,7 +1692,7 @@ namespace das {
         typedef callable < void ( argType... ) > BlockFn;
         template <typename Functor>
         __forceinline das_make_block ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
-                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(context,func) {
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
         };
         template <size_t... I>
@@ -1714,7 +1714,7 @@ namespace das {
         typedef callable < resType ( argType... ) > BlockFn;
         template <typename Functor>
         __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
-                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(context,func) {
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
         };
         template <size_t... I>
@@ -1738,7 +1738,7 @@ namespace das {
         typedef callable < resType () > BlockFn;
         template <typename Functor>
         __forceinline das_make_block_cmres ( Context * context, uint32_t argStackTop, uint64_t ann, FuncInfo * fi, Functor && func )
-                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(context,func) {
+                : das_make_block_base(context,argStackTop,ann,fi), blockFunction(&func) {
             aotFunction = &blockFunction;
         };
         virtual vec4f eval ( Context & context ) override {
