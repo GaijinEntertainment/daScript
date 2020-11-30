@@ -1787,7 +1787,7 @@ namespace das {
             using BlockFn = callable < ResType ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
-                return (*fn) ( arg... );
+                return (*fn) ( forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
                 vec4f result = __context__->invoke(blk, arguments, nullptr);
@@ -1811,7 +1811,7 @@ namespace das {
             using BlockFn = callable < ResType ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
-                return (*fn) ( arg... );
+                return (*fn) ( forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
                 typename remove_const<ResType>::type result;
@@ -1821,7 +1821,7 @@ namespace das {
         }
         template <typename BLK, typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context *, const BLK & blk, ArgType ...arg ) {
-            return blk(arg...);
+            return blk(forward<ArgType>(arg)...);
         }
     };
 
@@ -1841,7 +1841,7 @@ namespace das {
             using BlockFn = callable < void ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
-                (*fn) ( arg... );
+                (*fn) ( forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
                 __context__->invoke(blk, arguments, nullptr);
@@ -1849,7 +1849,7 @@ namespace das {
         }
         template <typename BLK, typename ...ArgType>
         static __forceinline void invoke ( Context *, const BLK & blk, ArgType ...arg ) {
-            return blk(arg...);
+            return blk(forward<ArgType>(arg)...);
         }
     };
 
@@ -1874,7 +1874,7 @@ namespace das {
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
-                return (*fnPtr) ( __context__, arg... );
+                return (*fnPtr) ( __context__, forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
                 vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
@@ -1901,7 +1901,7 @@ namespace das {
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
-                return (*fnPtr) ( __context__, arg... );
+                return (*fnPtr) ( __context__, forward<ArgType>(arg)... );
             } else {
                 if (!simFunc) __context__->throw_error("invoke null function");
                 typename remove_const<ResType>::type result;
@@ -1954,7 +1954,7 @@ namespace das {
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
-                return (*fnPtr) ( __context__, blk.capture, arg... );
+                return (*fnPtr) ( __context__, blk.capture, forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
                 vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
@@ -1987,7 +1987,7 @@ namespace das {
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
-                return (*fnPtr) ( __context__, blk.capture, arg... );
+                return (*fnPtr) ( __context__, blk.capture, forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
                 typename remove_const<ResType>::type result;
@@ -2023,7 +2023,7 @@ namespace das {
             if ( simFunc->aotFunction ) {
                 using fnPtrType = void (*) ( Context *, void *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
-                (*fnPtr) ( __context__, blk.capture, arg... );
+                (*fnPtr) ( __context__, blk.capture, forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
                 __context__->callOrFastcall(simFunc, arguments, 0);

@@ -7,6 +7,9 @@
 namespace das {
     template <typename RetT, typename ...Args>
     struct CallableLambdaBase {
+        CallableLambdaBase () = default;
+        CallableLambdaBase ( const CallableLambdaBase & ) = delete;
+        CallableLambdaBase & operator = ( const CallableLambdaBase & ) = delete;
         virtual RetT invoke ( Args... ) = 0;
         virtual ~CallableLambdaBase() {}
     };
@@ -14,14 +17,14 @@ namespace das {
     template <typename LL, typename RetT, typename ...Args>
     struct CallableLambda : CallableLambdaBase<RetT,Args...> {
         CallableLambda ( LL && o ) : obj(o) {}
-        virtual RetT invoke ( Args ...args ) override { return obj(args...); };
+        virtual RetT invoke ( Args ...args ) override { return obj(forward<Args>(args)...); };
         LL  obj;
     };
 
     template <typename LL, typename ...Args>
     struct CallableLambda<LL,void,Args...> : CallableLambdaBase<void,Args...> {
         CallableLambda ( LL && o ) : obj(o) {}
-        virtual void invoke ( Args ...args ) override { obj(args...); };
+        virtual void invoke ( Args ...args ) override { obj(forward<Args>(args)...); };
         LL  obj;
     };
 
@@ -60,14 +63,14 @@ namespace das {
     struct callable<RetT (Args...)> : CallableBase<RetT,Args...> {
         template <typename LL>
         __forceinline callable ( LL && obj ) : CallableBase<RetT,Args...>(obj) {}
-        __forceinline RetT operator () ( Args... args ) { return this->callobj->invoke(args...); }
+        __forceinline RetT operator () ( Args... args ) { return this->callobj->invoke(forward<Args>(args)...); }
     };
 
     template <typename ...Args>
     struct callable<void (Args...)> : CallableBase<void,Args...> {
         template <typename LL>
         __forceinline callable ( LL && obj ) : CallableBase<void,Args...>(obj) {}
-        __forceinline void operator () ( Args... args ) { this->callobj->invoke(args...); }
+        __forceinline void operator () ( Args... args ) { this->callobj->invoke(forward<Args>(args)...); }
     };
 }
 
