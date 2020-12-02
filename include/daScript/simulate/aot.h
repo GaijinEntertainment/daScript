@@ -1486,7 +1486,7 @@ namespace das {
     template <typename R, typename ...Arg>
     struct ImplAotStaticFunctionCMRES<R (*)(Arg...)> {
         static __forceinline void call ( R (*fn) (Arg...), Context & ctx ) {
-            using result = remove_const<R>::type;
+            using result = typename remove_const<R>::type;
             *((result *) ctx.abiCMRES) = CallAotStaticFunction<R,Arg...>::call(fn,ctx,make_index_sequence<sizeof...(Arg)>());
         }
     };
