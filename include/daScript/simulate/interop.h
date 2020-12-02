@@ -38,35 +38,55 @@ namespace das
 #pragma warning(push)
 #pragma warning(disable:4100)
 #endif
-    template <typename Result>
-    struct ImplCallStaticFunction {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            return cast<Result>::from( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
+
+    template <typename R, typename ...Args>
+    struct CallStaticFunction {
+        template <size_t... I>
+        static __forceinline R call ( R (* fn) (Args...), Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            return fn(cast_arg<Args>::to(ctx,args[I])...);
         }
     };
 
-    template <typename Result>
-    struct ImplCallStaticFunction<smart_ptr<Result>> {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            return cast<Result *>::from( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ).orphan() );
+    template <typename FunctionType>
+    struct ImplCallStaticFunction;
+
+    template <typename R, typename ...Args>
+    struct ImplCallStaticFunction<R (*)(Args...)> {
+        static __forceinline R call_imm( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return CallStaticFunction<R,Args...>::call(fn,ctx,args,make_index_sequence<sizeof...(Args)>());
+        }
+        static __forceinline vec4f call( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return cast<R>::from(call_imm(fn,ctx,args));
         }
     };
 
-    template <typename Result>
-    struct ImplCallStaticFunction<smart_ptr_raw<Result>> {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            return cast<Result *>::from( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ).get() );
+    template <typename R, typename ...Args>
+    struct ImplCallStaticFunction<smart_ptr<R> (*)(Args...)> {
+        static __forceinline R * call_imm ( smart_ptr<R> (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return CallStaticFunction<smart_ptr<R>,Args...>::call(fn,ctx,args,make_index_sequence<sizeof...(Args)>()).orphan();
+        }
+        static __forceinline vec4f call ( smart_ptr<R> (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return cast<R *>::from(call_imm(fn,ctx,args));
         }
     };
 
-    template <>
-    struct ImplCallStaticFunction<void> {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
+    template <typename R, typename ...Args>
+    struct ImplCallStaticFunction<smart_ptr_raw<R> (*)(Args...)> {
+        static __forceinline R * call_imm ( smart_ptr_raw<R> (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return CallStaticFunction<smart_ptr_raw<R>,Args...>::call(fn,ctx,args,make_index_sequence<sizeof...(Args)>()).get();
+        }
+        static __forceinline vec4f call ( smart_ptr_raw<R> (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return cast<R *>::from(call_imm(fn,ctx,args));
+        }
+    };
+
+    template <typename ...Args>
+    struct ImplCallStaticFunction<void (*)(Args...)> {
+        static __forceinline void call_imm ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            CallStaticFunction<void,Args...>::call(fn,ctx,args,make_index_sequence<sizeof...(Args)>());
+        }
+        static __forceinline vec4f call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            call_imm(fn,ctx,args);
             return v_zero();
         }
     };
@@ -76,75 +96,51 @@ namespace das
         enum { value = is_pointer<T>::value || is_smart_ptr<T>::value };
     };
 
-    template <typename Result, typename CType,
-        bool Pointer=is_any_pointer<Result>::value && is_any_pointer<CType>::value,
-        bool IsEnum=is_enum<Result>::value
-    >
-    struct ImplCallStaticFunctionImm {
-        enum { valid = false };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType &&, Context &, SimNode **, index_sequence<I...> ) {
-            DAS_ASSERTF(0, "if this assert triggers, somehow prohibited call was called explicitly."
-                        "like evalDouble on pointer or something similar."
-                        "this means that this template needs to be revisited."
-                        "we should not even be here, because code above verifies 'valid' field.");
+    template <typename FunctionType, typename Result, typename CType, bool Pointer, bool IsEnum>
+    struct ImplCallStaticFunctionImpl {
+        static __forceinline CType call(FunctionType &&, Context & context, SimNode **) {
+            context.throw_error("internal integration error");
             return CType();
         }
     };
 
-    template <typename Result, typename CType>
-    struct ImplCallStaticFunctionImm<smart_ptr<Result>, CType, true, false> {
-        enum { valid = true };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
-            return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...).orphan();
+    template <typename FunctionType, typename Result, typename CType>   // any pointer or smart_pointer
+    struct ImplCallStaticFunctionImpl<FunctionType, Result, CType, true, false> {
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args) {
+            return (CType) ImplCallStaticFunction<FunctionType>::call_imm(fn,ctx,args);
         }
     };
 
-    template <typename Result, typename CType>
-    struct ImplCallStaticFunctionImm<smart_ptr_raw<Result>, CType, true, false> {
-        enum { valid = true };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
-            return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...).get();
+    template <typename FunctionType, typename Result, typename CType>   // any enum
+    struct ImplCallStaticFunctionImpl<FunctionType, Result, CType, false, true> {
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args) {
+            return (CType) ImplCallStaticFunction<FunctionType>::call_imm(fn,ctx,args);
         }
     };
 
-    template <typename Result, typename CType>
-    struct ImplCallStaticFunctionImm<Result, CType, true, false> {
-        enum { valid = true };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
-            return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...);
+    template <typename FunctionType, typename Result>
+    struct ImplCallStaticFunctionImpl<FunctionType,Result,Result, false, false> {   // no cast
+        static __forceinline Result call(FunctionType && fn, Context & ctx, SimNode ** args) {
+            return ImplCallStaticFunction<FunctionType>::call_imm(fn,ctx,args);
         }
     };
 
-    template <typename Result, typename CType>
-    struct ImplCallStaticFunctionImm<Result, CType, false, true> {
-        enum { valid = true };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...>) {
-            return (CType)fn(cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to(ctx, args[I])...);
-        }
-    };
-
-    template <typename Result>
-    struct ImplCallStaticFunctionImm<Result,Result, false, false> {
-        enum { valid = true };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline Result call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            return fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
-        }
-    };
-
-    template <typename CType, bool Pointer, bool IsEnum>
-    struct ImplCallStaticFunctionImm<void,CType,Pointer,IsEnum> {
-        enum { valid = true };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
+    template <typename FunctionType, typename CType, bool Pointer, bool IsEnum> // void
+    struct ImplCallStaticFunctionImpl<FunctionType,void,CType,Pointer,IsEnum> {
+        static __forceinline CType call(FunctionType && fn, Context & ctx, SimNode ** args) {
+            ImplCallStaticFunction<FunctionType>::call_imm(fn,ctx,args);
             return CType();
         }
+    };
+
+    template <typename FuncType, typename CType>
+    struct ImplCallStaticFunctionImm;
+
+    template <typename R, typename ...Args, typename CType>
+    struct ImplCallStaticFunctionImm<R (*)(Args...),CType>
+        : ImplCallStaticFunctionImpl<R (*)(Args...), R, CType,
+            is_any_pointer<R>::value && is_any_pointer<CType>::value,
+            is_enum<R>::value> {
     };
 
     template <typename Result>
@@ -189,26 +185,12 @@ namespace das
             : SimNode_ExtFuncCallBase(at,fnName) { }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            using FunctionTrait = function_traits<FuncT>;
-            using Result = typename FunctionTrait::return_type;
-            using Arguments = typename FunctionTrait::arguments;
-            const int nargs = tuple_size<Arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            return ImplCallStaticFunction<Result>::template
-                call<FuncT,Arguments>(*fn, context, arguments, Indices());
+            return ImplCallStaticFunction<FuncT>::call(*fn, context, arguments);
         }
 #define EVAL_NODE(TYPE,CTYPE)\
-        virtual CTYPE eval##TYPE ( Context & context ) override {                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
                 DAS_PROFILE_NODE \
-                using FunctionTrait = function_traits<FuncT>;                       \
-                using Result = typename FunctionTrait::return_type;                 \
-                using Arguments = typename FunctionTrait::arguments;                \
-                const int nargs = tuple_size<Arguments>::value;                     \
-                using Indices = make_index_sequence<nargs>;                         \
-                if ( !ImplCallStaticFunctionImm<Result,CTYPE>::valid )              \
-                    context.throw_error_at(debugInfo,"internal integration error"); \
-                return ImplCallStaticFunctionImm<Result,CTYPE>::template            \
-                    call<FuncT,Arguments>(*fn, context, arguments, Indices());      \
+                return ImplCallStaticFunctionImm<FuncT,CTYPE>::call(*fn, context, arguments); \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
