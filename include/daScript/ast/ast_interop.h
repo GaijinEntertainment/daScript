@@ -14,18 +14,22 @@ namespace das
         };
     };
 
+    template<typename F> struct makeFuncArgs;
+    template<typename R, typename ...Args> struct makeFuncArgs<R (*)(Args...)> : makeFuncArgs<R (Args...)> {};
+    template<typename R, typename ...Args>
+    struct makeFuncArgs<R (Args...)> {
+        static __forceinline vector<TypeDeclPtr> make ( const ModuleLibrary & lib ) {
+            return makeBuiltinArgs<R,Args...>(lib);
+        }
+    };
+
     template  <typename FuncT, FuncT fn, typename SimNodeT, typename FuncArgT>
     class ExternalFn : public ExternalFnBase {
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
     public:
         __forceinline ExternalFn(const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
         : ExternalFnBase(name,cppName) {
-            using FunctionTrait = function_traits<FuncArgT>;
-            const int nargs = tuple_size<typename FunctionTrait::arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            using Arguments = typename FunctionTrait::arguments;
-            using Result  = typename FunctionTrait::return_type;
-            constructExternal(makeArgs<Result,Arguments>(lib, Indices()));
+            constructExternal(makeFuncArgs<FuncArgT>::make(lib));
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);

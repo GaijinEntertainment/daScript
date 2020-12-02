@@ -1481,7 +1481,6 @@ namespace das {
 
     template <typename FuncT, FuncT fn>
     struct SimNode_Aot : SimNode_CallBase {
-        const char * extFnName = nullptr;
         __forceinline SimNode_Aot ( ) : SimNode_CallBase(LineInfo()) {
             aotFunction = (void*) fn;
         }
@@ -1506,7 +1505,6 @@ namespace das {
 
     template <typename FuncT, FuncT fn>
     struct SimNode_AotCMRES : SimNode_CallBase {
-        const char * extFnName = nullptr;
         __forceinline SimNode_AotCMRES ( ) : SimNode_CallBase(LineInfo()) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE

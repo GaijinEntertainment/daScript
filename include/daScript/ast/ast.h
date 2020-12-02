@@ -675,18 +675,6 @@ namespace das
         return { makeType<RetT>(lib), makeArgumentType<Args>(lib)... };
     }
 
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4100)
-#endif
-    template <typename RetT, typename ArgumentsType, size_t... I>
-    __noinline vector<TypeDeclPtr> makeArgs ( const ModuleLibrary & lib, index_sequence<I...> ) {
-        return { makeType<RetT>(lib), makeArgumentType< typename tuple_element<I, ArgumentsType>::type>(lib)... };
-    }
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-
     struct TypeInfoMacro : public ptr_ref_count {
         TypeInfoMacro ( const string & n )
             : name(n) {
