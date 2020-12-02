@@ -1,6 +1,5 @@
 #pragma once
 
-#include "daScript/misc/function_traits.h"
 #include "daScript/misc/callable.h"
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/debug_print.h"
@@ -1453,29 +1452,42 @@ namespace das {
         }
     };
 
-    template <typename Result>
-    struct ImplAotStaticFunction {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType && fn, Context & ctx, index_sequence<I...> ) {
-            return cast<Result>::from(
-            fn( cast_aot_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, ctx.abiArguments()[ I ? I-1 : 0 ] )... ) );
+    template <typename R, typename ...Arg>
+    struct CallAotStaticFunction {
+        template <size_t... I>
+        static __forceinline R call ( R (* fn) (Arg...), Context & ctx, index_sequence<I...> ) {
+            return fn(cast_aot_arg<Arg>::to(ctx,ctx.abiArguments()[I?I-1:0])...);
         }
     };
 
-    template <>
-    struct ImplAotStaticFunction<void> {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline vec4f call(FunctionType && fn, Context & ctx, index_sequence<I...> ) {
-            fn( cast_aot_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, ctx.abiArguments()[ I ? I-1 : 0 ] )... );
+    template <typename FunctionType>
+    struct ImplAotStaticFunction;
+
+    template <typename R, typename ...Arg>
+    struct ImplAotStaticFunction<R (*)(Arg...)> {
+        static __forceinline vec4f call ( R (*fn) (Arg...), Context & ctx ) {
+            return cast<R>::from(
+                CallAotStaticFunction<R,Arg...>::call(fn,ctx,make_index_sequence<sizeof...(Arg)>())
+            );
+        }
+    };
+
+    template <typename ...Arg>
+    struct ImplAotStaticFunction<void (*)(Arg...)> {
+        static __forceinline vec4f call ( void (*fn) (Arg...), Context & ctx ) {
+            CallAotStaticFunction<void,Arg...>::call(fn,ctx,make_index_sequence<sizeof...(Arg)>());
             return v_zero();
         }
     };
 
-    template <typename Result>
-    struct ImplAotStaticFunctionCMRES {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline Result call(FunctionType && fn, Context & ctx, index_sequence<I...> ) {
-            return fn( cast_aot_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, ctx.abiArguments()[ I ? I-1 : 0 ] )... );
+    template <typename FunctionType>
+    struct ImplAotStaticFunctionCMRES;
+
+    template <typename R, typename ...Arg>
+    struct ImplAotStaticFunctionCMRES<R (*)(Arg...)> {
+        static __forceinline void call ( R (*fn) (Arg...), Context & ctx ) {
+            using result = remove_const<R>::type;
+            *((result *) ctx.abiCMRES) = CallAotStaticFunction<R,Arg...>::call(fn,ctx,make_index_sequence<sizeof...(Arg)>());
         }
     };
 
@@ -1486,17 +1498,10 @@ namespace das {
         }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            using FunctionTrait = function_traits<FuncT>;
-            using Result = typename FunctionTrait::return_type;
-            using Arguments = typename FunctionTrait::arguments;
-            const int nargs = tuple_size<Arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            // TODO: sort out interop
             vec4f * aa = context.abiArg;
-            vec4f stub[1] = { v_zero() };
+            vec4f stub[1];
             if ( !aa ) context.abiArg = stub;
-            auto res = ImplAotStaticFunction<Result>::template
-                call<FuncT,Arguments>(*fn, context, Indices());
+            auto res = ImplAotStaticFunction<FuncT>::call(*fn, context);
             context.abiArg = aa;
             context.abiResult() = res;
             return res;
@@ -1508,17 +1513,10 @@ namespace das {
         __forceinline SimNode_AotCMRES ( ) : SimNode_CallBase(LineInfo()) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            using FunctionTrait = function_traits<FuncT>;
-            using Result = typename FunctionTrait::return_type;
-            using Arguments = typename FunctionTrait::arguments;
-            const int nargs = tuple_size<Arguments>::value;
-            using Indices = make_index_sequence<nargs>;
             vec4f * aa = context.abiArg;
-            vec4f stub[1] = { v_zero() };
-            if ( !aa ) { context.abiArg = stub; }
-            using ResultValue = typename remove_const<Result>::type;
-            *((ResultValue *)context.abiCMRES) = ImplAotStaticFunctionCMRES<Result>::template
-                call<FuncT,Arguments>(*fn, context, Indices());
+            vec4f stub[1];
+            if ( !aa ) context.abiArg = stub;
+            ImplAotStaticFunctionCMRES<FuncT>::call(*fn, context);
             context.abiArg = aa;
             context.abiResult() = cast<void *>::from(context.abiCMRES);
             return context.abiResult();
