@@ -1,7 +1,6 @@
 #pragma once
 
 #include "daScript/simulate/simulate.h"
-#include "daScript/misc/function_traits.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das
@@ -143,17 +142,16 @@ namespace das
             is_enum<R>::value> {
     };
 
-    template <typename Result>
-    struct ImplCallStaticFunctionAndCopy {
-        enum { valid = true };
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline void call(FunctionType && fn, Context & ctx, Result * res, SimNode ** args, index_sequence<I...> ) {
-            *res = fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... );
+    template <typename FunctionType>
+    struct ImplCallStaticFunctionAndCopy;
+
+    template <typename R, typename ...Args>
+    struct ImplCallStaticFunctionAndCopy < R (*)(Args...) > {
+        static __forceinline void call ( R (*fn)(Args...), Context & ctx, void * res, SimNode ** args ) {
+            using result = typename remove_const<R>::type;
+            *((result *)res) = CallStaticFunction<R,Args...>::call(fn,ctx,args,make_index_sequence<sizeof...(Args)>());
         }
     };
-
-    template <>
-    struct ImplCallStaticFunctionAndCopy<void>;
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -203,22 +201,20 @@ namespace das
             : SimNode_ExtFuncCallBase(at,fnName) { }
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            using FunctionTrait = function_traits<FuncT>;
-            using Result = typename FunctionTrait::return_type;
-            using Arguments = typename FunctionTrait::arguments;
-            const int nargs = tuple_size<Arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            Result * cmres = (Result *)(cmresEval->evalPtr(context));
-            ImplCallStaticFunctionAndCopy<Result>::template
-                call<FuncT,Arguments>(*fn, context, cmres, arguments, Indices());
-            return cast<Result *>::from(cmres);
+            void * cmres = cmresEval->evalPtr(context);
+            ImplCallStaticFunctionAndCopy<FuncT>::call(*fn, context, cmres, arguments);
+            return cast<void *>::from(cmres);
         }
     };
 
-    struct ImplCallStaticFunctionRef {
-        template <typename FunctionType, typename ArgumentsType, size_t... I>
-        static __forceinline char * call(FunctionType && fn, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            return (char *) & ( fn( cast_arg< typename tuple_element<I, ArgumentsType>::type  >::to ( ctx, args[ I ] )... ) );
+
+    template <typename FunctionType>
+    struct ImplCallStaticFunctionRef;
+
+    template <typename R, typename ...Args>
+    struct ImplCallStaticFunctionRef < R (*)(Args...) > {
+        static __forceinline char * call ( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return (char *) & CallStaticFunction<R,Args...>::call(fn,ctx,args,make_index_sequence<sizeof...(Args)>());
         }
     };
 
@@ -230,12 +226,7 @@ namespace das
             : SimNode_ExtFuncCallBase(at,fnName) { }
         __forceinline char * compute(Context & context) {
             DAS_PROFILE_NODE
-            using FunctionTrait = function_traits<FuncT>;
-            using Arguments = typename FunctionTrait::arguments;
-            const int nargs = tuple_size<Arguments>::value;
-            using Indices = make_index_sequence<nargs>;
-            return ImplCallStaticFunctionRef::template
-                call<FuncT, Arguments>(*fn, context, arguments, Indices());
+            return ImplCallStaticFunctionRef<FuncT>::call(*fn, context, arguments);
         }
     };
 
