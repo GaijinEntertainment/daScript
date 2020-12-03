@@ -288,7 +288,7 @@ namespace das
 
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
         vec4f evalWithCatch ( SimNode * node );
-        bool  runWithCatch ( const function<void()> & subexpr );
+        bool  runWithCatch ( const callable<void()> & subexpr );
 
         DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX;

@@ -772,7 +772,7 @@ namespace das
         static void Shutdown();
         static TypeAnnotation * resolveAnnotation ( const TypeInfo * info );
         static Type findOption ( const string & name );
-        static void foreach(function<bool(Module * module)> && func);
+        static void foreach(const callable<bool(Module * module)> & func);
         virtual uintptr_t rtti_getUserData() {return uintptr_t(0);}
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);
@@ -858,7 +858,7 @@ namespace das
         virtual ~ModuleLibrary() {};
         void addBuiltInModule ();
         void addModule ( Module * module );
-        void foreach ( function<bool (Module * module)> && func, const string & name ) const;
+        void foreach ( const callable<bool (Module * module)> & func, const string & name ) const;
         vector<TypeDeclPtr> findAlias ( const string & name, Module * inWhichModule ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name, Module * inWhichModule ) const;
         vector<TypeInfoMacroPtr> findTypeInfoMacro ( const string & name, Module * inWhichModule ) const;

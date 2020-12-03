@@ -93,7 +93,7 @@ namespace das {
         resetFusionEngine();
     }
 
-    void Module::foreach ( function<bool (Module * module)> && func ) {
+    void Module::foreach ( const callable<bool (Module * module)> & func ) {
         for (auto m = modules; m != nullptr; m = m->next) {
             if (!func(m)) break;
         }
@@ -547,7 +547,7 @@ namespace das {
         }
     }
 
-    void ModuleLibrary::foreach ( function<bool (Module * module)> && func, const string & moduleName ) const {
+    void ModuleLibrary::foreach ( const callable<bool (Module * module)> & func, const string & moduleName ) const {
         bool any = moduleName=="*";
         for ( auto pm : modules ) {
             if ( !any && pm->name!=moduleName ) continue;

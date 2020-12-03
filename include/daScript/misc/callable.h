@@ -16,23 +16,23 @@ namespace das {
 
     template <typename R, typename... Args>
     class callable<R(Args...)> {
-        typedef R (*invoke_fn_t)(char*, Args...);
+        typedef R (*invoke_fn_t)(const char*, Args...);
         template <typename Functor>
         static __forceinline R invoke_fn(Functor* fn, Args... args) {
             return (*fn)(forward<Args>(args)...);
         }
         invoke_fn_t     invoke_f;
-        char *          data_ptr;
+        const char *    data_ptr;
     public:
         callable(callable && rhs) = delete;
         callable(callable const& rhs) = delete;
         __forceinline callable() = default;
         template <typename Functor>
-        __forceinline callable(Functor * f)
+        __forceinline callable(const Functor & f)
             : invoke_f(reinterpret_cast<invoke_fn_t>(invoke_fn<Functor>))
-            , data_ptr(reinterpret_cast<char *>(f)) {
+            , data_ptr(reinterpret_cast<const char *>(&f)) {
         }
-        __forceinline R operator()(Args... args) {
+        __forceinline R operator()(Args... args) const {
             return this->invoke_f(this->data_ptr, forward<Args>(args)...);
         }
     };

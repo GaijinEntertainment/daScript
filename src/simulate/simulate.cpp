@@ -1193,7 +1193,7 @@ namespace das
 #endif
     }
 
-    bool Context::runWithCatch ( const function<void()> & subexpr ) {
+    bool Context::runWithCatch ( const callable<void()> & subexpr ) {
         auto aa = abiArg; auto acm = abiCMRES;
         char * EP, * SP;
         stack.watermark(EP,SP);

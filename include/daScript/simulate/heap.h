@@ -2,6 +2,7 @@
 
 #include "daScript/misc/memory_model.h"
 #include "daScript/misc/fnv.h"
+#include "daScript/misc/callable.h"
 
 namespace das {
 
@@ -170,7 +171,7 @@ namespace das {
 
     class StringHeapAllocator : public AnyHeapAllocator {
     public:
-        virtual void forEachString ( const function<void (const char *)> & fn ) = 0;
+        virtual void forEachString ( const callable<void (const char *)> & fn ) = 0;
         virtual void reset() override;
     public:
         char * allocateString ( const char * text, uint32_t length );
@@ -262,7 +263,7 @@ namespace das {
         virtual uint64_t bytesAllocated() const override { return model.bytesAllocated(); }
         virtual uint64_t totalAlignedMemoryAllocated() const override { return model.totalAlignedMemoryAllocated(); }
         virtual void reset() override { model.reset(); }
-        virtual void forEachString ( const function<void (const char *)> & fn ) override ;
+        virtual void forEachString ( const callable<void (const char *)> & fn ) override ;
         virtual void report() override ;
         virtual bool mark() override;
         virtual void mark ( char * ptr, uint32_t size ) override;
@@ -289,7 +290,7 @@ namespace das {
         virtual uint64_t bytesAllocated() const override { return model.bytesAllocated(); }
         virtual uint64_t totalAlignedMemoryAllocated() const override { return model.totalAlignedMemoryAllocated(); }
         virtual void reset() override { model.reset(); }
-        virtual void forEachString ( const function<void (const char *)> & fn ) override;
+        virtual void forEachString ( const callable<void (const char *)> & fn ) override;
         virtual void report() override;
         virtual bool mark() override { return false; }
         virtual void mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); }
