@@ -13,7 +13,7 @@ require daslib/template_boost
 //  @@ (effects : int) // effects : ArmyEffects
 //      return <- [{ auto[] val => 1.0 }]
 [call_macro(name="trivial_value")]
-class ApplyMacro : AstCallMacro
+class TrivialValueMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         // check if we  get correct number of arguments
         if call.arguments.length!=1
