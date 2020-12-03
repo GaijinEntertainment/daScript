@@ -53,7 +53,7 @@ namespace das
 
     template <typename R, typename ...Args>
     struct ImplCallStaticFunction<R (*)(Args...)> {
-        static __forceinline vec4f call( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
+        static _msc_inline_bug vec4f call( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
             return cast<R>::from(CallStaticFunction<R,Args...>(fn,ctx,args));
         }
     };

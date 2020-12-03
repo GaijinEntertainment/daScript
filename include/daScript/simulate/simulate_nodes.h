@@ -3670,12 +3670,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         int32_t     variant;
     };
 
-#if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)
-#define _msc_inline_bug __declspec(noinline)
-#else
-#define _msc_inline_bug __forceinline
-#endif
-
 #define DEFINE_POLICY(CALL) template <typename SimPolicy> struct Sim_##CALL;
 
 #define IMPLEMENT_OP1_POLICY_BASE(CALL,TYPE,CTYPE,INLINE)               \

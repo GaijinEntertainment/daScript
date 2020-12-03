@@ -193,5 +193,11 @@ inline void das_aligned_free16(void *ptr) {
 #define DAS_SANITIZER   0
 #endif
 
+#if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)
+#define _msc_inline_bug __declspec(noinline)
+#else
+#define _msc_inline_bug __forceinline
+#endif
+
 #include "daScript/misc/smart_ptr.h"
 
