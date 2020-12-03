@@ -22,6 +22,21 @@ def test_ifs
     assert(s is s_value)
     assert(s as s_value == "3")
 
+variant FooIS
+    i : int
+    s : string
+    // j : int
+
+[sideeffects]
+def test_short_notation
+    let e = [[FooIS 1]]
+    assert(e is i)
+    assert(e as i == 1)
+    let ee = [[FooIS 1;"2"]]
+    assert((ee[0] is i) && (ee[0] as i == 1))
+    assert((ee[1] is s) && (ee[1] as s == "2"))
+    return true
+
 [export]
 def test
 
@@ -104,5 +119,7 @@ def test
         assert(y as a[t]==t)
 
     test_ifs()
+
+    test_short_notation()
 
     return true

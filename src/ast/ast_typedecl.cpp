@@ -1841,6 +1841,22 @@ namespace das
         return offset;
     }
 
+    int TypeDecl::getVariantUniqueFieldIndex ( const TypeDeclPtr & uniqueType ) const {
+        int index = -1;
+        int idx = 0;
+        for ( const auto & argT : argTypes ) {
+            if ( argT->isSameType(*uniqueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::yes) ) {
+                if ( index != -1 ) {
+                    return -1;
+                } else {
+                    index = idx;
+                }
+            }
+            idx ++;
+        }
+        return index;
+    }
+
     int TypeDecl::getVariantSize() const {
         DAS_ASSERT(baseType==Type::tVariant);
         int maxSize = 0;

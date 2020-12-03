@@ -6280,9 +6280,48 @@ namespace das {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
             if ( !canCopyOrMoveType(expr->recordType,init->type,TemporaryMatters::no) ) {
-                error("can't initialize array element " + to_string(index) + "; expecting "
-                      +expr->recordType->describe()+", passing "+init->type->describe(), "", "",
-                        init->at, CompilationError::invalid_type );
+                if ( expr->recordType->isVariant() ) {
+                    int uidx = expr->recordType->getVariantUniqueFieldIndex(init->type);
+                    if ( uidx==-1 ) {
+                        vector<pair<string,TypeDeclPtr>> options;
+                        for ( size_t vi=0; vi != expr->recordType->argTypes.size(); ++vi ) {
+                            const auto & argT = expr->recordType->argTypes[vi];
+                            if ( argT->isSameType(*init->type,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no) ) {
+                                options.emplace_back(expr->recordType->argNames[vi], argT);
+                            }
+                        }
+                        if ( options.size()==0 ) {
+                            error("can't recognize unique variant " + init->type->describe() + " in " + expr->recordType->describe(), "", "",
+                                init->at, CompilationError::invalid_type);
+                        } else {
+                            TextWriter tw;
+                            for ( auto & opt : options ) {
+                                tw << "\t\t" << opt.first << ":" << opt.second->describe();
+                                if ( opt!=options.back() )
+                                    tw << "\n";
+                            }
+                            error("can't recognize unique variant " + init->type->describe() + " in " + expr->recordType->describe(),
+                                "\tcandidates are:\n" + tw.str(), "",
+                                init->at, CompilationError::invalid_type);
+                        }
+                    } else {
+                        auto mkv = make_smart<ExprMakeVariant>(expr->at);
+                        mkv->variants.push_back(make_smart<MakeFieldDecl>(
+                            init->at,
+                            expr->recordType->argNames[uidx],
+                            init->clone(),
+                            false,          // move
+                            false           // clone
+                        ));
+                        mkv->makeType = make_smart<TypeDecl>(*expr->recordType);
+                        reportAstChanged();
+                        return mkv;
+                    }
+                } else {
+                    error("can't initialize array element " + to_string(index) + "; expecting "
+                        +expr->recordType->describe()+", passing "+init->type->describe(), "", "",
+                            init->at, CompilationError::invalid_type );
+                }
             } else if ( !expr->recordType->canCopy() && expr->recordType->canMove() && init->type->isConst() ) {
                 error("can't move from a constant value\n\t" + init->type->describe(), "", "",
                     init->at, CompilationError::cant_move);
@@ -6300,6 +6339,39 @@ namespace das {
             if ( !expr->recordType ) {
                 return Visitor::visit(expr);
             }
+            if ( expr->recordType->isVariant() ) {
+                bool canPromoteToMakeVariant = true;
+                for ( auto & eval : expr->values ) {
+                    if ( !eval->rtti_isMakeVariant() ) {
+                        canPromoteToMakeVariant = false;
+                        break;
+                    } else {
+                        auto emkv = static_pointer_cast<ExprMakeVariant>(eval);
+                        if ( emkv->variants.size()!=1 ) {
+                            canPromoteToMakeVariant = false;
+                            break;
+                        }
+                    }
+                }
+                if ( canPromoteToMakeVariant ) {
+                        auto mkv = make_smart<ExprMakeVariant>(expr->at);
+                        for ( const auto & eval : expr->values ) {
+                            auto emkv = static_pointer_cast<ExprMakeVariant>(eval);
+                            DAS_ASSERT(emkv->variants.size()==1);
+                            const auto & fmkv = emkv->variants[0];
+                            mkv->variants.push_back(make_smart<MakeFieldDecl>(
+                                fmkv->at,
+                                fmkv->name,
+                                fmkv->value->clone(),
+                                bool(fmkv->moveSemantics),
+                                bool(fmkv->cloneSemantics)
+                            ));
+                        }
+                        mkv->makeType = make_smart<TypeDecl>(*expr->makeType);
+                        reportAstChanged();
+                        return mkv;
+                }
+            }
             if ( !expr->recordType->canCopy() && !expr->recordType->canMove() ) {
                 error("array element has to be copyable or moveable", "", "",
                     expr->at, CompilationError::invalid_type);
@@ -6311,14 +6383,25 @@ namespace das {
                 resT->dim[0] = resDim;
             } else {
                 DAS_ASSERT(expr->values.size()==1);
-                reportAstChanged();
-                auto resExpr = expr->values[0];
-                if ( resExpr->rtti_isMakeTuple() ) {
-                    auto mkt = static_pointer_cast<ExprMakeTuple>(resExpr);
-                    mkt->recordType = make_smart<TypeDecl>(*expr->recordType);
-                    mkt->makeType.reset();
+                auto eval = expr->values[0];
+                if ( !eval->type ) {
+                    error("unknown value type", "", "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                } else if ( !expr->recordType->isSameType(*(eval->type),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no) ) {
+                    error("incompatible value type. expecting " + expr->recordType->describe() + " vs " + eval->type->describe(), "", "",
+                        eval->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                } else {
+                    reportAstChanged();
+                    auto resExpr = expr->values[0];
+                    if ( resExpr->rtti_isMakeTuple() ) {
+                        auto mkt = static_pointer_cast<ExprMakeTuple>(resExpr);
+                        mkt->recordType = make_smart<TypeDecl>(*expr->recordType);
+                        mkt->makeType.reset();
+                    }
+                    return resExpr;
                 }
-                return resExpr;
             }
             expr->type = resT;
             verifyType(expr->type);

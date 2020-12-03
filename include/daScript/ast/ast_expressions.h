@@ -1207,6 +1207,7 @@ namespace das
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
+        virtual bool rtti_isMakeVariant() const override { return true; }
         vector<MakeFieldDeclPtr>    variants;
     };
 

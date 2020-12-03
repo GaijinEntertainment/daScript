@@ -101,6 +101,7 @@ namespace das {
         int getVariantSize() const;
         int getVariantAlign() const;
         int getVariantFieldOffset ( int index ) const;
+        int getVariantUniqueFieldIndex ( const TypeDeclPtr & uniqueType ) const;
         string describe ( DescribeExtra extra = DescribeExtra::yes, DescribeContracts contracts = DescribeContracts::yes, DescribeModule module = DescribeModule::yes) const;
         bool canCopy() const;
         bool canMove() const;
