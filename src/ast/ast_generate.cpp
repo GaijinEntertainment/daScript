@@ -531,7 +531,7 @@ namespace das {
         cTHIS->at = block->at;
         cTHIS->name = "__this";
         cTHIS->type = make_smart<TypeDecl>(ls);
-        cTHIS->isExplicit = true;
+        cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         for ( auto & arg : block->arguments ) {
             auto cA = arg->clone();
