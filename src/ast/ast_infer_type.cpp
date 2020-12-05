@@ -5566,11 +5566,7 @@ namespace das {
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
             if ( functions.size()>1 ) {
-                vector<TypeDeclPtr> arguments;
-                for ( auto & arg : expr->arguments ) {
-                    arguments.push_back(arg->type);
-                }
-                applyLSP(arguments,functions);
+                applyLSP(types,functions);
             }
             if ( functions.size()==1 ) {
                 auto funcC = functions.back();
