@@ -1470,6 +1470,10 @@ namespace das {
                         var->at, CompilationError::invalid_variable_type);
                 }
             }
+            if ( !var->init && var->type->hasNonTrivialCtor() ) {
+                error("global variable of type " + var->type->describe() + " needs to be initialized", "", "",
+                    var->at, CompilationError::invalid_variable_type);
+            }
             verifyType(var->type);
             return Visitor::visitGlobalLet(var);
         }
@@ -5132,7 +5136,7 @@ namespace das {
                 if ( !var->init && var->type->isLocal() ) { // we already report error for non-local
                     if ( var->type->hasNonTrivialCtor() ) {
                         error("local variable of type " + var->type->describe() + " needs to be initialized", "", "",
-                            var->at, CompilationError::unsafe);
+                            var->at, CompilationError::invalid_variable_type);
                     }
                 } else if ( var->init && var->init->rtti_isCast() ) {
                     auto castExpr = static_pointer_cast<ExprCast>(var->init);
