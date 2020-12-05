@@ -432,25 +432,6 @@ namespace das
         }
     }
 
-    string LineInfo::describeJson() const {
-        string fileName = fileInfo ? fileInfo->name : "";
-        int tabSize = fileInfo ? fileInfo->tabSize : 4;
-        TextWriter ss;
-        ss  <<  "\"uri\":\"" << escapeString(fileName) << "\",\n"
-            <<  "\"tab\":" << tabSize << ","
-            <<  "\"range\":{"
-            <<  "\"start\":{"
-            <<  "\"line\":" << line << ","
-            <<  "\"character\": " << column
-            <<  "},"
-            <<  "\"end\":{"
-            <<  "\"line\":" << last_line << ","
-            <<  "\"character\":" << last_column
-            <<  "}"
-            <<  "}\n";
-        return ss.str();
-    }
-
     bool LineInfo::operator < ( const LineInfo & info ) const {
         if ( fileInfo && info.fileInfo && fileInfo->name != info.fileInfo->name)
             return fileInfo->name<info.fileInfo->name;

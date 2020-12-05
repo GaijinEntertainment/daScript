@@ -152,7 +152,6 @@ namespace das
         bool operator != ( const LineInfo & info ) const;
         bool inside ( const LineInfo & info ) const;
         string describe(bool fully = false) const;
-        string describeJson() const;
         FileInfo *  fileInfo = nullptr;
         uint32_t    column = 0, line = 0;
         uint32_t    last_column = 0, last_line = 0;
