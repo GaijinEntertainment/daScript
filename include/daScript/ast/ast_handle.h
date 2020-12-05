@@ -125,6 +125,7 @@ namespace das
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
+        virtual bool hasNonTrivialCtor() const override { return !is_trivially_constructible<OT>::value; }
         template <typename FunT, FunT PROP>
         void addProperty ( const string & na, const string & cppNa="" ) {
             auto & field = fields[na];
@@ -530,6 +531,7 @@ namespace das
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
         virtual bool isLocal() const override { return true; }
+        virtual bool hasNonTrivialCtor() const override { return !is_trivially_constructible<OT>::value; }
         virtual bool isPod() const override { return true; }
         virtual bool isRawPod() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }

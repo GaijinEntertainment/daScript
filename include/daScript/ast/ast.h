@@ -180,6 +180,8 @@ namespace das
         bool isTemp( das_set<Structure *> & dep ) const;
         bool isShareable ( das_set<Structure *> & dep ) const;
         bool hasClasses( das_set<Structure *> & dep ) const;
+        bool hasNonTrivialCtor ( das_set<Structure *> & dep ) const;
+        bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
@@ -322,6 +324,8 @@ namespace das
         virtual bool isRawPod() const { return false; }
         virtual bool isRefType() const { return false; }
         virtual bool isLocal() const { return false; }
+        virtual bool hasNonTrivialCtor() const { return true; }
+        virtual bool canBePlacedInContainer() const { return false; }
         virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
         virtual bool needDelete() const { return canDelete(); }

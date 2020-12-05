@@ -91,16 +91,16 @@ namespace das {
         bool        is_valid;
         uint64_t size() const   { return stats.st_size; }
 #if defined(_MSC_VER)
-        Time     atime() const  { return stats.st_atime; }
-        Time     ctime() const  { return stats.st_ctime; }
-        Time     mtime() const  { return stats.st_mtime; }
+        Time     atime() const  { return { stats.st_atime }; }
+        Time     ctime() const  { return { stats.st_ctime }; }
+        Time     mtime() const  { return { stats.st_mtime }; }
         bool     is_reg() const { return stats.st_mode & _S_IFREG; }
         bool     is_dir() const { return stats.st_mode & _S_IFDIR; }
 
 #else
-        Time     atime() const  { return stats.st_atime; }
-        Time     ctime() const  { return stats.st_ctime; }
-        Time     mtime() const  { return stats.st_mtime; }
+        Time     atime() const  { return { stats.st_atime }; }
+        Time     ctime() const  { return { stats.st_ctime }; }
+        Time     mtime() const  { return { stats.st_mtime }; }
         bool     is_reg() const { return S_ISREG(stats.st_mode); }
         bool     is_dir() const { return S_ISDIR(stats.st_mode); }
 

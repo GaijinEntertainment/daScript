@@ -69,9 +69,8 @@ struct TestObjectFoo {
     Point3 hit;
     int32_t fooData;
     SomeEnum_16 e16;
-    TestObjectFoo * foo_loop = nullptr;
+    TestObjectFoo * foo_loop;
     int32_t fooArray[3];
-    TestObjectFoo() {}
     int propAdd13() {
         return fooData + 13;
     }
@@ -88,6 +87,7 @@ struct TestObjectFoo {
     __forceinline TestObjectFoo * getLoop() { return foo_loop; }
     __forceinline const TestObjectFoo * getLoop() const { return foo_loop; }
 };
+static_assert ( std::is_trivially_constructible<TestObjectFoo>::value, "this one needs to remain trivially constructable" );
 
 typedef das::vector<TestObjectFoo> FooArray;
 

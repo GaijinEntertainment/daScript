@@ -6,12 +6,6 @@ namespace das {
 
     struct Time {
         time_t time;
-        Time() = default;
-        Time(time_t t) : time(t) {}
-        Time(const Time &) = default;
-        Time(Time &&) = default;
-        Time & operator = ( const Time & ) = default;
-        Time & operator = ( time_t t ) { time = t; return *this; }
     };
 
     template <>

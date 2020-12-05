@@ -315,6 +315,24 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
+    bool Structure::canBePlacedInContainer(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && !fd.type->canBePlacedInContainer(dep) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool Structure::hasNonTrivialCtor(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && !fd.type->hasNonTrivialCtor(dep) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool Structure::isLocal(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->isLocal(dep) ) {

@@ -173,8 +173,8 @@ namespace das {
                         error("can't declare a void array, " + arrayType->describe(), "", "",
                               arrayType->at,CompilationError::invalid_array_type);
                     }
-                    if ( !arrayType->isLocal() ) {
-                        error("array type has to be 'local', " + arrayType->describe(), "", "",
+                    if ( !arrayType->canBePlacedInContainer() ) {
+                        error("can't have array of non-trivial type, " + arrayType->describe(), "", "",
                               arrayType->at,CompilationError::invalid_type);
                     }
                     verifyType(arrayType);
@@ -204,8 +204,8 @@ namespace das {
                         error("table value can't be declared as a reference, " + valueType->describe(), "", "",
                               valueType->at,CompilationError::invalid_table_type);
                     }
-                    if ( !valueType->isLocal() ) {
-                        error("table value has to be 'local', " + valueType->describe(), "", "",
+                    if ( !valueType->canBePlacedInContainer() ) {
+                        error("can't have table value of non-trivial type, " + valueType->describe(), "", "",
                               valueType->at,CompilationError::invalid_type);
                     }
                     verifyType(valueType);
@@ -5129,7 +5129,12 @@ namespace das {
                       var->at, CompilationError::unsafe);
             }
             if ( !var->type->isAutoOrAlias() ){
-                if ( var->init && var->init->rtti_isCast() ) {
+                if ( !var->init && var->type->isLocal() ) { // we already report error for non-local
+                    if ( var->type->hasNonTrivialCtor() ) {
+                        error("local variable of type " + var->type->describe() + " needs to be initialized", "", "",
+                            var->at, CompilationError::unsafe);
+                    }
+                } else if ( var->init && var->init->rtti_isCast() ) {
                     auto castExpr = static_pointer_cast<ExprCast>(var->init);
                     if ( castExpr->castType->isAuto() ) {
                         reportAstChanged();
@@ -5565,9 +5570,7 @@ namespace das {
             }
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
-            if ( functions.size()>1 ) {
-                applyLSP(types,functions);
-            }
+            applyLSP(types,functions);
             if ( functions.size()==1 ) {
                 auto funcC = functions.back();
                 if ( funcC->firstArgReturnType ) {
