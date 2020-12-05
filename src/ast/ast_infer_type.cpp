@@ -961,7 +961,13 @@ namespace das {
                 ss << "\t";
                 if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
                     ss << missFn->module->name << "::";
-                ss << missFn->describe() << "\n";
+                ss << missFn->describe();
+                if ( missFn->builtIn ) {
+                    ss << " // builtin";
+                } else {
+                    ss << " at " << missFn->at.describe();
+                }
+                ss << "\n";
                 if ( reportDetails ) {
                     ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                 }
@@ -999,7 +1005,13 @@ namespace das {
                 ss << "\t";
                 if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
                     ss << missFn->module->name << "::";
-                ss << missFn->describe() << "\n";
+                ss << missFn->describe();
+                if ( missFn->builtIn ) {
+                    ss << " // builtin";
+                } else if ( missFn->at.line ) {
+                    ss << " at " << missFn->at.describe();
+                }
+                ss << "\n";
                 if ( reportDetails ) {
                     ss << describeMismatchingFunction(missFn, arguments, inferAuto, inferBlocks);
                 }
@@ -1042,7 +1054,9 @@ namespace das {
             vector<TypeDeclPtr> argDummy;
             argDummy.push_back(make_smart<TypeDecl>(*left));
             argDummy.push_back(make_smart<TypeDecl>(*right));
-            return findMatchingFunctions("_::clone", argDummy);
+            auto clones = findMatchingFunctions("_::clone", argDummy);
+            applyLSP(argDummy, clones);
+            return clones;
         }
 
         bool verifyCloneFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
@@ -1052,7 +1066,9 @@ namespace das {
         vector<FunctionPtr> getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
             vector<TypeDeclPtr> argDummy;
             argDummy.push_back(make_smart<TypeDecl>(*subexpr));
-            return findMatchingFunctions("_::finalize", argDummy);
+            auto fins = findMatchingFunctions("_::finalize", argDummy);
+            applyLSP(argDummy, fins);
+            return fins;
         }
 
         bool verifyFinalizeFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
@@ -4110,7 +4126,11 @@ namespace das {
             } else {
                 TextWriter errs;
                 for ( auto & var : vars ) {
-                    errs << "\t" << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
+                    errs << "\t" << var->module->name << "::" << var->name << " : " << var->type->describe();
+                    if ( var->at.line ) {
+                        errs << " at " << var->at.describe();
+                    }
+                    errs << "\n";
                 }
                 error("too many matching variables " + expr->name, "candidates are:\n" + errs.str(), "",
                     expr->at, CompilationError::variable_not_found);
@@ -5373,10 +5393,10 @@ namespace das {
         }
 
         // however many casts is where its at
-        int computeSubstituteDistance ( ExprLooksLikeCall * expr, const FunctionPtr & fn ) const {
+        static int computeSubstituteDistance ( const vector<TypeDeclPtr> & arguments, const FunctionPtr & fn ) {
             int distance = 0;
-            for ( size_t i=0; i!=expr->arguments.size(); ++i ) {
-                const auto & argType = expr->arguments[i]->type;
+            for ( size_t i=0; i!=arguments.size(); ++i ) {
+                const auto & argType = arguments[i];
                 const auto & funType = fn->arguments[i]->type;
                 if ( !argType->isSameType ( *funType, RefMatters::no, ConstMatters::no,
                     TemporaryMatters::no, AllowSubstitute::no) ) {
@@ -5504,6 +5524,28 @@ namespace das {
             }
         }
 
+        static void applyLSP ( const vector<TypeDeclPtr> & arguments, vector<FunctionPtr> & functions ) {
+            if ( functions.size()<=1 ) return;
+            vector<pair<int,FunctionPtr>> fnm;
+            for ( auto & fn : functions ) {
+                auto dist = computeSubstituteDistance(arguments, fn);
+                fnm.push_back(make_pair(dist,fn));
+            }
+            sort ( fnm.begin(), fnm.end(), [&] ( auto a, auto b ) {
+                return a.first < b.first;
+            });
+            int count = 1;
+            int depth = fnm[0].first;
+            while ( count < int(fnm.size()) ) {
+                if ( fnm[count].first != depth ) break;
+                count ++;
+            }
+            if ( count == 1 ) {
+                functions.resize(1);
+                functions[0] = fnm[0].second;
+            }
+        }
+
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
             // infer
             vector<TypeDeclPtr> types;
@@ -5524,24 +5566,11 @@ namespace das {
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
             if ( functions.size()>1 ) {
-                vector<pair<int,FunctionPtr>> fnm;
-                for ( auto & fn : functions ) {
-                    auto dist = computeSubstituteDistance(expr, fn);
-                    fnm.push_back(make_pair(dist,fn));
+                vector<TypeDeclPtr> arguments;
+                for ( auto & arg : expr->arguments ) {
+                    arguments.push_back(arg->type);
                 }
-                sort ( fnm.begin(), fnm.end(), [&] ( auto a, auto b ) {
-                    return a.first < b.first;
-                });
-                int count = 1;
-                int depth = fnm[0].first;
-                while ( count < int(fnm.size()) ) {
-                    if ( fnm[count].first != depth ) break;
-                    count ++;
-                }
-                if ( count == 1 ) {
-                    functions.resize(1);
-                    functions[0] = fnm[0].second;
-                }
+                applyLSP(arguments,functions);
             }
             if ( functions.size()==1 ) {
                 auto funcC = functions.back();
