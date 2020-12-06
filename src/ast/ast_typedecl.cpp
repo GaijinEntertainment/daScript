@@ -787,7 +787,7 @@ namespace das
             return annotation->isLocal() && !annotation->hasNonTrivialCtor();
         } else if ( baseType==Type::tStructure ) {
             if (structType) {
-                if (dep.find(structType) != dep.end()) return false;
+                if (dep.find(structType) != dep.end()) return true;
                 dep.insert(structType);
                 return structType->canBePlacedInContainer(dep);
             }
