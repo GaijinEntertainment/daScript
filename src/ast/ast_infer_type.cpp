@@ -4170,6 +4170,7 @@ namespace das {
             // infer
             vector<TypeDeclPtr> types = { expr->subexpr->type };
             auto functions = findMatchingFunctions(expr->op, types);
+            applyLSP(types, functions);
             if ( functions.size()==0 ) {
                 reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
             } else if ( functions.size()>1 ) {
@@ -4290,6 +4291,7 @@ namespace das {
                         expr->at, CompilationError::invalid_type);
             vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
             auto functions = findMatchingFunctions("_::" + expr->op, types);    // NOTE: operators always in the context of the callee
+            applyLSP(types, functions);
             if (functions.size() != 1) {
                 if (expr->left->type->isNumeric() && expr->right->type->isNumeric()) {
                     if ( isAssignmentOperator(expr->op) ) {
@@ -5343,6 +5345,13 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             auto functions = findMatchingFunctions(expr->name, expr->arguments, true);
             auto generics = findMatchingGenerics(expr->name, expr->arguments);
+            if ( functions.size()> 1 ) {
+                vector<TypeDeclPtr> types;
+                for ( const auto & arg : expr->arguments ) {
+                    types.push_back(arg->value->type);
+                }
+                applyLSP(types, functions);
+            }
             if ( generics.size()>1 || functions.size()>1 ) {
                 reportExcess(expr, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
