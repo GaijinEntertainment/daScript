@@ -658,7 +658,17 @@ namespace das
                     auto left = ann->simulateGetField(decl->name, context, at, fakeExpr);
                     auto right = decl->value->simulate(context);
                     if ( !decl->value->type->isRef() ) {
-                        cpy = context.code->makeValueNode<SimNode_Set>(decl->value->type->baseType, decl->at, left, right);
+                        if ( decl->value->type->isHandle() ) {
+                            auto rightType = decl->value->type;
+                            cpy = rightType->annotation->simulateCopy(context, at, left,
+                                (!rightType->isRefType() && rightType->ref) ? rightType->annotation->simulateRef2Value(context, at, right) : right);
+                            if ( !cpy ) {
+                                context.thisProgram->error("integration error, simulateCopy returned null", "", "",
+                                                        at, CompilationError::missing_node );
+                            }
+                        } else {
+                            cpy = context.code->makeValueNode<SimNode_Set>(decl->value->type->baseType, decl->at, left, right);
+                        }
                     } else if ( decl->moveSemantics ) {
                         cpy = context.code->makeNode<SimNode_MoveRefValue>(decl->at, left, right, fieldSize);
                     } else {
