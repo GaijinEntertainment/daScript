@@ -595,7 +595,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             for (int i = 0; i != nElem; ++i)
                 argValues[i] = arguments[i]->eval(context);
     }};
-    template <> struct EvalBlock<0> { static __forceinline void eval(Context &, SimNode **, vec4f *) {} };
+    template <> struct EvalBlock<0> { static __forceinline void eval(Context &, SimNode **, vec4f * argValues ) {
+        argValues[0] = v_zero();
+    }};
     template <> struct EvalBlock<1> { static __forceinline void eval(Context & context, SimNode ** arguments, vec4f * argValues) {
             argValues[0] = arguments[0]->eval(context);
     }};

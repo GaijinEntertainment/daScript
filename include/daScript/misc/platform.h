@@ -67,9 +67,9 @@
 
 #ifndef _MSC_VER
     #define __forceinline inline __attribute__((always_inline))
-    #define __noinline __attribute__((noinline))
+    #define ___noinline __attribute__((noinline))
 #else
-    #define __noinline __declspec(noinline)
+    #define ___noinline __declspec(noinline)
 #endif
 
 #if defined(__has_feature)

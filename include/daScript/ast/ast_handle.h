@@ -302,7 +302,7 @@ namespace das
                 V_ARG_THIS(range);
                 V_END();
             }
-            __noinline char * compute ( Context & context ) {
+            ___noinline char * compute ( Context & context ) {
                 DAS_PROFILE_NODE
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));

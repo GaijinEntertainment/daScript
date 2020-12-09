@@ -56,7 +56,7 @@ namespace das
         defaultTempFn() = default;
         defaultTempFn ( bool args, bool impl, bool result, bool econst )
             : tempArgs(args), implicitArgs(impl), tempResult(result), explicitConstArgs(econst) {}
-        __noinline bool operator () ( Function * fn ) {
+        ___noinline bool operator () ( Function * fn ) {
             if ( tempArgs || implicitArgs ) {
                 for ( auto & arg : fn->arguments ) {
                     if ( arg->type->isTempType() ) {

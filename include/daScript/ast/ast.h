@@ -676,7 +676,7 @@ namespace das
     };
 
     template <typename RetT, typename ...Args>
-    __noinline vector<TypeDeclPtr> makeBuiltinArgs ( const ModuleLibrary & lib ) {
+    ___noinline vector<TypeDeclPtr> makeBuiltinArgs ( const ModuleLibrary & lib ) {
         return { makeType<RetT>(lib), makeArgumentType<Args>(lib)... };
     }
 
