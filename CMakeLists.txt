@@ -340,6 +340,27 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
         COMMAND ${dasAotTool} ${input_src} ${out_src}
     )
     list(APPEND ${genList} ${out_src})
+    set(custom_name ${mainTarget}_${input_name}_aot)
+    ADD_CUSTOM_TARGET(${custom_name} ALL DEPENDS ${out_src})
+    SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
+    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
+ENDMACRO()
+
+MACRO(DAS_AOT_D input genList mainTarget dasAotTool)
+    get_filename_component(input_src ${input} ABSOLUTE)
+    get_filename_component(input_dir ${input_src} DIRECTORY)
+    get_filename_component(input_name ${input} NAME)
+    set(out_dir ${input_dir}/_aot_generated)
+    set(out_src ${out_dir}/${input_name}.cpp)
+    file(MAKE_DIRECTORY ${out_dir})
+	ADD_CUSTOM_COMMAND(
+		DEPENDS ${input_src}
+        DEPENDS ${dasAotTool}
+        OUTPUT  ${out_src}
+        COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+        COMMAND ${dasAotTool} ${input_src} ${out_src}
+    )
+    list(APPEND ${genList} ${out_src})
 ENDMACRO()
 
 SET(AOT_BATCH_SIZE 10)
@@ -349,7 +370,7 @@ MACRO(DAS_AOT_DIR inFiles genList mainTarget dasAotTool)
     set(batch_index 0)
     set(batch_list)
     FOREACH(inF ${inFiles})
-        DAS_AOT(${inF} batch_list ${mainTarget} ${dasAotTool})
+        DAS_AOT_D(${inF} batch_list ${mainTarget} ${dasAotTool})
         math(EXPR file_index "${file_index} + 1")
         if(file_index EQUAL ${AOT_BATCH_SIZE})
             set(custom_name ${mainTarget}_${batch_index}_aot)
