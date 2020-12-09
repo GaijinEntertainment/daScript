@@ -120,7 +120,7 @@ namespace das
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
-        das_map<string, FileInfoPtr>    files;
+        das_hash_map<string, FileInfoPtr>    files;
     };
     typedef smart_ptr<FileAccess> FileAccessPtr;
 

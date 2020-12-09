@@ -43,7 +43,7 @@ namespace das {
         vector<ExprBlock *>     scopes;
         vector<ExprWith *>      with;
         vector<size_t>          varStack;
-        das_map<int32_t,int32_t>    labels;
+        das_hash_set<int32_t>   labels;
         size_t                  fieldOffset = 0;
         int32_t                 fieldIndex = 0;
         bool                    cppLayout = false;
@@ -1732,8 +1732,7 @@ namespace das {
     // ExprLabel
         virtual void preVisit ( ExprLabel * expr ) override {
             Visitor::preVisit(expr);
-            auto total = ++labels[expr->label];
-            if ( total != 1 ) {
+            if ( !labels.insert(expr->label).second ) {
                 error("duplicate label " + to_string(expr->label),  "", "",
                     expr->at, CompilationError::invalid_label);
             }
