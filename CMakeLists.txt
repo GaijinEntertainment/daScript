@@ -304,7 +304,7 @@ ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${S
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC})
 SETUP_CPP11(libDaScript)
-target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 
 IF(DAS_GEN_FOR_EACH_INCLUDED)
     DAS_GEN_FOR_EACH(include/daScript/simulate/for_each.h ${MAX_DAS_FOR_EACH_ARGS})
@@ -481,7 +481,7 @@ ADD_DEPENDENCIES(pathTracer libDaScript libPathTracerHelper)
 TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC examples/pathTracer)
 SETUP_CPP11(pathTracer)
 add_dependencies(pathTracer pathTracerAot dasAotStub)
-target_precompile_headers(pathTracer PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(pathTracer PUBLIC include/daScript/misc/platform.h)
 
 # Stand alone command line compiler
 
@@ -574,7 +574,7 @@ TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)
 SETUP_LTO(daScriptTest)
-target_precompile_headers(daScriptTest PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(daScriptTest PUBLIC include/daScript/misc/platform.h)
 
 # Profile module
 
@@ -614,7 +614,7 @@ TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
 ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)
 add_dependencies(daScriptProfile daScriptProfileAot dasAotStub)
-target_precompile_headers(daScriptProfile PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(daScriptProfile PUBLIC include/daScript/misc/platform.h)
 
 MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
     add_executable(${tutorial_name} ${tutorial_src})

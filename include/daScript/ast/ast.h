@@ -1007,7 +1007,7 @@ namespace das
         Module * addModule ( const string & name );
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
-        void inferTypesDirty(TextWriter & logs);
+        void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint ( ModuleGroup & libGroup );
         void checkSideEffects();
         void foldUnsafe();
