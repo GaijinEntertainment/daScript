@@ -916,7 +916,7 @@ namespace das {
 
     void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context ) {
         AstContext astc = generateAstContext(prog,expr.get());
-        __m128 args[2];
+        vec4f args[2];
         args[0] = cast<bool>::from ( astc.valid );
         args[1] = astc.valid ? cast<AstContext&>::from(astc) : v_zero();
         context->invoke(block, args, nullptr );
