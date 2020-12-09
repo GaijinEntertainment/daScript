@@ -4206,7 +4206,7 @@ namespace das {
             } else if ( functions.size()>1 ) {
                 string candidates = verbose ? program->describeCandidates(functions) : "";
                 error("too many matching operators '" + expr->op
-                      + "' with argument " + describeType(expr->subexpr->type), "", "",
+                      + "' with argument " + describeType(expr->subexpr->type), candidates, "",
                     expr->at, CompilationError::operator_not_found);
             } else {
                 expr->func = functions[0].get();
