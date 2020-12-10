@@ -215,6 +215,25 @@ namespace das
         }
     };
 
+    template <typename FuncT> struct result_of_func_ptr;
+    template <typename R, typename ...Args>
+    struct result_of_func_ptr<R (*)(Args...)> {
+        using type = R;
+    };
+
+    template <typename FuncT, FuncT fn>
+    struct SimNode_ExtFuncCallCtor : SimNode_ExtFuncCallBase {
+        enum { IS_CMRES = true };
+        SimNode_ExtFuncCallCtor ( const LineInfo & at, const char * fnName )
+            : SimNode_ExtFuncCallBase(at,fnName) { }
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            void * cmres = cmresEval->evalPtr(context);
+            using CtorType = typename result_of_func_ptr<FuncT>::type;
+            new (cmres) CtorType();
+            return cast<void *>::from(cmres);
+        }
+    };
 
     template <typename FunctionType>
     struct ImplCallStaticFunctionRef;
