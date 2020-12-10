@@ -230,3 +230,8 @@ namespace das {
 __forceinline EntityId make_invalid_id() {
     return EntityId(-1);
 }
+
+struct FancyClass {
+    int32_t value;
+    FancyClass ( int32_t a, int32_t b ) : value(a+b) {}
+};

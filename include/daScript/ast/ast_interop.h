@@ -91,6 +91,19 @@ namespace das
         explicitConstArgFn() : defaultTempFn(false,true,false,true) {}
     };
 
+    template  <typename CType, typename ...Args>
+    class BuiltIn_PlacementNew : public BuiltInFunction {
+    public:
+        __forceinline BuiltIn_PlacementNew(const char * fn, const ModuleLibrary & lib, const char * cna = nullptr)
+        : BuiltInFunction(fn,cna) {
+            this->policyBased = false;
+            construct(makeBuiltinArgs<CType,Args...>(lib));
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            return context.code->makeNode<SimNode_PlacementNew<CType,Args...>>(at);
+        }
+    };
+
     void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
 
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
@@ -116,6 +129,11 @@ namespace das
         auto fnX = make_smart<InteropFn<func, RetT, Args...>>(name, lib, cppName);
         addExternFunc(mod, fnX, true, seFlags);
         return fnX;
+    }
+
+    template <typename CType, typename ...Args>
+    inline auto addCtor ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr ) {
+        mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
     }
 }
 

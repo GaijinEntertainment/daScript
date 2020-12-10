@@ -4,6 +4,7 @@
 #include "module_unitTest.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/ast/ast_policy_types.h"
 
  int32_t TestObjectSmart::total = 0;
 
@@ -31,6 +32,7 @@ MAKE_TYPE_FACTORY(TestObjectSmart,TestObjectSmart)
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
+MAKE_TYPE_FACTORY(FancyClass, FancyClass)
 
 MAKE_TYPE_FACTORY(SomeDummyType, SomeDummyType)
 MAKE_TYPE_FACTORY(Point3Array, Point3Array)
@@ -556,6 +558,15 @@ void tempArrayAliasExample(const das::TArray<Point3> & arr,
     context->invoke(blk, args, nullptr);
 }
 
+struct FancyClassAnnotation : ManagedStructureAnnotation <FancyClass,false,false> {
+    FancyClassAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FancyClass", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+    }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    virtual bool isLocal() const override { return true; }
+};
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -689,6 +700,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<EntityIdAnnotation>());
     addExtern<DAS_BIND_FUN(make_invalid_id)>(*this, lib, "make_invalid_id",
         SideEffects::none, "make_invalid_id");
+    // FancyClass
+    addAnnotation(make_smart<FancyClassAnnotation>(lib));
+    addCtor<FancyClass,int32_t,int32_t>(*this,lib,"FancyClass","FancyClass");
     // and verify
     verifyAotReady();
 }

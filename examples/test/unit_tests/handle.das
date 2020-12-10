@@ -67,8 +67,13 @@ def test_handled
         delete a
         delete b
 
+def test_fancy
+    var fc = FancyClass(1,2)
+    assert(fc.value==3)
+
 [export]
 def test:bool
     test_native()
     test_handled()
+    test_fancy()
     return true

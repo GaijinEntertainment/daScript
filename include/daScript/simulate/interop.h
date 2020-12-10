@@ -235,6 +235,30 @@ namespace das
         }
     };
 
+    template <typename CType, typename ...Args>
+    struct SimNode_PlacementNew : SimNode_CallBase {
+        SimNode_PlacementNew(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            vector<string> typenames = { typeName<CType>::name(), typeName<Args>::name()... };
+            TextWriter tw;
+            tw << "PlacementNew_";
+            for ( auto & t : typenames ) tw << "_" << t;
+            vis.op(tw.str().c_str());
+            V_CALL();
+            V_END();
+        }
+        template <size_t ...I>
+        static __forceinline void CallPlacementNew ( void * cmres, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
+        }
+        virtual vec4f eval(Context & context) override {
+            auto cmres = cmresEval->evalPtr(context);
+            CallPlacementNew(cmres,context,arguments,make_index_sequence<sizeof...(Args)>());
+            return cast<void *>::from(cmres);
+        }
+    };
+
     template <typename FunctionType>
     struct ImplCallStaticFunctionRef;
 
