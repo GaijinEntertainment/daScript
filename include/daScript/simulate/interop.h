@@ -157,7 +157,9 @@ namespace das
     struct ImplCallStaticFunctionAndCopy < R (*)(Args...) > {
         static __forceinline void call ( R (*fn)(Args...), Context & ctx, void * res, SimNode ** args ) {
             using result = typename remove_const<R>::type;
-            *((result *)res) = CallStaticFunction<R,Args...>(fn,ctx,args);
+            // note: copy is closer to AOT, but placement new is correct behavior under simulation
+            // *((result *)res) = CallStaticFunction<R,Args...>(fn,ctx,args);
+            new (res) result ( CallStaticFunction<R,Args...>(fn,ctx,args) );
         }
     };
 
@@ -238,16 +240,6 @@ namespace das
     template <typename CType, typename ...Args>
     struct SimNode_PlacementNew : SimNode_CallBase {
         SimNode_PlacementNew(const LineInfo & at) : SimNode_CallBase(at) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            vector<string> typenames = { typeName<CType>::name(), typeName<Args>::name()... };
-            TextWriter tw;
-            tw << "PlacementNew_";
-            for ( auto & t : typenames ) tw << "_" << t;
-            vis.op(tw.str().c_str());
-            V_CALL();
-            V_END();
-        }
         template <size_t ...I>
         static __forceinline void CallPlacementNew ( void * cmres, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
@@ -291,8 +283,7 @@ namespace das
             DAS_PROFILE_NODE
             vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
-            auto res = fn(context,this,args);
-            return res;
+            return fn(context,this,args);
         }
     };
 }
