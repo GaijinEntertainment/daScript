@@ -2257,6 +2257,36 @@ namespace das {
     __forceinline uint32_t enum_to_uint   ( EnumStub stub )   { return uint32_t(stub.value); }
     __forceinline uint32_t enum8_to_uint  ( EnumStub8 stub )  { return uint32_t(stub.value); }
     __forceinline uint32_t enum16_to_uint ( EnumStub16 stub ) { return uint32_t(stub.value); }
+
+
+    template <typename CType>
+    struct das_using {
+        template <typename TT>
+        static __forceinline void use ( TT && block ) {
+            CType value;
+            block ( value );
+        }
+        template <typename TT, typename A1>
+        static __forceinline void use ( A1 a1, TT && block ) {
+            CType value ( a1 );
+            block ( value );
+        }
+        template <typename TT, typename A1, typename A2>
+        static __forceinline void use ( A1 a1, A2 a2, TT && block ) {
+            CType value ( a1, a2 );
+            block ( value );
+        }
+        template <typename TT, typename A1, typename A2, typename A3>
+        static __forceinline void use ( A1 a1, A2 a2, A3 a3, TT && block ) {
+            CType value ( a1, a2, a3 );
+            block ( value );
+        }
+        template <typename TT, typename A1, typename A2, typename A3, typename A4>
+        static __forceinline void use ( A1 a1, A2 a2, A3 a3, A4 a4, TT && block ) {
+            CType value ( a1, a2, a3, a4 );
+            block ( value );
+        }
+    };
 }
 
 #if defined(_MSC_VER)

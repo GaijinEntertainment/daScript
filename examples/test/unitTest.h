@@ -233,5 +233,6 @@ __forceinline EntityId make_invalid_id() {
 
 struct FancyClass {
     int32_t value;
+    FancyClass () : value(13) {}
     FancyClass ( int32_t a, int32_t b ) : value(a+b) {}
 };

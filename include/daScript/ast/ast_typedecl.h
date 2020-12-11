@@ -355,6 +355,15 @@ namespace das {
     };
 
     template <typename TT>
+    struct typeFactory<TExplicit<TT>> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = typeFactory<TT>::make(lib);
+            t->isExplicit = true;
+            return t;
+        }
+    };
+
+    template <typename TT>
     struct TImplicit {};
 
     template <typename TT>

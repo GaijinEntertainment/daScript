@@ -3,6 +3,10 @@
 namespace das {
     template <typename TT>
     struct TTemporary {};
+
+
+    template <typename TT>
+    struct TExplicit {};
 }
 
 #define MAKE_TYPE_FACTORY(TYPE,CTYPE) \

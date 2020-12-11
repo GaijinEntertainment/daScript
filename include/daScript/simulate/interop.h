@@ -252,6 +252,25 @@ namespace das
         }
     };
 
+    template <typename CType, typename ...Args>
+    struct SimNode_Using : SimNode_ExtFuncCallBase {
+        SimNode_Using(const LineInfo & at)
+            : SimNode_ExtFuncCallBase(at,"using") {}
+        template <size_t ...I>
+        __forceinline void CallUsing ( const Block & blk, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            CType value( (cast_arg<Args>::to(ctx,args[I]))...);
+            vec4f bargs[1];
+            bargs[0] = cast<CType *>::from(&value);
+            ctx.invoke(blk,bargs,nullptr,&debugInfo);
+        }
+        virtual vec4f eval(Context & context) override {
+            DAS_ASSERT(nArguments == (sizeof...(Args) + 1) );
+            auto pblock = cast_arg<const Block *>::to(context,arguments[nArguments-1]);
+            CallUsing(*pblock,context,arguments,make_index_sequence<sizeof...(Args)>());
+            return v_zero();
+        }
+    };
+
     template <typename FunctionType>
     struct ImplCallStaticFunctionRef;
 

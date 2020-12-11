@@ -701,7 +701,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::none, "make_invalid_id");
     // FancyClass
     addAnnotation(make_smart<FancyClassAnnotation>(lib));
+    addCtor<FancyClass>(*this,lib,"FancyClass","FancyClass");
     addCtor<FancyClass,int32_t,int32_t>(*this,lib,"FancyClass","FancyClass");
+    addUsing<FancyClass>(*this,lib);
+    addUsing<FancyClass,int32_t,int32_t>(*this,lib);
     // and verify
     verifyAotReady();
 }

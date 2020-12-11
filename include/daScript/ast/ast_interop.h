@@ -96,6 +96,7 @@ namespace das
     public:
         __forceinline BuiltIn_PlacementNew(const char * fn, const ModuleLibrary & lib, const char * cna = nullptr)
         : BuiltInFunction(fn,cna), fnName(fn) {
+            this->modifyExternal = true;
             this->isTypeConstructor = true;
             this->copyOnReturn = true;
             this->moveOnReturn = true;
@@ -105,6 +106,24 @@ namespace das
             return context.code->makeNode<SimNode_PlacementNew<CType,Args...>>(at,fnName);
         }
         const char * fnName = nullptr;
+    };
+
+    template  <typename CType, typename ...Args>
+    class BuiltIn_Using : public BuiltInFunction {
+    public:
+        __forceinline BuiltIn_Using(const ModuleLibrary & lib)
+        : BuiltInFunction("using","das_using") {
+            this->cppName = string("das_using<") + typeName<CType>::name() + ">::use";
+            this->aotTemplate = true;
+            this->modifyExternal = true;
+            this->invoke = true;
+            vector<TypeDeclPtr> args = makeBuiltinArgs<CType,Args...>(lib);
+            args.emplace_back(makeType<const TBlock<void,TTemporary<TExplicit<CType>>>>(lib));
+            construct(args);
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            return context.code->makeNode<SimNode_Using<CType,Args...>>(at);
+        }
     };
 
     void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
@@ -137,6 +156,11 @@ namespace das
     template <typename CType, typename ...Args>
     inline auto addCtor ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr ) {
         mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
+    }
+
+    template <typename CType, typename ...Args>
+    inline auto addUsing ( Module & mod, const ModuleLibrary & lib ) {
+        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib));
     }
 }
 
