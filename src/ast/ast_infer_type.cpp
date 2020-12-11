@@ -5253,7 +5253,8 @@ namespace das {
                     error("local variable " + var->name + " can't be initialized at all", "", "",
                         var->at, CompilationError::invalid_initialization_type);
                 }
-            } else if ( !var->type->ref && !var->init->type->canCopy()
+            }
+            if ( !var->type->ref && !var->init->type->canCopy()
                        && var->init->type->canMove() && !(var->init_via_move || var->init_via_clone) ) {
                 error("local variable " + var->name + " can only be move-initialized","","use <- for that",
                     var->at, CompilationError::invalid_initialization_type);

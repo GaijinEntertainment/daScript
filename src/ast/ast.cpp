@@ -625,8 +625,8 @@ namespace das {
             } else if ( result->canMove() ) {
                 copyOnReturn = false;
                 moveOnReturn = true;
-            } else if ( !result->ref ) {
-                // its not a ref, so its fine
+            } else if ( result->ref ) {
+                // its ref, so its fine
             } else if ( result->hasNonTrivialCtor() ) {
                 // we can initialize it locally
             } else {
