@@ -2536,6 +2536,24 @@ namespace das
                 context.thisProgram->error("internal compilation error, can't generate copy", "", "", var->at);
             }
             return retN;
+        } else if ( var->isCtorInitialized() ) {
+            auto varExpr = make_smart<ExprVar>(var->at, var->name);
+            varExpr->variable = var;
+            varExpr->local = local;
+            varExpr->type = make_smart<TypeDecl>(*var->type);
+            SimNode_CallBase * retN = nullptr; // it has to be CALL with CMRES
+            const auto & rE = var->init;
+            if ( rE->rtti_isCall() ) {
+                auto cll = static_pointer_cast<ExprCall>(rE);
+                if ( cll->func->copyOnReturn || cll->func->moveOnReturn ) {
+                    retN = (SimNode_CallBase *) rE->simulate(context);
+                    retN->cmresEval = varExpr->simulate(context);
+                }
+            }
+            if ( !retN ) {
+                context.thisProgram->error("internal compilation error, can't generate class constructor", "", "", var->at);
+            }
+            return retN;
         } else {
             context.thisProgram->error("internal compilation error, initializing variable which can't be copied or moved", "", "", var->at);
             return nullptr;

@@ -181,6 +181,7 @@ namespace das
         bool isShareable ( das_set<Structure *> & dep ) const;
         bool hasClasses( das_set<Structure *> & dep ) const;
         bool hasNonTrivialCtor ( das_set<Structure *> & dep ) const;
+        bool hasNonTrivialDtor ( das_set<Structure *> & dep ) const;
         bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
@@ -212,6 +213,7 @@ namespace das
         string getMangledName() const;
         uint32_t getMangledNameHash() const;
         bool isAccessUnused() const;
+        bool isCtorInitialized() const;
         string          name;
         TypeDeclPtr     type;
         ExpressionPtr   init;
@@ -325,7 +327,10 @@ namespace das
         virtual bool isRefType() const { return false; }
         virtual bool isLocal() const { return false; }
         virtual bool hasNonTrivialCtor() const { return true; }
-        virtual bool canBePlacedInContainer() const { return false; }
+        virtual bool hasNonTrivialDtor() const { return true; }
+        virtual bool canBePlacedInContainer() const {
+            return isLocal() && !hasNonTrivialCtor() && !hasNonTrivialDtor();
+        }
         virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
         virtual bool needDelete() const { return canDelete(); }
@@ -617,6 +622,7 @@ namespace das
                 bool    firstArgReturnType : 1;
                 bool    noPointerCast : 1;
                 bool    isClassMethod : 1;
+                bool    isTypeConstructor : 1;
             };
             uint32_t flags = 0;
         };

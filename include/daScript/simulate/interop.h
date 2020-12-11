@@ -238,8 +238,9 @@ namespace das
     };
 
     template <typename CType, typename ...Args>
-    struct SimNode_PlacementNew : SimNode_CallBase {
-        SimNode_PlacementNew(const LineInfo & at) : SimNode_CallBase(at) {}
+    struct SimNode_PlacementNew : SimNode_ExtFuncCallBase {
+        SimNode_PlacementNew(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallBase(at,fnName) {}
         template <size_t ...I>
         static __forceinline void CallPlacementNew ( void * cmres, Context & ctx, SimNode ** args, index_sequence<I...> ) {
             new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);

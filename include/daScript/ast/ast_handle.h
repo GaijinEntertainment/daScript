@@ -126,6 +126,7 @@ namespace das
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
         virtual bool hasNonTrivialCtor() const override { return !is_trivially_constructible<OT>::value; }
+        virtual bool hasNonTrivialDtor() const override { return !is_trivially_destructible<OT>::value; }
         template <typename FunT, FunT PROP>
         void addProperty ( const string & na, const string & cppNa="" ) {
             auto & field = fields[na];

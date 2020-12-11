@@ -784,7 +784,7 @@ namespace das
 
     bool TypeDecl::canBePlacedInContainer(das_set<Structure *> & dep) const {
         if ( baseType==Type::tHandle ) {
-            return annotation->isLocal() && !annotation->hasNonTrivialCtor();
+            return annotation->canBePlacedInContainer();
         } else if ( baseType==Type::tStructure ) {
             if (structType) {
                 if (dep.find(structType) != dep.end()) return true;
@@ -830,6 +830,33 @@ namespace das
         } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             if ( firstType && firstType->hasNonTrivialCtor(dep) ) return true;
             if ( secondType && secondType->hasNonTrivialCtor(dep) ) return true;
+        }
+        return false;
+    }
+
+    bool TypeDecl::hasNonTrivialDtor() const {
+        das_set<Structure *> dep;
+        return hasNonTrivialDtor(dep);
+    }
+
+    bool TypeDecl::hasNonTrivialDtor(das_set<Structure *> & dep) const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->hasNonTrivialDtor();
+        } else if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->hasNonTrivialDtor(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->hasNonTrivialDtor(dep) ) {
+                    return true;
+                }
+            }
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && firstType->hasNonTrivialDtor(dep) ) return true;
+            if ( secondType && secondType->hasNonTrivialDtor(dep) ) return true;
         }
         return false;
     }

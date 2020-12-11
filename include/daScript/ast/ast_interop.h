@@ -95,13 +95,16 @@ namespace das
     class BuiltIn_PlacementNew : public BuiltInFunction {
     public:
         __forceinline BuiltIn_PlacementNew(const char * fn, const ModuleLibrary & lib, const char * cna = nullptr)
-        : BuiltInFunction(fn,cna) {
-            this->policyBased = false;
+        : BuiltInFunction(fn,cna), fnName(fn) {
+            this->isTypeConstructor = true;
+            this->copyOnReturn = true;
+            this->moveOnReturn = true;
             construct(makeBuiltinArgs<CType,Args...>(lib));
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
-            return context.code->makeNode<SimNode_PlacementNew<CType,Args...>>(at);
+            return context.code->makeNode<SimNode_PlacementNew<CType,Args...>>(at,fnName);
         }
+        const char * fnName = nullptr;
     };
 
     void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);

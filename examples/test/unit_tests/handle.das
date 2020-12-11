@@ -67,9 +67,15 @@ def test_handled
         delete a
         delete b
 
+[export]
+def test_fancy_container(var a : array<FancyClass>)
+    print("a = {a}\n")
+
 def test_fancy
     var fc = FancyClass(1,2)
     assert(fc.value==3)
+    var fc2 <- FancyClass(3,4)
+    assert(fc2.value==7)
 
 [export]
 def test:bool

@@ -133,6 +133,8 @@ namespace das {
         bool hasClasses( das_set<Structure*> & dep ) const;
         bool hasNonTrivialCtor() const;
         bool hasNonTrivialCtor( das_set<Structure*> & dep ) const;
+        bool hasNonTrivialDtor() const;
+        bool hasNonTrivialDtor( das_set<Structure*> & dep ) const;
         bool canBePlacedInContainer() const;
         bool canBePlacedInContainer( das_set<Structure*> & dep ) const;
         Type getVectorBaseType() const;

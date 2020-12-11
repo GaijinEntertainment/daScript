@@ -562,9 +562,8 @@ struct FancyClassAnnotation : ManagedStructureAnnotation <FancyClass,false,false
     FancyClassAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FancyClass", ml) {
         addField<DAS_BIND_MANAGED_FIELD(value)>("value");
     }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
     virtual bool isLocal() const override { return true; }
+    virtual bool canBePlacedInContainer() const override { return true; }
 };
 
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {

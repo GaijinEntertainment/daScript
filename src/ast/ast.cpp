@@ -333,6 +333,15 @@ namespace das {
         return true;
     }
 
+    bool Structure::hasNonTrivialDtor(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && !fd.type->hasNonTrivialDtor(dep) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool Structure::isLocal(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->isLocal(dep) ) {
@@ -399,6 +408,22 @@ namespace das {
 
     bool Variable::isAccessUnused() const {
         return !(access_get || access_init || access_pass || access_ref);
+    }
+
+    bool Variable::isCtorInitialized() const {
+        if ( !init ) {
+            return false;
+        }
+        if ( !type->hasNonTrivialCtor() ) {
+            return false;
+        }
+        if ( init->rtti_isCallFunc() ) {
+            auto cfun = static_pointer_cast<ExprCallFunc>(init);
+            if ( cfun->func && cfun->func->isTypeConstructor ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // function
@@ -601,6 +626,10 @@ namespace das {
                 copyOnReturn = false;
                 moveOnReturn = true;
             } else if ( !result->ref ) {
+                // its not a ref, so its fine
+            } else if ( result->hasNonTrivialCtor() ) {
+                // we can initialize it locally
+            } else {
                 DAS_FATAL_LOG("BuiltInFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
                 DAS_FATAL_ERROR;
             }
