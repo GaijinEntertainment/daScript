@@ -200,13 +200,13 @@ namespace das {
         }
     };
 
-    struct ModuleAnnotation : ManagedStructureAnnotation<Module> {
+    struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Module", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
 
-    struct FileAccessAnnotation : ManagedStructureAnnotation<FileAccess> {
+    struct FileAccessAnnotation : ManagedStructureAnnotation<FileAccess,false> {
         FileAccessAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileAccess", ml) {
         }
     };
@@ -221,7 +221,7 @@ namespace das {
         }
     };
 
-    struct FileInfoAnnotation : ManagedStructureAnnotation<FileInfo> {
+    struct FileInfoAnnotation : ManagedStructureAnnotation<FileInfo,false> {
         FileInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addProperty<DAS_BIND_MANAGED_PROP(getSource)>("source");
@@ -230,12 +230,12 @@ namespace das {
         }
     };
 
-    struct ContextAnnotation : ManagedStructureAnnotation<Context> {
+    struct ContextAnnotation : ManagedStructureAnnotation<Context,false> {
         ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
         }
     };
 
-    struct LineInfoAnnotation : ManagedStructureAnnotation<LineInfo> {
+    struct LineInfoAnnotation : ManagedStructureAnnotation<LineInfo,false> {
         LineInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LineInfo", ml) {
             this->addField<DAS_BIND_MANAGED_FIELD(fileInfo)>("fileInfo");
             this->addField<DAS_BIND_MANAGED_FIELD(column)>("column");

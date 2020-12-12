@@ -62,7 +62,8 @@ struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotL
     TestObjectNotLocalAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectNotLocal", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
     }
-    virtual bool isLocal() const { return false; }  // this is here so that the class is not local
+    virtual bool isLocal() const { return false; }                  // this is here so that the class is not local
+    virtual bool canBePlacedInContainer() const { return false; }   // this can't be in the container either
 };
 
 struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> {

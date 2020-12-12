@@ -65,7 +65,7 @@ namespace das
 
     template <typename OT,
         bool canNew = is_default_constructible<OT>::value,
-        bool canDelete = is_destructible<OT>::value
+        bool canDelete = canNew && is_destructible<OT>::value
     > struct ManagedStructureAnnotation ;
 
     struct BasicStructureAnnotation : TypeAnnotation {
