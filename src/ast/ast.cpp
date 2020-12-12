@@ -627,7 +627,7 @@ namespace das {
             this->arguments.push_back(arg);
         }
         result = args[0];
-        if ( result->isRefType() ) {
+        if ( result->isRefType() && !result->ref ) {
             if ( result->canCopy() ) {
                 copyOnReturn = true;
                 moveOnReturn = false;
@@ -642,6 +642,9 @@ namespace das {
                 DAS_FATAL_LOG("BuiltInFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
                 DAS_FATAL_ERROR;
             }
+        } else {
+            copyOnReturn = false;
+            moveOnReturn = false;
         }
     }
 
@@ -659,7 +662,7 @@ namespace das {
             this->arguments.push_back(arg);
         }
         result = args[0];
-        if ( result->isRefType() ) {
+        if ( result->isRefType() && !result->ref ) {
             if ( result->canCopy() ) {
                 copyOnReturn = true;
                 moveOnReturn = false;
@@ -670,6 +673,9 @@ namespace das {
                 DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
                 DAS_FATAL_ERROR;
             }
+        } else {
+            copyOnReturn = false;
+            moveOnReturn = false;
         }
     }
 
@@ -687,7 +693,7 @@ namespace das {
             this->arguments.push_back(arg);
         }
         result = args[0];
-        if ( result->isRefType() ) {
+        if ( result->isRefType() && !result->ref ) {
             if ( result->canCopy() ) {
                 copyOnReturn = true;
                 moveOnReturn = false;
@@ -698,6 +704,9 @@ namespace das {
                 DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
                 DAS_FATAL_ERROR;
             }
+        } else {
+            copyOnReturn = false;
+            moveOnReturn = false;
         }
     }
 

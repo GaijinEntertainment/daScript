@@ -1597,7 +1597,7 @@ namespace das {
                 error("not a valid function return type " + describeType(func->result), "", "",
                       func->result->at,CompilationError::invalid_return_type);
             }
-            if ( func->result->isRefType() ) {
+            if ( func->result->isRefType() && !func->result->ref ) {
                 if ( func->result->canCopy() ) {
                     func->copyOnReturn = true;
                     func->moveOnReturn = false;
@@ -3596,7 +3596,7 @@ namespace das {
         }
     // ExprBlock
         void setBlockCopyMoveFlags ( ExprBlock * block ) {
-            if ( block->returnType->isRefType() ) {
+            if ( block->returnType->isRefType() && !block->returnType->ref ) {
                 if ( block->returnType->canCopy() ) {
                     block->copyOnReturn = true;
                     block->moveOnReturn = false;

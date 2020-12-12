@@ -200,7 +200,7 @@ namespace das {
         }
     };
 
-    struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
+    struct ModuleAnnotation : ManagedStructureAnnotation<Module> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Module", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
@@ -211,7 +211,7 @@ namespace das {
         }
     };
 
-    struct ErrorAnnotation : ManagedStructureAnnotation<Error,false> {
+    struct ErrorAnnotation : ManagedStructureAnnotation<Error> {
         ErrorAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Error", ml) {
             addField<DAS_BIND_MANAGED_FIELD(what)>("what");
             addField<DAS_BIND_MANAGED_FIELD(extra)>("extra");
@@ -221,7 +221,7 @@ namespace das {
         }
     };
 
-    struct FileInfoAnnotation : ManagedStructureAnnotation<FileInfo,false> {
+    struct FileInfoAnnotation : ManagedStructureAnnotation<FileInfo> {
         FileInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addProperty<DAS_BIND_MANAGED_PROP(getSource)>("source");
@@ -230,12 +230,12 @@ namespace das {
         }
     };
 
-    struct ContextAnnotation : ManagedStructureAnnotation<Context,false> {
+    struct ContextAnnotation : ManagedStructureAnnotation<Context> {
         ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
         }
     };
 
-    struct LineInfoAnnotation : ManagedStructureAnnotation<LineInfo,false> {
+    struct LineInfoAnnotation : ManagedStructureAnnotation<LineInfo> {
         LineInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LineInfo", ml) {
             this->addField<DAS_BIND_MANAGED_FIELD(fileInfo)>("fileInfo");
             this->addField<DAS_BIND_MANAGED_FIELD(column)>("column");
@@ -243,11 +243,7 @@ namespace das {
             this->addField<DAS_BIND_MANAGED_FIELD(last_column)>("last_column");
             this->addField<DAS_BIND_MANAGED_FIELD(last_line)>("last_line");
         }
-        virtual bool canCopy() const override { return true; }
         virtual bool isLocal() const override { return true; }
-        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(LineInfo)));
-        }
     };
 
     TypeDeclPtr makeProgramFlags() {
@@ -885,6 +881,8 @@ namespace das {
             // type annotations
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
+                addCtor<LineInfo>(*this,lib,"LineInfo","LineInfo");
+                addCtor<LineInfo,FileInfo *,int,int,int,int>(*this,lib,"LineInfo","LineInfo");
             addAnnotation(make_smart<ContextAnnotation>(lib));
             addAnnotation(make_smart<ErrorAnnotation>(lib));
             addAnnotation(make_smart<FileAccessAnnotation>(lib));

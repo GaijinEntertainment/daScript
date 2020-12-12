@@ -40,16 +40,6 @@ namespace das
     struct CallMacro;
     typedef smart_ptr<CallMacro> CallMacroPtr;
 
-    template <typename T>
-    struct isCloneable  {
-        template<typename U>
-        static decltype(declval<U&>() = declval<const U&>(), U (declval<const U&>()), true_type{}) func (remove_reference_t<U>*);
-        template<typename U>
-        static false_type func (...);
-        using  type = decltype(func<T>(nullptr));
-        static constexpr bool value { type::value };
-    };
-
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]

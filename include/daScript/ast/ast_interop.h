@@ -162,5 +162,12 @@ namespace das
     inline auto addUsing ( Module & mod, const ModuleLibrary & lib ) {
         mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib));
     }
+
+    template <typename CType, typename ...Args>
+    inline auto addCtorAndUsing ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr ) {
+        mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
+        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib));
+    }
+
 }
 
