@@ -62,7 +62,7 @@ struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotL
     TestObjectNotLocalAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectNotLocal", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
     }
-    virtual bool isLocal() const { return false; }
+    virtual bool isLocal() const { return false; }  // this is here so that the class is not local
 };
 
 struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> {
@@ -74,9 +74,6 @@ struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> 
         // reason: recursive type
         addField<DAS_BIND_MANAGED_FIELD(first)>("first");
     }
-    virtual bool isLocal() const override { return false; }
-    virtual bool canMove() const override { return false; }
-    virtual bool canCopy() const override { return false; }
 };
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
@@ -100,15 +97,6 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
             const TestObjectFoo * (TestObjectFoo::*)() const, &TestObjectFoo::getLoop
         >("getLoop","getLoop");
     }
-    virtual bool isLocal() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-        return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(TestObjectFoo)));
-    }
-    virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-        return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(TestObjectFoo)));
-    }
 };
 
 struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
@@ -118,7 +106,6 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
         addProperty<DAS_BIND_MANAGED_PROP(getFoo)>("getFoo");
         addProperty<DAS_BIND_MANAGED_PROP(getFooPtr)>("getFooPtr");
     }
-    virtual bool isLocal() const { return true; }
 };
 
 void testFoo ( TestObjectFoo & foo ) {
@@ -558,12 +545,12 @@ void tempArrayAliasExample(const das::TArray<Point3> & arr,
     context->invoke(blk, args, nullptr);
 }
 
-struct FancyClassAnnotation : ManagedStructureAnnotation <FancyClass,false,false> {
+struct FancyClassAnnotation : ManagedStructureAnnotation <FancyClass> {
     FancyClassAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FancyClass", ml) {
         addField<DAS_BIND_MANAGED_FIELD(value)>("value");
     }
-    virtual bool isLocal() const override { return true; }
-    virtual bool canBePlacedInContainer() const override { return true; }
+    virtual bool isLocal() const override { return true; }                  // this is here so that we can make local variable and init with special c-tor
+    virtual bool canBePlacedInContainer() const override { return true; }   // this is here so that we can make array<FancyClass>
 };
 
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {

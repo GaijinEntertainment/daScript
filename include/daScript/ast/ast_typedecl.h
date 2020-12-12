@@ -106,6 +106,8 @@ namespace das {
         bool canCopy() const;
         bool canMove() const;
         bool canClone() const;
+        bool canNew() const;
+        bool canDeletePtr() const;
         bool canDelete() const;
         bool needDelete() const;
         bool isPod() const;
@@ -135,6 +137,8 @@ namespace das {
         bool hasNonTrivialCtor( das_set<Structure*> & dep ) const;
         bool hasNonTrivialDtor() const;
         bool hasNonTrivialDtor( das_set<Structure*> & dep ) const;
+        bool hasNonTrivialCopy() const;
+        bool hasNonTrivialCopy( das_set<Structure*> & dep ) const;
         bool canBePlacedInContainer() const;
         bool canBePlacedInContainer( das_set<Structure*> & dep ) const;
         Type getVectorBaseType() const;

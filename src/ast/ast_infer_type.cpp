@@ -2722,6 +2722,12 @@ namespace das {
                 } else if ( expr->trait=="is_numeric_comparable" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isNumericComparable());
+                } else if ( expr->trait=="is_local" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isLocal());
+                } else if ( expr->trait=="can_be_placed_in_container" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canBePlacedInContainer());
                 } else if ( expr->trait=="can_copy" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canCopy());
@@ -2731,12 +2737,27 @@ namespace das {
                 } else if ( expr->trait=="can_clone" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canClone());
+                } else if ( expr->trait=="can_new" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canNew());
                 } else if ( expr->trait=="can_delete" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canDelete());
+                } else if ( expr->trait=="can_delete_ptr" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canDeletePtr());
                 } else if ( expr->trait=="need_delete" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->needDelete());
+                } else if ( expr->trait=="has_nontrivial_ctor" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCtor());
+                } else if ( expr->trait=="has_nontrivial_dtor" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialDtor());
+                } else if ( expr->trait=="has_nontrivial_copy" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCopy());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportAstChanged();

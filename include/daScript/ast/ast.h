@@ -40,6 +40,16 @@ namespace das
     struct CallMacro;
     typedef smart_ptr<CallMacro> CallMacroPtr;
 
+    template <typename T>
+    struct isCloneable  {
+        template<typename U>
+        static decltype(declval<U&>() = declval<const U&>(), U (declval<const U&>()), true_type{}) func (remove_reference_t<U>*);
+        template<typename U>
+        static false_type func (...);
+        using  type = decltype(func<T>(nullptr));
+        static constexpr bool value { type::value };
+    };
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -182,6 +192,7 @@ namespace das
         bool hasClasses( das_set<Structure *> & dep ) const;
         bool hasNonTrivialCtor ( das_set<Structure *> & dep ) const;
         bool hasNonTrivialDtor ( das_set<Structure *> & dep ) const;
+        bool hasNonTrivialCopy ( das_set<Structure *> & dep ) const;
         bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
@@ -319,17 +330,24 @@ namespace das
             return p;
         }
         virtual bool canAot(das_set<Structure *> &) const { return true; }
-        virtual bool canMove() const { return false; }
-        virtual bool canCopy() const { return false; }
+        virtual bool canMove() const {
+            return !hasNonTrivialCopy();
+        }
+        virtual bool canCopy() const {
+            return !hasNonTrivialCopy();
+        }
         virtual bool canClone() const { return false; }
         virtual bool isPod() const { return false; }
         virtual bool isRawPod() const { return false; }
         virtual bool isRefType() const { return false; }
-        virtual bool isLocal() const { return false; }
         virtual bool hasNonTrivialCtor() const { return true; }
         virtual bool hasNonTrivialDtor() const { return true; }
+        virtual bool hasNonTrivialCopy() const { return true; }
         virtual bool canBePlacedInContainer() const {
-            return isLocal() && !hasNonTrivialCtor() && !hasNonTrivialDtor();
+            return !hasNonTrivialCtor() && !hasNonTrivialDtor() && !hasNonTrivialCopy();
+        }
+        virtual bool isLocal() const {
+            return isPod() && !hasNonTrivialCtor() && !hasNonTrivialDtor() && !hasNonTrivialCopy();
         }
         virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
@@ -899,7 +917,7 @@ namespace das
     protected:
         das_map<string,ModuleGroupUserDataPtr>  userData;
     };
-
+    template <> struct isCloneable<ModuleGroup> : false_type {};
 
     struct PassMacro : ptr_ref_count {
         PassMacro ( const string na = "" ) : name(na) {}

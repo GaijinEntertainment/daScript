@@ -342,6 +342,15 @@ namespace das {
         return true;
     }
 
+    bool Structure::hasNonTrivialCopy(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && !fd.type->hasNonTrivialCopy(dep) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool Structure::isLocal(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->isLocal(dep) ) {
