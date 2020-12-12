@@ -76,8 +76,6 @@ def test_fancy
     assert(fc0.value==13)
     var fc = FancyClass(1,2)
     assert(fc.value==3)
-    var fc2 <- FancyClass(3,4)
-    assert(fc2.value==7)
     using() <| $( var f : FancyClass# )
         assert(f.value==13)
     using(1,3) <| $( var f : FancyClass# )

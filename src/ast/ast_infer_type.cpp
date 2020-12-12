@@ -5269,6 +5269,10 @@ namespace das {
                 error("local variable " + var->name + " can only be initialized with type constructor", "", "",
                     var->at, CompilationError::invalid_initialization_type);
             } else if ( !var->type->ref && !var->init->type->canCopy() && !var->init->type->canMove()
+                        && var->type->hasNonTrivialCtor() && var->isCtorInitialized() && var->init_via_move ) {
+                error("local variable " + var->name + " can only be initialized with copy", "", "",
+                    var->at, CompilationError::invalid_initialization_type);
+            } else if ( !var->type->ref && !var->init->type->canCopy() && !var->init->type->canMove()
                         && !var->type->hasNonTrivialCtor() ) {
                 error("local variable " + var->name + " can't be initialized at all", "", "",
                     var->at, CompilationError::invalid_initialization_type);
